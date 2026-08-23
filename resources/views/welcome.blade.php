@@ -118,21 +118,21 @@
         <main class="w-full flex flex-col items-center space-y-12">
             <!-- Pilihan Role -->
             <div id="role-selector" class="grid grid-cols-1 md:grid-cols-3 gap-stack-md w-full max-w-3xl transition-all duration-300">
-                <button onclick="selectRole('Kasir')" data-role="Kasir" class="role-card group flex flex-col items-center p-stack-lg bg-surface-card border border-border-subtle rounded-xl shadow-sm hover:shadow-md transition-all duration-300 hover:border-primary active:scale-95">
+                <a href="{{ route('cashier.login') }}" data-role="Kasir" class="role-card group flex flex-col items-center p-stack-lg bg-surface-card border border-border-subtle rounded-xl shadow-sm hover:shadow-md transition-all duration-300 hover:border-primary active:scale-95">
                     <div class="w-20 h-20 rounded-full bg-surface-container flex items-center justify-center mb-stack-md group-hover:bg-primary-fixed-dim transition-colors">
                         <span class="material-symbols-outlined text-[40px] text-primary">point_of_sale</span>
                     </div>
                     <span class="font-headline-sm text-headline-sm text-on-surface mb-1">Kasir</span>
                     <span class="text-on-surface-variant text-label-caps font-label-caps uppercase tracking-widest">Akses Transaksi</span>
-                </button>
+                </a>
 
-                <button onclick="selectRole('Manager')" data-role="Manager" class="role-card group flex flex-col items-center p-stack-lg bg-surface-card border border-border-subtle rounded-xl shadow-sm hover:shadow-md transition-all duration-300 hover:border-primary active:scale-95">
+                <a href="{{ route('manager.login') }}" data-role="Manager" class="role-card group flex flex-col items-center p-stack-lg bg-surface-card border border-border-subtle rounded-xl shadow-sm hover:shadow-md transition-all duration-300 hover:border-primary active:scale-95">
                     <div class="w-20 h-20 rounded-full bg-surface-container flex items-center justify-center mb-stack-md group-hover:bg-primary-fixed-dim transition-colors">
                         <span class="material-symbols-outlined text-[40px] text-primary">inventory_2</span>
                     </div>
                     <span class="font-headline-sm text-headline-sm text-on-surface mb-1">Manager</span>
                     <span class="text-on-surface-variant text-label-caps font-label-caps uppercase tracking-widest">Akses Operasional</span>
-                </button>
+                </a>
 
                 <button onclick="selectRole('Owner')" data-role="Owner" class="role-card group flex flex-col items-center p-stack-lg bg-surface-card border border-border-subtle rounded-xl shadow-sm hover:shadow-md transition-all duration-300 hover:border-primary active:scale-95">
                     <div class="w-20 h-20 rounded-full bg-surface-container flex items-center justify-center mb-stack-md group-hover:bg-primary-fixed-dim transition-colors">
@@ -201,7 +201,7 @@
             const loginContainer = document.getElementById('login-container');
             const roleText = document.getElementById('active-role-text');
             
-            roleText.innerText = Masuk Sebagai ;
+            roleText.innerText = `Masuk Sebagai ${role}`;
             
             roleSelector.classList.add('opacity-0', 'pointer-events-none', '-translate-y-8');
             setTimeout(() => {

@@ -6,6 +6,14 @@ Route::get('/', function () {
     return view('welcome');
 });
 
+Route::get('/login-kasir', function () {
+    return view('cashier-login');
+})->name('cashier.login');
+
+Route::get('/login-manager', function () {
+    return view('manager-login');
+})->name('manager.login');
+
 Route::get('/inventory', function () {
     return view('inventory');
 });
