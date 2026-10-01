@@ -4,74 +4,12 @@
 
 @section('content')
 <!-- Sidebar -->
-<aside class="w-64 bg-slate-50 border-r border-gray-200 flex flex-col justify-between shrink-0">
-    <div>
-        <div class="p-6">
-            <h1 class="text-2xl font-bold text-blue-600">Vigilant POS</h1>
-            <p class="text-sm text-gray-500 mt-1">Worker Coop Admin</p>
-        </div>
-        
-        <nav class="mt-4 flex flex-col gap-1">
-            <a href="/dashboard" class="flex items-center gap-3 px-6 py-3 text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors">
-                <span class="material-symbols-rounded text-gray-400">dashboard</span>
-                <span class="font-medium">Dashboard</span>
-            </a>
-            <a href="/inventory" class="flex items-center gap-3 px-6 py-3 text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors">
-                <span class="material-symbols-rounded text-gray-400">inventory_2</span>
-                <span class="font-medium">Products</span>
-            </a>
-            <a href="/members" class="flex items-center gap-3 px-6 py-3 text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors">
-                <span class="material-symbols-rounded text-gray-400">group</span>
-                <span class="font-medium">Members</span>
-            </a>
-            <a href="/reports" class="flex items-center gap-3 px-6 py-3 text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors">
-                <span class="material-symbols-rounded text-gray-400">bar_chart</span>
-                <span class="font-medium">Reports</span>
-            </a>
-            <a href="/settings" class="flex items-center gap-3 px-6 py-3 bg-blue-50 text-blue-600 border-l-4 border-blue-600 relative">
-                <span class="material-symbols-rounded filled text-blue-600">settings</span>
-                <span class="font-medium">Settings</span>
-            </a>
-        </nav>
-    </div>
-
-    <!-- User Profile (Bottom) -->
-    <div class="p-6 border-t border-gray-200 flex flex-col gap-4">
-        <div class="flex items-center gap-3">
-            <img src="https://ui-avatars.com/api/?name=AH&background=f1f5f9&color=0f172a&rounded=true" alt="Ahmad Hidayat" class="w-10 h-10 rounded-full">
-            <div>
-                <p class="font-bold text-sm text-gray-800">Ahmad Hidayat</p>
-                <p class="text-xs text-gray-500">Kasir</p>
-            </div>
-        </div>
-        <button class="flex items-center gap-2 text-red-500 font-medium text-sm hover:bg-red-50 py-2 px-3 rounded-lg transition-colors -ml-3 w-fit">
-            <span class="material-symbols-rounded">logout</span>
-            Logout
-        </button>
-    </div>
-</aside>
+<x-cashier-sidebar active="settings" />
 
 <!-- Main Content -->
 <main class="flex-1 flex flex-col bg-white relative h-full">
     <!-- Header -->
-    <header class="h-20 border-b border-gray-200 flex items-center justify-between px-8 bg-white shrink-0">
-        <h2 class="text-xl font-bold text-gray-800">Pengaturan Terminal</h2>
-        <div class="flex items-center gap-6">
-            <button class="text-gray-500 hover:text-gray-700 relative">
-                <span class="material-symbols-rounded">notifications</span>
-            </button>
-            <button class="text-green-500 hover:text-green-600">
-                <span class="material-symbols-rounded filled">wifi</span>
-            </button>
-            <button class="text-gray-500 hover:text-gray-700">
-                <span class="material-symbols-rounded">sync</span>
-            </button>
-            <div class="h-6 w-px bg-gray-300"></div>
-            <div class="flex items-center text-sm font-medium text-gray-500">
-                ID TERMINAL: #01
-            </div>
-        </div>
-    </header>
+    <x-cashier-header title="Pengaturan Terminal" />
 
     <!-- Scrollable Content -->
     <div class="flex-1 overflow-auto p-8 bg-slate-50">
@@ -85,11 +23,7 @@
                     <span class="material-symbols-rounded absolute -right-6 top-6 text-9xl text-slate-50 opacity-50 z-0">badge</span>
                     
                     <div class="flex items-start gap-5 relative z-10">
-                        <div class="relative">
-                            <img src="https://images.unsplash.com/photo-1560250097-0b93528c311a?q=80&w=200&auto=format&fit=crop" alt="Profile" class="w-20 h-20 rounded-xl object-cover border border-gray-200 bg-gray-100">
-                            <div class="absolute -bottom-2 -right-2 w-6 h-6 bg-green-500 rounded-full border-2 border-white flex items-center justify-center">
-                                <span class="material-symbols-rounded text-white text-[14px] font-bold">check</span>
-                            </div>
+                        <div class="relative hidden">
                         </div>
                         <div>
                             <h3 class="text-lg font-bold text-gray-800">Ahmad Hidayat</h3>

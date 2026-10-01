@@ -12,7 +12,6 @@
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
     <style>
         body {
-            font-family: 'Inter', sans-serif;
             background-color: #f8fafc; /* Slate-50 */
         }
         .material-symbols-rounded {
@@ -46,7 +45,7 @@
         }
     </style>
 </head>
-<body class="text-slate-800 antialiased overflow-hidden h-screen w-screen flex">
+<body class="font-sans text-slate-800 antialiased overflow-hidden h-screen w-screen flex">
     @yield('content')
 </body>
 </html>

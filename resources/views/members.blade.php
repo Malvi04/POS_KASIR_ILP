@@ -4,65 +4,23 @@
 
 @section('content')
 <!-- Sidebar -->
-<aside class="w-64 bg-slate-50 border-r border-gray-200 flex flex-col justify-between shrink-0">
-    <div>
-        <div class="p-6">
-            <h1 class="text-2xl font-bold text-blue-600">Vigilant POS</h1>
-            <p class="text-sm text-gray-500 mt-1">Worker Coop Admin</p>
-        </div>
-        
-        <nav class="mt-4 flex flex-col gap-1">
-            <a href="/dashboard" class="flex items-center gap-3 px-6 py-3 text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors">
-                <span class="material-symbols-rounded text-gray-400">dashboard</span>
-                <span class="font-medium">Dashboard</span>
-            </a>
-            <a href="/inventory" class="flex items-center gap-3 px-6 py-3 text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors">
-                <span class="material-symbols-rounded text-gray-400">inventory_2</span>
-                <span class="font-medium">Products</span>
-            </a>
-            <a href="/members" class="flex items-center gap-3 px-6 py-3 bg-blue-50 text-blue-600 border-l-4 border-blue-600 relative">
-                <span class="material-symbols-rounded filled text-blue-600">group</span>
-                <span class="font-medium">Members</span>
-            </a>
-            <a href="/reports" class="flex items-center gap-3 px-6 py-3 text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors">
-                <span class="material-symbols-rounded text-gray-400">bar_chart</span>
-                <span class="font-medium">Reports</span>
-            </a>
-            <a href="/settings" class="flex items-center gap-3 px-6 py-3 text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors">
-                <span class="material-symbols-rounded text-gray-400">settings</span>
-                <span class="font-medium">Settings</span>
-            </a>
-        </nav>
-    </div>
-</aside>
+<x-cashier-sidebar active="members" />
 
 <!-- Main Content -->
 <main class="flex-1 flex flex-col bg-slate-50 relative h-full">
     <!-- Header -->
-    <header class="h-20 border-b border-gray-200 flex items-center justify-between px-8 bg-white shrink-0">
-        <div class="flex items-center">
-            <h2 class="text-xl font-bold text-gray-800">Manajemen Anggota</h2>
-            <div class="h-6 w-px bg-gray-300 mx-6"></div>
-            <div class="flex items-center gap-6 text-sm font-medium">
-                <a href="#" class="text-blue-600 font-bold border-b-2 border-blue-600 pb-1 -mb-1">Daftar Anggota</a>
-                <a href="#" class="text-gray-500 hover:text-gray-700">Plafon Kredit</a>
-            </div>
-        </div>
-        <div class="flex items-center gap-5">
-            <button class="text-gray-500 hover:text-gray-700">
-                <span class="material-symbols-rounded">notifications</span>
-            </button>
-            <button class="text-gray-500 hover:text-gray-700">
-                <span class="material-symbols-rounded">wifi</span>
-            </button>
-            <button class="text-gray-500 hover:text-gray-700">
-                <span class="material-symbols-rounded">sync</span>
-            </button>
-        </div>
-    </header>
+    <x-cashier-header title="Manajemen Anggota" />
 
     <!-- Scrollable content area -->
     <div class="flex-1 overflow-auto p-8 flex flex-col">
+        
+        <!-- Tabs -->
+        <div class="flex items-center gap-6 text-sm font-medium border-b border-gray-200 mb-6 pb-2">
+            <a href="#" class="text-blue-600 font-bold border-b-2 border-blue-600 pb-2 -mb-[9px]">Daftar Anggota</a>
+            <a href="#" class="text-gray-500 hover:text-gray-700">Plafon Kredit</a>
+        </div>
+
+
         
         <!-- Summary Cards -->
         <div class="mb-6">
@@ -106,10 +64,7 @@
                         <!-- Row 1 -->
                         <tr class="hover:bg-gray-50 transition-colors">
                             <td class="px-6 py-4">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">BP</div>
-                                    <div class="font-bold text-gray-900 leading-tight">Bambang<br>Pamungkas</div>
-                                </div>
+                                <div class="font-bold text-gray-900 leading-tight">Bambang Pamungkas</div>
                             </td>
                             <td class="px-6 py-4 font-mono text-gray-600 text-[13px]">327501002230004</td>
                             <td class="px-6 py-4">Logistik &<br>Gudang</td>
@@ -133,10 +88,7 @@
                         <!-- Row 2 -->
                         <tr class="hover:bg-gray-50 transition-colors">
                             <td class="px-6 py-4">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-xs">SL</div>
-                                    <div class="font-bold text-gray-900">Siti Lestari</div>
-                                </div>
+                                <div class="font-bold text-gray-900">Siti Lestari</div>
                             </td>
                             <td class="px-6 py-4 font-mono text-gray-600 text-[13px]">327501440230012</td>
                             <td class="px-6 py-4">Administrasi</td>
@@ -160,10 +112,7 @@
                         <!-- Row 3 - Blocked -->
                         <tr class="hover:bg-gray-50 transition-colors bg-gray-50/50">
                             <td class="px-6 py-4">
-                                <div class="flex items-center gap-3 opacity-60">
-                                    <div class="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center font-bold text-xs">AS</div>
-                                    <div class="font-bold text-gray-500 leading-tight">Andri<br>Setiawan</div>
-                                </div>
+                                <div class="font-bold text-gray-500 leading-tight">Andri Setiawan</div>
                             </td>
                             <td class="px-6 py-4 font-mono text-gray-400 text-[13px]">327501002230099</td>
                             <td class="px-6 py-4 text-gray-400">Produksi A</td>
@@ -187,10 +136,7 @@
                         <!-- Row 4 -->
                         <tr class="hover:bg-gray-50 transition-colors">
                             <td class="px-6 py-4">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center font-bold text-xs">DI</div>
-                                    <div class="font-bold text-gray-900">Dewi Indah</div>
-                                </div>
+                                <div class="font-bold text-gray-900">Dewi Indah</div>
                             </td>
                             <td class="px-6 py-4 font-mono text-gray-600 text-[13px]">327501550230056</td>
                             <td class="px-6 py-4">Maintenance</td>
@@ -214,10 +160,7 @@
                         <!-- Row 5 -->
                         <tr class="hover:bg-gray-50 transition-colors">
                             <td class="px-6 py-4">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">RH</div>
-                                    <div class="font-bold text-gray-900 leading-tight">Raka<br>Hendra</div>
-                                </div>
+                                <div class="font-bold text-gray-900 leading-tight">Raka Hendra</div>
                             </td>
                             <td class="px-6 py-4 font-mono text-gray-600 text-[13px]">327501009930011</td>
                             <td class="px-6 py-4">Logistik &<br>Gudang</td>

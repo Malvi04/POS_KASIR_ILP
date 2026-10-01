@@ -3,42 +3,14 @@
 @section('title', 'Dashboard - ILP POS')
 
 @section('content')
-<div class="flex flex-col h-screen w-full bg-[#f4f6f9] font-sans">
-    <!-- Header -->
-    <header class="h-16 px-8 flex items-center justify-between shrink-0 pt-2">
-        <h1 class="text-[22px] font-bold text-[#6a87c1] tracking-tight ml-2">ILP POS</h1>
-        <div class="flex items-center gap-5 text-[#a0abbd] mr-2">
-            <button class="hover:text-gray-600 transition-colors flex items-center">
-                <span class="material-symbols-rounded" style="font-size: 24px;">wifi</span>
-            </button>
-            <button class="hover:text-gray-600 transition-colors flex items-center">
-                <span class="material-symbols-rounded" style="font-size: 24px;">notifications</span>
-            </button>
-        </div>
-    </header>
+<div class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800">
+    <!-- Sidebar -->
+    <x-cashier-sidebar active="dashboard" />
 
-    <!-- Main Content Area -->
-    <div class="flex flex-1 overflow-hidden mt-4">
-        <!-- Sidebar -->
-        <aside class="w-64 shrink-0 flex flex-col px-6">
-            <nav class="flex flex-col gap-2">
-                <a href="#" class="flex items-center gap-4 px-4 py-3 bg-[#e2ecf8] text-[#6a87c1] rounded-xl font-semibold text-[15px]">
-                    <span class="material-symbols-rounded" style="font-size: 22px;">dashboard</span>
-                    Dashboard
-                </a>
-                <a href="#" class="flex items-center gap-4 px-4 py-3 text-[#a0abbd] hover:bg-gray-200/50 rounded-xl font-medium text-[15px] transition-colors">
-                    <span class="material-symbols-rounded" style="font-size: 22px;">inventory_2</span>
-                    Inventory
-                </a>
-                <a href="#" class="flex items-center gap-4 px-4 py-3 text-[#a0abbd] hover:bg-gray-200/50 rounded-xl font-medium text-[15px] transition-colors">
-                    <span class="material-symbols-rounded" style="font-size: 22px;">receipt_long</span>
-                    Sales
-                </a>
-            </nav>
-        </aside>
-
-        <!-- Main Workspace -->
-        <main class="flex-1 flex px-2 gap-10 overflow-hidden">
+    <!-- Main Workspace -->
+    <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
+        <x-cashier-header title="Dashboard" />
+        <div class="flex flex-1 mt-8">
             <!-- Left Area (Skeleton Content) -->
             <div class="flex-1 pt-1 ml-4">
                 <div class="flex flex-col gap-5">
@@ -64,7 +36,7 @@
                     </div>
                 </div>
             </div>
-        </main>
-    </div>
+        </div>
+    </main>
 </div>
 @endsection

@@ -3,80 +3,41 @@
 @section('title', 'POS - ILP POS')
 
 @section('content')
-<div x-data="{ showHoldModal: false, showPaymentModal: false }" class="flex w-full h-full relative text-gray-800">
+<div x-data="{ 
+    showHoldModal: false, 
+    grandTotal: 28638,
+    paymentModal: {
+        open: false,
+        method: 'tunai',
+        uangDiterima: '',
+        kembalian: 0
+    },
+    formatNumber(num) {
+        return new Intl.NumberFormat('id-ID').format(num);
+    },
+    calcKembalian() {
+        let uang = parseInt(this.paymentModal.uangDiterima.toString().replace(/\D/g, '')) || 0;
+        this.paymentModal.kembalian = uang - this.grandTotal;
+    },
+    setUang(amount) {
+        this.paymentModal.uangDiterima = amount.toString();
+        this.calcKembalian();
+    },
+    processPayment(method) {
+        if (method === 'tunai' && this.paymentModal.kembalian >= 0) {
+            window.location.href = '/cetak-struk';
+        } else if (method === 'qris') {
+            window.location.href = '/cetak-struk';
+        }
+    }
+}" @open-payment.window="paymentModal.open = true" class="flex w-full h-full relative text-gray-800">
     <!-- Sidebar -->
-    <aside class="w-64 bg-slate-100 border-r border-gray-200 flex flex-col justify-between shrink-0">
-        <div>
-            <div class="p-6">
-                <h1 class="text-3xl font-extrabold text-blue-800 tracking-tight">ILP POS</h1>
-            </div>
-            
-            <nav class="mt-2 px-4 flex flex-col gap-2">
-                <a href="#" class="flex items-center gap-3 px-4 py-3 bg-blue-200/50 text-blue-800 rounded-lg font-bold">
-                    <span class="material-symbols-rounded filled text-blue-700">dashboard</span>
-                    <span>Dashboard</span>
-                </a>
-                <a href="#" class="flex items-center gap-3 px-4 py-3 text-gray-600 hover:bg-gray-200/50 rounded-lg font-medium transition-colors">
-                    <span class="material-symbols-rounded text-gray-500">inventory_2</span>
-                    <span>Inventory</span>
-                </a>
-                <a href="#" class="flex items-center gap-3 px-4 py-3 text-gray-600 hover:bg-gray-200/50 rounded-lg font-medium transition-colors">
-                    <span class="material-symbols-rounded text-gray-500">point_of_sale</span>
-                    <span>Sales</span>
-                </a>
-                <a href="#" class="flex items-center gap-3 px-4 py-3 text-gray-600 hover:bg-gray-200/50 rounded-lg font-medium transition-colors">
-                    <span class="material-symbols-rounded text-gray-500">group</span>
-                    <span>Customers</span>
-                </a>
-                <a href="#" class="flex items-center gap-3 px-4 py-3 text-gray-600 hover:bg-gray-200/50 rounded-lg font-medium transition-colors">
-                    <span class="material-symbols-rounded text-gray-500">bar_chart</span>
-                    <span>Reports</span>
-                </a>
-            </nav>
-        </div>
-
-        <div class="px-4 pb-6 flex flex-col gap-2">
-            <a href="#" class="flex items-center gap-3 px-4 py-3 text-gray-600 hover:bg-gray-200/50 rounded-lg font-medium transition-colors">
-                <span class="material-symbols-rounded text-gray-500">settings</span>
-                <span>Settings</span>
-            </a>
-            <a href="#" class="flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg font-medium transition-colors">
-                <span class="material-symbols-rounded text-red-500">logout</span>
-                <span>Logout</span>
-            </a>
-        </div>
-    </aside>
+    <x-cashier-sidebar active="pos" />
 
     <!-- Main Section -->
     <main class="flex-1 flex flex-col bg-slate-50 min-w-0">
         <!-- Header -->
-        <header class="h-20 border-b border-gray-200 bg-slate-100 flex items-center justify-between px-8 shrink-0">
-            <div class="flex flex-col">
-                <span class="text-xs font-bold text-gray-500 tracking-wider">TERMINAL</span>
-                <h2 class="text-lg font-bold text-gray-800">#01 - Minimarket Retail</h2>
-            </div>
-            
-            <div class="flex items-center gap-6">
-                <!-- User Profile -->
-                <div class="flex items-center gap-3 bg-gray-200/60 px-4 py-2 rounded-lg">
-                    <span class="material-symbols-rounded text-blue-600 bg-white p-1 rounded-full shadow-sm">person</span>
-                    <div class="flex flex-col">
-                        <span class="text-sm font-bold text-gray-800 leading-tight">Andi Pratama</span>
-                        <span class="text-[10px] font-bold text-gray-500 tracking-wider">SHIFT PAGI (07:00 - 15:00)</span>
-                    </div>
-                </div>
-                
-                <div class="flex items-center gap-4 text-gray-500">
-                    <button class="hover:text-gray-700 relative">
-                        <span class="material-symbols-rounded">notifications</span>
-                        <span class="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full border border-slate-100"></span>
-                    </button>
-                    <button class="hover:text-gray-700">
-                        <span class="material-symbols-rounded">wifi</span>
-                    </button>
-                </div>
-            </div>
-        </header>
+        <x-cashier-header title="Terminal POS" />
 
         <!-- Content Area -->
         <div class="flex-1 flex overflow-hidden">
@@ -107,10 +68,7 @@
                 <div class="flex-1 overflow-y-auto mt-2 pb-4">
                     <div class="grid grid-cols-3 xl:grid-cols-4 gap-4">
                         <!-- Product 1 -->
-                        <div class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm hover:shadow-md cursor-pointer transition-shadow flex flex-col h-48 relative overflow-hidden group">
-                            <div class="h-24 bg-gray-100 rounded-lg mb-3 flex items-center justify-center p-2">
-                                <span class="material-symbols-rounded text-gray-300 text-4xl">cookie</span>
-                            </div>
+                        <div class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm hover:shadow-md cursor-pointer transition-shadow flex flex-col min-h-[100px] relative overflow-hidden group">
                             <div class="flex-1 flex flex-col justify-between">
                                 <h4 class="font-bold text-gray-800 text-sm leading-tight line-clamp-2">Oreo Vanilla 133g</h4>
                                 <div class="flex items-center justify-between mt-1">
@@ -127,10 +85,7 @@
                         </div>
 
                         <!-- Product 2 -->
-                        <div class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm hover:shadow-md cursor-pointer transition-shadow flex flex-col h-48 relative">
-                            <div class="h-24 bg-gray-100 rounded-lg mb-3 flex items-center justify-center p-2">
-                                <span class="material-symbols-rounded text-gray-300 text-4xl">ramen_dining</span>
-                            </div>
+                        <div class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm hover:shadow-md cursor-pointer transition-shadow flex flex-col min-h-[100px] relative">
                             <div class="flex-1 flex flex-col justify-between">
                                 <h4 class="font-bold text-gray-800 text-sm leading-tight line-clamp-2">Indomie Goreng Spcl</h4>
                                 <div class="mt-1">
@@ -144,7 +99,7 @@
                         </div>
 
                         <!-- See All -->
-                        <div class="bg-gray-100 border-2 border-dashed border-gray-300 rounded-xl p-4 shadow-sm hover:bg-gray-200 cursor-pointer transition-colors flex flex-col items-center justify-center h-48 text-gray-500">
+                        <div class="bg-gray-100 border-2 border-dashed border-gray-300 rounded-xl p-4 shadow-sm hover:bg-gray-200 cursor-pointer transition-colors flex flex-col items-center justify-center min-h-[100px] text-gray-500">
                             <span class="material-symbols-rounded text-3xl mb-2">add_circle</span>
                             <span class="text-xs font-bold tracking-wider">LIHAT SEMUA</span>
                         </div>
@@ -170,9 +125,6 @@
                     
                     <!-- Item 1 -->
                     <div class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex gap-3">
-                        <div class="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center shrink-0">
-                             <span class="material-symbols-rounded text-gray-400">ramen_dining</span>
-                        </div>
                         <div class="flex-1 flex flex-col justify-between">
                             <div class="flex justify-between items-start">
                                 <h4 class="font-bold text-gray-800 text-sm leading-tight">Indomie Goreng Spcl</h4>
@@ -191,9 +143,6 @@
 
                     <!-- Item 2 -->
                     <div class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex gap-3 relative">
-                        <div class="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center shrink-0">
-                             <span class="material-symbols-rounded text-gray-400">cookie</span>
-                        </div>
                         <div class="flex-1 flex flex-col justify-between">
                             <div class="flex justify-between items-start">
                                 <h4 class="font-bold text-gray-800 text-sm leading-tight">Oreo Vanilla 133g</h4>
@@ -215,9 +164,6 @@
 
                     <!-- Item 3 -->
                     <div class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex gap-3">
-                        <div class="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center shrink-0">
-                             <span class="material-symbols-rounded text-gray-400">local_cafe</span>
-                        </div>
                         <div class="flex-1 flex flex-col justify-between">
                             <div class="flex justify-between items-start">
                                 <h4 class="font-bold text-gray-800 text-sm leading-tight">Teh Pucuk 350ml</h4>
@@ -270,7 +216,7 @@
                             </div>
                             <span class="text-[10px] text-gray-400 tracking-widest">F3</span>
                         </button>
-                        <button @click="showPaymentModal = true" class="flex-[1.5] flex flex-col items-center justify-center gap-1 bg-[#0b3c9a] hover:bg-blue-800 text-white py-3 rounded-xl shadow-md font-bold transition-colors">
+                        <button @click="paymentModal.open = true" class="flex-[1.5] flex flex-col items-center justify-center gap-1 bg-[#0b3c9a] hover:bg-blue-800 text-white py-3 rounded-xl shadow-md font-bold transition-colors">
                             <div class="flex items-center gap-2">
                                 <span class="material-symbols-rounded">payments</span>
                                 <span>Bayar</span>
@@ -284,7 +230,7 @@
     </main>
 
     <!-- Overlay for Modals -->
-    <div x-show="showHoldModal || showPaymentModal" 
+    <div x-show="showHoldModal" 
          x-transition.opacity
          style="display: none;" 
          class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 flex items-center justify-center">
@@ -382,94 +328,9 @@
             </div>
         </div>
 
-        <!-- MODAL 2: Konfirmasi Pembayaran -->
-        <div x-show="showPaymentModal" 
-             @click.away="showPaymentModal = false"
-             x-transition.scale.origin.bottom
-             class="bg-white rounded-2xl shadow-2xl w-[750px] overflow-hidden flex flex-col"
-             style="display: none;">
-            
-            <div class="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50/50">
-                <div>
-                    <h3 class="text-2xl font-bold text-blue-800">Konfirmasi Pembayaran</h3>
-                    <p class="text-sm text-gray-500 mt-1">Pilih metode dan masukkan nominal pembayaran</p>
-                </div>
-                <button @click="showPaymentModal = false" class="text-gray-400 hover:text-gray-700 transition-colors">
-                    <span class="material-symbols-rounded text-3xl">close</span>
-                </button>
-            </div>
-
-            <!-- Tabs -->
-            <div class="flex border-b border-gray-200 px-6 pt-4 bg-gray-50/30">
-                <button class="px-8 py-3 font-bold text-blue-700 border-b-2 border-blue-600 flex items-center gap-2">
-                    <span class="material-symbols-rounded">payments</span> Tunai
-                </button>
-                <button class="px-8 py-3 font-bold text-gray-500 hover:text-gray-700 border-b-2 border-transparent flex items-center gap-2">
-                    <span class="material-symbols-rounded">qr_code_2</span> QRIS
-                </button>
-                <button class="px-8 py-3 font-bold text-gray-500 hover:text-gray-700 border-b-2 border-transparent flex items-center gap-2">
-                    <span class="material-symbols-rounded">credit_card</span> Kredit Anggota
-                </button>
-            </div>
-
-            <div class="flex p-6 gap-8">
-                <!-- Left: Input Area -->
-                <div class="flex-1 flex flex-col gap-4">
-                    <div class="flex flex-col gap-2">
-                        <label class="text-xs font-bold text-gray-500 tracking-wider">TUNAI DITERIMA</label>
-                        <div class="relative">
-                            <span class="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-bold text-blue-800">Rp</span>
-                            <input type="text" value="50.000" class="w-full pl-14 pr-4 py-4 rounded-xl border-2 border-blue-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 text-3xl font-mono font-bold text-blue-800 text-right shadow-inner outline-none transition-all">
-                        </div>
-                    </div>
-                    
-                    <div class="grid grid-cols-2 gap-3 mt-2">
-                        <button class="py-3 px-4 border border-gray-200 hover:border-blue-300 hover:bg-blue-50 rounded-xl font-mono font-bold text-lg text-gray-700 transition-colors shadow-sm bg-white">
-                            Rp 30.000
-                        </button>
-                        <button class="py-3 px-4 border border-gray-200 hover:border-blue-300 hover:bg-blue-50 rounded-xl font-mono font-bold text-lg text-gray-700 transition-colors shadow-sm bg-white">
-                            Rp 50.000
-                        </button>
-                        <button class="py-3 px-4 border border-gray-200 hover:border-blue-300 hover:bg-blue-50 rounded-xl font-mono font-bold text-lg text-gray-700 transition-colors shadow-sm bg-white">
-                            Rp 100.000
-                        </button>
-                        <button class="py-3 px-4 border border-gray-200 hover:border-blue-300 hover:bg-blue-50 rounded-xl font-bold text-lg text-gray-700 transition-colors shadow-sm bg-white">
-                            Uang Pas
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Right: Summary -->
-                <div class="w-64 bg-gray-50 rounded-xl p-5 border border-gray-200 flex flex-col justify-center gap-4">
-                    <div class="flex justify-between items-center">
-                        <span class="text-sm font-medium text-gray-600">Total Tagihan</span>
-                        <span class="font-mono font-bold text-gray-900">Rp 28.638</span>
-                    </div>
-                    <div class="flex justify-between items-center border-b border-gray-200 pb-4">
-                        <span class="text-sm font-medium text-gray-600">Diterima</span>
-                        <span class="font-mono font-bold text-gray-900">Rp 50.000</span>
-                    </div>
-                    
-                    <div class="pt-2">
-                        <span class="text-xs font-bold text-gray-500 tracking-wider">KEMBALIAN</span>
-                        <div class="text-3xl font-mono font-black text-green-600 mt-1">
-                            <span class="text-lg mr-1 text-green-500">Rp</span>21.362
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="p-6 border-t border-gray-200 flex justify-center gap-4 bg-gray-50/50">
-                <button @click="showPaymentModal = false" class="bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 font-bold py-3 px-8 rounded-xl shadow-sm transition-colors w-48">
-                    Batal
-                </button>
-                <button class="bg-[#0b3c9a] hover:bg-blue-800 text-white font-bold py-3 px-8 rounded-xl shadow-md transition-colors flex items-center justify-center gap-2 flex-1">
-                    <span class="material-symbols-rounded">print</span>
-                    Selesaikan & Cetak Struk
-                </button>
-            </div>
-        </div>
-
     </div>
+
+    <!-- MODAL 2: Konfirmasi Pembayaran (Partial Include) -->
+    @include('kasir.partials._payment-modal')
 </div>
 @endsection

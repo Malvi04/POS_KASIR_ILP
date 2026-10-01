@@ -37,3 +37,23 @@ Route::get('/dashboard', function () {
 Route::get('/reports', function () {
     return view('reports');
 });
+
+Route::get('/select-shift', function () {
+    return view('select-shift');
+});
+
+Route::get('/proses-kredit', function () {
+    return view('proses-kredit');
+});
+
+Route::get('/kupon', function () {
+    return view('kupon');
+});
+
+Route::get('/retur', function () {
+    return view('retur');
+});
+
+Route::get('/cetak-struk', function () {
+    return view('cetak-struk');
+});

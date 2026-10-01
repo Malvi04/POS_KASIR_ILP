@@ -1,10 +1,10 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="id" class="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Minimarket ILP - Portal Akses</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=block" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=block" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <script id="tailwind-config">
         tailwind.config = {
@@ -83,13 +83,13 @@
                     },
                     fontFamily: {
                         "financial-lg": ["JetBrains Mono"],
-                        "headline-sm": ["Inter"],
+                        "headline-sm": ["Instrument Sans"],
                         "financial-md": ["JetBrains Mono"],
-                        "display-lg": ["Inter"],
-                        "body-md": ["Inter"],
-                        "label-caps": ["Inter"],
-                        "headline-md": ["Inter"],
-                        "body-lg": ["Inter"]
+                        "display-lg": ["Instrument Sans"],
+                        "body-md": ["Instrument Sans"],
+                        "label-caps": ["Instrument Sans"],
+                        "headline-md": ["Instrument Sans"],
+                        "body-lg": ["Instrument Sans"]
                     },
                     fontSize: {
                         "financial-lg": ["20px", {lineHeight: "28px", fontWeight: "600"}],
@@ -120,7 +120,7 @@
             <div id="role-selector" class="grid grid-cols-1 md:grid-cols-3 gap-stack-md w-full max-w-3xl transition-all duration-300">
                 <a href="{{ route('cashier.login') }}" data-role="Kasir" class="role-card group flex flex-col items-center p-stack-lg bg-surface-card border border-border-subtle rounded-xl shadow-sm hover:shadow-md transition-all duration-300 hover:border-primary active:scale-95">
                     <div class="w-20 h-20 rounded-full bg-surface-container flex items-center justify-center mb-stack-md group-hover:bg-primary-fixed-dim transition-colors">
-                        <span class="material-symbols-outlined text-[40px] text-primary">point_of_sale</span>
+                        <span class="material-symbols-rounded text-[40px] text-primary">point_of_sale</span>
                     </div>
                     <span class="font-headline-sm text-headline-sm text-on-surface mb-1">Kasir</span>
                     <span class="text-on-surface-variant text-label-caps font-label-caps uppercase tracking-widest">Akses Transaksi</span>
@@ -128,7 +128,7 @@
 
                 <a href="{{ route('manager.login') }}" data-role="Manager" class="role-card group flex flex-col items-center p-stack-lg bg-surface-card border border-border-subtle rounded-xl shadow-sm hover:shadow-md transition-all duration-300 hover:border-primary active:scale-95">
                     <div class="w-20 h-20 rounded-full bg-surface-container flex items-center justify-center mb-stack-md group-hover:bg-primary-fixed-dim transition-colors">
-                        <span class="material-symbols-outlined text-[40px] text-primary">inventory_2</span>
+                        <span class="material-symbols-rounded text-[40px] text-primary">inventory_2</span>
                     </div>
                     <span class="font-headline-sm text-headline-sm text-on-surface mb-1">Manager</span>
                     <span class="text-on-surface-variant text-label-caps font-label-caps uppercase tracking-widest">Akses Operasional</span>
@@ -136,7 +136,7 @@
 
                 <button onclick="selectRole('Owner')" data-role="Owner" class="role-card group flex flex-col items-center p-stack-lg bg-surface-card border border-border-subtle rounded-xl shadow-sm hover:shadow-md transition-all duration-300 hover:border-primary active:scale-95">
                     <div class="w-20 h-20 rounded-full bg-surface-container flex items-center justify-center mb-stack-md group-hover:bg-primary-fixed-dim transition-colors">
-                        <span class="material-symbols-outlined text-[40px] text-primary">analytics</span>
+                        <span class="material-symbols-rounded text-[40px] text-primary">analytics</span>
                     </div>
                     <span class="font-headline-sm text-headline-sm text-on-surface mb-1">Owner</span>
                     <span class="text-on-surface-variant text-label-caps font-label-caps uppercase tracking-widest">Akses Strategis</span>
@@ -163,7 +163,7 @@
                     <div class="space-y-stack-sm pt-2">
                         <button class="w-full h-12 bg-primary text-on-primary font-headline-sm text-headline-sm rounded-lg hover:bg-on-primary-fixed-variant active:scale-[0.98] transition-all flex items-center justify-center space-x-2">
                             <span>Masuk Ke Sistem</span>
-                            <span class="material-symbols-outlined">login</span>
+                            <span class="material-symbols-rounded">login</span>
                         </button>
                         <div class="flex justify-center">
                             <a href="#" class="text-primary font-body-md hover:underline decoration-2 underline-offset-4">Lupa PIN?</a>
@@ -173,7 +173,7 @@
                 
                 <div class="mt-4 flex justify-center">
                     <button onclick="resetSelection()" class="text-on-surface-variant flex items-center space-x-1 hover:text-primary transition-colors">
-                        <span class="material-symbols-outlined text-[18px]">arrow_back</span>
+                        <span class="material-symbols-rounded text-[18px]">arrow_back</span>
                         <span class="font-label-caps text-label-caps uppercase tracking-wider">Kembali Pilih Peran</span>
                     </button>
                 </div>
@@ -189,7 +189,7 @@
         <div class="flex items-center space-x-gutter">
             <span class="text-label-caps font-label-caps text-text-secondary uppercase">© 2026 Minimarket ILP</span>
             <a href="#" class="text-primary hover:underline text-label-caps font-label-caps uppercase flex items-center space-x-1">
-                <span class="material-symbols-outlined text-[14px]">help</span>
+                <span class="material-symbols-rounded text-[14px]">help</span>
                 <span>Bantuan</span>
             </a>
         </div>

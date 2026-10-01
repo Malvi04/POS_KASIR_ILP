@@ -6,78 +6,12 @@
 <div class="flex flex-col h-screen w-full font-sans">
     <div class="flex flex-1 overflow-hidden">
         <!-- Sidebar -->
-        <aside class="w-[240px] shrink-0 flex flex-col justify-between bg-[#f4f6f9] border-r border-[#e2e8f0]">
-             <!-- Top Part -->
-             <div>
-                 <div class="px-6 py-6 pt-8">
-                     <h1 class="text-[20px] font-extrabold text-[#1e3a8a] tracking-tight leading-tight">Vigilant POS</h1>
-                     <p class="text-[13px] font-semibold text-[#64748b] mt-1">Worker Coop Admin</p>
-                 </div>
-                 
-                 <nav class="flex flex-col gap-2 px-4 mt-4">
-                     <a href="#" class="flex items-center gap-4 px-4 py-3 text-[#64748b] hover:bg-gray-200/50 rounded-xl font-medium text-[14.5px] transition-colors">
-                         <span class="material-symbols-rounded" style="font-size: 22px;">dashboard</span>
-                         Dashboard
-                     </a>
-                     <!-- Active State -->
-                     <a href="#" class="flex items-center gap-4 px-4 py-3 bg-[#e0e7ff] text-[#2764c2] rounded-xl font-bold text-[14.5px] relative overflow-hidden">
-                         <div class="absolute left-0 top-0 bottom-0 w-1.5 bg-[#2764c2] rounded-r-md"></div>
-                         <span class="material-symbols-rounded filled" style="font-size: 22px;">bar_chart</span>
-                         Reports
-                     </a>
-                     <a href="#" class="flex items-center gap-4 px-4 py-3 text-[#64748b] hover:bg-gray-200/50 rounded-xl font-medium text-[14.5px] transition-colors">
-                         <span class="material-symbols-rounded" style="font-size: 22px;">inventory_2</span>
-                         Products
-                     </a>
-                     <a href="#" class="flex items-center gap-4 px-4 py-3 text-[#64748b] hover:bg-gray-200/50 rounded-xl font-medium text-[14.5px] transition-colors">
-                         <span class="material-symbols-rounded" style="font-size: 22px;">group</span>
-                         Members
-                     </a>
-                     <a href="#" class="flex items-center gap-4 px-4 py-3 text-[#64748b] hover:bg-gray-200/50 rounded-xl font-medium text-[14.5px] transition-colors">
-                         <span class="material-symbols-rounded" style="font-size: 22px;">settings</span>
-                         Settings
-                     </a>
-                 </nav>
-             </div>
-             
-             <!-- User profile bottom -->
-             <div class="p-4 border-t border-[#e2e8f0]">
-                 <div class="flex items-center gap-3">
-                     <div class="w-10 h-10 rounded-full bg-[#3b82f6] text-white flex items-center justify-center font-bold text-sm">AD</div>
-                     <div class="flex flex-col">
-                         <span class="text-[13px] font-bold text-gray-900 leading-tight">Admin</span>
-                         <span class="text-[11px] text-[#64748b] font-medium mt-0.5">Vigilant Terminal 01</span>
-                     </div>
-                 </div>
-             </div>
-        </aside>
+        <x-cashier-sidebar active="reports" />
         
         <!-- Main Area -->
         <div class="flex-1 flex flex-col min-w-0 bg-[#fafafa]">
             <!-- Header -->
-            <header class="h-16 px-8 flex items-center justify-between border-b border-[#e2e8f0] bg-white shrink-0">
-                <!-- Search -->
-                <div class="relative w-80">
-                    <span class="material-symbols-rounded absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" style="font-size: 20px;">search</span>
-                    <input type="text" placeholder="Cari transaksi..." class="w-full pl-10 pr-4 py-2 bg-[#f8fafc] border border-[#e2e8f0] rounded-lg text-sm focus:outline-none focus:border-blue-500 text-gray-700 font-medium placeholder-gray-400">
-                </div>
-                
-                <div class="flex items-center gap-6">
-                    <div class="flex items-center gap-4 text-gray-500">
-                        <button class="hover:text-gray-900 transition-colors"><span class="material-symbols-rounded" style="font-size: 22px;">notifications</span></button>
-                        <button class="hover:text-gray-900 transition-colors"><span class="material-symbols-rounded" style="font-size: 22px;">wifi</span></button>
-                        <button class="hover:text-gray-900 transition-colors"><span class="material-symbols-rounded" style="font-size: 22px;">sync</span></button>
-                    </div>
-                    
-                    <div class="h-5 w-px bg-gray-300"></div>
-                    
-                    <div class="flex items-center gap-2 text-[13px]">
-                        <span class="font-bold text-gray-600">Reports</span>
-                        <span class="material-symbols-rounded text-gray-400" style="font-size: 16px;">chevron_right</span>
-                        <span class="font-bold text-[#2764c2]">Riwayat Penjualan</span>
-                    </div>
-                </div>
-            </header>
+            <x-cashier-header title="Laporan & Riwayat" />
             
             <!-- Content -->
             <main class="flex-1 overflow-y-auto p-8 bg-[#f8f9fb]">
@@ -100,11 +34,6 @@
                         <span class="text-[13px] font-bold text-gray-500 mb-1">Jumlah Transaksi</span>
                         <h2 class="text-[32px] font-black text-gray-900 mb-2 tracking-tight">142</h2>
                         <div class="flex items-center gap-3">
-                            <div class="flex -space-x-2">
-                                <div class="w-6 h-6 rounded-full bg-blue-600 border-2 border-white"></div>
-                                <div class="w-6 h-6 rounded-full bg-blue-300 border-2 border-white"></div>
-                                <div class="w-6 h-6 rounded-full bg-gray-200 border-2 border-white"></div>
-                            </div>
                             <span class="text-[11px] font-bold text-gray-500">Antrian Lancar</span>
                         </div>
                     </div>
@@ -198,12 +127,8 @@
                                     </div>
                                 </td>
                                 <td class="px-6 py-4">
-                                    <div class="flex items-center gap-3">
-                                        <div class="w-7 h-7 rounded-full bg-blue-100 text-[#1e40af] flex items-center justify-center text-[10px] font-bold shrink-0">BK</div>
-                                        <div class="flex flex-col text-[12px]">
-                                            <span class="font-bold text-gray-800">Budi</span>
-                                            <span class="text-gray-500">Kurniawan</span>
-                                        </div>
+                                    <div class="flex flex-col text-[12px]">
+                                        <span class="font-bold text-gray-800">Budi Kurniawan</span>
                                     </div>
                                 </td>
                                 <td class="px-6 py-4">
@@ -234,12 +159,8 @@
                                     </div>
                                 </td>
                                 <td class="px-6 py-4">
-                                    <div class="flex items-center gap-3">
-                                        <div class="w-7 h-7 rounded-full bg-blue-100 text-[#1e40af] flex items-center justify-center text-[10px] font-bold shrink-0">BK</div>
-                                        <div class="flex flex-col text-[12px]">
-                                            <span class="font-bold text-gray-800">Budi</span>
-                                            <span class="text-gray-500">Kurniawan</span>
-                                        </div>
+                                    <div class="flex flex-col text-[12px]">
+                                        <span class="font-bold text-gray-800">Budi Kurniawan</span>
                                     </div>
                                 </td>
                                 <td class="px-6 py-4">
@@ -270,12 +191,8 @@
                                     </div>
                                 </td>
                                 <td class="px-6 py-4">
-                                    <div class="flex items-center gap-3 opacity-60">
-                                        <div class="w-7 h-7 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-[10px] font-bold shrink-0">BK</div>
-                                        <div class="flex flex-col text-[12px]">
-                                            <span class="font-bold text-gray-500">Budi</span>
-                                            <span class="text-gray-400">Kurniawan</span>
-                                        </div>
+                                    <div class="flex flex-col text-[12px] opacity-60">
+                                        <span class="font-bold text-gray-500">Budi Kurniawan</span>
                                     </div>
                                 </td>
                                 <td class="px-6 py-4">
@@ -306,12 +223,8 @@
                                     </div>
                                 </td>
                                 <td class="px-6 py-4">
-                                    <div class="flex items-center gap-3">
-                                        <div class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold shrink-0">ST</div>
-                                        <div class="flex flex-col text-[12px]">
-                                            <span class="font-bold text-gray-800">Siti</span>
-                                            <span class="text-gray-500">Aminah</span>
-                                        </div>
+                                    <div class="flex flex-col text-[12px]">
+                                        <span class="font-bold text-gray-800">Siti Aminah</span>
                                     </div>
                                 </td>
                                 <td class="px-6 py-4">
@@ -345,12 +258,8 @@
                                     </div>
                                 </td>
                                 <td class="px-6 py-4">
-                                    <div class="flex items-center gap-3">
-                                        <div class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold shrink-0">ST</div>
-                                        <div class="flex flex-col text-[12px]">
-                                            <span class="font-bold text-gray-800">Siti</span>
-                                            <span class="text-gray-500">Aminah</span>
-                                        </div>
+                                    <div class="flex flex-col text-[12px]">
+                                        <span class="font-bold text-gray-800">Siti Aminah</span>
                                     </div>
                                 </td>
                                 <td class="px-6 py-4">
