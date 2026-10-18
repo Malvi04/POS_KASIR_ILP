@@ -3,7 +3,7 @@
 @section('title', 'Pilih Shift - ILP POS')
 
 @section('content')
-<div class="bg-[#f8f9fa] min-h-screen flex flex-col text-gray-800 w-full font-sans" x-data="{ selectedShift: 'pagi' }">
+<div class="bg-[#f8f9fa] min-h-screen flex flex-col text-gray-800 w-full font-sans" x-data="{ selectedShift: 'kasir_1' }">
 
     <!-- Topbar -->
     <header class="h-14 bg-[#f8f9fa] border-b border-gray-200 flex items-center justify-between px-6 shrink-0">
@@ -73,50 +73,24 @@
 
             <!-- Shift Selection -->
             <div class="bg-white rounded-2xl shadow-sm border border-gray-200 flex-1 p-8 flex flex-col">
-                <h3 class="text-gray-700 font-medium text-sm mb-6">Pilih Jadwal Shift</h3>
+                <h3 class="text-gray-700 font-medium text-sm mb-6">Pilih Kasir</h3>
 
-                <div class="flex flex-col gap-4">
-                    <!-- Shift Pagi -->
-                    <label class="relative flex items-center p-5 rounded-xl border-[1.5px] cursor-pointer transition-all"
-                           :class="selectedShift === 'pagi' ? 'border-[#0052cc] bg-[#eef2ff]' : 'border-gray-200 hover:border-blue-300 bg-white'">
-                        <input type="radio" name="shift" value="pagi" x-model="selectedShift" class="hidden">
-                        <div class="flex flex-col">
-                            <span class="text-sm font-bold text-gray-700" :class="selectedShift === 'pagi' ? 'text-gray-900' : ''">Shift Pagi</span>
-                            <span class="text-2xl font-mono font-bold text-[#0052cc] mt-1 tracking-wide">07:00 - 15:00</span>
-                        </div>
-                    </label>
-
-                    <!-- Shift Sore -->
-                    <label class="relative flex items-center p-5 rounded-xl border-[1.5px] cursor-pointer transition-all"
-                           :class="selectedShift === 'sore' ? 'border-[#0052cc] bg-[#eef2ff]' : 'border-gray-200 hover:border-blue-300 bg-white'">
-                        <input type="radio" name="shift" value="sore" x-model="selectedShift" class="hidden">
-                        <div class="flex flex-col">
-                            <span class="text-sm font-bold text-gray-700" :class="selectedShift === 'sore' ? 'text-gray-900' : ''">Shift Sore</span>
-                            <span class="text-2xl font-mono font-bold text-[#0052cc] mt-1 tracking-wide">15:00 - 22:00</span>
-                        </div>
-                    </label>
-
-                    <!-- Shift Malam (Disabled) -->
-                    <label class="relative flex items-center justify-between p-5 rounded-xl border-[1.5px] border-gray-200 bg-[#f8f9fa] cursor-not-allowed opacity-80">
-                        <input type="radio" name="shift" value="malam" disabled class="hidden">
-                        <div class="flex flex-col">
-                            <span class="text-sm font-bold text-gray-400">Shift Malam (Lembur)</span>
-                            <span class="text-2xl font-mono font-bold text-gray-400 mt-1 tracking-wide">22:00 - 06:00</span>
-                        </div>
-                        <span class="material-symbols-rounded text-gray-400">lock</span>
-                    </label>
+                <div class="flex flex-col gap-3 overflow-y-auto pr-2" style="max-height: 380px;">
+                    <template x-for="i in 12" :key="i">
+                        <label class="relative flex items-center p-4 rounded-lg border-[1.5px] cursor-pointer transition-all"
+                               :class="selectedShift === 'kasir_' + i ? 'border-[#0052cc] bg-[#eef2ff]' : 'border-gray-200 hover:border-blue-300 bg-white'">
+                            <input type="radio" name="kasir" :value="'kasir_' + i" x-model="selectedShift" class="hidden">
+                            <span class="text-[15px] font-bold text-gray-700" :class="selectedShift === 'kasir_' + i ? 'text-gray-900' : ''" x-text="'Kasir ' + i"></span>
+                        </label>
+                    </template>
                 </div>
 
                 <!-- Action Buttons -->
-                <div class="mt-8 flex gap-4 w-full">
-                    <a href="{{ url('/pos') }}" class="bg-[#16a34a] hover:bg-[#15803d] text-white font-bold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm shadow-sm">
+                <div class="mt-8 flex justify-center w-full">
+                    <a href="{{ url('/pos') }}" class="bg-[#16a34a] hover:bg-[#15803d] text-white font-bold py-2.5 px-8 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm shadow-sm">
                         <span class="material-symbols-rounded text-[20px]">login</span>
-                        Masuk Shift
+                        Masuk
                     </a>
-                    <button class="bg-[#4f5e71] hover:bg-[#3d4a5a] text-white font-bold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm shadow-sm">
-                        <span class="material-symbols-rounded text-[20px]">logout</span>
-                        Pulang Shift
-                    </button>
                 </div>
             </div>
         </div>

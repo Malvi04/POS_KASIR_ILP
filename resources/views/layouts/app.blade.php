@@ -44,6 +44,67 @@
             background: #94a3b8;
         }
     </style>
+    <script>
+        (function () {
+            const pageCache = new Map();
+
+            function prefetchUrl(url) {
+                if (!pageCache.has(url)) {
+                    pageCache.set(url, fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                        .then(r => r.ok ? r.text() : null)
+                        .catch(() => null));
+                }
+                return pageCache.get(url);
+            }
+
+            async function navigateTo(url, push = true) {
+                try {
+                    const html = await prefetchUrl(url);
+                    if (!html) {
+                        window.location.href = url;
+                        return;
+                    }
+                    const doc = new DOMParser().parseFromString(html, 'text/html');
+                    document.title = doc.title;
+                    document.body.innerHTML = doc.body.innerHTML;
+                    if (push) {
+                        window.history.pushState({ url }, doc.title, url);
+                    }
+                } catch (err) {
+                    window.location.href = url;
+                }
+            }
+
+            document.addEventListener('mouseover', function (e) {
+                const link = e.target.closest('a');
+                if (!link || !link.href || link.target || link.hasAttribute('download')) return;
+                const href = link.getAttribute('href');
+                if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+                if (link.origin === window.location.origin) {
+                    prefetchUrl(link.href);
+                }
+            }, { passive: true });
+
+            document.addEventListener('click', function (e) {
+                if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                const link = e.target.closest('a');
+                if (!link || !link.href || link.target || link.hasAttribute('download')) return;
+                const href = link.getAttribute('href');
+                if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+                if (link.origin === window.location.origin) {
+                    e.preventDefault();
+                    if (link.href !== window.location.href) {
+                        navigateTo(link.href, true);
+                    }
+                }
+            });
+
+            window.addEventListener('popstate', function () {
+                pageCache.delete(window.location.href);
+                navigateTo(window.location.href, false);
+            });
+        })();
+    </script>
 </head>
 <body class="font-sans text-slate-800 antialiased overflow-hidden h-screen w-screen flex">
     @yield('content')

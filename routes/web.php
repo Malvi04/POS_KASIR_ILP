@@ -57,3 +57,59 @@ Route::get('/retur', function () {
 Route::get('/cetak-struk', function () {
     return view('cetak-struk');
 });
+
+Route::get('/absensi', function () {
+    return view('absensi');
+});
+
+Route::get('/member-detail', function () {
+    return view('member-detail');
+});
+
+Route::get('/stock-opname', function () {
+    return view('stock-opname');
+});
+
+Route::get('/kasir/stock-opname', function () {
+    return view('cashier-stock-opname');
+});
+
+Route::get('/kasir/inventory', function () {
+    return view('cashier-inventory');
+});
+
+Route::get('/kasir/members', function () {
+    return view('cashier-members');
+});
+
+Route::get('/promosi', function () {
+    return view('promosi');
+});
+
+Route::get('/kasir/reports', function () {
+    return view('cashier-reports');
+});
+
+Route::get('/kelola-akun', function () {
+    return view('kelola-akun');
+});
+
+Route::get('/kasir/retur', function () {
+    return view('cashier-retur');
+});
+
+Route::get('/umkm-partners', function () {
+    return view('umkm-partners');
+});
+
+Route::get('/kasir/settings', function () {
+    return view('cashier-settings');
+});
+
+
+
+
+
+
+
+
