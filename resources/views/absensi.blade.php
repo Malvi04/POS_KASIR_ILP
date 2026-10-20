@@ -76,12 +76,22 @@
                     </div>
                     
                     <div class="flex flex-col gap-1.5">
-                        <label class="text-[12px] font-bold text-gray-600">Shift</label>
+                        <label class="text-[12px] font-bold text-gray-600">Kasir</label>
                         <div class="relative">
                             <select class="appearance-none w-[180px] bg-white border border-gray-200 rounded-lg px-3 py-2 pr-8 text-[13px] text-gray-700 focus:outline-none focus:border-[#0052cc]">
-                                <option>Semua Shift</option>
-                                <option>Shift Pagi</option>
-                                <option>Shift Sore</option>
+                                <option>Semua Kasir</option>
+                                <option>Kasir 1</option>
+                                <option>Kasir 2</option>
+                                <option>Kasir 3</option>
+                                <option>Kasir 4</option>
+                                <option>Kasir 5</option>
+                                <option>Kasir 6</option>
+                                <option>Kasir 7</option>
+                                <option>Kasir 8</option>
+                                <option>Kasir 9</option>
+                                <option>Kasir 10</option>
+                                <option>Kasir 11</option>
+                                <option>Kasir 12</option>
                             </select>
                             <span class="material-symbols-rounded absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-[18px]">expand_more</span>
                         </div>

@@ -7,11 +7,11 @@ Route::get('/', function () {
 });
 
 Route::get('/login-kasir', function () {
-    return view('cashier-login');
+    return view('welcome', ['initialRole' => 'Kasir']);
 })->name('cashier.login');
 
 Route::get('/login-manager', function () {
-    return view('manager-login');
+    return view('welcome', ['initialRole' => 'Manager']);
 })->name('manager.login');
 
 Route::get('/inventory', function () {
@@ -105,6 +105,11 @@ Route::get('/umkm-partners', function () {
 Route::get('/kasir/settings', function () {
     return view('cashier-settings');
 });
+
+Route::get('/kasir/sesi', function () {
+    return view('cashier-session');
+})->name('cashier.session');
+
 
 
 

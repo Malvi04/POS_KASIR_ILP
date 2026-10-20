@@ -3,10 +3,15 @@
 @section('title', 'Cetak Struk - ILP POS')
 
 @section('content')
-<div class="flex flex-col min-h-screen w-full bg-[#f8f9fa] font-sans">
+<div x-data="cashierOpeningData()" x-init="initOpening()" class="flex flex-col min-h-screen w-full bg-[#f8f9fa] font-sans">
     
     <!-- Top Header -->
-    <x-cashier-header title="Cetak Struk" />
+    <x-cashier-header title="Cetak Struk">
+        <a href="{{ url('/pos') }}" class="px-3.5 py-1.5 rounded-xl bg-[#0052cc] hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs">
+            <span class="material-symbols-rounded text-[16px]">arrow_back</span>
+            <span>Transaksi Baru (POS)</span>
+        </a>
+    </x-cashier-header>
 
     <!-- Main Content -->
     <main class="flex-1 overflow-y-auto bg-slate-50 relative">
@@ -18,26 +23,34 @@
             <!-- Receipt Header -->
             <div class="text-center mb-5">
                 <h2 class="text-2xl font-black text-[#0052cc] tracking-tight mb-1">MINIMARKET ILP</h2>
-                <p class="text-[13px] font-bold text-gray-600">Cabang Utama - Jakarta Selatan</p>
-                <p class="text-[12px] font-medium text-gray-400">Jl. Sudirman No. 45, Jakarta</p>
+                <p class="text-[13px] font-bold text-gray-600" x-text="activeSession.storeLocation">Minimarket - Sektor A</p>
+                <p class="text-[12px] font-medium text-gray-400">Koperasi Karyawan ILP</p>
             </div>
 
             <!-- Separator -->
             <div class="border-t-[1.5px] border-dashed border-gray-200 my-4"></div>
 
-            <!-- Transaction Meta -->
-            <div class="flex flex-col gap-1.5 text-[13px] font-mono mb-2">
+            <!-- Transaction Meta (Terkait ke Terminal, Sesi & Petugas sesuai Flow B) -->
+            <div class="flex flex-col gap-1.5 text-[12.5px] font-mono mb-2">
                 <div class="flex justify-between">
                     <span class="text-gray-600 font-medium">ID Transaksi:</span>
                     <span class="text-gray-900 font-bold">#TRX-99201</span>
                 </div>
                 <div class="flex justify-between">
-                    <span class="text-gray-600 font-medium">Tanggal:</span>
-                    <span class="text-gray-900 font-bold">20 Mei 2024, 14:20</span>
+                    <span class="text-gray-600 font-medium">ID Sesi Kasir:</span>
+                    <span class="text-[#0052cc] font-bold" x-text="activeSession.sessionId">CS-20261019-K01-003</span>
                 </div>
                 <div class="flex justify-between">
-                    <span class="text-gray-600 font-medium">Kasir:</span>
-                    <span class="text-gray-900 font-bold">Andi Pratama</span>
+                    <span class="text-gray-600 font-medium">Terminal:</span>
+                    <span class="text-gray-900 font-bold" x-text="activeSession.terminalLabel">Kasir 01</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600 font-medium">Petugas Kasir:</span>
+                    <span class="text-gray-900 font-bold" x-text="activeSession.cashierName">Budi Kurniawan</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600 font-medium">Tanggal:</span>
+                    <span class="text-gray-900 font-bold" x-text="activeSession.businessDayDate + ', ' + activeSession.startedAt">19 Oktober 2026</span>
                 </div>
             </div>
 

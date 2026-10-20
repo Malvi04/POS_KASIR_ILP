@@ -1,9 +1,35 @@
 @extends('layouts.app')
 
-@section('title', 'Reports - ILP POS')
+@section('title', 'Laporan Kasir - ILP POS')
 
 @section('content')
-<div class="flex flex-col h-screen w-full font-sans">
+<div x-data="{
+    ...cashierOpeningData(),
+    selectedSessionFilter: 'all',
+    selectedMethodFilter: 'all',
+    selectedStatusFilter: 'all',
+    transactions: [
+        { id: '#TRX-99204', sessionId: 'CS-20261019-K01-003', terminal: 'Kasir 01', time: '11:42', cashier: 'Budi Kurniawan', method: 'CAMPURAN', cashPortion: 100000, nonCashPortion: 45000, total: 145000, status: 'SELESAI' },
+        { id: '#TRX-99203', sessionId: 'CS-20261019-K01-003', terminal: 'Kasir 01', time: '11:20', cashier: 'Budi Kurniawan', method: 'TUNAI', cashPortion: 84000, nonCashPortion: 0, total: 84000, status: 'SELESAI' },
+        { id: '#TRX-99202', sessionId: 'CS-20261019-K01-003', terminal: 'Kasir 01', time: '10:35', cashier: 'Budi Kurniawan', method: 'QRIS', cashPortion: 0, nonCashPortion: 245500, total: 245500, status: 'SELESAI' },
+        { id: '#TRX-99201', sessionId: 'CS-20261019-K01-002', terminal: 'Kasir 01', time: '09:48', cashier: 'Andi Pratama', method: 'TUNAI', cashPortion: 120000, nonCashPortion: 0, total: 120000, status: 'SELESAI' },
+        { id: '#TRX-99200', sessionId: 'CS-20261019-K01-002', terminal: 'Kasir 01', time: '09:15', cashier: 'Andi Pratama', method: 'KREDIT ANGGOTA', cashPortion: 0, nonCashPortion: 240000, total: 240000, status: 'SELESAI' },
+        { id: '#TRX-99199', sessionId: 'CS-20261019-K01-002', terminal: 'Kasir 01', time: '08:40', cashier: 'Andi Pratama', method: 'QRIS', cashPortion: 0, nonCashPortion: 450000, total: 450000, status: 'DIBATALKAN' },
+        { id: '#TRX-99198', sessionId: 'CS-20261019-K01-001', terminal: 'Kasir 01', time: '07:30', cashier: 'Budi Kurniawan', method: 'TUNAI', cashPortion: 310000, nonCashPortion: 0, total: 310000, status: 'SELESAI' }
+    ],
+    get filteredTransactions() {
+        return this.transactions.filter(t => {
+            if (this.selectedSessionFilter === 'active' && t.sessionId !== this.activeSession.sessionId && t.sessionId !== 'CS-20261019-K01-003') return false;
+            if (this.selectedSessionFilter !== 'all' && this.selectedSessionFilter !== 'active' && t.sessionId !== this.selectedSessionFilter) return false;
+            if (this.selectedMethodFilter !== 'all' && t.method !== this.selectedMethodFilter) return false;
+            if (this.selectedStatusFilter !== 'all' && t.status !== this.selectedStatusFilter) return false;
+            return true;
+        });
+    }
+}"
+x-init="initOpening()"
+@pos-session-sync.window="initOpening()"
+class="flex flex-col h-screen w-full font-sans">
     <div class="flex flex-1 overflow-hidden">
         <!-- Sidebar -->
         <x-cashier-sidebar active="reports" />
@@ -11,293 +37,126 @@
         <!-- Main Area -->
         <div class="flex-1 flex flex-col min-w-0 bg-[#fafafa]">
             <!-- Header -->
-            <x-cashier-header title="Laporan & Riwayat" />
+            <x-cashier-header title="Laporan Penjualan" />
             
             <!-- Content -->
             <main class="flex-1 overflow-y-auto p-8 bg-[#f8f9fb]">
                 
-                <!-- Cards Row -->
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                    <!-- Card 1 -->
-                    <div class="bg-white rounded-[14px] p-6 border border-gray-200 shadow-sm relative overflow-hidden flex flex-col justify-center min-h-[140px]">
-                        <span class="text-[13px] font-bold text-gray-500 mb-1 z-10">Total Omzet Hari Ini</span>
-                        <h2 class="text-[32px] font-black text-[#1e40af] mb-1 z-10 tracking-tight">Rp 4.250.000</h2>
-                        <div class="flex items-center gap-1 text-[11px] font-bold text-[#16a34a] z-10">
-                            <span class="material-symbols-rounded" style="font-size: 14px;">trending_up</span>
-                            +12.5% dari kemarin
-                        </div>
-                        <span class="material-symbols-rounded absolute -right-6 -bottom-6 text-[110px] text-gray-100/80 z-0">payments</span>
+                <!-- 4 Clean Stat Cards -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
+                    <div class="bg-white rounded-xl p-5 border border-gray-200 shadow-xs">
+                        <span class="text-[11px] font-extrabold text-gray-500 uppercase tracking-wider">Omzet Sesi</span>
+                        <h2 class="text-2xl font-black text-[#1e40af] mt-1.5 font-mono" x-text="formatRupiah(totalSessionOmzet)">Rp 2.120.000</h2>
+                        <span class="text-xs font-bold text-gray-500 mt-1 block" x-text="activeSession.trxCount + ' Transaksi'">28 Transaksi</span>
                     </div>
                     
-                    <!-- Card 2 -->
-                    <div class="bg-white rounded-[14px] p-6 border border-gray-200 shadow-sm flex flex-col justify-center min-h-[140px]">
-                        <span class="text-[13px] font-bold text-gray-500 mb-1">Jumlah Transaksi</span>
-                        <h2 class="text-[32px] font-black text-gray-900 mb-2 tracking-tight">142</h2>
-                        <div class="flex items-center gap-3">
-                            <span class="text-[11px] font-bold text-gray-500">Antrian Lancar</span>
-                        </div>
+                    <div class="bg-white rounded-xl p-5 border border-emerald-200 shadow-xs">
+                        <span class="text-[11px] font-extrabold text-emerald-700 uppercase tracking-wider">Tunai Laci</span>
+                        <h2 class="text-2xl font-black text-emerald-700 mt-1.5 font-mono" x-text="formatRupiah((Number(activeSession.cashSalesNet)||0) + (Number(activeSession.splitCashPortion)||0))">Rp 970.000</h2>
+                        <span class="text-xs font-bold text-emerald-600 mt-1 block">Uang Fisik</span>
                     </div>
                     
-                    <!-- Card 3 -->
-                    <div class="bg-white rounded-[14px] p-6 border border-gray-200 shadow-sm flex flex-col justify-center min-h-[140px]">
-                        <span class="text-[13px] font-bold text-gray-500 mb-1">Metode Bayar Populer</span>
-                        <h2 class="text-[24px] font-black text-gray-900 mb-4 tracking-tight">QRIS</h2>
-                        <div class="w-[85%] h-2 bg-gray-100 rounded-full mb-3 overflow-hidden">
-                            <div class="h-full bg-[#1e40af] rounded-full" style="width: 65%"></div>
-                        </div>
-                        <span class="text-[10px] font-bold text-gray-400">65% Transaksi hari ini via QRIS</span>
+                    <div class="bg-white rounded-xl p-5 border border-gray-200 shadow-xs">
+                        <span class="text-[11px] font-extrabold text-gray-500 uppercase tracking-wider">QRIS / Debit</span>
+                        <h2 class="text-2xl font-black text-gray-900 mt-1.5 font-mono" x-text="formatRupiah(totalNonCashSales)">Rp 700.000</h2>
+                        <span class="text-xs font-bold text-[#0052cc] mt-1 block">Non-Tunai</span>
+                    </div>
+
+                    <div class="bg-white rounded-xl p-5 border border-orange-200 shadow-xs">
+                        <span class="text-[11px] font-extrabold text-orange-700 uppercase tracking-wider">Kredit Anggota</span>
+                        <h2 class="text-2xl font-black text-orange-700 mt-1.5 font-mono" x-text="formatRupiah(activeSession.creditSales)">Rp 450.000</h2>
+                        <span class="text-xs font-bold text-orange-600 mt-1 block">Piutang</span>
                     </div>
                 </div>
                 
                 <!-- Filter Section -->
-                <div class="bg-white rounded-t-xl p-5 border border-gray-200 shadow-sm flex flex-col gap-4 border-b-0 pb-5">
-                     <div class="flex items-end gap-6 flex-wrap">
-                         <!-- Date Range -->
-                         <div class="flex flex-col gap-2">
-                             <label class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Rentang Tanggal</label>
-                             <div class="flex items-center gap-3">
-                                 <div class="relative">
-                                     <input type="text" value="dd/mm/yyyy" class="pl-4 pr-10 py-2 border border-gray-200 rounded-lg text-sm font-semibold text-gray-700 w-[140px] outline-none bg-white">
-                                     <span class="material-symbols-rounded absolute right-3 top-1/2 -translate-y-1/2 text-gray-600" style="font-size: 18px;">calendar_today</span>
-                                 </div>
-                                 <span class="text-[13px] text-gray-400 font-bold">s/d</span>
-                                 <div class="relative">
-                                     <input type="text" value="dd/mm/yyyy" class="pl-4 pr-10 py-2 border border-gray-200 rounded-lg text-sm font-semibold text-gray-700 w-[140px] outline-none bg-white">
-                                     <span class="material-symbols-rounded absolute right-3 top-1/2 -translate-y-1/2 text-gray-600" style="font-size: 18px;">calendar_today</span>
-                                 </div>
-                             </div>
-                         </div>
-                         
-                         <!-- Payment Method -->
-                         <div class="flex flex-col gap-2">
-                             <label class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Metode Bayar</label>
+                <div class="bg-white rounded-t-xl p-5 border border-gray-200 shadow-xs flex flex-col gap-4 border-b-0">
+                     <div class="flex items-end gap-4 flex-wrap">
+                         <div class="flex flex-col gap-1.5">
+                             <label class="text-[10px] font-black text-gray-500 uppercase tracking-widest">Sesi Kasir</label>
                              <div class="relative">
-                                 <select class="appearance-none pl-4 pr-10 py-2 border border-gray-200 rounded-lg text-sm font-semibold text-gray-700 w-[160px] outline-none bg-white cursor-pointer">
-                                     <option>Semua Metode</option>
+                                 <select x-model="selectedSessionFilter" class="appearance-none pl-3.5 pr-9 py-2 border border-gray-200 rounded-lg text-xs font-bold text-gray-800 min-w-[220px] outline-none bg-white cursor-pointer focus:border-[#0052cc]">
+                                     <option value="all">Semua Sesi Hari Ini</option>
+                                     <option value="active">Sesi Aktif Saat Ini</option>
+                                     <option value="CS-20261019-K01-002">CS-20261019-K01-002 (Andi)</option>
+                                     <option value="CS-20261019-K01-001">CS-20261019-K01-001 (Budi)</option>
                                  </select>
-                                 <span class="material-symbols-rounded absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none" style="font-size: 20px;">expand_more</span>
+                                 <span class="material-symbols-rounded absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none text-[18px]">expand_more</span>
                              </div>
                          </div>
                          
-                         <!-- Status -->
-                         <div class="flex flex-col gap-2">
-                             <label class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Status</label>
-                             <div class="flex bg-[#f8fafc] p-1 rounded-lg border border-gray-200">
-                                 <button class="px-5 py-1.5 bg-white border border-blue-200 text-[#1d4ed8] font-bold text-[12px] rounded shadow-sm">Semua</button>
-                                 <button class="px-5 py-1.5 text-gray-500 font-bold text-[12px] hover:text-gray-800 transition-colors">Selesai</button>
-                                 <button class="px-5 py-1.5 text-gray-500 font-bold text-[12px] hover:text-gray-800 transition-colors">Batal</button>
+                         <div class="flex flex-col gap-1.5">
+                             <label class="text-[10px] font-black text-gray-500 uppercase tracking-widest">Metode Bayar</label>
+                             <div class="relative">
+                                 <select x-model="selectedMethodFilter" class="appearance-none pl-3.5 pr-9 py-2 border border-gray-200 rounded-lg text-xs font-bold text-gray-800 w-[160px] outline-none bg-white cursor-pointer focus:border-[#0052cc]">
+                                     <option value="all">Semua</option>
+                                     <option value="TUNAI">Tunai</option>
+                                     <option value="QRIS">QRIS / Debit</option>
+                                     <option value="KREDIT ANGGOTA">Kredit Anggota</option>
+                                     <option value="CAMPURAN">Campuran</option>
+                                 </select>
+                                 <span class="material-symbols-rounded absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none text-[18px]">expand_more</span>
                              </div>
                          </div>
-                     </div>
-                     
-                     <div class="flex items-center gap-3 pt-1">
-                         <button class="flex items-center justify-center gap-2 px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-[13px] rounded-lg transition-colors border border-gray-200 shadow-sm">
-                             <span class="material-symbols-rounded" style="font-size: 18px;">download</span> Ekspor CSV
-                         </button>
-                         <button class="flex items-center justify-center gap-2 px-5 py-2.5 bg-[#0047cc] hover:bg-blue-800 text-white font-bold text-[13px] rounded-lg shadow-md transition-colors">
-                             <span class="material-symbols-rounded" style="font-size: 18px;">filter_alt</span> Terapkan Filter
-                         </button>
+                         
+                         <div class="flex flex-col gap-1.5">
+                             <label class="text-[10px] font-black text-gray-500 uppercase tracking-widest">Status</label>
+                             <div class="flex bg-[#f8fafc] p-1 rounded-lg border border-gray-200">
+                                 <button type="button" @click="selectedStatusFilter = 'all'" :class="selectedStatusFilter === 'all' ? 'bg-white border border-blue-200 text-[#1d4ed8] shadow-2xs' : 'text-gray-500'" class="px-3.5 py-1 font-bold text-xs rounded cursor-pointer">Semua</button>
+                                 <button type="button" @click="selectedStatusFilter = 'SELESAI'" :class="selectedStatusFilter === 'SELESAI' ? 'bg-white border border-blue-200 text-[#1d4ed8] shadow-2xs' : 'text-gray-500'" class="px-3.5 py-1 font-bold text-xs rounded cursor-pointer">Selesai</button>
+                                 <button type="button" @click="selectedStatusFilter = 'DIBATALKAN'" :class="selectedStatusFilter === 'DIBATALKAN' ? 'bg-white border border-blue-200 text-[#1d4ed8] shadow-2xs' : 'text-gray-500'" class="px-3.5 py-1 font-bold text-xs rounded cursor-pointer">Batal</button>
+                             </div>
+                         </div>
                      </div>
                 </div>
                 
                 <!-- Table -->
-                <div class="bg-white rounded-b-xl border border-gray-200 shadow-sm overflow-hidden border-t-0">
+                <div class="bg-white rounded-b-xl border border-gray-200 shadow-xs overflow-hidden">
                     <table class="w-full text-left border-collapse">
                         <thead>
-                            <tr class="bg-[#f8fafc] border-b border-gray-200 border-t border-gray-200">
-                                <th class="px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest w-[15%]">ID Transaksi</th>
-                                <th class="px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest w-[15%]">Waktu</th>
-                                <th class="px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest w-[20%]">Kasir</th>
-                                <th class="px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest w-[15%]">Metode Bayar</th>
-                                <th class="px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest w-[15%]">Total Belanja</th>
-                                <th class="px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest w-[10%]">Status</th>
-                                <th class="px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest w-[10%] text-center">Aksi</th>
+                            <tr class="bg-[#f8fafc] border-b border-gray-200">
+                                <th class="px-5 py-3.5 text-[10px] font-black text-gray-500 uppercase tracking-widest">No. Transaksi</th>
+                                <th class="px-5 py-3.5 text-[10px] font-black text-gray-500 uppercase tracking-widest">ID Sesi</th>
+                                <th class="px-5 py-3.5 text-[10px] font-black text-gray-500 uppercase tracking-widest">Petugas</th>
+                                <th class="px-5 py-3.5 text-[10px] font-black text-gray-500 uppercase tracking-widest">Jam</th>
+                                <th class="px-5 py-3.5 text-[10px] font-black text-gray-500 uppercase tracking-widest">Metode</th>
+                                <th class="px-5 py-3.5 text-[10px] font-black text-gray-500 uppercase tracking-widest text-right">Total</th>
+                                <th class="px-5 py-3.5 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center">Status</th>
+                                <th class="px-5 py-3.5 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center">Struk</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-gray-100">
-                            <!-- Row 1 -->
-                            <tr class="hover:bg-blue-50/20 transition-colors">
-                                <td class="px-6 py-4">
-                                    <span class="font-bold text-[#3b82f6] text-[13px]">#TRX-99201</span>
-                                </td>
-                                <td class="px-6 py-4 text-gray-600">
-                                    <div class="flex flex-col text-[12px] font-medium">
-                                        <span class="text-gray-800">14:25, 24 Okt</span>
-                                        <span class="text-gray-500 mt-0.5">2023</span>
-                                    </div>
-                                </td>
-                                <td class="px-6 py-4">
-                                    <div class="flex flex-col text-[12px]">
-                                        <span class="font-bold text-gray-800">Budi Kurniawan</span>
-                                    </div>
-                                </td>
-                                <td class="px-6 py-4">
-                                    <span class="px-3 py-1 bg-[#eff6ff] text-[#1d4ed8] text-[9px] font-extrabold rounded-full border border-blue-100">QRIS</span>
-                                </td>
-                                <td class="px-6 py-4">
-                                    <span class="font-medium text-gray-700 text-[13px]">Rp 245.500</span>
-                                </td>
-                                <td class="px-6 py-4">
-                                    <span class="px-2.5 py-1 bg-[#f0fdf4] text-[#15803d] text-[9px] font-black tracking-widest rounded uppercase border border-green-200">SELESAI</span>
-                                </td>
-                                <td class="px-6 py-4 text-center">
-                                    <button class="text-[#3b82f6] hover:text-blue-800 transition-colors p-1 rounded-lg">
-                                        <span class="material-symbols-rounded" style="font-size: 18px;">print</span>
-                                    </button>
-                                </td>
-                            </tr>
-                            
-                            <!-- Row 2 -->
-                            <tr class="hover:bg-blue-50/20 transition-colors">
-                                <td class="px-6 py-4">
-                                    <span class="font-bold text-[#3b82f6] text-[13px]">#TRX-99200</span>
-                                </td>
-                                <td class="px-6 py-4 text-gray-600">
-                                    <div class="flex flex-col text-[12px] font-medium">
-                                        <span class="text-gray-800">14:10, 24 Okt</span>
-                                        <span class="text-gray-500 mt-0.5">2023</span>
-                                    </div>
-                                </td>
-                                <td class="px-6 py-4">
-                                    <div class="flex flex-col text-[12px]">
-                                        <span class="font-bold text-gray-800">Budi Kurniawan</span>
-                                    </div>
-                                </td>
-                                <td class="px-6 py-4">
-                                    <span class="px-3 py-1 bg-gray-200/60 text-gray-600 text-[9px] font-extrabold rounded-full">TUNAI</span>
-                                </td>
-                                <td class="px-6 py-4">
-                                    <span class="font-medium text-gray-700 text-[13px]">Rp 12.000</span>
-                                </td>
-                                <td class="px-6 py-4">
-                                    <span class="px-2.5 py-1 bg-[#f0fdf4] text-[#15803d] text-[9px] font-black tracking-widest rounded uppercase border border-green-200">SELESAI</span>
-                                </td>
-                                <td class="px-6 py-4 text-center">
-                                    <button class="text-[#3b82f6] hover:text-blue-800 transition-colors p-1 rounded-lg">
-                                        <span class="material-symbols-rounded" style="font-size: 18px;">print</span>
-                                    </button>
-                                </td>
-                            </tr>
-                            
-                            <!-- Row 3 (Dibatalkan) -->
-                            <tr class="hover:bg-blue-50/20 transition-colors bg-gray-50/30">
-                                <td class="px-6 py-4">
-                                    <span class="font-bold text-[#93c5fd] text-[13px]">#TRX-99199</span>
-                                </td>
-                                <td class="px-6 py-4 text-gray-400">
-                                    <div class="flex flex-col text-[12px] font-medium opacity-70">
-                                        <span class="text-gray-500">13:55, 24 Okt</span>
-                                        <span class="text-gray-400 mt-0.5">2023</span>
-                                    </div>
-                                </td>
-                                <td class="px-6 py-4">
-                                    <div class="flex flex-col text-[12px] opacity-60">
-                                        <span class="font-bold text-gray-500">Budi Kurniawan</span>
-                                    </div>
-                                </td>
-                                <td class="px-6 py-4">
-                                    <span class="px-3 py-1 bg-gray-100 text-gray-400 text-[9px] font-extrabold rounded-full opacity-70 border border-gray-200">QRIS</span>
-                                </td>
-                                <td class="px-6 py-4">
-                                    <span class="font-medium text-gray-400 text-[13px] opacity-80">Rp 450.000</span>
-                                </td>
-                                <td class="px-6 py-4">
-                                    <span class="px-2.5 py-1 bg-red-100/50 text-[#dc2626] text-[9px] font-black tracking-widest rounded uppercase border border-red-200/50">DIBATALKAN</span>
-                                </td>
-                                <td class="px-6 py-4 text-center">
-                                    <button class="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg">
-                                        <span class="material-symbols-rounded" style="font-size: 18px;">visibility_off</span>
-                                    </button>
-                                </td>
-                            </tr>
-                            
-                            <!-- Row 4 -->
-                            <tr class="hover:bg-blue-50/20 transition-colors">
-                                <td class="px-6 py-4">
-                                    <span class="font-bold text-[#3b82f6] text-[13px]">#TRX-99198</span>
-                                </td>
-                                <td class="px-6 py-4 text-gray-600">
-                                    <div class="flex flex-col text-[12px] font-medium">
-                                        <span class="text-gray-800">13:42, 24 Okt</span>
-                                        <span class="text-gray-500 mt-0.5">2023</span>
-                                    </div>
-                                </td>
-                                <td class="px-6 py-4">
-                                    <div class="flex flex-col text-[12px]">
-                                        <span class="font-bold text-gray-800">Siti Aminah</span>
-                                    </div>
-                                </td>
-                                <td class="px-6 py-4">
-                                    <div class="inline-flex flex-col items-center bg-[#ffedd5] text-[#c2410c] px-3 py-1 rounded-xl border border-[#fed7aa] leading-[1.1]">
-                                        <span class="text-[8px] font-extrabold uppercase">KREDIT</span>
-                                        <span class="text-[8px] font-extrabold uppercase">ANGGOTA</span>
-                                    </div>
-                                </td>
-                                <td class="px-6 py-4">
-                                    <span class="font-medium text-gray-700 text-[13px]">Rp 1.120.000</span>
-                                </td>
-                                <td class="px-6 py-4">
-                                    <span class="px-2.5 py-1 bg-[#f0fdf4] text-[#15803d] text-[9px] font-black tracking-widest rounded uppercase border border-green-200">SELESAI</span>
-                                </td>
-                                <td class="px-6 py-4 text-center">
-                                    <button class="text-[#3b82f6] hover:text-blue-800 transition-colors p-1 rounded-lg">
-                                        <span class="material-symbols-rounded" style="font-size: 18px;">print</span>
-                                    </button>
-                                </td>
-                            </tr>
-                            
-                            <!-- Row 5 -->
-                            <tr class="hover:bg-blue-50/20 transition-colors">
-                                <td class="px-6 py-4">
-                                    <span class="font-bold text-[#3b82f6] text-[13px]">#TRX-99197</span>
-                                </td>
-                                <td class="px-6 py-4 text-gray-600">
-                                    <div class="flex flex-col text-[12px] font-medium">
-                                        <span class="text-gray-800">13:30, 24 Okt</span>
-                                        <span class="text-gray-500 mt-0.5">2023</span>
-                                    </div>
-                                </td>
-                                <td class="px-6 py-4">
-                                    <div class="flex flex-col text-[12px]">
-                                        <span class="font-bold text-gray-800">Siti Aminah</span>
-                                    </div>
-                                </td>
-                                <td class="px-6 py-4">
-                                    <span class="px-3 py-1 bg-[#eff6ff] text-[#1d4ed8] text-[9px] font-extrabold rounded-full border border-blue-100">QRIS</span>
-                                </td>
-                                <td class="px-6 py-4">
-                                    <span class="font-medium text-gray-700 text-[13px]">Rp 88.000</span>
-                                </td>
-                                <td class="px-6 py-4">
-                                    <span class="px-2.5 py-1 bg-[#f0fdf4] text-[#15803d] text-[9px] font-black tracking-widest rounded uppercase border border-green-200">SELESAI</span>
-                                </td>
-                                <td class="px-6 py-4 text-center">
-                                    <button class="text-[#3b82f6] hover:text-blue-800 transition-colors p-1 rounded-lg">
-                                        <span class="material-symbols-rounded" style="font-size: 18px;">print</span>
-                                    </button>
-                                </td>
-                            </tr>
+                        <tbody class="divide-y divide-gray-100 text-xs">
+                            <template x-for="trx in filteredTransactions" :key="trx.id">
+                                <tr class="hover:bg-blue-50/20 transition-colors">
+                                    <td class="px-5 py-3.5 font-mono font-bold text-[#0052cc]" x-text="trx.id"></td>
+                                    <td class="px-5 py-3.5 font-mono text-gray-700" x-text="trx.sessionId"></td>
+                                    <td class="px-5 py-3.5 font-bold text-gray-900" x-text="trx.cashier"></td>
+                                    <td class="px-5 py-3.5 text-gray-600" x-text="trx.time"></td>
+                                    <td class="px-5 py-3.5">
+                                        <span class="px-2.5 py-1 rounded-full text-[10px] font-extrabold"
+                                              :class="{
+                                                  'bg-emerald-50 text-emerald-700 border border-emerald-200': trx.method === 'TUNAI',
+                                                  'bg-blue-50 text-[#0052cc] border border-blue-200': trx.method === 'QRIS',
+                                                  'bg-orange-50 text-orange-700 border border-orange-200': trx.method === 'KREDIT ANGGOTA',
+                                                  'bg-purple-50 text-purple-700 border border-purple-200': trx.method === 'CAMPURAN'
+                                              }"
+                                              x-text="trx.method"></span>
+                                    </td>
+                                    <td class="px-5 py-3.5 text-right font-mono font-bold text-gray-900" x-text="formatRupiah(trx.total)"></td>
+                                    <td class="px-5 py-3.5 text-center">
+                                        <span class="px-2.5 py-0.5 rounded text-[10px] font-black uppercase"
+                                              :class="trx.status === 'SELESAI' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-600 border border-red-200'"
+                                              x-text="trx.status"></span>
+                                    </td>
+                                    <td class="px-5 py-3.5 text-center">
+                                        <a href="{{ url('/cetak-struk') }}" class="text-[#0052cc] hover:text-blue-800 inline-flex p-1">
+                                            <span class="material-symbols-rounded text-[18px]">print</span>
+                                        </a>
+                                    </td>
+                                </tr>
+                            </template>
                         </tbody>
                     </table>
-                    
-                    <!-- Pagination Footer -->
-                    <div class="px-6 py-4 bg-[#f8fafc] border-t border-gray-200 flex items-center justify-between">
-                        <span class="text-[#64748b] font-bold text-[11px]">Menampilkan 1-10 dari 142 transaksi</span>
-                        
-                        <div class="flex items-center gap-1">
-                            <button class="w-7 h-7 flex items-center justify-center rounded text-gray-400 hover:bg-gray-200 transition-colors">
-                                <span class="material-symbols-rounded" style="font-size: 16px;">chevron_left</span>
-                            </button>
-                            <button class="w-7 h-7 flex items-center justify-center rounded bg-[#0047cc] text-white font-bold text-[11px] shadow-sm">1</button>
-                            <button class="w-7 h-7 flex items-center justify-center rounded text-gray-500 hover:bg-gray-200 transition-colors text-[11px] font-bold">2</button>
-                            <button class="w-7 h-7 flex items-center justify-center rounded text-gray-500 hover:bg-gray-200 transition-colors text-[11px] font-bold">3</button>
-                            <span class="w-7 h-7 flex items-center justify-center text-gray-400 text-[12px] font-bold tracking-widest">...</span>
-                            <button class="w-7 h-7 flex items-center justify-center rounded text-gray-500 hover:bg-gray-200 transition-colors text-[11px] font-bold">15</button>
-                            <button class="w-7 h-7 flex items-center justify-center rounded text-gray-500 hover:bg-gray-200 transition-colors">
-                                <span class="material-symbols-rounded" style="font-size: 16px;">chevron_right</span>
-                            </button>
-                        </div>
-                    </div>
                 </div>
                 
             </main>

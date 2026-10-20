@@ -109,10 +109,7 @@
                             <!-- Row 1 -->
                             <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                                 <td class="px-6 py-4">
-                                    <div class="flex items-center gap-3">
-                                        <div class="w-8 h-8 rounded-full bg-[#dbeafe] text-[#0052cc] flex items-center justify-center font-bold text-[11px] shrink-0">BP</div>
-                                        <div class="font-bold text-gray-900 leading-tight">Bambang<br>Pamungkas</div>
-                                    </div>
+                                    <div class="font-bold text-gray-900 leading-tight">Bambang<br>Pamungkas</div>
                                 </td>
                                 <td class="px-6 py-4 font-mono font-medium text-gray-600">327501002230004</td>
                                 <td class="px-6 py-4 text-gray-600 leading-tight">Logistik &<br>Gudang</td>
@@ -142,10 +139,7 @@
                             <!-- Row 2 -->
                             <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                                 <td class="px-6 py-4">
-                                    <div class="flex items-center gap-3">
-                                        <div class="w-8 h-8 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center font-bold text-[11px] shrink-0">SL</div>
-                                        <div class="font-bold text-gray-900">Siti Lestari</div>
-                                    </div>
+                                    <div class="font-bold text-gray-900">Siti Lestari</div>
                                 </td>
                                 <td class="px-6 py-4 font-mono font-medium text-gray-600">327501440230012</td>
                                 <td class="px-6 py-4 text-gray-600">Administrasi</td>
@@ -175,10 +169,7 @@
                             <!-- Row 3 - Blocked -->
                             <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                                 <td class="px-6 py-4">
-                                    <div class="flex items-center gap-3">
-                                        <div class="w-8 h-8 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center font-bold text-[11px] shrink-0">AS</div>
-                                        <div class="font-bold text-gray-500 leading-tight">Andri<br>Setiawan</div>
-                                    </div>
+                                    <div class="font-bold text-gray-500 leading-tight">Andri<br>Setiawan</div>
                                 </td>
                                 <td class="px-6 py-4 font-mono font-medium text-gray-400">327501082230899</td>
                                 <td class="px-6 py-4 text-gray-400">Produksi A</td>
@@ -208,10 +199,7 @@
                             <!-- Row 4 -->
                             <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                                 <td class="px-6 py-4">
-                                    <div class="flex items-center gap-3">
-                                        <div class="w-8 h-8 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-[11px] shrink-0">DI</div>
-                                        <div class="font-bold text-gray-900">Dewi Indah</div>
-                                    </div>
+                                    <div class="font-bold text-gray-900">Dewi Indah</div>
                                 </td>
                                 <td class="px-6 py-4 font-mono font-medium text-gray-600">327501550230056</td>
                                 <td class="px-6 py-4 text-gray-600">Maintenance</td>
@@ -241,10 +229,7 @@
                             <!-- Row 5 -->
                             <tr class="hover:bg-gray-50 transition-colors">
                                 <td class="px-6 py-4">
-                                    <div class="flex items-center gap-3">
-                                        <div class="w-8 h-8 rounded-full bg-[#dbeafe] text-[#0052cc] flex items-center justify-center font-bold text-[11px] shrink-0">RH</div>
-                                        <div class="font-bold text-gray-900 leading-tight">Raka<br>Hendra</div>
-                                    </div>
+                                    <div class="font-bold text-gray-900 leading-tight">Raka<br>Hendra</div>
                                 </td>
                                 <td class="px-6 py-4 font-mono font-medium text-gray-600">327501009930011</td>
                                 <td class="px-6 py-4 text-gray-600 leading-tight">Logistik &<br>Gudang</td>

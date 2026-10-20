@@ -28,7 +28,6 @@
                 
                 <div class="h-5 w-px bg-gray-200 mx-1"></div>
                 
-                <span class="text-[13px] font-bold text-gray-600 tracking-wide">ID TERMINAL: #01</span>
             </div>
         </header>
 

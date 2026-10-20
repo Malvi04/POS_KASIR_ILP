@@ -1,5 +1,8 @@
 <header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
-    <h2 class="text-lg font-bold text-gray-800">{{ $title }}</h2>
+    <div class="flex items-center gap-4">
+        <h2 class="text-lg font-bold text-gray-800">{{ $title }}</h2>
+        {{ $slot ?? '' }}
+    </div>
     <div class="flex items-center gap-5">
         <button class="text-gray-400 hover:text-gray-600 transition-colors relative">
             <span class="material-symbols-rounded text-[22px]">notifications</span>

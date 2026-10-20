@@ -109,14 +109,9 @@
                             <!-- Row 1 -->
                             <tr class="border-b border-gray-100 hover:bg-gray-50/80 transition-colors">
                                 <td class="px-6 py-4">
-                                    <div class="flex items-center gap-4">
-                                        <div class="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center shrink-0 bg-white">
-                                            <span class="material-symbols-rounded text-blue-300 text-[20px]">water_drop</span>
-                                        </div>
-                                        <div class="flex flex-col">
-                                            <span class="font-bold text-gray-900 text-[14px]">Aqua Mineral 600ml</span>
-                                            <span class="text-[12px] text-gray-500 mt-0.5">Danone Indonesia</span>
-                                        </div>
+                                    <div class="flex flex-col">
+                                        <span class="font-bold text-gray-900 text-[14px]">Aqua Mineral 600ml</span>
+                                        <span class="text-[12px] text-gray-500 mt-0.5">Danone Indonesia</span>
                                     </div>
                                 </td>
                                 <td class="px-4 py-4 font-mono font-medium text-gray-700">8991234567890</td>
@@ -151,14 +146,9 @@
                             <!-- Row 2 -->
                             <tr class="border-b border-amber-100 bg-[#fffdf5] hover:bg-amber-50/40 transition-colors">
                                 <td class="px-6 py-4">
-                                    <div class="flex items-center gap-4">
-                                        <div class="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center shrink-0 bg-white">
-                                            <span class="material-symbols-rounded text-orange-400 text-[20px]">tapas</span>
-                                        </div>
-                                        <div class="flex flex-col">
-                                            <span class="font-bold text-gray-900 text-[14px]">Chitato Sapi Panggang 68g</span>
-                                            <span class="text-[12px] text-gray-500 mt-0.5">Indofood</span>
-                                        </div>
+                                    <div class="flex flex-col">
+                                        <span class="font-bold text-gray-900 text-[14px]">Chitato Sapi Panggang 68g</span>
+                                        <span class="text-[12px] text-gray-500 mt-0.5">Indofood</span>
                                     </div>
                                 </td>
                                 <td class="px-4 py-4 font-mono font-medium text-gray-700">8992345678901</td>
@@ -193,14 +183,9 @@
                             <!-- Row 3 -->
                             <tr class="border-b border-red-100 bg-[#fffcfc] hover:bg-red-50/40 transition-colors">
                                 <td class="px-6 py-4">
-                                    <div class="flex items-center gap-4">
-                                        <div class="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center shrink-0 bg-white">
-                                            <span class="material-symbols-rounded text-gray-400 text-[20px]">local_drink</span>
-                                        </div>
-                                        <div class="flex flex-col">
-                                            <span class="font-bold text-gray-900 text-[14px]">Ultra Milk Full Cream 1L</span>
-                                            <span class="text-[12px] text-gray-500 mt-0.5">Ultrajaya</span>
-                                        </div>
+                                    <div class="flex flex-col">
+                                        <span class="font-bold text-gray-900 text-[14px]">Ultra Milk Full Cream 1L</span>
+                                        <span class="text-[12px] text-gray-500 mt-0.5">Ultrajaya</span>
                                     </div>
                                 </td>
                                 <td class="px-4 py-4 font-mono font-medium text-gray-700">8993456789012</td>
@@ -235,14 +220,9 @@
                             <!-- Row 4 -->
                             <tr class="border-b border-gray-100 hover:bg-gray-50/80 transition-colors">
                                 <td class="px-6 py-4">
-                                    <div class="flex items-center gap-4">
-                                        <div class="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center shrink-0 bg-white">
-                                            <span class="material-symbols-rounded text-green-700 text-[20px]">grass</span>
-                                        </div>
-                                        <div class="flex flex-col">
-                                            <span class="font-bold text-gray-900 text-[14px]">Beras Pandan Wangi 5kg</span>
-                                            <span class="text-[12px] text-gray-500 mt-0.5">Lokal Berdikari</span>
-                                        </div>
+                                    <div class="flex flex-col">
+                                        <span class="font-bold text-gray-900 text-[14px]">Beras Pandan Wangi 5kg</span>
+                                        <span class="text-[12px] text-gray-500 mt-0.5">Lokal Berdikari</span>
                                     </div>
                                 </td>
                                 <td class="px-4 py-4 font-mono font-medium text-gray-700">8994567890123</td>
@@ -279,14 +259,9 @@
                             <!-- Row 5 -->
                             <tr class="hover:bg-gray-50/80 transition-colors">
                                 <td class="px-6 py-4">
-                                    <div class="flex items-center gap-4">
-                                        <div class="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center shrink-0 bg-white">
-                                            <span class="material-symbols-rounded text-yellow-500 text-[20px]">clean_hands</span>
-                                        </div>
-                                        <div class="flex flex-col">
-                                            <span class="font-bold text-gray-900 text-[14px]">Sunlight Jeruk Nipis 755ml</span>
-                                            <span class="text-[12px] text-gray-500 mt-0.5">Unilever</span>
-                                        </div>
+                                    <div class="flex flex-col">
+                                        <span class="font-bold text-gray-900 text-[14px]">Sunlight Jeruk Nipis 755ml</span>
+                                        <span class="text-[12px] text-gray-500 mt-0.5">Unilever</span>
                                     </div>
                                 </td>
                                 <td class="px-4 py-4 font-mono font-medium text-gray-700">8995678901234</td>

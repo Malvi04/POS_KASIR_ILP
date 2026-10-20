@@ -579,18 +579,13 @@
                                             
                                             <!-- 1. NAMA MITRA -->
                                             <td class="py-4 px-6">
-                                                <div class="flex items-center gap-3.5">
-                                                    <div class="w-9 h-9 rounded-lg flex items-center justify-center font-extrabold text-[13px] shrink-0"
-                                                         :class="partner.status === 'NON-AKTIF' ? 'bg-slate-100 text-slate-500' : 'bg-[#dbeafe] text-[#0052cc]'"
-                                                         x-text="partner.initial"></div>
-                                                    <div class="min-w-0">
-                                                        <div class="font-extrabold leading-snug truncate"
-                                                             :class="partner.status === 'NON-AKTIF' ? 'text-slate-600' : 'text-[#0f172a]'"
-                                                             x-text="partner.name"></div>
-                                                        <div class="text-[12px] font-medium truncate mt-0.5"
-                                                             :class="partner.status === 'NON-AKTIF' ? 'text-slate-400' : 'text-slate-500'"
-                                                             x-text="partner.location"></div>
-                                                    </div>
+                                                <div class="min-w-0">
+                                                    <div class="font-extrabold leading-snug truncate"
+                                                         :class="partner.status === 'NON-AKTIF' ? 'text-slate-600' : 'text-[#0f172a]'"
+                                                         x-text="partner.name"></div>
+                                                    <div class="text-[12px] font-medium truncate mt-0.5"
+                                                         :class="partner.status === 'NON-AKTIF' ? 'text-slate-400' : 'text-slate-500'"
+                                                         x-text="partner.location"></div>
                                                 </div>
                                             </td>
 

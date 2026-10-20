@@ -4,13 +4,16 @@
 
 @section('content')
 <div x-data="{ 
+    ...cashierOpeningData(),
     showHoldModal: false, 
     grandTotal: 28638,
     paymentModal: {
         open: false,
         method: 'tunai',
-        uangDiterima: '',
-        kembalian: 0
+        uangDiterima: '50000',
+        kembalian: 21362,
+        splitCash: 10000,
+        splitNonCash: 18638
     },
     formatNumber(num) {
         return new Intl.NumberFormat('id-ID').format(num);
@@ -19,25 +22,67 @@
         let uang = parseInt(this.paymentModal.uangDiterima.toString().replace(/\D/g, '')) || 0;
         this.paymentModal.kembalian = uang - this.grandTotal;
     },
+    calcSplitPayment() {
+        let cash = Math.min(Math.max(parseInt(this.paymentModal.splitCash) || 0, 0), this.grandTotal);
+        this.paymentModal.splitCash = cash;
+        this.paymentModal.splitNonCash = Math.max(this.grandTotal - cash, 0);
+    },
     setUang(amount) {
         this.paymentModal.uangDiterima = amount.toString();
         this.calcKembalian();
     },
     processPayment(method) {
         if (method === 'tunai' && this.paymentModal.kembalian >= 0) {
+            this.activeSession.cashSalesNet = (Number(this.activeSession.cashSalesNet) || 0) + this.grandTotal;
+            this.activeSession.trxCount = (Number(this.activeSession.trxCount) || 0) + 1;
+            this.persistAllState();
             window.location.href = '/cetak-struk';
         } else if (method === 'qris') {
+            this.activeSession.qrisSales = (Number(this.activeSession.qrisSales) || 0) + this.grandTotal;
+            this.activeSession.trxCount = (Number(this.activeSession.trxCount) || 0) + 1;
+            this.persistAllState();
+            window.location.href = '/cetak-struk';
+        } else if (method === 'campuran') {
+            this.calcSplitPayment();
+            this.activeSession.splitCashPortion = (Number(this.activeSession.splitCashPortion) || 0) + this.paymentModal.splitCash;
+            this.activeSession.splitNonCashPortion = (Number(this.activeSession.splitNonCashPortion) || 0) + this.paymentModal.splitNonCash;
+            this.activeSession.trxCount = (Number(this.activeSession.trxCount) || 0) + 1;
+            this.persistAllState();
             window.location.href = '/cetak-struk';
         }
     }
-}" @open-payment.window="paymentModal.open = true" class="flex w-full h-full relative text-gray-800">
+}" x-init="initOpening()" @pos-session-sync.window="initOpening()" @open-payment.window="paymentModal.open = true" class="flex w-full h-full relative text-gray-800">
     <!-- Sidebar -->
     <x-cashier-sidebar active="pos" />
 
     <!-- Main Section -->
     <main class="flex-1 flex flex-col bg-slate-50 min-w-0">
         <!-- Header -->
-        <x-cashier-header title="Terminal POS" />
+        <x-cashier-header title="POS">
+            <div class="flex flex-wrap items-center gap-2">
+                <a href="{{ url('/kasir/sesi') }}" 
+                   class="flex items-center gap-2 bg-blue-50 hover:bg-blue-100 text-[#0052cc] border border-blue-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all">
+                    <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                    <span class="font-extrabold text-[#0052cc]" x-text="activeSession.terminalLabel">Kasir 01</span>
+                    <span class="text-gray-300">•</span>
+                    <span class="text-gray-700 font-bold" x-text="activeSession.cashierName">Budi Kurniawan</span>
+                </a>
+
+                <button type="button"
+                        @click="$dispatch('open-cash-movement')"
+                        class="flex items-center gap-1.5 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer">
+                    <span class="material-symbols-rounded text-[16px] text-[#0052cc]">account_balance_wallet</span>
+                    <span>Kas Laci</span>
+                </button>
+
+                <button type="button"
+                        @click="$dispatch('open-closing-wizard')"
+                        class="flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer">
+                    <span class="material-symbols-rounded text-[16px] text-amber-700">logout</span>
+                    <span>Tutup Sesi</span>
+                </button>
+            </div>
+        </x-cashier-header>
 
         <!-- Content Area -->
         <div class="flex-1 flex overflow-hidden">
@@ -110,10 +155,10 @@
             <!-- Right Side: Cart -->
             <div class="w-[400px] bg-slate-200/50 border-l border-gray-300 flex flex-col shadow-inner z-10 shrink-0">
                 <!-- Cart Header -->
-                <div class="p-6 border-b border-gray-300/60 flex items-start justify-between">
+                <div class="p-5 border-b border-gray-300/60 flex items-start justify-between bg-white/40">
                     <div>
-                        <h2 class="text-2xl font-bold text-gray-800">Keranjang Belanja</h2>
-                        <p class="text-sm text-gray-500 font-medium mt-1">No. Transaksi: #TRX-99201</p>
+                        <h2 class="text-xl font-bold text-gray-800">Keranjang Belanja</h2>
+                        <p class="text-xs text-gray-500 font-medium mt-0.5">No. Transaksi: <span class="font-mono font-bold text-gray-700">#TRX-99201</span></p>
                     </div>
                     <button class="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors">
                         <span class="material-symbols-rounded">delete_sweep</span>
@@ -332,5 +377,22 @@
 
     <!-- MODAL 2: Konfirmasi Pembayaran (Partial Include) -->
     @include('kasir.partials._payment-modal')
+
+    <!-- MODAL 3: Kontrol Pembukaan & Koin/Kertas (Partial Include) -->
+    @include('kasir.partials._opening-modal')
+
+    <!-- Success Toast Notification -->
+    <div x-show="showSuccessToast" 
+         style="display: none;"
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0 -translate-y-2"
+         x-transition:enter-end="opacity-100 translate-y-0"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100 translate-y-0"
+         x-transition:leave-end="opacity-0 -translate-y-2"
+         class="fixed top-5 right-5 z-70 bg-gray-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 font-bold text-sm border border-gray-700">
+        <span class="material-symbols-rounded text-green-400 text-[22px]">check_circle</span>
+        <span>Kasir aktif! Kas opening tersimpan sebesar Rp <span x-text="kasOpening"></span></span>
+    </div>
 </div>
 @endsection

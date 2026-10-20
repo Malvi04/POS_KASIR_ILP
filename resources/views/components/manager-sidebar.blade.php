@@ -54,14 +54,20 @@
         </nav>
     </div>
     
-    <!-- User Profile Area -->
-    <div class="p-6 border-t border-gray-200/50 mt-4 flex items-center gap-3">
-        <div class="w-10 h-10 rounded-full bg-[#0052cc] flex items-center justify-center text-white font-bold text-sm shrink-0">
-            AD
+    <!-- User Profile Area & Logout -->
+    <div class="p-5 border-t border-gray-200/50 mt-4 flex flex-col gap-3">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-[#0052cc] flex items-center justify-center text-white font-bold text-sm shrink-0">
+                AD
+            </div>
+            <div class="flex flex-col overflow-hidden flex-1">
+                <span class="text-[14px] font-bold text-gray-900 truncate">Manager</span>
+                <span class="text-[12px] text-gray-500 truncate">Minimarket Pusat</span>
+            </div>
         </div>
-        <div class="flex flex-col overflow-hidden">
-            <span class="text-[14px] font-bold text-gray-900 truncate">Manager</span>
-            <span class="text-[12px] text-gray-500 truncate">Minimarket Pusat</span>
-        </div>
+        <a href="{{ url('/') }}" data-no-spa class="flex items-center justify-center gap-2 py-2 px-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-[12.5px] font-bold transition-colors">
+            <span class="material-symbols-rounded text-[18px]">logout</span>
+            <span>Keluar ke Portal</span>
+        </a>
     </div>
 </aside>

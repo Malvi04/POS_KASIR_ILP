@@ -1,257 +1,411 @@
 <!DOCTYPE html>
-<html lang="id" class="light">
+<html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Minimarket ILP - Portal Akses</title>
-    <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600&display=block" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-    <script id="tailwind-config">
-        tailwind.config = {
-            darkMode: "class",
-            theme: {
-                extend: {
-                    colors: {
-                        "tertiary-fixed-dim": "#ffb596",
-                        "surface-container-lowest": "#ffffff",
-                        "on-tertiary": "#ffffff",
-                        "on-secondary-fixed-variant": "#38485d",
-                        "surface-variant": "#e0e3e5",
-                        "error": "#ba1a1a",
-                        "on-tertiary-fixed-variant": "#7d2d00",
-                        "on-secondary-fixed": "#0b1c30",
-                        "border-subtle": "#e2e8f0",
-                        "surface-container-high": "#e6e8ea",
-                        "secondary-container": "#d0e1fb",
-                        "on-background": "#191c1e",
-                        "on-primary-fixed": "#00174b",
-                        "on-primary": "#ffffff",
-                        "on-surface-variant": "#434655",
-                        "on-surface": "#191c1e",
-                        "error-container": "#ffdad6",
-                        "background": "#f7f9fb",
-                        "tertiary-container": "#bc4800",
-                        "surface-card": "#ffffff",
-                        "tertiary": "#943700",
-                        "surface-container": "#eceef0",
-                        "surface-bright": "#f7f9fb",
-                        "primary-fixed-dim": "#b4c5ff",
-                        "tertiary-fixed": "#ffdbcd",
-                        "inverse-on-surface": "#eff1f3",
-                        "primary": "#004ac6",
-                        "text-primary": "#0f172a",
-                        "surface-container-highest": "#e0e3e5",
-                        "surface-container-low": "#f2f4f6",
-                        "status-warning": "#d97706",
-                        "surface-tint": "#0053db",
-                        "on-primary-fixed-variant": "#003ea8",
-                        "on-error-container": "#93000a",
-                        "on-primary-container": "#eeefff",
-                        "inverse-primary": "#b4c5ff",
-                        "text-secondary": "#475569",
-                        "status-success": "#16a34a",
-                        "on-tertiary-container": "#ffede6",
-                        "secondary-fixed-dim": "#b7c8e1",
-                        "outline": "#737686",
-                        "secondary-fixed": "#d3e4fe",
-                        "status-error": "#dc2626",
-                        "secondary": "#505f76",
-                        "on-error": "#ffffff",
-                        "surface-dim": "#d8dadc",
-                        "primary-fixed": "#dbe1ff",
-                        "primary-container": "#2563eb",
-                        "on-secondary": "#ffffff",
-                        "inverse-surface": "#2d3133",
-                        "on-secondary-container": "#54647a",
-                        "surface": "#f7f9fb",
-                        "on-tertiary-fixed": "#360f00",
-                        "outline-variant": "#c3c6d7"
-                    },
-                    borderRadius: {
-                        DEFAULT: "0.25rem",
-                        lg: "0.5rem",
-                        xl: "0.75rem",
-                        full: "9999px"
-                    },
-                    spacing: {
-                        gutter: "16px",
-                        "stack-sm": "8px",
-                        "stack-lg": "32px",
-                        "container-padding": "24px",
-                        "stack-md": "16px",
-                        base: "4px"
-                    },
-                    fontFamily: {
-                        "financial-lg": ["JetBrains Mono"],
-                        "headline-sm": ["Instrument Sans"],
-                        "financial-md": ["JetBrains Mono"],
-                        "display-lg": ["Instrument Sans"],
-                        "body-md": ["Instrument Sans"],
-                        "label-caps": ["Instrument Sans"],
-                        "headline-md": ["Instrument Sans"],
-                        "body-lg": ["Instrument Sans"]
-                    },
-                    fontSize: {
-                        "financial-lg": ["20px", {lineHeight: "28px", fontWeight: "600"}],
-                        "headline-sm": ["18px", {lineHeight: "24px", fontWeight: "600"}],
-                        "financial-md": ["14px", {lineHeight: "20px", fontWeight: "500"}],
-                        "display-lg": ["32px", {lineHeight: "40px", letterSpacing: "-0.02em", fontWeight: "700"}],
-                        "body-md": ["14px", {lineHeight: "20px", fontWeight: "400"}],
-                        "label-caps": ["12px", {lineHeight: "16px", letterSpacing: "0.05em", fontWeight: "700"}],
-                        "headline-md": ["24px", {lineHeight: "32px", fontWeight: "600"}],
-                        "body-lg": ["16px", {lineHeight: "24px", fontWeight: "400"}]
-                    }
-                }
-            }
-        };
-    </script>
+    @vite(['resources/css/app.css'])
     <style>
+        body {
+            font-family: 'Instrument Sans', sans-serif;
+        }
         .material-symbols-rounded {
-          font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
         }
         .material-symbols-rounded.filled {
-          font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
         }
     </style>
 </head>
-<body class="bg-background text-on-surface font-body-md text-body-md min-h-screen flex flex-col items-center justify-center overflow-hidden relative bg-gradient-to-br from-surface-bright via-surface-container-low to-secondary-container/10">
+<body class="bg-[#f8f9fa] text-gray-800 min-h-screen flex flex-col justify-between antialiased selection:bg-[#0052cc] selection:text-white relative overflow-x-hidden">
 
-    <div class="z-10 w-full max-w-4xl px-container-padding flex flex-col items-center space-y-stack-lg">
-        <header class="text-center space-y-base mb-8">
-            <h1 class="font-headline-md text-headline-md font-bold text-primary tracking-tight">Minimarket ILP</h1>
-            <h2 class="font-display-lg text-display-lg text-on-surface">Selamat Datang di POS ILP</h2>
-            <p class="text-on-surface-variant font-body-lg text-body-lg">Silakan pilih peran Anda untuk memulai sesi</p>
+    <!-- Background Radial Gradient -->
+    <div class="fixed inset-0 pointer-events-none -z-10 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-100/40 via-transparent to-transparent"></div>
+
+    <!-- Top Spacer / Brand Minimal -->
+    <div class="w-full h-12"></div>
+
+    <!-- Main Centered Content Container -->
+    <main class="w-full max-w-4xl mx-auto px-6 py-6 flex flex-col items-center justify-center my-auto">
+        
+        <!-- Header -->
+        <header id="portal-header" class="text-center mb-9 transition-all duration-300">
+            <span class="text-[13px] font-bold tracking-wider text-[#0052cc] uppercase">Minimarket ILP</span>
+            <h1 class="text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight mt-1">Selamat Datang di POS ILP</h1>
+            <p id="portal-subtitle" class="text-gray-500 text-[14px] mt-1.5 font-medium transition-all duration-300">Silakan pilih peran Anda untuk memulai sesi</p>
         </header>
 
-        <main class="w-full flex flex-col items-center space-y-12">
-            <!-- Pilihan Role -->
-            <div id="role-selector" class="grid grid-cols-1 md:grid-cols-3 gap-stack-md w-full max-w-3xl transition-all duration-300">
-                <a href="{{ route('cashier.login') }}" data-role="Kasir" class="role-card group flex flex-col items-center p-stack-lg bg-surface-card border border-border-subtle rounded-xl shadow-sm hover:shadow-md transition-all duration-300 hover:border-primary active:scale-95">
-                    <div class="w-20 h-20 rounded-full bg-surface-container flex items-center justify-center mb-stack-md group-hover:bg-primary-fixed-dim transition-colors">
-                        <span class="material-symbols-rounded text-[40px] text-primary">point_of_sale</span>
-                    </div>
-                    <span class="font-headline-sm text-headline-sm text-on-surface mb-1">Kasir</span>
-                    <span class="text-on-surface-variant text-label-caps font-label-caps uppercase tracking-widest">Akses Transaksi</span>
-                </a>
-
-                <a href="{{ route('manager.login') }}" data-role="Manager" class="role-card group flex flex-col items-center p-stack-lg bg-surface-card border border-border-subtle rounded-xl shadow-sm hover:shadow-md transition-all duration-300 hover:border-primary active:scale-95">
-                    <div class="w-20 h-20 rounded-full bg-surface-container flex items-center justify-center mb-stack-md group-hover:bg-primary-fixed-dim transition-colors">
-                        <span class="material-symbols-rounded text-[40px] text-primary">inventory_2</span>
-                    </div>
-                    <span class="font-headline-sm text-headline-sm text-on-surface mb-1">Manager</span>
-                    <span class="text-on-surface-variant text-label-caps font-label-caps uppercase tracking-widest">Akses Operasional</span>
-                </a>
-
-                <button onclick="selectRole('Owner')" data-role="Owner" class="role-card group flex flex-col items-center p-stack-lg bg-surface-card border border-border-subtle rounded-xl shadow-sm hover:shadow-md transition-all duration-300 hover:border-primary active:scale-95">
-                    <div class="w-20 h-20 rounded-full bg-surface-container flex items-center justify-center mb-stack-md group-hover:bg-primary-fixed-dim transition-colors">
-                        <span class="material-symbols-rounded text-[40px] text-primary">analytics</span>
-                    </div>
-                    <span class="font-headline-sm text-headline-sm text-on-surface mb-1">Owner</span>
-                    <span class="text-on-surface-variant text-label-caps font-label-caps uppercase tracking-widest">Akses Strategis</span>
-                </button>
-            </div>
-
-            <!-- Form Login PIN -->
-            <div id="login-container" class="hidden opacity-0 translate-y-4 transition-all duration-500 w-full max-w-sm">
-                <div class="bg-surface-card border border-border-subtle rounded-xl p-stack-lg shadow-sm space-y-stack-md">
-                    <div class="text-center space-y-1">
-                        <p id="active-role-text" class="font-headline-sm text-headline-sm text-on-surface">Masuk Sebagai Kasir</p>
-                        <p class="text-on-surface-variant text-body-md font-body-md">Masukkan PIN Keamanan</p>
-                    </div>
-
-                    <div class="flex justify-center space-x-2">
-                        <input maxlength="1" oninput="moveToNext(this, 'pin2')" id="pin1" class="pin-dot w-12 h-14 text-center text-financial-lg font-financial-lg border-2 border-border-subtle rounded-lg bg-surface-container-low focus:border-primary focus:ring-0 transition-all outline-none" type="password" inputmode="numeric" placeholder="•">
-                        <input maxlength="1" oninput="moveToNext(this, 'pin3')" id="pin2" class="pin-dot w-12 h-14 text-center text-financial-lg font-financial-lg border-2 border-border-subtle rounded-lg bg-surface-container-low focus:border-primary focus:ring-0 transition-all outline-none" type="password" inputmode="numeric" placeholder="•">
-                        <input maxlength="1" oninput="moveToNext(this, 'pin4')" id="pin3" class="pin-dot w-12 h-14 text-center text-financial-lg font-financial-lg border-2 border-border-subtle rounded-lg bg-surface-container-low focus:border-primary focus:ring-0 transition-all outline-none" type="password" inputmode="numeric" placeholder="•">
-                        <input maxlength="1" oninput="moveToNext(this, 'pin5')" id="pin4" class="pin-dot w-12 h-14 text-center text-financial-lg font-financial-lg border-2 border-border-subtle rounded-lg bg-surface-container-low focus:border-primary focus:ring-0 transition-all outline-none" type="password" inputmode="numeric" placeholder="•">
-                        <input maxlength="1" oninput="moveToNext(this, 'pin6')" id="pin5" class="pin-dot w-12 h-14 text-center text-financial-lg font-financial-lg border-2 border-border-subtle rounded-lg bg-surface-container-low focus:border-primary focus:ring-0 transition-all outline-none" type="password" inputmode="numeric" placeholder="•">
-                        <input maxlength="1" oninput="submitPin()" id="pin6" class="pin-dot w-12 h-14 text-center text-financial-lg font-financial-lg border-2 border-border-subtle rounded-lg bg-surface-container-low focus:border-primary focus:ring-0 transition-all outline-none" type="password" inputmode="numeric" placeholder="•">
-                    </div>
-
-                    <div class="space-y-stack-sm pt-2">
-                        <button class="w-full h-12 bg-primary text-on-primary font-headline-sm text-headline-sm rounded-lg hover:bg-on-primary-fixed-variant active:scale-[0.98] transition-all flex items-center justify-center space-x-2">
-                            <span>Masuk Ke Sistem</span>
-                            <span class="material-symbols-rounded">login</span>
-                        </button>
-                        <div class="flex justify-center">
-                            <a href="#" class="text-primary font-body-md hover:underline decoration-2 underline-offset-4">Lupa PIN?</a>
-                        </div>
-                    </div>
+        <!-- 1. Role Cards Selector (Smoothly transitions out when any role is picked) -->
+        <div id="role-selector" class="grid grid-cols-1 sm:grid-cols-3 gap-6 w-full max-w-3xl transition-all duration-300 ease-out transform opacity-100 translate-y-0">
+            
+            <!-- 1. Kasir Card -->
+            <button type="button" onclick="selectRole('Kasir')"
+                    class="group bg-white rounded-2xl border border-gray-200/90 p-8 shadow-sm hover:shadow-md hover:border-[#0052cc] flex flex-col items-center text-center transition-all duration-200 transform hover:-translate-y-1 cursor-pointer w-full">
+                <div class="w-20 h-20 rounded-full bg-blue-50 text-[#0052cc] flex items-center justify-center mb-5 group-hover:bg-[#0052cc] group-hover:text-white transition-colors duration-200 shadow-sm">
+                    <span class="material-symbols-rounded text-[40px]">point_of_sale</span>
                 </div>
-                
-                <div class="mt-4 flex justify-center">
-                    <button onclick="resetSelection()" class="text-on-surface-variant flex items-center space-x-1 hover:text-primary transition-colors">
+                <h2 class="text-[18px] font-bold text-gray-900">Kasir</h2>
+                <span class="text-[11px] font-bold text-gray-400 tracking-wider uppercase mt-1">Akses Transaksi</span>
+            </button>
+
+            <!-- 2. Manager Card -->
+            <button type="button" onclick="selectRole('Manager')"
+                    class="group bg-white rounded-2xl border border-gray-200/90 p-8 shadow-sm hover:shadow-md hover:border-[#0052cc] flex flex-col items-center text-center transition-all duration-200 transform hover:-translate-y-1 cursor-pointer w-full">
+                <div class="w-20 h-20 rounded-full bg-blue-50 text-[#0052cc] flex items-center justify-center mb-5 group-hover:bg-[#0052cc] group-hover:text-white transition-colors duration-200 shadow-sm">
+                    <span class="material-symbols-rounded text-[40px]">inventory_2</span>
+                </div>
+                <h2 class="text-[18px] font-bold text-gray-900">Manager</h2>
+                <span class="text-[11px] font-bold text-gray-400 tracking-wider uppercase mt-1">Akses Operasional</span>
+            </button>
+
+            <!-- 3. Owner Card -->
+            <button type="button" onclick="selectRole('Owner')"
+                    class="group bg-white rounded-2xl border border-gray-200/90 p-8 shadow-sm hover:shadow-md hover:border-[#0052cc] flex flex-col items-center text-center transition-all duration-200 transform hover:-translate-y-1 cursor-pointer w-full">
+                <div class="w-20 h-20 rounded-full bg-blue-50 text-[#0052cc] flex items-center justify-center mb-5 group-hover:bg-[#0052cc] group-hover:text-white transition-colors duration-200 shadow-sm">
+                    <span class="material-symbols-rounded text-[40px]">analytics</span>
+                </div>
+                <h2 class="text-[18px] font-bold text-gray-900">Owner</h2>
+                <span class="text-[11px] font-bold text-gray-400 tracking-wider uppercase mt-1">Akses Strategis</span>
+            </button>
+
+        </div>
+
+        <!-- 2. Container Forms (Kasir, Manager, Owner with identical smooth animation) -->
+        <div id="login-forms-container" class="w-full flex justify-center">
+
+            <!-- FORM 1: LOGIN KASIR -->
+            <div id="form-kasir" class="hidden opacity-0 translate-y-4 transition-all duration-300 ease-out transform w-full max-w-md">
+                <div class="bg-white border border-gray-200/90 rounded-2xl p-8 shadow-sm">
+                    <div class="text-center mb-6">
+                        <div class="w-14 h-14 bg-blue-50 text-[#0052cc] rounded-full flex items-center justify-center mx-auto mb-3">
+                            <span class="material-symbols-rounded text-[28px]">point_of_sale</span>
+                        </div>
+                        <h2 class="text-[20px] font-bold text-gray-900">Login Akun Petugas Kasir</h2>
+                        <p class="text-[13px] text-gray-500 mt-1">Pilih akun petugas resmi &amp; masukkan PIN pribadi</p>
+                    </div>
+
+                    <form action="{{ url('/select-shift') }}" method="GET" onsubmit="localStorage.setItem('pos_kasir_staff_id', document.getElementById('kasir-staff-select').value);" class="space-y-4">
+                        <div>
+                            <label class="block text-[12.5px] font-bold text-gray-700 mb-1.5">Akun Petugas Terdaftar</label>
+                            <div class="relative flex items-center">
+                                <span class="material-symbols-rounded absolute left-3 text-gray-400 text-[20px]">badge</span>
+                                <select id="kasir-staff-select" name="staff_id"
+                                        onchange="document.getElementById('kasir-username').value = this.options[this.selectedIndex].dataset.username"
+                                        class="w-full pl-10 pr-8 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-[14px] text-gray-800 focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 outline-none transition-all font-bold cursor-pointer">
+                                    <option value="USR-02" data-username="budi_kasir01" selected>Budi Kurniawan (NIK: 202409821002)</option>
+                                    <option value="USR-01" data-username="andi_kasir">Andi Pratama (NIK: 202409821001)</option>
+                                    <option value="USR-03" data-username="citra_kasir">Citra Dewi (NIK: 202409821003)</option>
+                                    <option value="USR-04" data-username="dedi_kasir">Dedi Santoso (NIK: 202409821004)</option>
+                                </select>
+                                <input type="hidden" id="kasir-username" name="username" value="budi_kasir01">
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex items-center justify-between mb-1.5">
+                                <label class="text-[12.5px] font-bold text-gray-700">PIN Pribadi / Kata Sandi</label>
+                                <button type="button" onclick="alert('Silakan hubungi supervisor / manager untuk bantuan reset PIN petugas.')" class="text-[12px] text-[#0052cc] hover:underline font-semibold cursor-pointer">Lupa PIN?</button>
+                            </div>
+                            <div class="relative flex items-center">
+                                <span class="material-symbols-rounded absolute left-3 text-gray-400 text-[20px]">lock</span>
+                                <input type="password" id="kasir-password" name="password" value="123456" required
+                                       class="w-full pl-10 pr-11 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-[14px] font-mono text-gray-800 focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 outline-none transition-all font-bold">
+                                <button type="button" onclick="togglePassword('kasir-password', 'kasir-eye')" class="absolute right-3 text-gray-400 hover:text-gray-600 cursor-pointer p-1">
+                                    <span id="kasir-eye" class="material-symbols-rounded text-[20px]">visibility</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="pt-2">
+                            <button type="submit" class="w-full h-12 bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-[14px] rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer">
+                                <span>Lanjut Pilih Terminal &amp; Buka Sesi</span>
+                                <span class="material-symbols-rounded text-[20px]">login</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="mt-4 text-center">
+                    <button type="button" onclick="resetSelection()" class="inline-flex items-center gap-1.5 text-gray-500 hover:text-[#0052cc] font-bold text-[13px] transition-colors cursor-pointer py-1 px-3 rounded-lg hover:bg-gray-100">
                         <span class="material-symbols-rounded text-[18px]">arrow_back</span>
-                        <span class="font-label-caps text-label-caps uppercase tracking-wider">Kembali Pilih Peran</span>
+                        <span>Kembali Pilih Peran</span>
                     </button>
                 </div>
             </div>
-        </main>
-    </div>
 
-    <footer class="fixed bottom-0 w-full flex justify-between items-center px-container-padding py-stack-md bg-surface-container-low/80 backdrop-blur-md border-t border-border-subtle">
-        <div class="flex items-center space-x-2">
-            <div class="w-2 h-2 rounded-full bg-status-success animate-pulse"></div>
-            <span class="text-label-caps font-label-caps text-on-surface-variant uppercase">System Status: Online</span>
+            <!-- FORM 2: LOGIN MANAGER -->
+            <div id="form-manager" class="hidden opacity-0 translate-y-4 transition-all duration-300 ease-out transform w-full max-w-md">
+                <div class="bg-white border border-gray-200/90 rounded-2xl p-8 shadow-sm">
+                    <div class="text-center mb-6">
+                        <div class="w-14 h-14 bg-blue-50 text-[#0052cc] rounded-full flex items-center justify-center mx-auto mb-3">
+                            <span class="material-symbols-rounded text-[28px]">inventory_2</span>
+                        </div>
+                        <h2 class="text-[20px] font-bold text-gray-900">Login Manager</h2>
+                        <p class="text-[13px] text-gray-500 mt-1">Portal Khusus Manajer Operasional</p>
+                    </div>
+
+                    <form action="{{ url('/dashboard') }}" method="GET" class="space-y-4">
+                        <div>
+                            <label class="block text-[12.5px] font-bold text-gray-700 mb-1.5">Nama Manager</label>
+                            <div class="relative flex items-center">
+                                <span class="material-symbols-rounded absolute left-3 text-gray-400 text-[20px]">person</span>
+                                <input type="text" id="manager-username" name="username" value="andi_manager" placeholder="Masukkan nama manager" required
+                                       class="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-[14px] text-gray-800 focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 outline-none transition-all font-medium">
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex items-center justify-between mb-1.5">
+                                <label class="text-[12.5px] font-bold text-gray-700">Kata Sandi</label>
+                                <button type="button" onclick="alert('Silakan hubungi administrator koperasi untuk reset sandi manager.')" class="text-[12px] text-[#0052cc] hover:underline font-semibold cursor-pointer">Lupa Sandi?</button>
+                            </div>
+                            <div class="relative flex items-center">
+                                <span class="material-symbols-rounded absolute left-3 text-gray-400 text-[20px]">lock</span>
+                                <input type="password" id="manager-password" name="password" value="password" placeholder="••••••••" required
+                                       class="w-full pl-10 pr-11 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-[14px] text-gray-800 focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 outline-none transition-all font-medium">
+                                <button type="button" onclick="togglePassword('manager-password', 'manager-eye')" class="absolute right-3 text-gray-400 hover:text-gray-600 cursor-pointer p-1">
+                                    <span id="manager-eye" class="material-symbols-rounded text-[20px]">visibility</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="pt-2">
+                            <button type="submit" class="w-full h-12 bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-[14px] rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer">
+                                <span>Masuk Sebagai Manager</span>
+                                <span class="material-symbols-rounded text-[20px]">login</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="mt-4 text-center">
+                    <button type="button" onclick="resetSelection()" class="inline-flex items-center gap-1.5 text-gray-500 hover:text-[#0052cc] font-bold text-[13px] transition-colors cursor-pointer py-1 px-3 rounded-lg hover:bg-gray-100">
+                        <span class="material-symbols-rounded text-[18px]">arrow_back</span>
+                        <span>Kembali Pilih Peran</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- FORM 3: LOGIN OWNER -->
+            <div id="form-owner" class="hidden opacity-0 translate-y-4 transition-all duration-300 ease-out transform w-full max-w-md">
+                <div class="bg-white border border-gray-200/90 rounded-2xl p-8 shadow-sm">
+                    <div class="text-center mb-6">
+                        <div class="w-14 h-14 bg-blue-50 text-[#0052cc] rounded-full flex items-center justify-center mx-auto mb-3">
+                            <span class="material-symbols-rounded text-[28px]">analytics</span>
+                        </div>
+                        <h2 class="text-[20px] font-bold text-gray-900">Login Owner</h2>
+                        <p class="text-[13px] text-gray-500 mt-1">Masukkan 6 digit PIN otorisasi strategis Anda</p>
+                    </div>
+
+                    <form onsubmit="event.preventDefault(); submitOwnerPin();" class="space-y-6">
+                        <div class="flex justify-center gap-2.5">
+                            <input maxlength="1" oninput="moveToNext(this, 'pin2')" id="pin1" class="pin-dot w-11 h-14 text-center font-mono text-xl font-bold border-2 border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 outline-none transition-all text-gray-900" type="password" inputmode="numeric" placeholder="•" autocomplete="off">
+                            <input maxlength="1" oninput="moveToNext(this, 'pin3')" id="pin2" class="pin-dot w-11 h-14 text-center font-mono text-xl font-bold border-2 border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 outline-none transition-all text-gray-900" type="password" inputmode="numeric" placeholder="•" autocomplete="off">
+                            <input maxlength="1" oninput="moveToNext(this, 'pin4')" id="pin3" class="pin-dot w-11 h-14 text-center font-mono text-xl font-bold border-2 border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 outline-none transition-all text-gray-900" type="password" inputmode="numeric" placeholder="•" autocomplete="off">
+                            <input maxlength="1" oninput="moveToNext(this, 'pin5')" id="pin4" class="pin-dot w-11 h-14 text-center font-mono text-xl font-bold border-2 border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 outline-none transition-all text-gray-900" type="password" inputmode="numeric" placeholder="•" autocomplete="off">
+                            <input maxlength="1" oninput="moveToNext(this, 'pin6')" id="pin5" class="pin-dot w-11 h-14 text-center font-mono text-xl font-bold border-2 border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 outline-none transition-all text-gray-900" type="password" inputmode="numeric" placeholder="•" autocomplete="off">
+                            <input maxlength="1" oninput="submitOwnerPin()" id="pin6" class="pin-dot w-11 h-14 text-center font-mono text-xl font-bold border-2 border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 outline-none transition-all text-gray-900" type="password" inputmode="numeric" placeholder="•" autocomplete="off">
+                        </div>
+
+                        <div class="space-y-3 pt-2">
+                            <button type="submit" class="w-full h-12 bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-[14px] rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer">
+                                <span>Masuk Ke Sistem</span>
+                                <span class="material-symbols-rounded text-[20px]">login</span>
+                            </button>
+                            <div class="text-center">
+                                <button type="button" onclick="alert('Silakan hubungi administrator IT koperasi untuk verifikasi reset PIN Owner.')" class="text-[13px] text-[#0052cc] hover:underline font-semibold cursor-pointer">
+                                    Lupa PIN Owner?
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="mt-4 text-center">
+                    <button type="button" onclick="resetSelection()" class="inline-flex items-center gap-1.5 text-gray-500 hover:text-[#0052cc] font-bold text-[13px] transition-colors cursor-pointer py-1 px-3 rounded-lg hover:bg-gray-100">
+                        <span class="material-symbols-rounded text-[18px]">arrow_back</span>
+                        <span>Kembali Pilih Peran</span>
+                    </button>
+                </div>
+            </div>
+
         </div>
-        <div class="flex items-center space-x-gutter">
-            <span class="text-label-caps font-label-caps text-text-secondary uppercase">© 2026 Minimarket ILP</span>
-            <a href="#" class="text-primary hover:underline text-label-caps font-label-caps uppercase flex items-center space-x-1">
-                <span class="material-symbols-rounded text-[14px]">help</span>
+
+    </main>
+
+    <!-- Bottom Footer -->
+    <footer class="w-full border-t border-gray-200/80 bg-white/70 backdrop-blur-md px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-[12px] text-gray-500">
+        <div class="flex items-center gap-2">
+            <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+            <span class="font-bold text-gray-600">Status Sistem: POS Online &amp; Terhubung</span>
+        </div>
+        <div class="flex items-center gap-4">
+            <span>© 2026 Minimarket ILP</span>
+            <span class="text-gray-300">•</span>
+            <button type="button" onclick="alert('POS Koperasi ILP v2.4.1\nHubungi helpdesk@ilp-pos.co.id untuk bantuan teknis.')" class="hover:text-[#0052cc] font-medium flex items-center gap-1 cursor-pointer">
+                <span class="material-symbols-rounded text-[15px]">help</span>
                 <span>Bantuan</span>
-            </a>
+            </button>
         </div>
     </footer>
 
+    <!-- Script Handling with Identical Smooth Animations -->
     <script>
-        function selectRole(role) {
+        let currentActiveForm = null;
+
+        const roleForms = {
+            'Kasir': document.getElementById('form-kasir'),
+            'Manager': document.getElementById('form-manager'),
+            'Owner': document.getElementById('form-owner')
+        };
+
+        const roleSubtitles = {
+            'Kasir': 'Silakan lengkapi akun Kasir untuk akses transaksi',
+            'Manager': 'Silakan lengkapi akun Manager untuk akses operasional',
+            'Owner': 'Silakan masukkan PIN otorisasi Owner untuk akses strategis'
+        };
+
+        function selectRole(role, instant = false) {
             const roleSelector = document.getElementById('role-selector');
-            const loginContainer = document.getElementById('login-container');
-            const roleText = document.getElementById('active-role-text');
-            
-            roleText.innerText = `Masuk Sebagai ${role}`;
-            
-            roleSelector.classList.add('opacity-0', 'pointer-events-none', '-translate-y-8');
+            const targetForm = roleForms[role];
+            const subtitle = document.getElementById('portal-subtitle');
+            if (!targetForm) return;
+
+            currentActiveForm = targetForm;
+
+            if (subtitle && roleSubtitles[role]) {
+                subtitle.innerText = roleSubtitles[role];
+            }
+
+            if (instant) {
+                roleSelector.classList.add('hidden', 'opacity-0', 'pointer-events-none');
+                Object.values(roleForms).forEach(f => f.classList.add('hidden', 'opacity-0', 'translate-y-4'));
+                targetForm.classList.remove('hidden');
+                targetForm.offsetHeight;
+                targetForm.classList.remove('opacity-0', 'translate-y-4');
+                focusFirstInput(role);
+                return;
+            }
+
+            // 1. Smoothly fade out & slide up role selector (Identical to Owner transition)
+            roleSelector.classList.add('opacity-0', 'pointer-events-none', '-translate-y-4');
+
             setTimeout(() => {
                 roleSelector.classList.add('hidden');
-                loginContainer.classList.remove('hidden');
+
+                // Hide other forms
+                Object.values(roleForms).forEach(f => {
+                    if (f !== targetForm) {
+                        f.classList.add('hidden', 'opacity-0', 'translate-y-4');
+                    }
+                });
+
+                // Display target form
+                targetForm.classList.remove('hidden');
+                targetForm.offsetHeight; // force reflow
+
                 setTimeout(() => {
-                    loginContainer.classList.remove('opacity-0', 'translate-y-4');
-                    document.getElementById('pin1').focus();
+                    targetForm.classList.remove('opacity-0', 'translate-y-4');
+                    focusFirstInput(role);
                 }, 50);
-            }, 300);
+            }, 250);
         }
 
         function resetSelection() {
             const roleSelector = document.getElementById('role-selector');
-            const loginContainer = document.getElementById('login-container');
-            
-            loginContainer.classList.add('opacity-0', 'translate-y-4');
-            setTimeout(() => {
-                loginContainer.classList.add('hidden');
-                roleSelector.classList.remove('hidden');
-                setTimeout(() => {
-                    roleSelector.classList.remove('opacity-0', 'pointer-events-none', '-translate-y-8');
-                }, 50);
-            }, 300);
+            const subtitle = document.getElementById('portal-subtitle');
+            if (!currentActiveForm) return;
 
-            // Bersihkan PIN ketika kembali
+            if (subtitle) {
+                subtitle.innerText = 'Silakan pilih peran Anda untuk memulai sesi';
+            }
+
+            // 1. Smoothly fade out & slide down active form (Identical to Owner transition)
+            currentActiveForm.classList.add('opacity-0', 'translate-y-4');
+
+            setTimeout(() => {
+                currentActiveForm.classList.add('hidden');
+                currentActiveForm = null;
+
+                roleSelector.classList.remove('hidden');
+                roleSelector.offsetHeight; // force reflow
+
+                setTimeout(() => {
+                    roleSelector.classList.remove('opacity-0', 'pointer-events-none', '-translate-y-4');
+                }, 50);
+            }, 250);
+
+            // Bersihkan input PIN jika ada
             document.querySelectorAll('.pin-dot').forEach(el => el.value = '');
+        }
+
+        function focusFirstInput(role) {
+            if (role === 'Kasir') {
+                const el = document.getElementById('kasir-username');
+                if (el) el.focus();
+            } else if (role === 'Manager') {
+                const el = document.getElementById('manager-username');
+                if (el) el.focus();
+            } else if (role === 'Owner') {
+                const el = document.getElementById('pin1');
+                if (el) el.focus();
+            }
+        }
+
+        function togglePassword(inputId, iconId) {
+            const input = document.getElementById(inputId);
+            const icon = document.getElementById(iconId);
+            if (!input || !icon) return;
+
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.innerText = 'visibility_off';
+            } else {
+                input.type = 'password';
+                icon.innerText = 'visibility';
+            }
         }
 
         function moveToNext(current, nextFieldId) {
             if (current.value.length >= 1) {
-                document.getElementById(nextFieldId).focus();
+                const next = document.getElementById(nextFieldId);
+                if (next) next.focus();
             }
         }
-        
-        function submitPin() {
-            // Animasi atau logika submit bisa ditambahkan di sini
-            if (document.getElementById('pin6').value.length >= 1) {
-                // contoh: auto klik tombol Masuk
+
+        function submitOwnerPin() {
+            const pinInputs = document.querySelectorAll('.pin-dot');
+            let pin = '';
+            pinInputs.forEach(input => pin += input.value);
+
+            if (pin.length === 6) {
+                window.location.href = "{{ url('/dashboard') }}";
             }
         }
+
+        // Handle keyboard backspace across PIN inputs
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Backspace' && e.target.classList.contains('pin-dot') && e.target.value === '') {
+                const prev = e.target.previousElementSibling;
+                if (prev && prev.classList.contains('pin-dot')) {
+                    prev.focus();
+                }
+            }
+        });
+
+        // Initialize role if passed in query param or server variable
+        @php
+            $selectedRole = $initialRole ?? request('role', '');
+        @endphp
+        @if(!empty($selectedRole))
+            window.addEventListener('DOMContentLoaded', function() {
+                selectRole('{{ $selectedRole }}', true);
+            });
+        @endif
     </script>
 </body>
 </html>

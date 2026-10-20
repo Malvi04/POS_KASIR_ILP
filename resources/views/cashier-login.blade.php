@@ -4,8 +4,17 @@
 
 @section('content')
 <div class="min-h-screen w-full font-sans text-slate-800 antialiased" style="background: radial-gradient(circle at 50% 38%, #e1e8ff 0, #f7f9fd 38%, #f8fafc 100%);">
+    <style>
+        @keyframes smoothSlideUp {
+            from { opacity: 0; transform: translateY(16px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-smooth {
+            animation: smoothSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+    </style>
     <main class="min-h-[calc(100vh-37px)] px-5 py-12 flex flex-col items-center justify-center">
-        <section class="w-full max-w-[400px] -mt-5">
+        <section class="w-full max-w-[400px] -mt-5 animate-smooth">
             <header class="mb-8 text-center">
                 <h1 class="text-[25px] font-bold tracking-[-0.04em] text-[#0b57d0]">Minimarket Pro</h1>
                 <p class="mt-1 text-[16px] text-[#404656]">Sistem Kasir ILP</p>
@@ -47,7 +56,7 @@
                 </form>
 
                 <div class="mt-8 border-t border-[#e8edf3] pt-4 text-center">
-                    <a href="{{ url('/') }}" class="inline-flex items-center gap-2 text-[12px] font-bold tracking-[0.02em] text-[#526078] transition hover:text-[#0b57d0]">
+                    <a href="{{ url('/') }}" data-no-spa class="inline-flex items-center gap-2 text-[12px] font-bold tracking-[0.02em] text-[#526078] transition hover:text-[#0b57d0]">
                         <span class="material-symbols-rounded text-[19px]">arrow_back</span>
                         Kembali ke Pilihan Akses
                     </a>

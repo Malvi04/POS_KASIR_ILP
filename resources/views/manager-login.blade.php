@@ -4,8 +4,17 @@
 
 @section('content')
 <div class="min-h-screen w-full font-sans text-[#202532] antialiased" style="background: radial-gradient(circle at 50% 38%, #f9fbff 0, #eef4ff 56%, #e5effd 100%);">
+    <style>
+        @keyframes smoothSlideUp {
+            from { opacity: 0; transform: translateY(16px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-smooth {
+            animation: smoothSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+    </style>
     <main class="flex min-h-screen flex-col items-center justify-center px-5 py-12">
-        <section class="w-full max-w-[480px]">
+        <section class="w-full max-w-[480px] animate-smooth">
             <div class="rounded-xl border border-[#dfe6f0] bg-white/95 px-8 py-8 shadow-card sm:px-8">
                 <header class="mb-8 text-center">
                     <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-[#2d64e7] text-white shadow-icon">
@@ -45,7 +54,7 @@
                 </form>
 
                 <div class="mt-8 border-t border-[#e6ebf2] pt-4 text-center">
-                    <a href="{{ url('/') }}" class="inline-flex items-center gap-1 text-[13px] font-medium text-[#58667e] transition hover:text-[#0b57d0]">
+                    <a href="{{ url('/') }}" data-no-spa class="inline-flex items-center gap-1 text-[13px] font-medium text-[#58667e] transition hover:text-[#0b57d0]">
                         <span class="material-symbols-rounded text-[19px]">arrow_back</span>
                         Kembali ke Pilihan Akses
                     </a>

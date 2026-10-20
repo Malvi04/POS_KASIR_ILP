@@ -29,41 +29,23 @@
                     <h1 class="text-2xl font-black text-gray-900 tracking-tight">Input Retur Barang (Toko <span class="material-symbols-rounded relative top-1 text-[24px]">arrow_forward</span> Gudang DC)</h1>
                 </div>
 
-                <!-- Info Cards & Notice -->
-                <div class="flex flex-col gap-4">
-                    <div class="flex gap-4">
-                        <div class="bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm">
-                            <div class="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-                                <span class="material-symbols-rounded">person</span>
-                            </div>
-                            <div class="flex flex-col">
-                                <span class="text-sm font-bold text-gray-900">Siti Rahmawati</span>
-                                <span class="text-[10px] font-bold text-gray-500 tracking-wider">TERMINAL #01 • SHIFT PAGI</span>
-                            </div>
+                <!-- Info Cards -->
+                <div class="flex gap-4">
+                    <div class="bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm">
+                        <div class="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                            <span class="material-symbols-rounded">person</span>
                         </div>
-                        <div class="bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm">
-                            <div class="w-10 h-10 rounded-lg bg-green-50 text-green-600 flex items-center justify-center">
-                                <span class="material-symbols-rounded">cloud_sync</span>
-                            </div>
-                            <div class="flex flex-col">
-                                <span class="text-[10px] font-bold text-green-600 tracking-wider">ONLINE TERHUBUNG</span>
-                                <span class="text-xs font-bold text-gray-900">ERP DC CAKUNG V4.2</span>
-                            </div>
+                        <div class="flex flex-col">
+                            <span class="text-sm font-bold text-gray-900">Siti Rahmawati</span>
                         </div>
                     </div>
-
-                    <div class="bg-[#f0f4ff] border border-blue-200 rounded-xl p-4 flex items-center justify-between shadow-sm">
-                        <div class="flex items-center gap-4">
-                            <div class="w-12 h-12 rounded-lg bg-[#0052cc] text-white flex items-center justify-center shrink-0">
-                                <span class="material-symbols-rounded">local_shipping</span>
-                            </div>
-                            <div>
-                                <h3 class="font-bold text-gray-900 text-sm">Kebijakan Ritase Armada Retur Cabang Toko</h3>
-                                <p class="text-[13px] text-gray-600 mt-0.5">Biaya sewa ritase logistik antar cabang &rarr; gudang DC terstandarisasi flat <span class="font-bold text-blue-600">Rp 500.000 / pengiriman truk</span>. Kasir fokus verifikasi fisik, scan SKU, input alasan, dan foto kemasan.</p>
-                            </div>
+                    <div class="bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm">
+                        <div class="w-10 h-10 rounded-lg bg-green-50 text-green-600 flex items-center justify-center">
+                            <span class="material-symbols-rounded">cloud_sync</span>
                         </div>
-                        <div class="bg-white px-3 py-1.5 rounded-lg border border-gray-200 text-[11px] font-bold text-gray-700 tracking-wider shrink-0">
-                            BATCH AKTIF: #BTH-RET-20250519-01
+                        <div class="flex flex-col">
+                            <span class="text-[10px] font-bold text-green-600 tracking-wider">ONLINE TERHUBUNG</span>
+                            <span class="text-xs font-bold text-gray-900">Gudang Minimarket ILP</span>
                         </div>
                     </div>
                 </div>
@@ -136,14 +118,9 @@
                         
                         <!-- Form Header -->
                         <div class="flex items-start justify-between">
-                            <div class="flex gap-3">
-                                <div class="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm">
-                                    <span class="material-symbols-rounded text-[20px]">qr_code_scanner</span>
-                                </div>
-                                <div>
-                                    <h3 class="font-bold text-gray-900">Form Scan Cepat Barang</h3>
-                                    <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider mt-0.5">INPUT ITEM SATU PER SATU</p>
-                                </div>
+                            <div>
+                                <h3 class="font-bold text-gray-900">Form Scan Cepat Barang</h3>
+                                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider mt-0.5">INPUT ITEM SATU PER SATU</p>
                             </div>
                             <div class="bg-gray-100 px-2 py-1 rounded text-[10px] font-bold text-gray-500 text-center">
                                 Shortcut<br>[F2]
@@ -154,34 +131,28 @@
                         <div>
                             <div class="flex justify-between items-end mb-1.5">
                                 <label class="text-[11px] font-bold text-gray-700 tracking-wider">BARCODE / SCAN EAN-13</label>
-                                <a href="#" class="text-[11px] font-bold text-blue-600 hover:underline flex items-center gap-1"><span class="material-symbols-rounded text-[14px]">bolt</span>Contoh Cepat</a>
+                                <a href="#" class="text-[11px] font-bold text-blue-600 hover:underline">Contoh Cepat</a>
                             </div>
                             <div class="flex gap-2">
                                 <div class="relative flex-1">
-                                    <span class="material-symbols-rounded absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">qr_code</span>
-                                    <input type="text" value="8992388102315" class="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg font-mono text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                                    <input type="text" value="8992388102315" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg font-mono text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
                                 </div>
                                 <button class="bg-[#0052cc] hover:bg-blue-700 text-white px-5 rounded-lg font-bold text-sm transition-colors shadow-sm">DETEKSI</button>
                             </div>
                         </div>
 
                         <!-- Product Detail Card (No Photo) -->
-                        <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 flex gap-4">
-                            <div class="w-16 h-16 bg-white border border-gray-200 rounded-lg flex flex-col items-center justify-center shrink-0 text-blue-600 shadow-sm">
-                                <span class="material-symbols-rounded text-[24px]">oil_barrel</span>
-                            </div>
-                            <div class="flex-1">
-                                <span class="text-[10px] font-bold text-blue-600 tracking-wider">MINYAK GORENG & BAHAN POKOK</span>
-                                <h4 class="font-bold text-gray-900 text-sm leading-tight mt-1">Minyak Goreng Sawit 2 Liter Pouch</h4>
-                                <div class="flex items-center gap-4 mt-2">
-                                    <div class="flex flex-col">
-                                        <span class="text-[10px] text-gray-500 font-bold">SKU:</span>
-                                        <span class="text-xs font-mono font-bold text-gray-700">MYK-0021</span>
-                                    </div>
-                                    <div class="flex flex-col">
-                                        <span class="text-[10px] text-gray-500 font-bold">Hrg Beli:</span>
-                                        <span class="text-xs font-mono font-bold text-gray-700">Rp 34.500</span>
-                                    </div>
+                        <div class="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                            <span class="text-[10px] font-bold text-blue-600 tracking-wider">MINYAK GORENG & BAHAN POKOK</span>
+                            <h4 class="font-bold text-gray-900 text-sm leading-tight mt-1">Minyak Goreng Sawit 2 Liter Pouch</h4>
+                            <div class="flex items-center gap-4 mt-2">
+                                <div class="flex flex-col">
+                                    <span class="text-[10px] text-gray-500 font-bold">SKU:</span>
+                                    <span class="text-xs font-mono font-bold text-gray-700">MYK-0021</span>
+                                </div>
+                                <div class="flex flex-col">
+                                    <span class="text-[10px] text-gray-500 font-bold">Hrg Beli:</span>
+                                    <span class="text-xs font-mono font-bold text-gray-700">Rp 34.500</span>
                                 </div>
                             </div>
                         </div>
@@ -191,9 +162,9 @@
                             <div>
                                 <label class="text-[11px] font-bold text-gray-700 tracking-wider block mb-1.5">KUANTITAS / JUMLAH FISIK</label>
                                 <div class="flex items-center justify-between border border-gray-200 rounded-lg bg-white p-1">
-                                    <button class="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-100 rounded transition-colors"><span class="material-symbols-rounded text-[20px]">remove</span></button>
+                                    <button class="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-100 rounded transition-colors text-base font-bold">−</button>
                                     <span class="font-bold text-gray-900">2</span>
-                                    <button class="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-100 rounded transition-colors"><span class="material-symbols-rounded text-[20px]">add</span></button>
+                                    <button class="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-100 rounded transition-colors text-base font-bold">+</button>
                                 </div>
                             </div>
                             <div>
@@ -255,12 +226,11 @@
 
                         <!-- Buttons -->
                         <div class="flex gap-3 mt-2">
-                            <button class="flex-1 bg-[#0052cc] hover:bg-blue-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition-colors">
-                                <span class="material-symbols-rounded text-[20px]">add_task</span>
+                            <button class="flex-1 bg-[#0052cc] hover:bg-blue-700 text-white py-3 rounded-xl font-bold flex items-center justify-center shadow-sm transition-colors text-sm">
                                 Masukkan ke Draft Retur
                             </button>
-                            <button class="w-12 h-12 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl flex items-center justify-center shrink-0 transition-colors">
-                                <span class="material-symbols-rounded">refresh</span>
+                            <button class="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs transition-colors shrink-0">
+                                Reset
                             </button>
                         </div>
                     </div>
@@ -271,20 +241,15 @@
                         <!-- Table Card -->
                         <div class="bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col">
                             <div class="px-6 py-4 flex justify-between items-center border-b border-gray-200">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-8 h-8 rounded bg-gray-100 flex items-center justify-center text-gray-500">
-                                        <span class="material-symbols-rounded text-[18px]">view_list</span>
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <h3 class="font-bold text-gray-900">Daftar Muatan Batch Retur Siap Kirim</h3>
+                                        <span class="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded">4 SKU TERDAFTAR</span>
                                     </div>
-                                    <div>
-                                        <div class="flex items-center gap-2">
-                                            <h3 class="font-bold text-gray-900">Daftar Muatan Batch Retur Siap Kirim</h3>
-                                            <span class="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded">4 SKU TERDAFTAR</span>
-                                        </div>
-                                        <p class="text-[10px] font-bold text-gray-500 tracking-wider uppercase mt-0.5">TUJUAN: CENTRAL DISTRIBUTION CENTER (DC CAKUNG 01)</p>
-                                    </div>
+                                    <p class="text-[10px] font-bold text-gray-500 tracking-wider uppercase mt-0.5">TUJUAN: Gudang Minimarket ILP</p>
                                 </div>
-                                <button class="border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-bold text-[11px] px-3 py-1.5 rounded flex items-center gap-1 transition-colors">
-                                    <span class="material-symbols-rounded text-[16px]">print</span> LABEL BARCODE RETUR
+                                <button class="border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-bold text-[11px] px-3 py-1.5 rounded transition-colors">
+                                    LABEL BARCODE RETUR
                                 </button>
                             </div>
                             
@@ -302,19 +267,14 @@
                                         <!-- Row 1 -->
                                         <tr class="hover:bg-blue-50/30 transition-colors">
                                             <td class="px-5 py-3">
-                                                <div class="flex gap-3 items-center">
-                                                    <div class="w-10 h-10 rounded border border-gray-200 bg-white flex items-center justify-center text-gray-400 shrink-0">
-                                                        <span class="material-symbols-rounded text-[20px]">local_drink</span>
-                                                    </div>
-                                                    <div class="flex flex-col">
-                                                        <span class="font-bold text-gray-800">Susu UHT Full Cream 1000ml</span>
-                                                        <span class="text-[11px] font-mono text-gray-500 mt-0.5">SKU-SUSU-0914</span>
-                                                    </div>
+                                                <div class="flex flex-col">
+                                                    <span class="font-bold text-gray-800">Susu UHT Full Cream 1000ml</span>
+                                                    <span class="text-[11px] font-mono text-gray-500 mt-0.5">SKU-SUSU-0914</span>
                                                 </div>
                                             </td>
                                             <td class="px-5 py-3">
                                                 <div class="flex flex-col items-start gap-1">
-                                                    <span class="bg-red-50 text-red-600 border border-red-200 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1"><span class="material-symbols-rounded text-[12px]">broken_image</span> RUSAK / BOCOR</span>
+                                                    <span class="bg-red-50 text-red-600 border border-red-200 text-[10px] font-bold px-2 py-0.5 rounded">RUSAK / BOCOR</span>
                                                     <span class="text-[11px] text-gray-600">Tutup jebol di display</span>
                                                 </div>
                                             </td>
@@ -334,19 +294,14 @@
                                         <!-- Row 2 -->
                                         <tr class="hover:bg-blue-50/30 transition-colors">
                                             <td class="px-5 py-3">
-                                                <div class="flex gap-3 items-center">
-                                                    <div class="w-10 h-10 rounded border border-gray-200 bg-white flex items-center justify-center text-gray-400 shrink-0">
-                                                        <span class="material-symbols-rounded text-[20px]">bakery_dining</span>
-                                                    </div>
-                                                    <div class="flex flex-col">
-                                                        <span class="font-bold text-gray-800">Roti Tawar Gandum Spesial</span>
-                                                        <span class="text-[11px] font-mono text-gray-500 mt-0.5">SKU-ROTI-0102</span>
-                                                    </div>
+                                                <div class="flex flex-col">
+                                                    <span class="font-bold text-gray-800">Roti Tawar Gandum Spesial</span>
+                                                    <span class="text-[11px] font-mono text-gray-500 mt-0.5">SKU-ROTI-0102</span>
                                                 </div>
                                             </td>
                                             <td class="px-5 py-3">
                                                 <div class="flex flex-col items-start gap-1">
-                                                    <span class="bg-orange-50 text-orange-600 border border-orange-200 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1"><span class="material-symbols-rounded text-[12px]">event_busy</span> KEDALUWARSA ED</span>
+                                                    <span class="bg-orange-50 text-orange-600 border border-orange-200 text-[10px] font-bold px-2 py-0.5 rounded">KEDALUWARSA ED</span>
                                                     <span class="text-[11px] text-orange-600 font-bold">Batas ED: 20 Mei (H-1)</span>
                                                 </div>
                                             </td>
@@ -366,19 +321,14 @@
                                         <!-- Row 3 -->
                                         <tr class="hover:bg-blue-50/30 transition-colors">
                                             <td class="px-5 py-3">
-                                                <div class="flex gap-3 items-center">
-                                                    <div class="w-10 h-10 rounded border border-gray-200 bg-white flex items-center justify-center text-gray-400 shrink-0">
-                                                        <span class="material-symbols-rounded text-[20px]">cookie</span>
-                                                    </div>
-                                                    <div class="flex flex-col">
-                                                        <span class="font-bold text-gray-800">Biskuit Butter Cookies Kaleng</span>
-                                                        <span class="text-[11px] font-mono text-gray-500 mt-0.5">SKU-BSK-4420</span>
-                                                    </div>
+                                                <div class="flex flex-col">
+                                                    <span class="font-bold text-gray-800">Biskuit Butter Cookies Kaleng</span>
+                                                    <span class="text-[11px] font-mono text-gray-500 mt-0.5">SKU-BSK-4420</span>
                                                 </div>
                                             </td>
                                             <td class="px-5 py-3">
                                                 <div class="flex flex-col items-start gap-1">
-                                                    <span class="bg-blue-50 text-blue-600 border border-blue-200 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1"><span class="material-symbols-rounded text-[12px]">move_up</span> MUTASI OVERSTOCK</span>
+                                                    <span class="bg-blue-50 text-blue-600 border border-blue-200 text-[10px] font-bold px-2 py-0.5 rounded">MUTASI OVERSTOCK</span>
                                                     <span class="text-[11px] text-gray-600">Sisa stok musiman lebaran</span>
                                                 </div>
                                             </td>
@@ -398,19 +348,14 @@
                                         <!-- Row 4 -->
                                         <tr class="bg-blue-50/50 hover:bg-blue-50 transition-colors">
                                             <td class="px-5 py-3">
-                                                <div class="flex gap-3 items-center">
-                                                    <div class="w-10 h-10 rounded border border-gray-200 bg-white flex items-center justify-center text-gray-400 shrink-0">
-                                                        <span class="material-symbols-rounded text-[20px]">oil_barrel</span>
-                                                    </div>
-                                                    <div class="flex flex-col">
-                                                        <span class="font-bold text-gray-800">Minyak Goreng Sawit 2L</span>
-                                                        <span class="text-[11px] font-mono text-gray-500 mt-0.5">SKU-MYK-0021</span>
-                                                    </div>
+                                                <div class="flex flex-col">
+                                                    <span class="font-bold text-gray-800">Minyak Goreng Sawit 2L</span>
+                                                    <span class="text-[11px] font-mono text-gray-500 mt-0.5">SKU-MYK-0021</span>
                                                 </div>
                                             </td>
                                             <td class="px-5 py-3">
                                                 <div class="flex flex-col items-start gap-1">
-                                                    <span class="bg-red-50 text-red-600 border border-red-200 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1"><span class="material-symbols-rounded text-[12px]">broken_image</span> RUSAK / BOCOR</span>
+                                                    <span class="bg-red-50 text-red-600 border border-red-200 text-[10px] font-bold px-2 py-0.5 rounded">RUSAK / BOCOR</span>
                                                     <span class="text-[11px] text-gray-600">Rembes lipatan kemasan</span>
                                                 </div>
                                             </td>
