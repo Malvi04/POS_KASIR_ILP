@@ -70,51 +70,94 @@ Route::get('/stock-opname', function () {
     return view('stock-opname');
 });
 
-Route::get('/kasir/stock-opname', function () {
-    return view('cashier-stock-opname');
-});
-
-Route::get('/kasir/inventory', function () {
-    return view('cashier-inventory');
-});
-
-Route::get('/kasir/members', function () {
-    return view('cashier-members');
-});
-
 Route::get('/promosi', function () {
     return view('promosi');
-});
-
-Route::get('/kasir/reports', function () {
-    return view('cashier-reports');
 });
 
 Route::get('/kelola-akun', function () {
     return view('kelola-akun');
 });
 
-Route::get('/kasir/retur', function () {
-    return view('cashier-retur');
-});
-
 Route::get('/umkm-partners', function () {
     return view('umkm-partners');
 });
 
-Route::get('/kasir/settings', function () {
-    return view('cashier-settings');
-});
+/*
+|--------------------------------------------------------------------------
+| Cashier Role Routes (ILP POS Kasir)
+|--------------------------------------------------------------------------
+*/
 
+// 1. POS Utama
+// /pos handled above
+
+// 2. Sesi Kasir
 Route::get('/kasir/sesi', function () {
     return view('cashier-session');
 })->name('cashier.session');
 
+// 3. Produk Submenu
+Route::get('/kasir/produk/masuk', function () {
+    return view('cashier-goods-in');
+});
 
+Route::get('/kasir/inventory', function () {
+    return view('cashier-inventory');
+});
 
+// 4. Retur Barang Submenu
+Route::get('/kasir/retur', function () {
+    return view('cashier-retur');
+});
 
+Route::get('/kasir/retur/masuk', function () {
+    return view('cashier-return-in');
+});
 
+// 5. Transaksi Submenu
+Route::get('/kasir/transaksi/riwayat', function () {
+    return view('cashier-transactions');
+});
 
+Route::get('/kasir/transaksi/ditahan', function () {
+    return view('cashier-held-bills');
+});
 
+Route::get('/kasir/transaksi/refund', function () {
+    return view('cashier-refund');
+});
 
+// 6. Pelanggan / Anggota
+Route::get('/kasir/members', function () {
+    return view('cashier-members');
+});
 
+// 7. Laporan Submenu
+Route::get('/kasir/reports', function () {
+    return view('cashier-reports');
+});
+
+Route::get('/kasir/laporan/kasir', function () {
+    return view('cashier-report-by-cashier');
+});
+
+Route::get('/kasir/laporan/sesi', function () {
+    return view('cashier-report-sessions');
+});
+
+Route::get('/kasir/laporan/operasional', function () {
+    return view('cashier-report-operational');
+});
+
+// 8. Kupon
+// /kupon handled above
+
+// 9. Stock Opname
+Route::get('/kasir/stock-opname', function () {
+    return view('cashier-stock-opname');
+});
+
+// 10. Pengaturan
+Route::get('/kasir/settings', function () {
+    return view('cashier-settings');
+});
