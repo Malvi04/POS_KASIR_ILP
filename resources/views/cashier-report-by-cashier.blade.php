@@ -16,13 +16,35 @@
         activeSince: '07:00 WIB'
     },
 
-    myTransactions: [
-        { id: '#TRX-20261024-0028', time: '11:42 WIB', method: 'CAMPURAN', total: 145000, discount: 1500, itemCount: 5, status: 'SELESAI' },
-        { id: '#TRX-20261024-0027', time: '11:20 WIB', method: 'TUNAI', total: 84000, discount: 0, itemCount: 4, status: 'SELESAI' },
-        { id: '#TRX-20261024-0026', time: '10:55 WIB', method: 'QRIS', total: 245500, discount: 5000, itemCount: 8, status: 'SELESAI' },
-        { id: '#TRX-20261024-0022', time: '07:30 WIB', method: 'TUNAI', total: 310000, discount: 0, itemCount: 10, status: 'SELESAI' },
-        { id: '#TRX-20261024-0019', time: '07:15 WIB', method: 'KREDIT ANGGOTA', total: 195000, discount: 2500, itemCount: 6, status: 'SELESAI' }
-    ],
+    myTransactions: [],
+
+    initMyReport() {
+        const raw = localStorage.getItem('pos_ilp_transactions_v1');
+        if (raw) {
+            try {
+                const trxs = JSON.parse(raw);
+                if (trxs && trxs.length > 0) {
+                    this.myTransactions = trxs.map(t => ({
+                        id: t.id || t.trxId || '#TRX-001',
+                        time: t.time || '11:42 WIB',
+                        method: t.method || (t.paymentMethod || 'TUNAI'),
+                        total: Number(t.total || 0),
+                        discount: Number(t.discount || 0),
+                        itemCount: t.items ? t.items.length : (t.itemCount || 1),
+                        status: t.status || 'SELESAI'
+                    }));
+                    return;
+                }
+            } catch(e) {}
+        }
+        this.myTransactions = [
+            { id: '#TRX-20261024-0028', time: '11:42 WIB', method: 'CAMPURAN', total: 145000, discount: 1500, itemCount: 5, status: 'SELESAI' },
+            { id: '#TRX-20261024-0027', time: '11:20 WIB', method: 'TUNAI', total: 84000, discount: 0, itemCount: 4, status: 'SELESAI' },
+            { id: '#TRX-20261024-0026', time: '10:55 WIB', method: 'QRIS', total: 245500, discount: 5000, itemCount: 8, status: 'SELESAI' },
+            { id: '#TRX-20261024-0022', time: '07:30 WIB', method: 'TUNAI', total: 310000, discount: 0, itemCount: 10, status: 'SELESAI' },
+            { id: '#TRX-20261024-0019', time: '07:15 WIB', method: 'KREDIT ANGGOTA', total: 195000, discount: 2500, itemCount: 6, status: 'SELESAI' }
+        ];
+    },
 
     productCategoryShare: [
         { category: 'Sembako & Kebutuhan Pokok', sales: 485000, percentage: 49.5, color: 'bg-blue-600' },
@@ -56,7 +78,7 @@
         return this.refundActivities.reduce((sum, r) => sum + r.amount, 0);
     }
 }"
-x-init="initOpening()"
+x-init="initOpening(); initMyReport();"
 @pos-session-sync.window="initOpening()"
 class="flex flex-col h-screen w-full font-sans">
     <div class="flex flex-1 overflow-hidden">

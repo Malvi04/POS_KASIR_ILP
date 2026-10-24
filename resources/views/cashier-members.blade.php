@@ -105,10 +105,22 @@
     openDetail(m) {
         this.selectedMember = m;
         this.showDetailModal = true;
+    },
+
+    initMembers() {
+        try {
+            const raw = localStorage.getItem('pos_ilp_members_v1');
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    this.members = parsed;
+                }
+            }
+        } catch (e) {}
     }
 }"
-x-init="initOpening()"
-@pos-session-sync.window="initOpening()"
+x-init="initOpening(); initMembers();"
+@pos-session-sync.window="initOpening(); initMembers();"
 class="flex flex-col h-screen w-full font-sans">
     <div class="flex flex-1 overflow-hidden">
         <!-- Sidebar -->

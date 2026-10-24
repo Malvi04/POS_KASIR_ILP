@@ -13,7 +13,8 @@
     toastMessage: '',
     showToast: false,
 
-    heldBills: [
+    heldBills: [],
+    defaultHeldBills: [
         {
             id: '#HOLD-001',
             customerName: 'Budi Santoso',
@@ -27,10 +28,10 @@
             totalAmount: 145000,
             itemCount: 12,
             items: [
-                { name: 'Indomie Goreng Spesial 85g', qty: 5, price: 3500, total: 17500 },
-                { name: 'Ultra Milk Full Cream 1L', qty: 2, price: 19200, total: 38400 },
-                { name: 'Beras Pandan Wangi 5kg', qty: 1, price: 82000, total: 82000 },
-                { name: 'Aqua Mineral 600ml', qty: 4, price: 5500, total: 22000 }
+                { sku: 'PRD-006', barcode: '899275321004', name: 'Indomie Goreng Spesial 85g', qty: 5, price: 3500, memberPrice: 3200, total: 17500 },
+                { sku: 'PRD-003', barcode: '8993456789012', name: 'Ultra Milk Full Cream 1L', qty: 2, price: 19200, memberPrice: 18500, total: 38400 },
+                { sku: 'PRD-004', barcode: '8994567890123', name: 'Beras Pandan Wangi 5kg', qty: 1, price: 82000, memberPrice: 79000, total: 82000 },
+                { sku: 'PRD-001', barcode: '8991234567890', name: 'Aqua Mineral 600ml', qty: 4, price: 5500, memberPrice: 5000, total: 22000 }
             ]
         },
         {
@@ -46,9 +47,9 @@
             totalAmount: 57000,
             itemCount: 3,
             items: [
-                { name: 'Chitato Sapi Panggang 68g', qty: 2, price: 12800, total: 25600 },
-                { name: 'Sunlight Jeruk Nipis 755ml', qty: 1, price: 15500, total: 15500 },
-                { name: 'Teh Pucuk Harum 350ml', qty: 2, price: 4000, total: 8000 }
+                { sku: 'PRD-002', barcode: '8992345678901', name: 'Chitato Sapi Panggang 68g', qty: 2, price: 12800, memberPrice: 12000, total: 25600 },
+                { sku: 'PRD-005', barcode: '8995678901234', name: 'Sunlight Jeruk Nipis 755ml', qty: 1, price: 15500, memberPrice: 14500, total: 15500 },
+                { sku: 'PRD-008', barcode: '8997890123456', name: 'Teh Pucuk Harum 350ml', qty: 2, price: 4000, memberPrice: 3800, total: 8000 }
             ]
         },
         {
@@ -64,12 +65,34 @@
             totalAmount: 82000,
             itemCount: 4,
             items: [
-                { name: 'Gula Pasir Gulaku 1kg', qty: 2, price: 18000, total: 36000 },
-                { name: 'Biskuit Roma Kelapa 300g', qty: 2, price: 13500, total: 27000 },
-                { name: 'Aqua Mineral 600ml', qty: 2, price: 5500, total: 11000 }
+                { sku: 'PRD-010', barcode: '8999012345678', name: 'Gula Pasir Gulaku 1kg', qty: 2, price: 18000, memberPrice: 17500, total: 36000 },
+                { sku: 'PRD-009', barcode: '8998901234567', name: 'Oreo Vanilla 133g', qty: 2, price: 9500, memberPrice: 9000, total: 19000 },
+                { sku: 'PRD-001', barcode: '8991234567890', name: 'Aqua Mineral 600ml', qty: 2, price: 5500, memberPrice: 5000, total: 11000 }
             ]
         }
     ],
+
+    initHeldBills() {
+        try {
+            const raw = localStorage.getItem('pos_ilp_held_bills_v1');
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                    this.heldBills = parsed;
+                    this.activeSession.heldBillsCount = this.heldBills.length;
+                    return;
+                }
+            }
+        } catch (e) {}
+        this.heldBills = JSON.parse(JSON.stringify(this.defaultHeldBills));
+        this.saveHeldBillsToStorage();
+    },
+
+    saveHeldBillsToStorage() {
+        localStorage.setItem('pos_ilp_held_bills_v1', JSON.stringify(this.heldBills));
+        this.activeSession.heldBillsCount = this.heldBills.length;
+        this.persistAllState();
+    },
 
     get filteredBills() {
         return this.heldBills.filter(b => {
@@ -102,12 +125,14 @@
     proceedRecall() {
         if (!this.selectedBill) return;
 
+        // Save recalled items to active cart
+        localStorage.setItem('pos_ilp_active_cart_v1', JSON.stringify(this.selectedBill.items));
+
         // Remove from held queue
         const idx = this.heldBills.findIndex(b => b.id === this.selectedBill.id);
         if (idx !== -1) {
             this.heldBills.splice(idx, 1);
-            this.activeSession.heldBillsCount = Math.max(0, this.heldBills.length);
-            this.persistAllState();
+            this.saveHeldBillsToStorage();
         }
 
         this.showRecallModal = false;
@@ -122,8 +147,7 @@
         if (idx !== -1) {
             const billId = this.selectedBill.id;
             this.heldBills.splice(idx, 1);
-            this.activeSession.heldBillsCount = Math.max(0, this.heldBills.length);
-            this.persistAllState();
+            this.saveHeldBillsToStorage();
             this.showDeleteModal = false;
             this.showToastNotice(`Bill ${billId} berhasil dibatalkan dan dihapus.`);
         }
@@ -135,8 +159,8 @@
         setTimeout(() => { this.showToast = false; }, 3600);
     }
 }"
-x-init="initOpening()"
-@pos-session-sync.window="initOpening()"
+x-init="initOpening(); initHeldBills();"
+@pos-session-sync.window="initOpening(); initHeldBills();"
 class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden">
 
     <!-- Sidebar Kasir -->

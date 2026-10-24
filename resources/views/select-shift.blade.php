@@ -225,8 +225,15 @@
                             <span>Kasir sedang aktif digunakan oleh <strong x-text="selectedTerminalObj.activeCashierName || 'Petugas Lain'"></strong>. Silakan pilih kasir lain.</span>
                         </div>
 
+                        <!-- Warning Kasir Lain Dibuka Saat Masih Punya Sesi Aktif -->
+                        <div x-show="hasActiveSessionElsewhere"
+                             class="text-xs text-amber-800 font-medium flex items-center gap-1.5 bg-amber-50 px-3.5 py-2.5 rounded-lg border border-amber-200 w-full sm:w-auto">
+                            <span class="material-symbols-rounded text-[18px] text-amber-600 shrink-0">warning</span>
+                            <span>Anda masih memiliki sesi aktif di <strong x-text="userActiveSession ? userActiveSession.terminalLabel : 'Kasir Lain'"></strong>. Tutup sesi tersebut terlebih dahulu sebelum membuka terminal lain.</span>
+                        </div>
+
                         <!-- Info Kasir ACTIVE_MINE (Sesi Anda Masih Aktif) -->
-                        <div x-show="selectedTerminalObj && selectedTerminalObj.status === 'ACTIVE_MINE'" 
+                        <div x-show="!hasActiveSessionElsewhere && selectedTerminalObj && selectedTerminalObj.status === 'ACTIVE_MINE'"
                              class="text-xs text-[#0052cc] font-medium flex items-center gap-1.5 bg-blue-50 px-3 py-2 rounded-lg border border-blue-200 w-full sm:w-auto">
                             <span class="material-symbols-rounded text-[18px] text-[#0052cc] shrink-0">info</span>
                             <span>Sesi Anda di kasir ini masih aktif. Klik <strong>Lanjutkan Sesi Kasir</strong> untuk langsung masuk tanpa input modal awal ulang.</span>
@@ -234,21 +241,24 @@
                     </div>
 
                     <button type="button"
-                            @click="openOpeningModal()"
-                            :disabled="selectedTerminalObj && selectedTerminalObj.status === 'ACTIVE_OTHER'"
+                            @click="if (hasActiveSessionElsewhere) { selectedShift = userActiveSession.terminalId; resumeActiveSession(); } else { openOpeningModal(); }"
+                            :disabled="!hasActiveSessionElsewhere && selectedTerminalObj && selectedTerminalObj.status === 'ACTIVE_OTHER'"
                             :class="{
-                                'bg-gray-200 text-gray-400 border border-gray-300 cursor-not-allowed shadow-none': selectedTerminalObj && selectedTerminalObj.status === 'ACTIVE_OTHER',
-                                'bg-[#0052cc] hover:bg-[#0040a8] text-white shadow-sm cursor-pointer': selectedTerminalObj && selectedTerminalObj.status === 'ACTIVE_MINE',
-                                'bg-[#16a34a] hover:bg-[#15803d] text-white shadow-sm cursor-pointer': selectedTerminalObj && selectedTerminalObj.status !== 'ACTIVE_OTHER' && selectedTerminalObj.status !== 'ACTIVE_MINE'
+                                'bg-gray-200 text-gray-400 border border-gray-300 cursor-not-allowed shadow-none': !hasActiveSessionElsewhere && selectedTerminalObj && selectedTerminalObj.status === 'ACTIVE_OTHER',
+                                'bg-amber-600 hover:bg-amber-700 text-white shadow-sm cursor-pointer': hasActiveSessionElsewhere,
+                                'bg-[#0052cc] hover:bg-[#0040a8] text-white shadow-sm cursor-pointer': !hasActiveSessionElsewhere && selectedTerminalObj && selectedTerminalObj.status === 'ACTIVE_MINE',
+                                'bg-[#16a34a] hover:bg-[#15803d] text-white shadow-sm cursor-pointer': !hasActiveSessionElsewhere && selectedTerminalObj && selectedTerminalObj.status !== 'ACTIVE_OTHER' && selectedTerminalObj.status !== 'ACTIVE_MINE'
                             }"
                             class="w-full sm:w-auto font-bold py-3 px-8 rounded-xl transition-all flex items-center justify-center gap-2 text-sm shrink-0">
                         <span class="material-symbols-rounded text-[20px]"
-                              x-text="selectedTerminalObj && selectedTerminalObj.status === 'ACTIVE_OTHER' ? 'lock' : (selectedTerminalObj && selectedTerminalObj.status === 'ACTIVE_MINE' ? 'play_arrow' : 'login')"></span>
-                        <span x-text="selectedTerminalObj && selectedTerminalObj.status === 'ACTIVE_OTHER' 
-                              ? 'Kasir Sedang Dipakai' 
-                              : (selectedTerminalObj && selectedTerminalObj.status === 'ACTIVE_MINE' 
-                                  ? 'Lanjutkan Sesi Kasir' 
-                                  : (selectedTerminalObj && selectedTerminalObj.status === 'HANDOVER_PENDING' ? 'Terima Laci & Masuk' : 'Buka Kasir & Masuk'))">
+                              x-text="hasActiveSessionElsewhere ? 'arrow_forward' : (selectedTerminalObj && selectedTerminalObj.status === 'ACTIVE_OTHER' ? 'lock' : (selectedTerminalObj && selectedTerminalObj.status === 'ACTIVE_MINE' ? 'play_arrow' : 'login'))"></span>
+                        <span x-text="hasActiveSessionElsewhere
+                              ? ('Kembali ke ' + (userActiveSession ? userActiveSession.terminalLabel : 'Sesi Aktif'))
+                              : (selectedTerminalObj && selectedTerminalObj.status === 'ACTIVE_OTHER'
+                                  ? 'Kasir Sedang Dipakai'
+                                  : (selectedTerminalObj && selectedTerminalObj.status === 'ACTIVE_MINE'
+                                      ? 'Lanjutkan Sesi Kasir'
+                                      : (selectedTerminalObj && selectedTerminalObj.status === 'HANDOVER_PENDING' ? 'Terima Laci & Masuk' : 'Buka Kasir & Masuk')))">
                         </span>
                     </button>
                 </div>

@@ -12,17 +12,49 @@
     searchQuery: '',
     showSummaryModal: false,
 
-    transactions: [
-        { id: '#TRX-20261024-0028', sessionId: 'CS-20261024-K01-003', terminal: 'Kasir 01', time: '11:42 WIB', cashier: 'Budi Kurniawan', method: 'CAMPURAN', cashPortion: 100000, nonCashPortion: 45000, subtotal: 132000, tax: 14500, total: 145000, status: 'SELESAI', date: '2026-10-24' },
-        { id: '#TRX-20261024-0027', sessionId: 'CS-20261024-K01-003', terminal: 'Kasir 01', time: '11:20 WIB', cashier: 'Budi Kurniawan', method: 'TUNAI', cashPortion: 84000, nonCashPortion: 0, subtotal: 75675, tax: 8325, total: 84000, status: 'SELESAI', date: '2026-10-24' },
-        { id: '#TRX-20261024-0026', sessionId: 'CS-20261024-K01-003', terminal: 'Kasir 01', time: '10:55 WIB', cashier: 'Budi Kurniawan', method: 'QRIS', cashPortion: 0, nonCashPortion: 245500, subtotal: 221171, tax: 24329, total: 245500, status: 'SELESAI', date: '2026-10-24' },
-        { id: '#TRX-20261024-0025', sessionId: 'CS-20261024-K01-002', terminal: 'Kasir 01', time: '09:48 WIB', cashier: 'Andi Pratama', method: 'TUNAI', cashPortion: 120000, nonCashPortion: 0, subtotal: 108108, tax: 11892, total: 120000, status: 'SELESAI', date: '2026-10-24' },
-        { id: '#TRX-20261024-0024', sessionId: 'CS-20261024-K01-002', terminal: 'Kasir 01', time: '09:15 WIB', cashier: 'Andi Pratama', method: 'KREDIT ANGGOTA', cashPortion: 0, nonCashPortion: 240000, subtotal: 216216, tax: 23784, total: 240000, status: 'SELESAI', date: '2026-10-24' },
-        { id: '#TRX-20261024-0023', sessionId: 'CS-20261024-K01-002', terminal: 'Kasir 01', time: '08:40 WIB', cashier: 'Andi Pratama', method: 'QRIS', cashPortion: 0, nonCashPortion: 450000, subtotal: 405405, tax: 44595, total: 450000, status: 'DIBATALKAN', date: '2026-10-24' },
-        { id: '#TRX-20261024-0022', sessionId: 'CS-20261024-K01-001', terminal: 'Kasir 01', time: '07:30 WIB', cashier: 'Budi Kurniawan', method: 'TUNAI', cashPortion: 310000, nonCashPortion: 0, subtotal: 279279, tax: 30721, total: 310000, status: 'SELESAI', date: '2026-10-24' },
-        { id: '#TRX-20261023-0089', sessionId: 'CS-20261023-K01-002', terminal: 'Kasir 01', time: '16:20 WIB', cashier: 'Budi Kurniawan', method: 'TUNAI', cashPortion: 175000, nonCashPortion: 0, subtotal: 157657, tax: 17343, total: 175000, status: 'SELESAI', date: '2026-10-23' },
-        { id: '#TRX-20261023-0088', sessionId: 'CS-20261023-K01-002', terminal: 'Kasir 01', time: '15:10 WIB', cashier: 'Budi Kurniawan', method: 'QRIS', cashPortion: 0, nonCashPortion: 92000, subtotal: 82882, tax: 9118, total: 92000, status: 'SELESAI', date: '2026-10-23' }
-    ],
+    transactions: [],
+
+    initReports() {
+        const raw = localStorage.getItem('pos_ilp_transactions_v1');
+        if (raw) {
+            try {
+                const trxs = JSON.parse(raw);
+                if (trxs && trxs.length > 0) {
+                    this.transactions = trxs.map(t => ({
+                        id: t.id || t.trxId || '#TRX-001',
+                        sessionId: t.sessionId || 'CS-20261024-K01-003',
+                        terminal: t.terminal || 'Kasir 01',
+                        time: t.time || '11:42 WIB',
+                        cashier: t.cashier || 'Budi Kurniawan',
+                        method: t.method || (t.paymentMethod || 'TUNAI'),
+                        cashPortion: Number(t.cashGiven || t.cashPortion || 0),
+                        nonCashPortion: Number(t.nonCashPortion || 0),
+                        subtotal: Number(t.subtotal || Math.round((t.total || 0) / 1.11)),
+                        tax: Number(t.tax || Math.round((t.total || 0) - ((t.total || 0) / 1.11))),
+                        total: Number(t.total || 0),
+                        status: t.status || 'SELESAI',
+                        date: t.date || new Date().toISOString().split('T')[0]
+                    }));
+                    return;
+                }
+            } catch(e) {}
+        }
+        this.transactions = this.getDefaultTransactions();
+    },
+
+    getDefaultTransactions() {
+        return [
+            { id: '#TRX-20261024-0028', sessionId: 'CS-20261024-K01-003', terminal: 'Kasir 01', time: '11:42 WIB', cashier: 'Budi Kurniawan', method: 'CAMPURAN', cashPortion: 100000, nonCashPortion: 45000, subtotal: 132000, tax: 14500, total: 145000, status: 'SELESAI', date: '2026-10-24' },
+            { id: '#TRX-20261024-0027', sessionId: 'CS-20261024-K01-003', terminal: 'Kasir 01', time: '11:20 WIB', cashier: 'Budi Kurniawan', method: 'TUNAI', cashPortion: 84000, nonCashPortion: 0, subtotal: 75675, tax: 8325, total: 84000, status: 'SELESAI', date: '2026-10-24' },
+            { id: '#TRX-20261024-0026', sessionId: 'CS-20261024-K01-003', terminal: 'Kasir 01', time: '10:55 WIB', cashier: 'Budi Kurniawan', method: 'QRIS', cashPortion: 0, nonCashPortion: 245500, subtotal: 221171, tax: 24329, total: 245500, status: 'SELESAI', date: '2026-10-24' },
+            { id: '#TRX-20261024-0025', sessionId: 'CS-20261024-K01-002', terminal: 'Kasir 01', time: '09:48 WIB', cashier: 'Andi Pratama', method: 'TUNAI', cashPortion: 120000, nonCashPortion: 0, subtotal: 108108, tax: 11892, total: 120000, status: 'SELESAI', date: '2026-10-24' },
+            { id: '#TRX-20261024-0024', sessionId: 'CS-20261024-K01-002', terminal: 'Kasir 01', time: '09:15 WIB', cashier: 'Andi Pratama', method: 'KREDIT ANGGOTA', cashPortion: 0, nonCashPortion: 240000, subtotal: 216216, tax: 23784, total: 240000, status: 'SELESAI', date: '2026-10-24' },
+            { id: '#TRX-20261024-0023', sessionId: 'CS-20261024-K01-002', terminal: 'Kasir 01', time: '08:40 WIB', cashier: 'Andi Pratama', method: 'QRIS', cashPortion: 0, nonCashPortion: 450000, subtotal: 405405, tax: 44595, total: 450000, status: 'DIBATALKAN', date: '2026-10-24' },
+            { id: '#TRX-20261024-0022', sessionId: 'CS-20261024-K01-001', terminal: 'Kasir 01', time: '07:30 WIB', cashier: 'Budi Kurniawan', method: 'TUNAI', cashPortion: 310000, nonCashPortion: 0, subtotal: 279279, tax: 30721, total: 310000, status: 'SELESAI', date: '2026-10-24' },
+            { id: '#TRX-20261023-0089', sessionId: 'CS-20261023-K01-002', terminal: 'Kasir 01', time: '16:20 WIB', cashier: 'Budi Kurniawan', method: 'TUNAI', cashPortion: 175000, nonCashPortion: 0, subtotal: 157657, tax: 17343, total: 175000, status: 'SELESAI', date: '2026-10-23' },
+            { id: '#TRX-20261023-0088', sessionId: 'CS-20261023-K01-002', terminal: 'Kasir 01', time: '15:10 WIB', cashier: 'Budi Kurniawan', method: 'QRIS', cashPortion: 0, nonCashPortion: 92000, subtotal: 82882, tax: 9118, total: 92000, status: 'SELESAI', date: '2026-10-23' }
+        ];
+    },
 
     get filteredTransactions() {
         return this.transactions.filter(t => {
@@ -76,7 +108,7 @@
             .reduce((sum, t) => sum + t.total, 0);
     }
 }"
-x-init="initOpening()"
+x-init="initOpening(); initReports();"
 @pos-session-sync.window="initOpening()"
 class="flex flex-col h-screen w-full font-sans">
     <div class="flex flex-1 overflow-hidden">

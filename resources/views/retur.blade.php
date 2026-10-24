@@ -31,120 +31,142 @@
         this.showToast = true;
         setTimeout(() => { this.showToast = false; }, 3200);
     },
-    items: [
-        {
-            id: 1,
-            docNo: '#RTR-TK-2024-0892',
-            date: '24 Mei 2024 • 09:42 WIB',
-            ref: 'Ref: INV-2024/CAB-A',
-            direction: 'toko_ke_gudang',
-            directionLabel: 'TOKO → GUDANG',
-            conditionType: 'rusak',
-            conditionLabel: 'RUSAK / BOCOR',
-            conditionDesc: 'Karton rembes saat transit delivery rak',
-            products: [
-                { name: 'Minyak Goreng Sawit 2L', qty: '15 Pouch', color: 'text-[#dc2626]' },
-                { name: 'Susu UHT Cokelat 1L', qty: '24 Tetra', color: 'text-[#dc2626]' }
-            ],
-            extraItems: '+ 2 Item Cacat lainnya',
-            subtotalLabel: 'Subtotal:',
-            subtotal: 'Rp 3.420.000',
-            truckFee: '-Rp 500.000',
-            truckFeeFree: false,
-            netLabel: 'Net:',
-            netAmount: 'Rp 2.920.000',
-            plate: 'B 9481 UQ',
-            driver: 'Andi Pratama',
-            statusKey: 'cek_fisik',
-            statusLabel: 'CEK FISIK GUDANG',
-            statusSub: 'ETA: 13:30 WIB',
-            needsApproval: true
-        },
-        {
-            id: 2,
-            docNo: '#RTR-TK-2024-0891',
-            date: '23 Mei 2024 • 16:15 WIB',
-            ref: 'Ref: STK-ED-2405',
-            direction: 'toko_ke_gudang',
-            directionLabel: 'TOKO → GUDANG',
-            conditionType: 'ed',
-            conditionLabel: 'KEDALUWARSA / H-14',
-            conditionDesc: 'ED Bulan Juni 2024 batch A12',
-            products: [
-                { name: 'Yogurt Drink Strawberry 250ml', qty: '48 Btl', color: 'text-[#d97706]' },
-                { name: 'Roti Tawar Gandum Spesial', qty: '16 Pack', color: 'text-[#d97706]' }
-            ],
-            extraItems: '',
-            subtotalLabel: 'Subtotal:',
-            subtotal: 'Rp 1.880.000',
-            truckFee: '-Rp 500.000',
-            truckFeeFree: false,
-            netLabel: 'Net:',
-            netAmount: 'Rp 1.380.000',
-            plate: 'B 9102 UQ',
-            driver: 'Rahmat Hidayat',
-            statusKey: 'selesai',
-            statusLabel: 'SELESAI (BAST)',
-            statusSub: 'Diterima: Joko (WH-Staff)',
-            needsApproval: false
-        },
-        {
-            id: 3,
-            docNo: '#REP-GD-2024-0310',
-            date: '24 Mei 2024 • 11:20 WIB',
-            ref: 'Klaim: #RTR-TK-2024-0880',
-            direction: 'gudang_ke_toko',
-            directionLabel: 'GUDANG → TOKO',
-            conditionType: 'garansi',
-            conditionLabel: 'PENGGANTIAN GARANSI',
-            conditionDesc: 'Barang Baru Kompensasi Supplier',
-            products: [
-                { name: 'Kecap Manis Refill 550ml', qty: '30 Pouch', color: 'text-[#16a34a]' },
-                { name: 'Biskuit Cokelat Kaleng 650g', qty: '12 Kaleng', color: 'text-[#16a34a]' }
-            ],
-            extraItems: '',
-            subtotalLabel: 'Nilai Barang:',
-            subtotal: 'Rp 2.150.000',
-            truckFee: 'GRATIS (SOP)',
-            truckFeeFree: true,
-            netLabel: 'Total:',
-            netAmount: 'Rp 2.150.000',
-            plate: 'B 9844 XZ',
-            driver: 'Dedi Kurnia',
-            statusKey: 'perjalanan',
-            statusLabel: 'DALAM PERJALANAN',
-            statusSub: 'Tol Barat KM 14',
-            needsApproval: false
-        },
-        {
-            id: 4,
-            docNo: '#RTR-TK-2024-0890',
-            date: '22 Mei 2024 • 14:05 WIB',
-            ref: 'Ref: OVER-STOCK-09',
-            direction: 'toko_ke_gudang',
-            directionLabel: 'TOKO → GUDANG',
-            conditionType: 'overstock',
-            conditionLabel: 'MUTASI OVERSTOCK',
-            conditionDesc: 'Penyesuaian buffer ruang simpan rak',
-            products: [
-                { name: 'Deterjen Bubuk Premium 800g', qty: '60 Pack', color: 'text-[#0052cc]' },
-                { name: 'Pembersih Lantai Lavender 750ml', qty: '36 Btl', color: 'text-[#0052cc]' }
-            ],
-            extraItems: '',
-            subtotalLabel: 'Subtotal:',
-            subtotal: 'Rp 4.120.000',
-            truckFee: '-Rp 500.000',
-            truckFeeFree: false,
-            netLabel: 'Net:',
-            netAmount: 'Rp 3.620.000',
-            plate: 'B 9481 UQ',
-            driver: 'Andi Pratama',
-            statusKey: 'disetujui',
-            statusLabel: 'DISETUJUI SPV',
-            statusSub: 'Jadwal Besok Pagi',
-            needsApproval: true
+    items: [],
+
+    initReturns() {
+        const stored = localStorage.getItem('pos_ilp_manager_returns_v1');
+        if (stored) {
+            try {
+                this.items = JSON.parse(stored);
+            } catch(e) {
+                this.items = this.getDefaultReturns();
+            }
+        } else {
+            this.items = this.getDefaultReturns();
+            this.saveReturns();
         }
-    ],
+    },
+
+    saveReturns() {
+        localStorage.setItem('pos_ilp_manager_returns_v1', JSON.stringify(this.items));
+    },
+
+    getDefaultReturns() {
+        return [
+            {
+                id: 1,
+                docNo: '#RTR-TK-2024-0892',
+                date: '24 Mei 2024 • 09:42 WIB',
+                ref: 'Ref: INV-2024/CAB-A',
+                direction: 'toko_ke_gudang',
+                directionLabel: 'TOKO → GUDANG',
+                conditionType: 'rusak',
+                conditionLabel: 'RUSAK / BOCOR',
+                conditionDesc: 'Karton rembes saat transit delivery rak',
+                products: [
+                    { name: 'Minyak Goreng Sawit 2L', qty: '15 Pouch', color: 'text-[#dc2626]' },
+                    { name: 'Susu UHT Cokelat 1L', qty: '24 Tetra', color: 'text-[#dc2626]' }
+                ],
+                extraItems: '+ 2 Item Cacat lainnya',
+                subtotalLabel: 'Subtotal:',
+                subtotal: 'Rp 3.420.000',
+                truckFee: '-Rp 500.000',
+                truckFeeFree: false,
+                netLabel: 'Net:',
+                netAmount: 'Rp 2.920.000',
+                plate: 'B 9481 UQ',
+                driver: 'Andi Pratama',
+                statusKey: 'cek_fisik',
+                statusLabel: 'CEK FISIK GUDANG',
+                statusSub: 'ETA: 13:30 WIB',
+                needsApproval: true
+            },
+            {
+                id: 2,
+                docNo: '#RTR-TK-2024-0891',
+                date: '23 Mei 2024 • 16:15 WIB',
+                ref: 'Ref: STK-ED-2405',
+                direction: 'toko_ke_gudang',
+                directionLabel: 'TOKO → GUDANG',
+                conditionType: 'ed',
+                conditionLabel: 'KEDALUWARSA / H-14',
+                conditionDesc: 'ED Bulan Juni 2024 batch A12',
+                products: [
+                    { name: 'Yogurt Drink Strawberry 250ml', qty: '48 Btl', color: 'text-[#d97706]' },
+                    { name: 'Roti Tawar Gandum Spesial', qty: '16 Pack', color: 'text-[#d97706]' }
+                ],
+                extraItems: '',
+                subtotalLabel: 'Subtotal:',
+                subtotal: 'Rp 1.880.000',
+                truckFee: '-Rp 500.000',
+                truckFeeFree: false,
+                netLabel: 'Net:',
+                netAmount: 'Rp 1.380.000',
+                plate: 'B 9102 UQ',
+                driver: 'Rahmat Hidayat',
+                statusKey: 'selesai',
+                statusLabel: 'SELESAI (BAST)',
+                statusSub: 'Diterima: Joko (WH-Staff)',
+                needsApproval: false
+            },
+            {
+                id: 3,
+                docNo: '#REP-GD-2024-0310',
+                date: '24 Mei 2024 • 11:20 WIB',
+                ref: 'Klaim: #RTR-TK-2024-0880',
+                direction: 'gudang_ke_toko',
+                directionLabel: 'GUDANG → TOKO',
+                conditionType: 'garansi',
+                conditionLabel: 'PENGGANTIAN GARANSI',
+                conditionDesc: 'Barang Baru Kompensasi Supplier',
+                products: [
+                    { name: 'Kecap Manis Refill 550ml', qty: '30 Pouch', color: 'text-[#16a34a]' },
+                    { name: 'Biskuit Cokelat Kaleng 650g', qty: '12 Kaleng', color: 'text-[#16a34a]' }
+                ],
+                extraItems: '',
+                subtotalLabel: 'Nilai Barang:',
+                subtotal: 'Rp 2.150.000',
+                truckFee: 'GRATIS (SOP)',
+                truckFeeFree: true,
+                netLabel: 'Total:',
+                netAmount: 'Rp 2.150.000',
+                plate: 'B 9844 XZ',
+                driver: 'Dedi Kurnia',
+                statusKey: 'perjalanan',
+                statusLabel: 'DALAM PERJALANAN',
+                statusSub: 'Tol Barat KM 14',
+                needsApproval: false
+            },
+            {
+                id: 4,
+                docNo: '#RTR-TK-2024-0890',
+                date: '22 Mei 2024 • 14:05 WIB',
+                ref: 'Ref: OVER-STOCK-09',
+                direction: 'toko_ke_gudang',
+                directionLabel: 'TOKO → GUDANG',
+                conditionType: 'overstock',
+                conditionLabel: 'MUTASI OVERSTOCK',
+                conditionDesc: 'Penyesuaian buffer ruang simpan rak',
+                products: [
+                    { name: 'Deterjen Bubuk Premium 800g', qty: '60 Pack', color: 'text-[#0052cc]' },
+                    { name: 'Pembersih Lantai Lavender 750ml', qty: '36 Btl', color: 'text-[#0052cc]' }
+                ],
+                extraItems: '',
+                subtotalLabel: 'Subtotal:',
+                subtotal: 'Rp 4.120.000',
+                truckFee: '-Rp 500.000',
+                truckFeeFree: false,
+                netLabel: 'Net:',
+                netAmount: 'Rp 3.620.000',
+                plate: 'B 9481 UQ',
+                driver: 'Andi Pratama',
+                statusKey: 'disetujui',
+                statusLabel: 'DISETUJUI SPV',
+                statusSub: 'Jadwal Besok Pagi',
+                needsApproval: true
+            }
+        ];
+    },
     get filteredItems() {
         return this.items.filter(item => {
             if (this.directionFilter !== 'all' && item.direction !== this.directionFilter) return false;
@@ -165,6 +187,7 @@
         item.statusLabel = 'DISETUJUI MANAGER';
         item.statusSub = 'Siap Muat ke Gudang DC';
         item.needsApproval = false;
+        this.saveReturns();
         this.triggerToast('Pengajuan ' + item.docNo + ' berhasil di-Approve oleh Manager.');
     },
     rejectItem(item) {
@@ -172,12 +195,14 @@
         item.statusLabel = 'DITOLAK MANAGER';
         item.statusSub = 'Dikembalikan ke Staf Toko';
         item.needsApproval = false;
+        this.saveReturns();
         this.triggerToast('Pengajuan ' + item.docNo + ' telah ditolak.');
     },
     confirmReceive(item) {
         item.statusKey = 'selesai';
         item.statusLabel = 'SELESAI (BAST)';
         item.statusSub = 'Diterima Manager Toko';
+        this.saveReturns();
         this.triggerToast('Pengiriman Gudang ' + item.docNo + ' dikonfirmasi masuk stok toko.');
     },
     submitQuickDraft() {
@@ -231,17 +256,20 @@
             statusSub: isTokoToGudang ? 'Siap Di-approve Manager' : 'Dikirim dari Gudang DC',
             needsApproval: isTokoToGudang
         });
+        this.saveReturns();
 
         this.triggerToast('Draft ' + docId + ' (' + (isTokoToGudang ? 'Toko → Gudang' : 'Gudang → Toko') + ') berhasil ditambahkan!');
     }
-}" class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidden">
+}"
+x-init="initReturns()"
+class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidden">
 
     <!-- Manager Sidebar -->
     <x-manager-sidebar active="retur" />
 
     <!-- Main Content Area -->
     <div class="flex-1 flex flex-col h-screen overflow-hidden min-w-0">
-        
+
         <!-- Top Navbar -->
         <header class="h-[64px] bg-white border-b border-slate-200/80 px-8 flex items-center justify-between shrink-0 z-10">
             <div class="relative w-full max-w-[380px]">
@@ -476,7 +504,7 @@
 
                 <!-- Main Table Card -->
                 <div class="bg-white border border-slate-200/80 rounded-2xl shadow-2xs overflow-hidden">
-                    
+
                     <!-- Filter Toolbar (Cleanly Aligned, Non-Cut Off) -->
                     <div class="p-4 lg:px-6 border-b border-slate-100 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
                         <!-- Search Box -->
@@ -714,7 +742,7 @@
 
                 <!-- Bottom Section: Quick Input Draft Retur (8 Cols) & Audit BAST Terbaru (4 Cols) -->
                 <div id="bast-section" class="grid grid-cols-12 gap-5">
-                    
+
                     <!-- Left: Input Cepat Draft Retur (Toko <-> Gudang) -->
                     <div class="col-span-12 xl:col-span-8 bg-white border border-slate-200/80 rounded-2xl p-6 shadow-2xs flex flex-col justify-between">
                         <div>

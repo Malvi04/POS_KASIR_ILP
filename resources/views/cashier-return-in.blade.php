@@ -15,85 +15,107 @@
     toastMessage: '',
     showToast: false,
 
-    returnInDocuments: [
-        {
-            id: 1,
-            docNo: '#REP-GD-20261024-001',
-            type: 'PENGGANTIAN_GARANSI', // PENGGANTIAN_GARANSI | RETUR_DITOLAK | PENGEMBALIAN_TOKO
-            typeLabel: 'BARANG PENGGANTI (GARANSI)',
-            originRef: '#RTR-TK-20261020-001',
-            warehouseOrigin: 'DC Cikarang (Pusat Logistik)',
-            destinationStore: 'Minimarket ILP - Sektor A',
-            date: '24 Oktober 2026 • 11:30 WIB',
-            driverName: 'Rahmat Hidayat',
-            plateNumber: 'B 9102 UQ',
-            status: 'MENUNGGU_VERIFIKASI', // MENUNGGU_VERIFIKASI | DITERIMA_LENGKAP | DITERIMA_SELISIH
-            receivedAt: null,
-            receiverName: null,
-            generalNotes: 'Barang baru pengganti kompensasi supplier atas retur klaim susu rusak sebelumnya.',
-            items: [
-                { sku: '8993456789012', name: 'Ultra Milk Full Cream 1L (Fresh Batch)', unit: 'Tetra', qtySent: 48, qtyReceived: 48, condition: 'BAIK', note: 'Segel pabrik baru, batch ED 2027' },
-                { sku: '8991234567890', name: 'Aqua Mineral 600ml (Ganti Bocor)', unit: 'Botol', qtySent: 24, qtyReceived: 24, condition: 'BAIK', note: 'Kondisi mulus' }
-            ]
-        },
-        {
-            id: 2,
-            docNo: '#REJ-GD-20261023-002',
-            type: 'RETUR_DITOLAK',
-            typeLabel: 'RETUR DITOLAK GUDANG',
-            originRef: '#RTR-TK-20261018-005',
-            warehouseOrigin: 'DC Cikarang (QC Logistik)',
-            destinationStore: 'Minimarket ILP - Sektor A',
-            date: '23 Oktober 2026 • 15:45 WIB',
-            driverName: 'Andi Pratama',
-            plateNumber: 'B 9481 UQ',
-            status: 'MENUNGGU_VERIFIKASI',
-            receivedAt: null,
-            receiverName: null,
-            generalNotes: 'Klaim retur ditolak QC DC karena kerusakan akibat kelalaian penanganan toko (bukan cacat pabrik). Dikembalikan untuk penyesuaian susut gerai.',
-            items: [
-                { sku: '8998901234567', name: 'Biskuit Kaleng Butter Cookies', unit: 'Kaleng', qtySent: 2, qtyReceived: 2, condition: 'CACAT_DITOLAK', note: 'Kaleng penyok akibat jatuh di gerai' }
-            ]
-        },
-        {
-            id: 3,
-            docNo: '#REP-GD-20261022-008',
-            type: 'PENGGANTIAN_GARANSI',
-            typeLabel: 'BARANG PENGGANTI (GARANSI)',
-            originRef: '#RTR-TK-20261015-002',
-            warehouseOrigin: 'DC Cibitung (Hub Sembako)',
-            destinationStore: 'Minimarket ILP - Sektor A',
-            date: '22 Oktober 2026 • 10:15 WIB',
-            driverName: 'Joko Susilo',
-            plateNumber: 'B 9211 UQ',
-            status: 'DITERIMA_LENGKAP',
-            receivedAt: '22 Okt 2026 10:40 WIB',
-            receiverName: 'Budi Kurniawan (Kasir)',
-            generalNotes: 'Barang pengganti minyak goreng bocor telah diverifikasi fisik dan masuk ke stok aktif rak.',
-            items: [
-                { sku: '8996789012345', name: 'Minyak Goreng Sania 2L', unit: 'Pouch', qtySent: 12, qtyReceived: 12, condition: 'BAIK', note: 'Kondisi karton baik' }
-            ]
-        },
-        {
-            id: 4,
-            docNo: '#RTN-GD-20261021-003',
-            type: 'PENGEMBALIAN_TOKO',
-            typeLabel: 'BARANG DIKEMBALIKAN KE TOKO',
-            originRef: '#RTR-TK-20261016-004',
-            warehouseOrigin: 'DC Cikarang (Pusat Logistik)',
-            destinationStore: 'Minimarket ILP - Sektor A',
-            date: '21 Oktober 2026 • 13:20 WIB',
-            driverName: 'Dedi Kurnia',
-            plateNumber: 'B 9844 XZ',
-            status: 'DITERIMA_SELISIH',
-            receivedAt: '21 Okt 2026 14:05 WIB',
-            receiverName: 'Andi Pratama (Kasir)',
-            generalNotes: 'Pengembalian produk setelah rekonsiliasi transfer. Terdapat selisih kurang 1 pack.',
-            items: [
-                { sku: '8994567890123', name: 'Beras Pandan Wangi 5kg', unit: 'Pack', qtySent: 6, qtyReceived: 5, condition: 'BAIK', note: 'Kurang 1 pack saat serah terima armada' }
-            ]
+    returnInDocuments: [],
+
+    initReturnIn() {
+        const stored = localStorage.getItem('pos_ilp_return_in_docs_v1');
+        if (stored) {
+            try {
+                this.returnInDocuments = JSON.parse(stored);
+            } catch(e) {
+                this.returnInDocuments = this.getDefaultDocs();
+            }
+        } else {
+            this.returnInDocuments = this.getDefaultDocs();
+            this.saveDocs();
         }
-    ],
+    },
+
+    saveDocs() {
+        localStorage.setItem('pos_ilp_return_in_docs_v1', JSON.stringify(this.returnInDocuments));
+    },
+
+    getDefaultDocs() {
+        return [
+            {
+                id: 1,
+                docNo: '#REP-GD-20261024-001',
+                type: 'PENGGANTIAN_GARANSI', // PENGGANTIAN_GARANSI | RETUR_DITOLAK | PENGEMBALIAN_TOKO
+                typeLabel: 'BARANG PENGGANTI (GARANSI)',
+                originRef: '#RTR-TK-20261020-001',
+                warehouseOrigin: 'DC Cikarang (Pusat Logistik)',
+                destinationStore: 'Minimarket ILP - Sektor A',
+                date: '24 Oktober 2026 • 11:30 WIB',
+                driverName: 'Rahmat Hidayat',
+                plateNumber: 'B 9102 UQ',
+                status: 'MENUNGGU_VERIFIKASI', // MENUNGGU_VERIFIKASI | DITERIMA_LENGKAP | DITERIMA_SELISIH
+                receivedAt: null,
+                receiverName: null,
+                generalNotes: 'Barang baru pengganti kompensasi supplier atas retur klaim susu rusak sebelumnya.',
+                items: [
+                    { sku: '8993456789012', name: 'Ultra Milk Full Cream 1L (Fresh Batch)', unit: 'Tetra', qtySent: 48, qtyReceived: 48, condition: 'BAIK', note: 'Segel pabrik baru, batch ED 2027' },
+                    { sku: '8991234567890', name: 'Aqua Mineral 600ml (Ganti Bocor)', unit: 'Botol', qtySent: 24, qtyReceived: 24, condition: 'BAIK', note: 'Kondisi mulus' }
+                ]
+            },
+            {
+                id: 2,
+                docNo: '#REJ-GD-20261023-002',
+                type: 'RETUR_DITOLAK',
+                typeLabel: 'RETUR DITOLAK GUDANG',
+                originRef: '#RTR-TK-20261018-005',
+                warehouseOrigin: 'DC Cikarang (QC Logistik)',
+                destinationStore: 'Minimarket ILP - Sektor A',
+                date: '23 Oktober 2026 • 15:45 WIB',
+                driverName: 'Andi Pratama',
+                plateNumber: 'B 9481 UQ',
+                status: 'MENUNGGU_VERIFIKASI',
+                receivedAt: null,
+                receiverName: null,
+                generalNotes: 'Klaim retur ditolak QC DC karena kerusakan akibat kelalaian penanganan toko (bukan cacat pabrik). Dikembalikan untuk penyesuaian susut gerai.',
+                items: [
+                    { sku: '8998901234567', name: 'Biskuit Kaleng Butter Cookies', unit: 'Kaleng', qtySent: 2, qtyReceived: 2, condition: 'CACAT_DITOLAK', note: 'Kaleng penyok akibat jatuh di gerai' }
+                ]
+            },
+            {
+                id: 3,
+                docNo: '#REP-GD-20261022-008',
+                type: 'PENGGANTIAN_GARANSI',
+                typeLabel: 'BARANG PENGGANTI (GARANSI)',
+                originRef: '#RTR-TK-20261015-002',
+                warehouseOrigin: 'DC Cibitung (Hub Sembako)',
+                destinationStore: 'Minimarket ILP - Sektor A',
+                date: '22 Oktober 2026 • 10:15 WIB',
+                driverName: 'Joko Susilo',
+                plateNumber: 'B 9211 UQ',
+                status: 'DITERIMA_LENGKAP',
+                receivedAt: '22 Okt 2026 10:40 WIB',
+                receiverName: 'Budi Kurniawan (Kasir)',
+                generalNotes: 'Barang pengganti minyak goreng bocor telah diverifikasi fisik dan masuk ke stok aktif rak.',
+                items: [
+                    { sku: '8996789012345', name: 'Minyak Goreng Sania 2L', unit: 'Pouch', qtySent: 12, qtyReceived: 12, condition: 'BAIK', note: 'Kondisi karton baik' }
+                ]
+            },
+            {
+                id: 4,
+                docNo: '#RTN-GD-20261021-003',
+                type: 'PENGEMBALIAN_TOKO',
+                typeLabel: 'BARANG DIKEMBALIKAN KE TOKO',
+                originRef: '#RTR-TK-20261016-004',
+                warehouseOrigin: 'DC Cikarang (Pusat Logistik)',
+                destinationStore: 'Minimarket ILP - Sektor A',
+                date: '21 Oktober 2026 • 13:20 WIB',
+                driverName: 'Dedi Kurnia',
+                plateNumber: 'B 9844 XZ',
+                status: 'DITERIMA_SELISIH',
+                receivedAt: '21 Okt 2026 14:05 WIB',
+                receiverName: 'Andi Pratama (Kasir)',
+                generalNotes: 'Pengembalian produk setelah rekonsiliasi transfer. Terdapat selisih kurang 1 pack.',
+                items: [
+                    { sku: '8994567890123', name: 'Beras Pandan Wangi 5kg', unit: 'Pack', qtySent: 6, qtyReceived: 5, condition: 'BAIK', note: 'Kurang 1 pack saat serah terima armada' }
+                ]
+            }
+        ];
+    },
 
     get filteredDocuments() {
         return this.returnInDocuments.filter(doc => {
@@ -139,6 +161,28 @@
         this.showBastModal = true;
     },
 
+    updateInventoryStock(items, docType) {
+        // Only add stock if it is replacement or returned to store for sale
+        if (docType === 'RETUR_DITOLAK') return; // Rejected items are defective
+        const rawProd = localStorage.getItem('pos_ilp_inventory_products_v1');
+        if (!rawProd) return;
+        try {
+            let prods = JSON.parse(rawProd);
+            items.forEach(it => {
+                const receivedQty = parseInt(it.qtyReceived, 10) || 0;
+                if (receivedQty > 0 && it.condition === 'BAIK') {
+                    const p = prods.find(pr => pr.sku === it.sku || pr.barcode === it.sku || (pr.nama && pr.nama.toLowerCase().includes(it.name.toLowerCase())));
+                    if (p) {
+                        p.stok = (parseInt(p.stok, 10) || 0) + receivedQty;
+                    }
+                }
+            });
+            localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(prods));
+        } catch(e) {
+            console.error('Error updating stock', e);
+        }
+    },
+
     confirmReturnReceipt() {
         if (!this.selectedDoc) return;
 
@@ -156,8 +200,11 @@
 
             original.status = hasVariance ? 'DITERIMA_SELISIH' : 'DITERIMA_LENGKAP';
             original.receivedAt = nowStr;
-            original.receiverName = (this.activeSession.cashierName || 'Budi Kurniawan') + ' (Kasir)';
+            original.receiverName = (this.activeSession?.cashierName || 'Budi Kurniawan') + ' (Kasir)';
             original.generalNotes = this.verifyNotes.trim() || 'Verifikasi fisik barang masuk retur selesai dikonfirmasi kasir.';
+
+            this.updateInventoryStock(original.items, original.type);
+            this.saveDocs();
 
             this.showVerifyModal = false;
             this.showToastNotice(`Dokumen retur masuk ${original.docNo} berhasil diverifikasi!`);
@@ -170,7 +217,7 @@
         setTimeout(() => { this.showToast = false; }, 3600);
     }
 }"
-x-init="initOpening()"
+x-init="initOpening(); initReturnIn();"
 @pos-session-sync.window="initOpening()"
 class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden">
 

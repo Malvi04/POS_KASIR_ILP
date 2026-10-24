@@ -14,79 +14,101 @@
     toastMessage: '',
     showToast: false,
 
-    documents: [
-        {
-            id: 1,
-            docNo: '#SJ-DC-20261024-001',
-            date: '24 Oktober 2026 • 09:30 WIB',
-            warehouseOrigin: 'DC Cikarang (Pusat Logistik)',
-            destinationStore: 'Minimarket ILP - Sektor A',
-            driverName: 'Rahmat Hidayat',
-            plateNumber: 'B 9102 UQ',
-            status: 'MENUNGGU_VERIFIKASI', // MENUNGGU_VERIFIKASI | DITERIMA_LENGKAP | DITERIMA_SELISIH
-            receivedAt: null,
-            receiverName: null,
-            generalNotes: '',
-            items: [
-                { sku: '899275321004', name: 'Indomie Goreng Spesial 85g', category: 'Makanan', unit: 'Pcs', qtySent: 120, qtyReceived: 120, condition: 'BAIK', note: '' },
-                { sku: '8991234567890', name: 'Aqua Mineral 600ml', category: 'Minuman', unit: 'Botol', qtySent: 96, qtyReceived: 96, condition: 'BAIK', note: '' },
-                { sku: '8993456789012', name: 'Ultra Milk Full Cream 1L', category: 'Minuman', unit: 'Tetra', qtySent: 48, qtyReceived: 48, condition: 'BAIK', note: '' },
-                { sku: '8992345678901', name: 'Chitato Sapi Panggang 68g', category: 'Snack', unit: 'Pcs', qtySent: 36, qtyReceived: 36, condition: 'BAIK', note: '' }
-            ]
-        },
-        {
-            id: 2,
-            docNo: '#SJ-DC-20261024-002',
-            date: '24 Oktober 2026 • 11:15 WIB',
-            warehouseOrigin: 'DC Cikarang (Pusat Logistik)',
-            destinationStore: 'Minimarket ILP - Sektor A',
-            driverName: 'Dedi Kurnia',
-            plateNumber: 'B 9844 XZ',
-            status: 'MENUNGGU_VERIFIKASI',
-            receivedAt: null,
-            receiverName: null,
-            generalNotes: '',
-            items: [
-                { sku: '8994567890123', name: 'Beras Pandan Wangi 5kg', category: 'Kebutuhan Pokok', unit: 'Pack', qtySent: 25, qtyReceived: 25, condition: 'BAIK', note: '' },
-                { sku: '8995678901234', name: 'Minyak Goreng Sania 2L', category: 'Kebutuhan Pokok', unit: 'Pouch', qtySent: 60, qtyReceived: 60, condition: 'BAIK', note: '' },
-                { sku: '8996789012345', name: 'Gula Pasir Gulaku 1kg', category: 'Kebutuhan Pokok', unit: 'Pack', qtySent: 40, qtyReceived: 40, condition: 'BAIK', note: '' }
-            ]
-        },
-        {
-            id: 3,
-            docNo: '#SJ-DC-20261023-014',
-            date: '23 Oktober 2026 • 14:20 WIB',
-            warehouseOrigin: 'DC Cibitung (Hub Sembako)',
-            destinationStore: 'Minimarket ILP - Sektor A',
-            driverName: 'Andi Pratama',
-            plateNumber: 'B 9481 UQ',
-            status: 'DITERIMA_LENGKAP',
-            receivedAt: '23 Okt 2026 14:45 WIB',
-            receiverName: 'Budi Kurniawan (Kasir)',
-            generalNotes: 'Penerimaan fisik lengkap, segel boks dalam kondisi prima.',
-            items: [
-                { sku: '8997890123456', name: 'Sunlight Jeruk Nipis 755ml', category: 'Pembersih', unit: 'Botol', qtySent: 48, qtyReceived: 48, condition: 'BAIK', note: 'Sesuai' },
-                { sku: '8998901234567', name: 'Deterjen Rinso Molto 800g', category: 'Pembersih', unit: 'Pack', qtySent: 30, qtyReceived: 30, condition: 'BAIK', note: 'Sesuai' }
-            ]
-        },
-        {
-            id: 4,
-            docNo: '#SJ-DC-20261022-009',
-            date: '22 Oktober 2026 • 10:05 WIB',
-            warehouseOrigin: 'DC Cikarang (Pusat Logistik)',
-            destinationStore: 'Minimarket ILP - Sektor A',
-            driverName: 'Joko Susilo',
-            plateNumber: 'B 9211 UQ',
-            status: 'DITERIMA_SELISIH',
-            receivedAt: '22 Okt 2026 10:35 WIB',
-            receiverName: 'Budi Kurniawan (Kasir)',
-            generalNotes: 'Ditemukan selisih kurang 2 pack karena kemasan sobek di perjalanan truk pengirim.',
-            items: [
-                { sku: '8993456789012', name: 'Ultra Milk Cokelat 1L', category: 'Minuman', unit: 'Tetra', qtySent: 48, qtyReceived: 46, condition: 'RUSAK', note: '2 pack sobek/bocor rembes di karton' },
-                { sku: '8991234567890', name: 'Teh Pucuk Harum 350ml', category: 'Minuman', unit: 'Botol', qtySent: 72, qtyReceived: 72, condition: 'BAIK', note: 'Kondisi baik' }
-            ]
+    documents: [],
+
+    initGoodsIn() {
+        const stored = localStorage.getItem('pos_ilp_goods_in_docs_v1');
+        if (stored) {
+            try {
+                this.documents = JSON.parse(stored);
+            } catch(e) {
+                this.documents = this.getDefaultDocs();
+            }
+        } else {
+            this.documents = this.getDefaultDocs();
+            this.saveDocs();
         }
-    ],
+    },
+
+    saveDocs() {
+        localStorage.setItem('pos_ilp_goods_in_docs_v1', JSON.stringify(this.documents));
+    },
+
+    getDefaultDocs() {
+        return [
+            {
+                id: 1,
+                docNo: '#SJ-DC-20261024-001',
+                date: '24 Oktober 2026 • 09:30 WIB',
+                warehouseOrigin: 'DC Cikarang (Pusat Logistik)',
+                destinationStore: 'Minimarket ILP - Sektor A',
+                driverName: 'Rahmat Hidayat',
+                plateNumber: 'B 9102 UQ',
+                status: 'MENUNGGU_VERIFIKASI', // MENUNGGU_VERIFIKASI | DITERIMA_LENGKAP | DITERIMA_SELISIH
+                receivedAt: null,
+                receiverName: null,
+                generalNotes: '',
+                items: [
+                    { sku: '899275321004', name: 'Indomie Goreng Spesial 85g', category: 'Makanan', unit: 'Pcs', qtySent: 120, qtyReceived: 120, condition: 'BAIK', note: '' },
+                    { sku: '8991234567890', name: 'Aqua Mineral 600ml', category: 'Minuman', unit: 'Botol', qtySent: 96, qtyReceived: 96, condition: 'BAIK', note: '' },
+                    { sku: '8993456789012', name: 'Ultra Milk Full Cream 1L', category: 'Minuman', unit: 'Tetra', qtySent: 48, qtyReceived: 48, condition: 'BAIK', note: '' },
+                    { sku: '8992345678901', name: 'Chitato Sapi Panggang 68g', category: 'Snack', unit: 'Pcs', qtySent: 36, qtyReceived: 36, condition: 'BAIK', note: '' }
+                ]
+            },
+            {
+                id: 2,
+                docNo: '#SJ-DC-20261024-002',
+                date: '24 Oktober 2026 • 11:15 WIB',
+                warehouseOrigin: 'DC Cikarang (Pusat Logistik)',
+                destinationStore: 'Minimarket ILP - Sektor A',
+                driverName: 'Dedi Kurnia',
+                plateNumber: 'B 9844 XZ',
+                status: 'MENUNGGU_VERIFIKASI',
+                receivedAt: null,
+                receiverName: null,
+                generalNotes: '',
+                items: [
+                    { sku: '8994567890123', name: 'Beras Pandan Wangi 5kg', category: 'Kebutuhan Pokok', unit: 'Pack', qtySent: 25, qtyReceived: 25, condition: 'BAIK', note: '' },
+                    { sku: '8995678901234', name: 'Minyak Goreng Sania 2L', category: 'Kebutuhan Pokok', unit: 'Pouch', qtySent: 60, qtyReceived: 60, condition: 'BAIK', note: '' },
+                    { sku: '8996789012345', name: 'Gula Pasir Gulaku 1kg', category: 'Kebutuhan Pokok', unit: 'Pack', qtySent: 40, qtyReceived: 40, condition: 'BAIK', note: '' }
+                ]
+            },
+            {
+                id: 3,
+                docNo: '#SJ-DC-20261023-014',
+                date: '23 Oktober 2026 • 14:20 WIB',
+                warehouseOrigin: 'DC Cibitung (Hub Sembako)',
+                destinationStore: 'Minimarket ILP - Sektor A',
+                driverName: 'Andi Pratama',
+                plateNumber: 'B 9481 UQ',
+                status: 'DITERIMA_LENGKAP',
+                receivedAt: '23 Okt 2026 14:45 WIB',
+                receiverName: 'Budi Kurniawan (Kasir)',
+                generalNotes: 'Penerimaan fisik lengkap, segel boks dalam kondisi prima.',
+                items: [
+                    { sku: '8997890123456', name: 'Sunlight Jeruk Nipis 755ml', category: 'Pembersih', unit: 'Botol', qtySent: 48, qtyReceived: 48, condition: 'BAIK', note: 'Sesuai' },
+                    { sku: '8998901234567', name: 'Deterjen Rinso Molto 800g', category: 'Pembersih', unit: 'Pack', qtySent: 30, qtyReceived: 30, condition: 'BAIK', note: 'Sesuai' }
+                ]
+            },
+            {
+                id: 4,
+                docNo: '#SJ-DC-20261022-009',
+                date: '22 Oktober 2026 • 10:05 WIB',
+                warehouseOrigin: 'DC Cikarang (Pusat Logistik)',
+                destinationStore: 'Minimarket ILP - Sektor A',
+                driverName: 'Joko Susilo',
+                plateNumber: 'B 9211 UQ',
+                status: 'DITERIMA_SELISIH',
+                receivedAt: '22 Okt 2026 10:35 WIB',
+                receiverName: 'Budi Kurniawan (Kasir)',
+                generalNotes: 'Ditemukan selisih kurang 2 pack karena kemasan sobek di perjalanan truk pengirim.',
+                items: [
+                    { sku: '8993456789012', name: 'Ultra Milk Cokelat 1L', category: 'Minuman', unit: 'Tetra', qtySent: 48, qtyReceived: 46, condition: 'RUSAK', note: '2 pack sobek/bocor rembes di karton' },
+                    { sku: '8991234567890', name: 'Teh Pucuk Harum 350ml', category: 'Minuman', unit: 'Botol', qtySent: 72, qtyReceived: 72, condition: 'BAIK', note: 'Kondisi baik' }
+                ]
+            }
+        ];
+    },
 
     get filteredDocuments() {
         return this.documents.filter(doc => {
@@ -136,6 +158,26 @@
         return doc.items.reduce((acc, it) => acc + (Number(it.qtyReceived) - Number(it.qtySent)), 0);
     },
 
+    updateInventoryStock(items) {
+        const rawProd = localStorage.getItem('pos_ilp_inventory_products_v1');
+        if (!rawProd) return;
+        try {
+            let prods = JSON.parse(rawProd);
+            items.forEach(it => {
+                const receivedQty = parseInt(it.qtyReceived, 10) || 0;
+                if (receivedQty > 0) {
+                    const p = prods.find(pr => pr.sku === it.sku || pr.barcode === it.sku || (pr.nama && pr.nama.toLowerCase().includes(it.name.toLowerCase())));
+                    if (p) {
+                        p.stok = (parseInt(p.stok, 10) || 0) + receivedQty;
+                    }
+                }
+            });
+            localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(prods));
+        } catch(e) {
+            console.error('Error updating stock', e);
+        }
+    },
+
     confirmGoodsReceipt() {
         if (!this.selectedDoc) return;
 
@@ -155,11 +197,15 @@
 
             original.status = hasVariance ? 'DITERIMA_SELISIH' : 'DITERIMA_LENGKAP';
             original.receivedAt = nowStr;
-            original.receiverName = (this.activeSession.cashierName || 'Budi Kurniawan') + ' (Kasir)';
+            original.receiverName = (this.activeSession?.cashierName || 'Budi Kurniawan') + ' (Kasir)';
             original.generalNotes = this.verifyNotes.trim() || (hasVariance ? 'Penerimaan diverifikasi dengan catatan selisih/kondisi.' : 'Penerimaan fisik barang transfer lengkap dan sesuai.');
 
+            // Update master inventory stock!
+            this.updateInventoryStock(original.items);
+            this.saveDocs();
+
             this.showVerifyModal = false;
-            this.showToastNotice(`Dokumen ${original.docNo} berhasil dikonfirmasi (${original.status === 'DITERIMA_LENGKAP' ? 'Lengkap Sesuai' : 'Ada Selisih Fisik'}).`);
+            this.showToastNotice(`Dokumen ${original.docNo} berhasil dikonfirmasi (${original.status === 'DITERIMA_LENGKAP' ? 'Lengkap Sesuai' : 'Ada Selisih Fisik'}) dan stok produk telah diperbarui!`);
         }
     },
 
@@ -169,7 +215,7 @@
         setTimeout(() => { this.showToast = false; }, 3600);
     }
 }"
-x-init="initOpening()"
+x-init="initOpening(); initGoodsIn();"
 @pos-session-sync.window="initOpening()"
 class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden">
 

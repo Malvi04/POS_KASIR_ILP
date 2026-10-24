@@ -74,22 +74,51 @@
         this.triggerToast('Formulir dikembalikan ke pengaturan awal.');
     },
 
+    initSettings() {
+        const stored = localStorage.getItem('pos_ilp_manager_settings_v1');
+        if (stored) {
+            try {
+                const s = JSON.parse(stored);
+                if (s.profileName) this.profileName = s.profileName;
+                if (s.profileEmail) this.profileEmail = s.profileEmail;
+                if (s.profilePhone) this.profilePhone = s.profilePhone;
+                if (s.storeName) this.storeName = s.storeName;
+                if (s.storeAddress) this.storeAddress = s.storeAddress;
+                if (s.posPin) this.posPin = s.posPin;
+            } catch(e) {}
+        }
+    },
+
     saveSettings() {
         const now = new Date();
         const hh = String(now.getHours()).padStart(2, '0');
         const mm = String(now.getMinutes()).padStart(2, '0');
         this.lastSaved = 'Baru saja, ' + hh + ':' + mm + ' WIB';
+
+        const dataToSave = {
+            profileName: this.profileName,
+            profileEmail: this.profileEmail,
+            profilePhone: this.profilePhone,
+            storeName: this.storeName,
+            storeAddress: this.storeAddress,
+            posPin: this.posPin,
+            savedAt: this.lastSaved
+        };
+        localStorage.setItem('pos_ilp_manager_settings_v1', JSON.stringify(dataToSave));
+
         this.currentPassword = '';
         this.newPassword = '';
         this.confirmPassword = '';
-        this.triggerToast('Perubahan pengaturan POS berhasil disimpan.');
+        this.triggerToast('Perubahan pengaturan POS & PIN berhasil disimpan!');
     },
 
     revokeSession(id, name) {
         this.sessions = this.sessions.filter(s => s.id !== id);
         this.triggerToast('Sesi perangkat ' + name + ' telah dihentikan.');
     }
-}" class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden">
+}"
+x-init="initSettings()"
+class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden">
 
     <!-- Sidebar -->
     <x-manager-sidebar active="settings" />

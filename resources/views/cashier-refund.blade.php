@@ -65,39 +65,49 @@
         }
     },
 
-    // Riwayat Dokumen Refund
-    refundHistory: [
-        {
-            refundNo: '#RFD-20261024-001',
-            date: '24 Oktober 2026 • 10:20 WIB',
-            originFaktur: '#TRX-20261024-0019',
-            cashier: 'Budi Kurniawan',
-            reason: 'Kemasan Susu Rembes Cacat Pabrik',
-            condition: 'Karantina Barang Rusak',
-            itemCount: 1,
-            refundAmount: 19200,
-            status: 'SELESAI_DIREFUND',
-            spvApproval: 'Hendra Wijaya (Supervisor)',
-            items: [
-                { name: 'Ultra Milk Full Cream 1L', qty: 1, price: 19200, unit: 'Tetra' }
-            ]
-        },
-        {
-            refundNo: '#RFD-20261023-002',
-            date: '23 Oktober 2026 • 16:45 WIB',
-            originFaktur: '#TRX-20261023-0044',
-            cashier: 'Andi Pratama',
-            reason: 'Salah Beli Varian Rasa Biskuit',
-            condition: 'Segel Masih Utuh',
-            itemCount: 1,
-            refundAmount: 25600,
-            status: 'SELESAI_DIREFUND',
-            spvApproval: 'Hendra Wijaya (Supervisor)',
-            items: [
-                { name: 'Chitato Sapi Panggang 68g', qty: 2, price: 12800, unit: 'Pcs' }
-            ]
-        }
-    ],
+    initRefundState() {
+        try {
+            const raw = localStorage.getItem('pos_ilp_refund_history_v1');
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                    this.refundHistory = parsed;
+                }
+            }
+        } catch (e) {}
+
+        // Merge real transactions from storage into fakturDatabase
+        try {
+            const rawTrxs = localStorage.getItem('pos_ilp_transactions_v1');
+            if (rawTrxs) {
+                const trxs = JSON.parse(rawTrxs);
+                if (Array.isArray(trxs)) {
+                    trxs.forEach((t, i) => {
+                        this.fakturDatabase[t.id] = {
+                            id: t.id,
+                            date: (t.date || 'Hari Ini') + ' • ' + (t.time || ''),
+                            cashier: t.cashier || 'Budi Kurniawan',
+                            terminal: t.terminal || 'Kasir 01',
+                            method: t.method || 'TUNAI',
+                            totalPaid: t.total || 0,
+                            items: (t.items || []).map((it, idx) => ({
+                                id: 500 + idx,
+                                name: it.name,
+                                buyQty: it.qty,
+                                refundedQty: 0,
+                                price: it.price,
+                                unit: it.unit || 'Pcs'
+                            }))
+                        };
+                    });
+                }
+            }
+        } catch (e) {}
+    },
+
+    saveRefundHistory() {
+        localStorage.setItem('pos_ilp_refund_history_v1', JSON.stringify(this.refundHistory));
+    },
 
     lookupFaktur() {
         this.searchError = '';
@@ -203,6 +213,7 @@
         }
 
         this.refundHistory.unshift(refundDoc);
+        this.saveRefundHistory();
         this.selectedRefundDoc = refundDoc;
         this.showReceiptModal = true;
         this.showToastNotice(`Refund ${newRefundNo} sebesar ${this.formatRupiah(this.totalRefundCalculated)} berhasil diproses!`);
@@ -225,8 +236,8 @@
         setTimeout(() => { this.showToast = false; }, 3600);
     }
 }"
-x-init="initOpening(); lookupFaktur();"
-@pos-session-sync.window="initOpening()"
+x-init="initOpening(); initRefundState(); lookupFaktur();"
+@pos-session-sync.window="initOpening(); initRefundState();"
 class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden">
 
     <!-- Sidebar Kasir -->

@@ -409,17 +409,17 @@
                 Data diperbarui terakhir: 24 Mei 2024, 14:30 WIB
             </span>
             <div class="flex items-center gap-3">
-                <button class="px-4 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-[12.5px] font-bold text-gray-700 flex items-center gap-2 shadow-sm transition-colors">
+                <button type="button" @click="window.print()" class="px-4 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-[12.5px] font-bold text-gray-700 flex items-center gap-2 shadow-sm transition-colors cursor-pointer">
                     <span class="material-symbols-rounded text-[17px]">print</span>
-                    Cetak Laporan
+                    <span>Cetak Laporan</span>
                 </button>
-                <button class="px-4 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-[12.5px] font-bold text-gray-700 flex items-center gap-2 shadow-sm transition-colors">
+                <button type="button" @click="window.print()" class="px-4 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-[12.5px] font-bold text-gray-700 flex items-center gap-2 shadow-sm transition-colors cursor-pointer">
                     <span class="material-symbols-rounded text-[17px]">table_view</span>
-                    Ekspor Excel
+                    <span>Ekspor Excel</span>
                 </button>
-                <button class="px-4 py-2 rounded-lg bg-[#0052cc] hover:bg-[#0043a8] text-[12.5px] font-bold text-white flex items-center gap-2 shadow-sm transition-colors">
+                <button type="button" @click="window.print()" class="px-4 py-2 rounded-lg bg-[#0052cc] hover:bg-[#0043a8] text-[12.5px] font-bold text-white flex items-center gap-2 shadow-sm transition-colors cursor-pointer">
                     <span class="material-symbols-rounded text-[17px]">picture_as_pdf</span>
-                    Ekspor PDF
+                    <span>Ekspor PDF</span>
                 </button>
             </div>
         </footer>

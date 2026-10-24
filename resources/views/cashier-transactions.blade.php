@@ -14,7 +14,9 @@
     toastMessage: '',
     showToast: false,
 
-    transactions: [
+    transactions: [],
+
+    defaultTransactions: [
         {
             id: '#TRX-20261024-0028',
             rawId: 'TRX-0028',
@@ -116,7 +118,23 @@
                 { name: 'Ultra Milk Full Cream 1L', qty: 2, unit: 'Tetra', price: 19200, total: 38400 },
                 { name: 'Aqua Mineral 600ml', qty: 2, unit: 'Botol', price: 5500, total: 11000 }
             ]
-        },
+        }
+    ],
+
+    initTransactions() {
+        try {
+            const raw = localStorage.getItem('pos_ilp_transactions_v1');
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    this.transactions = parsed;
+                    return;
+                }
+            }
+        } catch (e) {}
+        this.transactions = JSON.parse(JSON.stringify(this.defaultTransactions));
+        localStorage.setItem('pos_ilp_transactions_v1', JSON.stringify(this.transactions));
+    },
         {
             id: '#TRX-20261024-0024',
             rawId: 'TRX-0024',
@@ -200,15 +218,17 @@
     },
 
     printStruk(t) {
-        window.location.href = '/cetak-struk';
+        if (!t) return;
+        localStorage.setItem('pos_ilp_latest_printed_receipt_v1', JSON.stringify(t));
+        window.location.href = '/cetak-struk?faktur=' + encodeURIComponent(t.id);
     },
 
     goToRefund(t) {
         window.location.href = '/kasir/transaksi/refund?faktur=' + encodeURIComponent(t.id);
     }
 }"
-x-init="initOpening()"
-@pos-session-sync.window="initOpening()"
+x-init="initOpening(); initTransactions();"
+@pos-session-sync.window="initOpening(); initTransactions();"
 class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden">
 
     <!-- Sidebar Kasir -->

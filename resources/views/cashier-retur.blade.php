@@ -13,6 +13,12 @@
     toastMessage: '',
     showToast: false,
 
+    // Modal Konfirmasi Hapus Massal & Batalkan Draf
+    showDeleteBatchModal: false,
+    deleteTargetType: 'draft_batch', // 'draft_batch' | 'history_draft'
+    deleteDocTarget: null,
+    isProcessingDelete: false,
+
     // Form State
     barcodeInput: '8992388102315',
     selectedProduct: {
@@ -28,103 +34,148 @@
     selectedReason: 'RUSAK_BOCOR',
     kasirNotes: 'Kardus minyak rembes di bagian dasar, kemasan bocor halus saat penataan di rak display.',
 
-    // Active Draft Batch Items
-    draftItems: [
-        { id: 1, sku: 'SKU-SUSU-0914', name: 'Susu UHT Full Cream 1000ml', reason: 'RUSAK_BOCOR', reasonLabel: 'RUSAK / BOCOR', note: 'Tutup jebol di display rak', qty: 4, unit: 'Karton', claimPrice: 135000, subtotal: 540000 },
-        { id: 2, sku: 'SKU-ROTI-0102', name: 'Roti Tawar Gandum Spesial', reason: 'KEDALUWARSA', reasonLabel: 'KEDALUWARSA / ED', note: 'Batas ED lewat batas retur (H-1)', qty: 5, unit: 'Pack', claimPrice: 17000, subtotal: 85000 },
-        { id: 3, sku: 'SKU-BSK-4420', name: 'Biskuit Butter Cookies Kaleng', reason: 'OVERSTOCK', reasonLabel: 'MUTASI OVERSTOCK', note: 'Sisa stok musiman tidak bergerak', qty: 3, unit: 'Kaleng', claimPrice: 65000, subtotal: 195000 },
-        { id: 4, sku: 'MYK-0021', name: 'Minyak Goreng Sawit 2L', reason: 'RUSAK_BOCOR', reasonLabel: 'RUSAK / BOCOR', note: 'Rembes lipatan kemasan pouch', qty: 6, unit: 'Pouch', claimPrice: 34500, subtotal: 207000 }
-    ],
+    // Active Draft Batch Items (State persisten di localStorage)
+    draftItems: [],
 
     // Return History Documents (Toko -> Gudang DC) with SOP Lifecycle
-    historyDocuments: [
-        {
-            docNo: '#RTR-TK-20261024-001',
-            date: '24 Oktober 2026 • 10:15 WIB',
-            storeLocation: 'Minimarket ILP - Sektor A',
-            targetWarehouse: 'DC Cikarang (Pusat Logistik)',
-            sopStatus: 'DIAJUKAN_TOKO', // DIAJUKAN_TOKO | DISETUJUI_SPV | PENYERAHAN_FISIK | DITERIMA_GUDANG
-            statusLabel: 'DRAFT DIAJUKAN',
-            statusDesc: 'Menunggu verifikasi Supervisor Toko. Barang masih di area karantina toko (stok belum dipotong).',
-            totalSku: 4,
-            totalKoli: 18,
-            totalClaimValue: 1027000,
-            submittedBy: 'Budi Kurniawan (Kasir)',
-            spvApprover: null,
-            dispatchedAt: null,
-            items: [
-                { sku: 'SKU-SUSU-0914', name: 'Susu UHT Full Cream 1000ml', qty: '4 Karton', reason: 'Rusak / Bocor kemasan' },
-                { sku: 'SKU-ROTI-0102', name: 'Roti Tawar Gandum Spesial', qty: '5 Pack', reason: 'Kedaluwarsa ED' },
-                { sku: 'SKU-BSK-4420', name: 'Biskuit Butter Cookies Kaleng', qty: '3 Kaleng', reason: 'Mutasi Overstock' },
-                { sku: 'MYK-0021', name: 'Minyak Goreng Sawit 2L', qty: '6 Pouch', reason: 'Rembes kemasan' }
-            ]
-        },
-        {
-            docNo: '#RTR-TK-20261023-004',
-            date: '23 Oktober 2026 • 16:30 WIB',
-            storeLocation: 'Minimarket ILP - Sektor A',
-            targetWarehouse: 'DC Cikarang (Pusat Logistik)',
-            sopStatus: 'DISETUJUI_SPV',
-            statusLabel: 'DISETUJUI SUPERVISOR',
-            statusDesc: 'Telah disetujui Kepala Toko. Menunggu kedatangan armada logistik DC untuk serah terima fisik.',
-            totalSku: 2,
-            totalKoli: 12,
-            totalClaimValue: 720000,
-            submittedBy: 'Andi Pratama (Kasir)',
-            spvApprover: 'Hendra Wijaya (Supervisor Toko)',
-            dispatchedAt: null,
-            items: [
-                { sku: '8993456789012', name: 'Ultra Milk Cokelat 1L', qty: '8 Tetra', reason: 'Kemasan penyok' },
-                { sku: '8992345678901', name: 'Chitato Sapi Panggang 68g', qty: '4 Karton', reason: 'Kedaluwarsa batch' }
-            ]
-        },
-        {
-            docNo: '#RTR-TK-20261022-002',
-            date: '22 Oktober 2026 • 11:00 WIB',
-            storeLocation: 'Minimarket ILP - Sektor A',
-            targetWarehouse: 'DC Cikarang (Pusat Logistik)',
-            sopStatus: 'PENYERAHAN_FISIK',
-            statusLabel: 'PENYERAHAN FISIK (GOODS ISSUED)',
-            statusDesc: 'BAST serah terima fisik barang telah ditandatangani pengemudi DC. Titik mutasi pengurangan stok toko.',
-            totalSku: 3,
-            totalKoli: 24,
-            totalClaimValue: 1450000,
-            submittedBy: 'Budi Kurniawan (Kasir)',
-            spvApprover: 'Hendra Wijaya (Supervisor Toko)',
-            dispatchedAt: '22 Okt 2026 13:45 WIB • Driver: Joko (B 9211 UQ)',
-            items: [
-                { sku: '8995678901234', name: 'Sunlight Jeruk Nipis 755ml', qty: '12 Botol', reason: 'Tutup pecah' },
-                { sku: '8996789012345', name: 'Minyak Goreng Sania 2L', qty: '8 Pouch', reason: 'Bocor kemasan' },
-                { sku: '8994567890123', name: 'Beras Pandan Wangi 5kg', qty: '4 Pack', reason: 'Kutu beras' }
-            ]
-        },
-        {
-            docNo: '#RTR-TK-20261020-001',
-            date: '20 Oktober 2026 • 09:15 WIB',
-            storeLocation: 'Minimarket ILP - Sektor A',
-            targetWarehouse: 'DC Cikarang (Pusat Logistik)',
-            sopStatus: 'DITERIMA_GUDANG',
-            statusLabel: 'SELESAI (DITERIMA DC)',
-            statusDesc: 'Gudang DC telah menyelesaikan verifikasi fisik barang dan menerbitkan nota kredit/kompensasi.',
-            totalSku: 2,
-            totalKoli: 15,
-            totalClaimValue: 890000,
-            submittedBy: 'Citra Dewi (Kasir)',
-            spvApprover: 'Hendra Wijaya (Supervisor Toko)',
-            dispatchedAt: '20 Okt 2026 11:20 WIB • Driver: Rahmat (B 9102 UQ)',
-            items: [
-                { sku: '8991234567890', name: 'Aqua Mineral 600ml', qty: '10 Karton', reason: 'Bocor karton' },
-                { sku: '899275321004', name: 'Indomie Goreng 85g', qty: '5 Karton', reason: 'Remuk packaging' }
-            ]
+    historyDocuments: [],
+
+    initRetur() {
+        this.initOpening();
+        try {
+            const savedDraft = localStorage.getItem('pos_ilp_retur_draft_items_v1');
+            if (savedDraft !== null) {
+                this.draftItems = JSON.parse(savedDraft);
+            } else {
+                // Initial prototype dummy items (hanya di-load pada kunjungan pertama)
+                this.draftItems = [
+                    { id: 'RTR-ITM-1', sku: 'SKU-SUSU-0914', name: 'Susu UHT Full Cream 1000ml', reason: 'RUSAK_BOCOR', reasonLabel: 'RUSAK / BOCOR', note: 'Tutup jebol di display rak', qty: 4, unit: 'Karton', claimPrice: 135000, subtotal: 540000 },
+                    { id: 'RTR-ITM-2', sku: 'SKU-ROTI-0102', name: 'Roti Tawar Gandum Spesial', reason: 'KEDALUWARSA', reasonLabel: 'KEDALUWARSA / ED', note: 'Batas ED lewat batas retur (H-1)', qty: 5, unit: 'Pack', claimPrice: 17000, subtotal: 85000 },
+                    { id: 'RTR-ITM-3', sku: 'SKU-BSK-4420', name: 'Biskuit Butter Cookies Kaleng', reason: 'OVERSTOCK', reasonLabel: 'MUTASI OVERSTOCK', note: 'Sisa stok musiman tidak bergerak', qty: 3, unit: 'Kaleng', claimPrice: 65000, subtotal: 195000 },
+                    { id: 'RTR-ITM-4', sku: 'MYK-0021', name: 'Minyak Goreng Sawit 2L', reason: 'RUSAK_BOCOR', reasonLabel: 'RUSAK / BOCOR', note: 'Rembes lipatan kemasan pouch', qty: 6, unit: 'Pouch', claimPrice: 34500, subtotal: 207000 }
+                ];
+                this.persistReturState();
+            }
+
+            const savedHistory = localStorage.getItem('pos_ilp_retur_history_docs_v1');
+            if (savedHistory !== null) {
+                this.historyDocuments = JSON.parse(savedHistory);
+            } else {
+                this.historyDocuments = [
+                    {
+                        docNo: '#RTR-TK-20261024-001',
+                        date: '24 Oktober 2026 • 10:15 WIB',
+                        storeLocation: 'Minimarket ILP - Sektor A',
+                        targetWarehouse: 'DC Cikarang (Pusat Logistik)',
+                        sopStatus: 'DIAJUKAN_TOKO',
+                        statusLabel: 'DRAFT DIAJUKAN',
+                        statusDesc: 'Menunggu verifikasi Supervisor Toko. Barang masih di area karantina toko (stok belum dipotong).',
+                        totalSku: 4,
+                        totalKoli: 18,
+                        totalClaimValue: 1027000,
+                        submittedBy: 'Budi Kurniawan (Kasir)',
+                        spvApprover: null,
+                        dispatchedAt: null,
+                        items: [
+                            { sku: 'SKU-SUSU-0914', name: 'Susu UHT Full Cream 1000ml', qty: '4 Karton', reason: 'Rusak / Bocor kemasan' },
+                            { sku: 'SKU-ROTI-0102', name: 'Roti Tawar Gandum Spesial', qty: '5 Pack', reason: 'Kedaluwarsa ED' },
+                            { sku: 'SKU-BSK-4420', name: 'Biskuit Butter Cookies Kaleng', qty: '3 Kaleng', reason: 'Mutasi Overstock' },
+                            { sku: 'MYK-0021', name: 'Minyak Goreng Sawit 2L', qty: '6 Pouch', reason: 'Rembes kemasan' }
+                        ]
+                    },
+                    {
+                        docNo: '#RTR-TK-20261023-004',
+                        date: '23 Oktober 2026 • 16:30 WIB',
+                        storeLocation: 'Minimarket ILP - Sektor A',
+                        targetWarehouse: 'DC Cikarang (Pusat Logistik)',
+                        sopStatus: 'DISETUJUI_SPV',
+                        statusLabel: 'DISETUJUI SUPERVISOR',
+                        statusDesc: 'Telah disetujui Kepala Toko. Menunggu kedatangan armada logistik DC untuk serah terima fisik.',
+                        totalSku: 2,
+                        totalKoli: 12,
+                        totalClaimValue: 720000,
+                        submittedBy: 'Andi Pratama (Kasir)',
+                        spvApprover: 'Hendra Wijaya (Supervisor Toko)',
+                        dispatchedAt: null,
+                        items: [
+                            { sku: '8993456789012', name: 'Ultra Milk Cokelat 1L', qty: '8 Tetra', reason: 'Kemasan penyok' },
+                            { sku: '8992345678901', name: 'Chitato Sapi Panggang 68g', qty: '4 Karton', reason: 'Kedaluwarsa batch' }
+                        ]
+                    },
+                    {
+                        docNo: '#RTR-TK-20261022-002',
+                        date: '22 Oktober 2026 • 11:00 WIB',
+                        storeLocation: 'Minimarket ILP - Sektor A',
+                        targetWarehouse: 'DC Cikarang (Pusat Logistik)',
+                        sopStatus: 'PENYERAHAN_FISIK',
+                        statusLabel: 'PENYERAHAN FISIK (GOODS ISSUED)',
+                        statusDesc: 'BAST serah terima fisik barang telah ditandatangani pengemudi DC. Titik mutasi pengurangan stok toko.',
+                        totalSku: 3,
+                        totalKoli: 24,
+                        totalClaimValue: 1450000,
+                        submittedBy: 'Budi Kurniawan (Kasir)',
+                        spvApprover: 'Hendra Wijaya (Supervisor Toko)',
+                        dispatchedAt: '22 Okt 2026 13:45 WIB • Driver: Joko (B 9211 UQ)',
+                        items: [
+                            { sku: '8995678901234', name: 'Sunlight Jeruk Nipis 755ml', qty: '12 Botol', reason: 'Tutup pecah' },
+                            { sku: '8996789012345', name: 'Minyak Goreng Sania 2L', qty: '8 Pouch', reason: 'Bocor kemasan' },
+                            { sku: '8994567890123', name: 'Beras Pandan Wangi 5kg', qty: '4 Pack', reason: 'Kutu beras' }
+                        ]
+                    },
+                    {
+                        docNo: '#RTR-TK-20261020-001',
+                        date: '20 Oktober 2026 • 09:15 WIB',
+                        storeLocation: 'Minimarket ILP - Sektor A',
+                        targetWarehouse: 'DC Cikarang (Pusat Logistik)',
+                        sopStatus: 'DITERIMA_GUDANG',
+                        statusLabel: 'SELESAI (DITERIMA DC)',
+                        statusDesc: 'Gudang DC telah menyelesaikan verifikasi fisik barang dan menerbitkan nota kredit/kompensasi.',
+                        totalSku: 2,
+                        totalKoli: 15,
+                        totalClaimValue: 890000,
+                        submittedBy: 'Citra Dewi (Kasir)',
+                        spvApprover: 'Hendra Wijaya (Supervisor Toko)',
+                        dispatchedAt: '20 Okt 2026 11:20 WIB • Driver: Rahmat (B 9102 UQ)',
+                        items: [
+                            { sku: '8991234567890', name: 'Aqua Mineral 600ml', qty: '10 Karton', reason: 'Bocor karton' },
+                            { sku: '899275321004', name: 'Indomie Goreng 85g', qty: '5 Karton', reason: 'Remuk packaging' }
+                        ]
+                    }
+                ];
+                this.persistReturState();
+            }
+        } catch (e) {
+            console.warn('Failed restoring retur state from localStorage', e);
         }
-    ],
+    },
+
+    persistReturState() {
+        try {
+            localStorage.setItem('pos_ilp_retur_draft_items_v1', JSON.stringify(this.draftItems));
+            localStorage.setItem('pos_ilp_retur_history_docs_v1', JSON.stringify(this.historyDocuments));
+        } catch (e) {
+            console.warn('Failed persisting retur state', e);
+        }
+    },
 
     get totalDraftValue() {
-        return this.draftItems.reduce((acc, it) => acc + (it.subtotal || 0), 0);
+        return this.draftItems.reduce((acc, it) => acc + (Number(it.subtotal) || 0), 0);
     },
 
     get totalDraftQty() {
-        return this.draftItems.reduce((acc, it) => acc + (it.qty || 0), 0);
+        return this.draftItems.reduce((acc, it) => acc + (Number(it.qty) || 0), 0);
+    },
+
+    get draftRusakCount() {
+        return this.draftItems.filter(it => it.reason === 'RUSAK_BOCOR' || it.reason === 'CACAT_PABRIK').length;
+    },
+
+    get draftEdCount() {
+        return this.draftItems.filter(it => it.reason === 'KEDALUWARSA').length;
+    },
+
+    get draftOverstockCount() {
+        return this.draftItems.filter(it => it.reason === 'OVERSTOCK').length;
     },
 
     get filteredHistory() {
@@ -151,27 +202,76 @@
             'CACAT_PABRIK': 'CACAT SEGEL PABRIK'
         };
 
+        const qtyNum = parseInt(this.inputQty, 10) || 1;
         const newItem = {
-            id: Date.now(),
+            id: 'RTR-' + Date.now() + '-' + Math.floor(100 + Math.random() * 900),
             sku: this.selectedProduct.sku,
             name: this.selectedProduct.name,
             reason: this.selectedReason,
             reasonLabel: reasonLabels[this.selectedReason] || 'RUSAK',
             note: this.kasirNotes.trim() || 'Catatan pemeriksaan kasir',
-            qty: this.inputQty,
+            qty: qtyNum,
             unit: this.selectedUnit,
             claimPrice: this.selectedProduct.buyPrice,
-            subtotal: this.inputQty * this.selectedProduct.buyPrice
+            subtotal: qtyNum * this.selectedProduct.buyPrice
         };
 
         this.draftItems.push(newItem);
-        this.showToastNotice(`${this.selectedProduct.name} (${this.inputQty} ${this.selectedUnit}) dimasukkan ke draf retur.`);
+        this.persistReturState();
+        this.showToastNotice(`${this.selectedProduct.name} (${qtyNum} ${this.selectedUnit}) dimasukkan ke draf retur.`);
         this.inputQty = 1;
     },
 
-    removeDraftItem(idx) {
-        this.draftItems.splice(idx, 1);
-        this.showToastNotice('Item berhasil dihapus dari draf retur.');
+    removeDraftItem(itemId) {
+        if (this.isProcessingDelete) return;
+        this.isProcessingDelete = true;
+        const target = this.draftItems.find(it => it.id === itemId);
+        const name = target ? target.name : 'Item';
+        this.draftItems = this.draftItems.filter(it => it.id !== itemId);
+        this.persistReturState();
+        this.isProcessingDelete = false;
+        this.showToastNotice(`${name} berhasil dihapus dari draf retur.`);
+    },
+
+    openClearDraftBatchModal() {
+        if (this.draftItems.length === 0) return;
+        this.deleteTargetType = 'draft_batch';
+        this.deleteDocTarget = null;
+        this.showDeleteBatchModal = true;
+    },
+
+    confirmClearDraftBatch() {
+        if (this.isProcessingDelete) return;
+        this.isProcessingDelete = true;
+        const count = this.draftItems.length;
+        this.draftItems = [];
+        this.persistReturState();
+        this.showDeleteBatchModal = false;
+        this.isProcessingDelete = false;
+        this.showToastNotice(`Seluruh muatan draf retur (${count} SKU) berhasil dikosongkan.`);
+    },
+
+    openCancelHistoryDocModal(doc) {
+        // Aturan bisnis: hanya dokumen yang masih berstatus DIAJUKAN_TOKO yang dapat dibatalkan kasir
+        if (doc.sopStatus !== 'DIAJUKAN_TOKO') {
+            this.showToastNotice('Dokumen retur yang telah disetujui atau diproses fisik tidak dapat dibatalkan.');
+            return;
+        }
+        this.deleteTargetType = 'history_draft';
+        this.deleteDocTarget = doc;
+        this.showDeleteBatchModal = true;
+    },
+
+    confirmCancelHistoryDoc() {
+        if (this.isProcessingDelete || !this.deleteDocTarget) return;
+        this.isProcessingDelete = true;
+        const docNo = this.deleteDocTarget.docNo;
+        this.historyDocuments = this.historyDocuments.filter(d => d.docNo !== docNo);
+        this.persistReturState();
+        this.showDeleteBatchModal = false;
+        this.deleteDocTarget = null;
+        this.isProcessingDelete = false;
+        this.showToastNotice(`Dokumen pengajuan retur ${docNo} berhasil dibatalkan dan dihapus.`);
     },
 
     submitBatchToSupervisor() {
@@ -184,7 +284,7 @@
         const newDoc = {
             docNo: newDocNo,
             date: nowStr,
-            storeLocation: 'Minimarket ILP - Sektor A',
+            storeLocation: this.activeSession?.storeLocation || 'Minimarket ILP - Sektor A',
             targetWarehouse: 'DC Cikarang (Pusat Logistik)',
             sopStatus: 'DIAJUKAN_TOKO',
             statusLabel: 'DRAFT DIAJUKAN',
@@ -192,7 +292,7 @@
             totalSku: this.draftItems.length,
             totalKoli: this.totalDraftQty,
             totalClaimValue: this.totalDraftValue,
-            submittedBy: (this.activeSession.cashierName || 'Budi Kurniawan') + ' (Kasir)',
+            submittedBy: (this.activeSession?.cashierName || 'Budi Kurniawan') + ' (Kasir)',
             spvApprover: null,
             dispatchedAt: null,
             items: this.draftItems.map(it => ({
@@ -205,6 +305,7 @@
 
         this.historyDocuments.unshift(newDoc);
         this.draftItems = [];
+        this.persistReturState();
         this.activeTab = 'history';
         this.showToastNotice(`Dokumen pengajuan retur ${newDocNo} berhasil dibuat!`);
     },
@@ -220,8 +321,8 @@
         setTimeout(() => { this.showToast = false; }, 3600);
     }
 }"
-x-init="initOpening()"
-@pos-session-sync.window="initOpening()"
+x-init="initRetur()"
+@pos-session-sync.window="initRetur()"
 class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden">
 
     <!-- Sidebar Kasir -->
@@ -296,7 +397,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <div class="bg-white rounded-2xl border border-rose-200 p-5 shadow-xs flex items-center justify-between border-l-4 border-l-rose-500">
                         <div>
                             <span class="text-[10px] font-bold text-rose-700 tracking-wider uppercase">KATEGORI RUSAK / BOCOR</span>
-                            <h3 class="text-2xl font-black text-rose-600 mt-1">2 SKU</h3>
+                            <h3 class="text-2xl font-black text-rose-600 mt-1" x-text="draftRusakCount + ' SKU'">2 SKU</h3>
                             <span class="text-[11px] text-gray-500 font-medium mt-0.5 block">Rembes lipatan & kemasan cacat</span>
                         </div>
                         <div class="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
@@ -307,7 +408,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <div class="bg-white rounded-2xl border border-amber-200 p-5 shadow-xs flex items-center justify-between border-l-4 border-l-amber-500">
                         <div>
                             <span class="text-[10px] font-bold text-amber-700 tracking-wider uppercase">KEDALUWARSA / ED</span>
-                            <h3 class="text-2xl font-black text-amber-600 mt-1">1 SKU</h3>
+                            <h3 class="text-2xl font-black text-amber-600 mt-1" x-text="draftEdCount + ' SKU'">1 SKU</h3>
                             <span class="text-[11px] text-gray-500 font-medium mt-0.5 block">&le; Batas retur pajang H-14</span>
                         </div>
                         <div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
@@ -466,7 +567,17 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     <span class="material-symbols-rounded text-[20px] text-[#0052cc]">inventory</span>
                                     <h3 class="font-bold text-gray-900 text-sm">Daftar Muatan Batch Retur (Siap Diajukan)</h3>
                                 </div>
-                                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#0052cc]" x-text="draftItems.length + ' SKU'"></span>
+                                <div class="flex items-center gap-2">
+                                    <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#0052cc]" x-text="draftItems.length + ' SKU'"></span>
+                                    <button type="button"
+                                            @click="openClearDraftBatchModal()"
+                                            :disabled="draftItems.length === 0"
+                                            :class="draftItems.length === 0 ? 'opacity-40 cursor-not-allowed bg-gray-100 text-gray-400' : 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 cursor-pointer'"
+                                            class="px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all">
+                                        <span class="material-symbols-rounded text-[15px]">delete_sweep</span>
+                                        <span>Kosongkan Draf</span>
+                                    </button>
+                                </div>
                             </div>
 
                             <div class="overflow-x-auto">
@@ -481,7 +592,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-gray-100">
-                                        <template x-for="(item, idx) in draftItems" :key="item.id">
+                                        <template x-for="item in draftItems" :key="item.id">
                                             <tr class="hover:bg-slate-50/50">
                                                 <td class="px-5 py-3.5">
                                                     <div class="flex flex-col">
@@ -507,8 +618,10 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
                                                 <td class="px-4 py-3.5 text-center">
                                                     <button type="button"
-                                                            @click="removeDraftItem(idx)"
-                                                            class="text-gray-400 hover:text-rose-600 transition-colors cursor-pointer">
+                                                            @click="removeDraftItem(item.id)"
+                                                            :disabled="isProcessingDelete"
+                                                            title="Hapus item ini dari draf retur"
+                                                            class="text-gray-400 hover:text-rose-600 transition-colors cursor-pointer p-1 rounded-lg hover:bg-rose-50">
                                                         <span class="material-symbols-rounded text-[18px]">delete</span>
                                                     </button>
                                                 </td>
@@ -517,8 +630,16 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
                                         <template x-if="draftItems.length === 0">
                                             <tr>
-                                                <td colspan="5" class="py-12 text-center text-gray-400">
-                                                    Belum ada item di dalam draf retur ini. Pindai barcode di sebelah kiri untuk menambahkan.
+                                                <td colspan="5" class="py-12 px-6 text-center">
+                                                    <div class="flex flex-col items-center justify-center max-w-sm mx-auto">
+                                                        <div class="w-14 h-14 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
+                                                            <span class="material-symbols-rounded text-[32px]">remove_shopping_cart</span>
+                                                        </div>
+                                                        <h4 class="text-sm font-black text-gray-800">Draf Muatan Retur Kosong</h4>
+                                                        <p class="text-xs text-gray-400 mt-1 leading-relaxed">
+                                                            Belum ada barang di dalam draf batch ini. Pindai barcode produk di panel sebelah kiri untuk menambahkan barang yang rusak atau kedaluwarsa.
+                                                        </p>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         </template>
@@ -663,12 +784,23 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
                                             <!-- Action -->
                                             <td class="px-6 py-4 text-right">
-                                                <button type="button"
-                                                        @click="openDetailModal(doc)"
-                                                        class="px-3.5 py-1.5 bg-slate-100 hover:bg-[#0052cc] hover:text-white text-gray-700 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 ml-auto cursor-pointer group">
-                                                    <span class="material-symbols-rounded text-[16px] text-gray-400 group-hover:text-white transition-colors">visibility</span>
-                                                    <span>Lihat Rincian</span>
-                                                </button>
+                                                <div class="flex items-center justify-end gap-2">
+                                                    <template x-if="doc.sopStatus === 'DIAJUKAN_TOKO'">
+                                                        <button type="button"
+                                                                @click="openCancelHistoryDocModal(doc)"
+                                                                class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1 cursor-pointer"
+                                                                title="Batalkan pengajuan draf ini">
+                                                            <span class="material-symbols-rounded text-[15px]">delete</span>
+                                                            <span>Batalkan</span>
+                                                        </button>
+                                                    </template>
+                                                    <button type="button"
+                                                            @click="openDetailModal(doc)"
+                                                            class="px-3.5 py-1.5 bg-slate-100 hover:bg-[#0052cc] hover:text-white text-gray-700 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer group">
+                                                        <span class="material-symbols-rounded text-[16px] text-gray-400 group-hover:text-white transition-colors">visibility</span>
+                                                        <span>Lihat Rincian</span>
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     </template>
@@ -761,6 +893,96 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             @click="showDetailModal = false"
                             class="px-5 py-2 rounded-xl bg-gray-800 hover:bg-gray-900 text-white font-bold text-xs transition-colors cursor-pointer">
                         Tutup
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </template>
+
+    <!-- MODAL KONFIRMASI HAPUS MASSAL & BATAL DRAF -->
+    <template x-teleport="body">
+        <div x-show="showDeleteBatchModal"
+             x-transition.opacity
+             style="display: none;"
+             class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+
+            <div x-show="showDeleteBatchModal"
+                 @click.away="if (!isProcessingDelete) showDeleteBatchModal = false"
+                 x-transition.scale.origin.bottom
+                 class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200 flex flex-col">
+
+                <div class="p-6 text-center">
+                    <div class="w-14 h-14 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto mb-4">
+                        <span class="material-symbols-rounded text-[32px]">warning</span>
+                    </div>
+
+                    <template x-if="deleteTargetType === 'draft_batch'">
+                        <div>
+                            <h3 class="text-base font-black text-gray-900 mb-1">Kosongkan Seluruh Draf Retur?</h3>
+                            <p class="text-xs text-gray-500 mb-4">
+                                Anda akan menghapus seluruh muatan batch retur yang belum diajukan:
+                            </p>
+                            <div class="bg-rose-50/70 border border-rose-200 rounded-xl p-3.5 mb-4 text-xs text-left">
+                                <div class="flex justify-between py-1 border-b border-rose-100">
+                                    <span class="text-gray-600">Jumlah Barang (SKU):</span>
+                                    <strong class="text-rose-900" x-text="draftItems.length + ' SKU'"></strong>
+                                </div>
+                                <div class="flex justify-between py-1 border-b border-rose-100">
+                                    <span class="text-gray-600">Total Kuantitas:</span>
+                                    <strong class="text-rose-900" x-text="totalDraftQty + ' Unit/Koli'"></strong>
+                                </div>
+                                <div class="flex justify-between py-1">
+                                    <span class="text-gray-600">Total Nilai Pokok Klaim:</span>
+                                    <strong class="font-mono text-rose-900" x-text="formatRupiah(totalDraftValue)"></strong>
+                                </div>
+                            </div>
+                            <p class="text-[11px] text-gray-400">
+                                Tindakan ini tidak dapat dibatalkan. Daftar muatan draf akan menjadi kosong.
+                            </p>
+                        </div>
+                    </template>
+
+                    <template x-if="deleteTargetType === 'history_draft'">
+                        <div>
+                            <h3 class="text-base font-black text-gray-900 mb-1">Batalkan Pengajuan Retur?</h3>
+                            <p class="text-xs text-gray-500 mb-4">
+                                Dokumen draf retur berikut akan dibatalkan dan dihapus dari antrean review:
+                            </p>
+                            <div class="bg-amber-50/70 border border-amber-200 rounded-xl p-3.5 mb-4 text-xs text-left">
+                                <div class="flex justify-between py-1 border-b border-amber-100">
+                                    <span class="text-gray-600">No. Dokumen:</span>
+                                    <strong class="font-mono text-amber-900" x-text="deleteDocTarget?.docNo"></strong>
+                                </div>
+                                <div class="flex justify-between py-1 border-b border-amber-100">
+                                    <span class="text-gray-600">Muatan:</span>
+                                    <strong class="text-amber-900" x-text="(deleteDocTarget?.totalSku || 0) + ' SKU (' + (deleteDocTarget?.totalKoli || 0) + ' Unit)'"></strong>
+                                </div>
+                                <div class="flex justify-between py-1">
+                                    <span class="text-gray-600">Total Nilai:</span>
+                                    <strong class="font-mono text-amber-900" x-text="formatRupiah(deleteDocTarget?.totalClaimValue)"></strong>
+                                </div>
+                            </div>
+                            <p class="text-[11px] text-gray-400">
+                                Barang akan dikembalikan ke status belum diajukan di gerai toko.
+                            </p>
+                        </div>
+                    </template>
+                </div>
+
+                <div class="px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-2.5 bg-slate-50">
+                    <button type="button"
+                            @click="showDeleteBatchModal = false"
+                            :disabled="isProcessingDelete"
+                            class="px-4 py-2 rounded-xl bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 font-bold text-xs cursor-pointer">
+                        Batal
+                    </button>
+                    <button type="button"
+                            @click="deleteTargetType === 'draft_batch' ? confirmClearDraftBatch() : confirmCancelHistoryDoc()"
+                            :disabled="isProcessingDelete"
+                            class="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 cursor-pointer">
+                        <span class="material-symbols-rounded text-[16px]">delete</span>
+                        <span x-text="deleteTargetType === 'draft_batch' ? 'Ya, Kosongkan Draf' : 'Ya, Batalkan Dokumen'"></span>
                     </button>
                 </div>
 

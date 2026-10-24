@@ -8,69 +8,104 @@
     showSessionDetailModal: false,
     selectedSessionDetail: null,
 
-    pastSessions: [
-        {
-            id: 'CS-20261024-K01-001',
-            date: '24 Oktober 2026',
-            shift: 'Pagi (07:00 - 10:00 WIB)',
-            terminal: 'Kasir 01',
-            cashier: 'Budi Kurniawan',
-            openingFloat: 500000,
-            cashSales: 310000,
-            nonCashSales: 0,
-            cashOut: 0,
-            expectedCash: 810000,
-            actualCash: 810000,
-            variance: 0,
-            varianceStatus: 'SESUAI',
-            notes: 'Sesi berakhir pada pergantian shift awal, saldo fisik tepat sesuai sistem.',
-            status: 'HANDOVER_DONE',
-            verifiedBy: 'Siti Aminah (SPV)'
-        },
-        {
-            id: 'CS-20261023-K01-002',
-            date: '23 Oktober 2026',
-            shift: 'Siang/Malam (14:00 - 22:00 WIB)',
-            terminal: 'Kasir 01',
-            cashier: 'Budi Kurniawan',
-            openingFloat: 500000,
-            cashSales: 1640000,
-            nonCashSales: 890000,
-            cashOut: 20000,
-            expectedCash: 2120000,
-            actualCash: 2115000,
-            variance: -5000,
-            varianceStatus: 'SELISIH_KURANG',
-            notes: 'Selisih kurang Rp 5.000 akibat pembulatan koin kembalian saat jam ramai sore.',
-            status: 'CLOSED',
-            verifiedBy: 'Bambang Sudiro (SPV)'
-        },
-        {
-            id: 'CS-20261023-K01-001',
-            date: '23 Oktober 2026',
-            shift: 'Pagi (07:00 - 14:00 WIB)',
-            terminal: 'Kasir 01',
-            cashier: 'Budi Kurniawan',
-            openingFloat: 500000,
-            cashSales: 1450000,
-            nonCashSales: 620000,
-            cashOut: 0,
-            expectedCash: 1950000,
-            actualCash: 1950000,
-            variance: 0,
-            varianceStatus: 'SESUAI',
-            notes: 'Penutupan sesi berjalan lancar tanpa kendala fisik.',
-            status: 'CLOSED',
-            verifiedBy: 'Siti Aminah (SPV)'
+    pastSessions: [],
+
+    initSessions() {
+        const raw = localStorage.getItem('pos_ilp_session_history_v1');
+        if (raw) {
+            try {
+                const hist = JSON.parse(raw);
+                if (hist && hist.length > 0) {
+                    this.pastSessions = hist.map(h => ({
+                        id: h.sessionId || h.id || 'CS-SESS-01',
+                        date: h.closedAt || h.date || '24 Oktober 2026',
+                        shift: h.shift || 'Pagi (07:00 - 15:00 WIB)',
+                        terminal: h.terminalLabel || 'Kasir 01',
+                        cashier: h.cashierName || 'Budi Kurniawan',
+                        openingFloat: Number(h.openingCash || h.openingFloat || 500000),
+                        cashSales: Number(h.cashSalesNet || h.cashSales || 0),
+                        nonCashSales: Number(h.nonCashSales || 0),
+                        cashOut: Number(h.cashOut || 0),
+                        expectedCash: Number(h.expectedCash || 0),
+                        actualCash: Number(h.actualCash || h.expectedCash || 0),
+                        variance: Number(h.variance || 0),
+                        varianceStatus: (Number(h.variance || 0) === 0) ? 'SESUAI' : (Number(h.variance) < 0 ? 'SELISIH_KURANG' : 'SELISIH_LEBIH'),
+                        notes: h.varianceReason || h.notes || 'Penutupan sesi kasir terverifikasi.',
+                        status: h.status || 'CLOSED',
+                        verifiedBy: h.verifiedBy || 'Supervisor Toko'
+                    }));
+                    return;
+                }
+            } catch(e) {}
         }
-    ],
+        this.pastSessions = this.getDefaultPastSessions();
+    },
+
+    getDefaultPastSessions() {
+        return [
+            {
+                id: 'CS-20261024-K01-001',
+                date: '24 Oktober 2026',
+                shift: 'Pagi (07:00 - 10:00 WIB)',
+                terminal: 'Kasir 01',
+                cashier: 'Budi Kurniawan',
+                openingFloat: 500000,
+                cashSales: 310000,
+                nonCashSales: 0,
+                cashOut: 0,
+                expectedCash: 810000,
+                actualCash: 810000,
+                variance: 0,
+                varianceStatus: 'SESUAI',
+                notes: 'Sesi berakhir pada pergantian shift awal, saldo fisik tepat sesuai sistem.',
+                status: 'HANDOVER_DONE',
+                verifiedBy: 'Siti Aminah (SPV)'
+            },
+            {
+                id: 'CS-20261023-K01-002',
+                date: '23 Oktober 2026',
+                shift: 'Siang/Malam (14:00 - 22:00 WIB)',
+                terminal: 'Kasir 01',
+                cashier: 'Budi Kurniawan',
+                openingFloat: 500000,
+                cashSales: 1640000,
+                nonCashSales: 890000,
+                cashOut: 20000,
+                expectedCash: 2120000,
+                actualCash: 2115000,
+                variance: -5000,
+                varianceStatus: 'SELISIH_KURANG',
+                notes: 'Selisih kurang Rp 5.000 akibat pembulatan koin kembalian saat jam ramai sore.',
+                status: 'CLOSED',
+                verifiedBy: 'Bambang Sudiro (SPV)'
+            },
+            {
+                id: 'CS-20261023-K01-001',
+                date: '23 Oktober 2026',
+                shift: 'Pagi (07:00 - 14:00 WIB)',
+                terminal: 'Kasir 01',
+                cashier: 'Budi Kurniawan',
+                openingFloat: 500000,
+                cashSales: 1450000,
+                nonCashSales: 620000,
+                cashOut: 0,
+                expectedCash: 1950000,
+                actualCash: 1950000,
+                variance: 0,
+                varianceStatus: 'SESUAI',
+                notes: 'Penutupan sesi berjalan lancar tanpa kendala fisik.',
+                status: 'CLOSED',
+                verifiedBy: 'Siti Aminah (SPV)'
+            }
+        ];
+    },
 
     viewSession(session) {
         this.selectedSessionDetail = session;
         this.showSessionDetailModal = true;
     }
 }"
-x-init="initOpening()"
+x-init="initOpening(); initSessions();"
 @pos-session-sync.window="initOpening()"
 class="flex flex-col h-screen w-full font-sans">
     <div class="flex flex-1 overflow-hidden">

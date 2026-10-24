@@ -237,6 +237,7 @@
                 cashMovements: defaultCashMovements,
 
                 showOpeningModal: false,
+                isOpeningSubmitting: false,
                 showDenomModal: false,
                 denomTarget: 'opening', // 'opening' | 'closing'
                 denomMode: 'idr',
@@ -332,38 +333,104 @@
                     return this.sessionHistory.filter(s => s.terminalId === this.selectedShift);
                 },
 
+                // Mencari apakah staff tertentu memiliki sesi OPEN di terminal manapun
+                getActiveSessionForStaff(staffId) {
+                    if (!staffId) return null;
+
+                    // 1. Cari terminal yang aktif digunakan staff ini
+                    const activeTerm = this.terminals.find(t => t.activeCashierId === staffId && t.activeSessionId);
+                    if (activeTerm) {
+                        const hist = this.sessionHistory.find(h => h.sessionId === activeTerm.activeSessionId);
+                        if (!hist || hist.status === 'OPEN') {
+                            return {
+                                source: 'terminal',
+                                terminalId: activeTerm.id,
+                                terminalLabel: activeTerm.label || this.formatShiftLabel(activeTerm.id),
+                                sessionId: activeTerm.activeSessionId,
+                                cashierId: staffId,
+                                cashierName: activeTerm.activeCashierName
+                            };
+                        }
+                    }
+
+                    // 2. Cross-check activeSession jika cashierId cocok dan status OPEN
+                    if (this.activeSession && this.activeSession.cashierId === staffId && this.activeSession.status === 'OPEN') {
+                        const hist = this.sessionHistory.find(h => h.sessionId === this.activeSession.sessionId);
+                        if (!hist || hist.status === 'OPEN') {
+                            const term = this.terminals.find(t => t.id === this.activeSession.terminalId);
+                            return {
+                                source: 'activeSession',
+                                terminalId: this.activeSession.terminalId,
+                                terminalLabel: term ? term.label : (this.activeSession.terminalLabel || this.formatShiftLabel(this.activeSession.terminalId)),
+                                sessionId: this.activeSession.sessionId,
+                                cashierId: staffId,
+                                cashierName: this.activeSession.cashierName
+                            };
+                        }
+                    }
+
+                    // 3. Cross-check sessionHistory apakah ada sesi OPEN milik staff ini
+                    const openInHistory = this.sessionHistory.find(s => s.cashierId === staffId && s.status === 'OPEN');
+                    if (openInHistory) {
+                        const term = this.terminals.find(t => t.id === openInHistory.terminalId);
+                        return {
+                            source: 'sessionHistory',
+                            terminalId: openInHistory.terminalId,
+                            terminalLabel: term ? term.label : (openInHistory.terminalLabel || this.formatShiftLabel(openInHistory.terminalId)),
+                            sessionId: openInHistory.sessionId,
+                            cashierId: staffId,
+                            cashierName: openInHistory.cashierName
+                        };
+                    }
+
+                    return null;
+                },
+
+                get userActiveSession() {
+                    return this.getActiveSessionForStaff(this.selectedStaffId);
+                },
+
+                get hasActiveSessionElsewhere() {
+                    const s = this.userActiveSession;
+                    return !!(s && s.terminalId !== this.selectedShift);
+                },
+
                 // Rumus Saldo Kas Seharusnya (Bagian 5 Dokumen):
                 // Uang Awal + Penerimaan Tunai Bersih + Kas Masuk Lain - Retur Tunai - Pengeluaran Tunai - Uang Ditarik ke Brankas
                 get expectedClosingCash() {
                     const s = this.activeSession;
                     if (!s) return 0;
-                    const totalCashSales = (Number(s.cashSalesNet) || 0) + (Number(s.splitCashPortion) || 0);
-                    return (Number(s.openingCash) || 0)
+                    const totalCashSales = Math.round((Number(s.cashSalesNet) || 0) + (Number(s.splitCashPortion) || 0));
+                    return Math.round(
+                        (Number(s.openingCash) || 0)
                         + totalCashSales
                         + (Number(s.cashIn) || 0)
                         - (Number(s.cashReturn) || 0)
                         - (Number(s.cashOut) || 0)
-                        - (Number(s.cashDrop) || 0);
+                        - (Number(s.cashDrop) || 0)
+                    );
                 },
 
                 get totalNonCashSales() {
                     const s = this.activeSession;
                     if (!s) return 0;
-                    return (Number(s.qrisSales) || 0) + (Number(s.splitNonCashPortion) || 0);
+                    return Math.round((Number(s.qrisSales) || 0) + (Number(s.splitNonCashPortion) || 0));
                 },
 
                 get totalSessionOmzet() {
                     const s = this.activeSession;
                     if (!s) return 0;
-                    return (Number(s.cashSalesNet) || 0)
+                    return Math.round(
+                        (Number(s.cashSalesNet) || 0)
                         + (Number(s.splitCashPortion) || 0)
                         + (Number(s.qrisSales) || 0)
                         + (Number(s.splitNonCashPortion) || 0)
-                        + (Number(s.creditSales) || 0);
+                        + (Number(s.creditSales) || 0)
+                    );
                 },
 
                 get cashVariance() {
-                    return (Number(this.closingWizard.actualCashNum) || 0) - this.expectedClosingCash;
+                    return Math.round((Number(this.closingWizard.actualCashNum) || 0) - this.expectedClosingCash);
                 },
 
                 initOpening() {
@@ -404,6 +471,29 @@
                 },
 
                 syncTerminalStatuses() {
+                    // Self-healing recovery: jika ada sesi yang tercatat CLOSED/PENDING_REVIEW di sessionHistory,
+                    // pastikan terminal yang bersangkutan dan activeSession tidak lagi berstatus aktif.
+                    this.terminals.forEach(term => {
+                        if (term.activeSessionId) {
+                            const hist = this.sessionHistory.find(h => h.sessionId === term.activeSessionId);
+                            if (hist && (hist.status === 'CLOSED' || hist.status === 'PENDING_REVIEW')) {
+                                term.activeSessionId = null;
+                                term.activeCashierId = null;
+                                term.activeCashierName = null;
+                                term.activeStartedAt = null;
+                            }
+                        }
+                    });
+
+                    if (this.activeSession && this.activeSession.sessionId) {
+                        const hist = this.sessionHistory.find(h => h.sessionId === this.activeSession.sessionId);
+                        if (hist && (hist.status === 'CLOSED' || hist.status === 'PENDING_REVIEW')) {
+                            this.activeSession.status = hist.status;
+                            this.activeSession.endedAt = hist.endedAt;
+                        }
+                    }
+
+                    // Sinkronisasi status terminal berdasarkan activeCashierId dan activeSessionId
                     this.terminals.forEach(term => {
                         if (term.activeCashierId && term.activeSessionId) {
                             term.status = (term.activeCashierId === this.selectedStaffId) ? 'ACTIVE_MINE' : 'ACTIVE_OTHER';
@@ -435,6 +525,15 @@
                         this.activeSession.terminalId = term.id;
                         this.activeSession.terminalLabel = term.label;
                         this.activeSession.status = 'OPEN';
+                        if (term.activeSessionId) {
+                            this.activeSession.sessionId = term.activeSessionId;
+                        }
+                        if (term.activeCashierName) {
+                            this.activeSession.cashierName = term.activeCashierName;
+                        }
+                        if (term.activeCashierId) {
+                            this.activeSession.cashierId = term.activeCashierId;
+                        }
                     }
 
                     this.persistAllState();
@@ -498,10 +597,30 @@
 
                 openOpeningModal() {
                     this.openingPinError = '';
+                    this.isOpeningSubmitting = false;
                     const term = this.selectedTerminalObj;
+
                     // Terminal yang sedang dipakai petugas lain dinonaktifkan
                     if (term && term.status === 'ACTIVE_OTHER') {
                         return;
+                    }
+
+                    // Validasi: Cek apakah petugas ini sudah memiliki sesi OPEN di terminal lain
+                    const staffActive = this.getActiveSessionForStaff(this.selectedStaffId);
+                    if (staffActive) {
+                        const activeLabel = staffActive.terminalLabel || this.formatShiftLabel(staffActive.terminalId);
+                        if (term && term.id !== staffActive.terminalId) {
+                            const errorMsg = `Anda masih memiliki sesi aktif di ${activeLabel}. Tutup sesi tersebut terlebih dahulu sebelum membuka terminal lain.`;
+                            this.triggerToast(errorMsg);
+                            this.openingPinError = errorMsg;
+                            return;
+                        }
+
+                        // Jika terminal yang dipilih adalah terminal aktifnya sendiri, langsung lanjutkan sesi
+                        if (term && term.id === staffActive.terminalId) {
+                            this.resumeActiveSession();
+                            return;
+                        }
                     }
 
                     // Sesi kasir aktif milik sendiri: langsung masuk tanpa input modal uang awal ulang
@@ -544,10 +663,10 @@
                 calcDenomTotal() {
                     let total = 0;
                     this.currentDenomList.forEach(item => {
-                        let cnt = parseInt(item.count) || 0;
-                        total += cnt * item.value;
+                        let cnt = parseInt(item.count, 10) || 0;
+                        total += Math.round(cnt * item.value);
                     });
-                    this.denomTotal = total;
+                    this.denomTotal = Math.round(total);
                 },
 
                 generateCatatanOpening() {
@@ -602,18 +721,61 @@
                 },
 
                 submitOpening() {
+                    // Double-submission Guard
+                    if (this.isOpeningSubmitting) return;
+
                     const staff = this.selectedStaffObj;
-                    if (!this.staffPinInput || this.staffPinInput.length < 4) {
-                        this.openingPinError = 'Masukkan PIN pribadi petugas (Demo PIN: 123456).';
-                        return;
+                    const term = this.selectedTerminalObj;
+
+                    // 1. Validasi Global: Cek apakah kasir ini sudah punya sesi OPEN di terminal lain
+                    const staffActive = this.getActiveSessionForStaff(staff.id);
+                    if (staffActive) {
+                        const activeLabel = staffActive.terminalLabel || this.formatShiftLabel(staffActive.terminalId);
+
+                        // Kasus A: Kasir mencoba membuka terminal berbeda padahal masih OPEN di terminal lain
+                        if (term && term.id !== staffActive.terminalId) {
+                            const errorMsg = `Anda masih memiliki sesi aktif di ${activeLabel}. Tutup sesi tersebut terlebih dahulu sebelum membuka terminal lain.`;
+                            this.openingPinError = errorMsg;
+                            this.triggerToast(errorMsg);
+                            return;
+                        }
+
+                        // Kasus B: Kasir mencoba membuka terminal yang sama padahal sesinya sudah OPEN
+                        if (term && term.id === staffActive.terminalId) {
+                            this.openingPinError = `Anda sudah memiliki sesi aktif di ${activeLabel}. Melanjutkan sesi berjalan...`;
+                            this.triggerToast(`Sesi di ${activeLabel} sudah aktif. Melanjutkan sesi berjalan.`);
+                            this.showOpeningModal = false;
+                            this.resumeActiveSession();
+                            return;
+                        }
                     }
-                    if (this.staffPinInput !== staff.pin && this.staffPinInput !== '123456') {
-                        this.openingPinError = 'PIN petugas tidak sesuai. Gunakan PIN: 123456.';
+
+                    // 2. Validasi Terminal Target: Cegah pembukaan terminal yang sedang dipakai petugas lain
+                    if (term && term.activeCashierId && term.activeSessionId && term.activeCashierId !== staff.id) {
+                        const errorMsg = `Terminal ${term.label} sedang digunakan oleh ${term.activeCashierName || 'Petugas Lain'}.`;
+                        this.openingPinError = errorMsg;
+                        this.triggerToast(errorMsg);
                         return;
                     }
 
-                    const term = this.selectedTerminalObj;
+                    // 3. Validasi PIN Petugas (Simulasi Demo PIN: 123456)
+                    if (!this.staffPinInput || this.staffPinInput.length < 4) {
+                        this.openingPinError = 'Masukkan PIN pribadi petugas (Simulasi Demo PIN: 123456).';
+                        return;
+                    }
+                    if (this.staffPinInput !== staff.pin && this.staffPinInput !== '123456') {
+                        this.openingPinError = 'PIN petugas tidak sesuai. Gunakan Demo PIN: 123456.';
+                        return;
+                    }
+
+                    // 4. Validasi Uang Awal Laci
                     const openingNumeric = this.parseRupiahString(this.kasOpening);
+                    if (isNaN(openingNumeric) || openingNumeric < 0) {
+                        this.openingPinError = 'Nominal uang awal laci tidak valid.';
+                        return;
+                    }
+
+                    this.isOpeningSubmitting = true;
                     const nowTime = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
                     const termNum = (term ? term.id.replace(/\D/g, '') : '1').padStart(2, '0');
                     const nextSeq = String((term ? term.sessionsTodayCount : 0) + 1).padStart(3, '0');
@@ -703,6 +865,7 @@
                         window.location.href = '/pos';
                     } else {
                         this.showOpeningModal = false;
+                        this.isOpeningSubmitting = false;
                         this.triggerToast(`Sesi ${newSessionId} aktif untuk ${staff.name} di ${this.formatShiftLabel(this.selectedShift)}!`);
                     }
                 },
@@ -730,19 +893,28 @@
                 },
 
                 submitCashMovement() {
-                    const amt = parseInt((this.newMovement.amount || '').toString().replace(/\D/g, ''), 10) || 0;
-                    if (amt <= 0) return;
+                    const rawVal = (this.newMovement.amount || '').toString().replace(/\D/g, '');
+                    const amt = parseInt(rawVal, 10) || 0;
+                    if (amt <= 0) {
+                        this.triggerToast('Nominal pergerakan kas harus lebih besar dari Rp 0.');
+                        return;
+                    }
+                    const currentDrawerCash = this.expectedClosingCash;
+                    if ((this.newMovement.type === 'PENGELUARAN_TUNAI' || this.newMovement.type === 'CASH_DROP' || this.newMovement.type === 'RETUR_TUNAI') && amt > currentDrawerCash) {
+                        this.triggerToast(`Nominal (${this.formatRupiah(amt)}) melebihi saldo kas laci saat ini (${this.formatRupiah(currentDrawerCash)}).`);
+                        return;
+                    }
                     const nowTime = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
                     let direction = 'out';
                     if (this.newMovement.type === 'KAS_MASUK') {
                         direction = 'in';
-                        this.activeSession.cashIn = (Number(this.activeSession.cashIn) || 0) + amt;
+                        this.activeSession.cashIn = Math.round((Number(this.activeSession.cashIn) || 0) + amt);
                     } else if (this.newMovement.type === 'PENGELUARAN_TUNAI') {
-                        this.activeSession.cashOut = (Number(this.activeSession.cashOut) || 0) + amt;
+                        this.activeSession.cashOut = Math.round((Number(this.activeSession.cashOut) || 0) + amt);
                     } else if (this.newMovement.type === 'RETUR_TUNAI') {
-                        this.activeSession.cashReturn = (Number(this.activeSession.cashReturn) || 0) + amt;
+                        this.activeSession.cashReturn = Math.round((Number(this.activeSession.cashReturn) || 0) + amt);
                     } else if (this.newMovement.type === 'CASH_DROP') {
-                        this.activeSession.cashDrop = (Number(this.activeSession.cashDrop) || 0) + amt;
+                        this.activeSession.cashDrop = Math.round((Number(this.activeSession.cashDrop) || 0) + amt);
                     }
 
                     const defaultLabels = {
@@ -798,10 +970,13 @@
                 },
 
                 lockBlindCountAndProceed() {
-                    if (!this.closingWizard.actualCashStr && this.closingWizard.actualCashNum <= 0) {
+                    const raw = (this.closingWizard.actualCashStr || '').toString().replace(/\D/g, '');
+                    const num = parseInt(raw, 10);
+                    if (isNaN(num) || num < 0 || (!raw && this.closingWizard.actualCashNum <= 0)) {
                         this.closingWizard.errorMsg = 'Wajib memasukkan hasil hitung fisik uang di laci terlebih dahulu (Opsi A - Blind Cash Count).';
                         return;
                     }
+                    this.closingWizard.actualCashNum = num;
                     this.closingWizard.errorMsg = '';
                     this.closingWizard.blindLocked = true;
                     this.closingWizard.step = 2;

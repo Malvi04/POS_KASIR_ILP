@@ -85,178 +85,209 @@
         setTimeout(() => { this.showToast = false; }, 3200);
     },
 
-    partners: [
-        {
-            id: 5,
-            key: 'dapur_bu_eni',
-            initial: 'D',
-            name: 'Dapur Bu Eni - Keripik Nusantara',
-            location: 'Jakarta Timur, DKI Jakarta',
-            category: 'Snack',
-            sku: 8,
-            stockStatus: 'aman',
-            stockLabel: 'Aman',
-            totalSales: 'Rp 6.450.000',
-            status: 'AKTIF',
-            regCode: 'UMKM-JKT-042',
-            picWhatsapp: 'Ibu Eni Suhartini - 0813-8899-7711',
-            bankName: 'BCA',
-            bankAccount: '8830-192-881',
-            bankHolder: 'a/n Dapur Eni Nusantara',
-            phone: '0813-8899-7711'
-        },
-        {
-            id: 1,
-            key: 'keripik_ibu_siti',
-            initial: 'K',
-            name: 'Keripik Ibu Siti',
-            location: 'Sleman, Yogyakarta',
-            category: 'Snack',
-            sku: 12,
-            stockStatus: 'aman',
-            stockLabel: 'Aman',
-            totalSales: 'Rp 4.250.000',
-            status: 'AKTIF',
-            regCode: 'UMKM-YGY-018',
-            picWhatsapp: 'Ibu Siti Aminah - 0812-8890-1122',
-            bankName: 'BRI',
-            bankAccount: '0341-01-029384-502',
-            bankHolder: 'a/n Keripik Ibu Siti Sleman',
-            phone: '0812-8890-1122'
-        },
-        {
-            id: 2,
-            key: 'batik_cantik_arum',
-            initial: 'B',
-            name: 'Batik Cantik Arum',
-            location: 'Solo, Jawa Tengah',
-            category: 'Kerajinan',
-            sku: 45,
-            stockStatus: 'restock',
-            stockLabel: 'Perlu Restock',
-            totalSales: 'Rp 15.800.000',
-            status: 'AKTIF',
-            regCode: 'UMKM-SLO-009',
-            picWhatsapp: 'Ibu Arum Kusuma - 0813-4455-9900',
-            bankName: 'MANDIRI',
-            bankAccount: '138-00-1928374-2',
-            bankHolder: 'a/n Galeri Batik Cantik Arum',
-            phone: '0813-4455-9900'
-        },
-        {
-            id: 3,
-            key: 'madu_hutan_asli',
-            initial: 'M',
-            name: 'Madu Hutan Asli',
-            location: 'Bogor, Jawa Barat',
-            category: 'Minuman',
-            sku: 5,
-            stockStatus: 'aman',
-            stockLabel: 'Aman',
-            totalSales: 'Rp 2.100.000',
-            status: 'AKTIF',
-            regCode: 'UMKM-BGR-027',
-            picWhatsapp: 'Bpk. Hendra Wijaya - 0857-1122-3344',
-            bankName: 'BSI',
-            bankAccount: '7192-8374-11',
-            bankHolder: 'a/n Koperasi Madu Hutan Bogor',
-            phone: '0857-1122-3344'
-        },
-        {
-            id: 4,
-            key: 'telor_asin_brebes',
-            initial: 'T',
-            name: 'Telor Asin Brebes Maknyus',
-            location: 'Brebes, Jawa Tengah',
-            category: 'Snack',
-            sku: 2,
-            stockStatus: 'kosong',
-            stockLabel: 'Kosong',
-            totalSales: 'Rp 0',
-            status: 'NON-AKTIF',
-            regCode: 'UMKM-BRB-034',
-            picWhatsapp: 'Bpk. Wahyu Hidayat - 0819-7788-5566',
-            bankName: 'BNI',
-            bankAccount: '0892-1123-44',
-            bankHolder: 'a/n Telor Asin Maknyus Brebes',
-            phone: '0819-7788-5566'
+    initUmkm() {
+        const storedPartners = localStorage.getItem('pos_ilp_umkm_partners_v1');
+        if (storedPartners) {
+            try { this.partners = JSON.parse(storedPartners); } catch(e) { this.partners = this.getDefaultPartners(); }
+        } else {
+            this.partners = this.getDefaultPartners();
+            this.saveUmkm();
         }
-    ],
 
-    partnerProducts: [
-        {
-            id: 101,
-            partnerKey: 'dapur_bu_eni',
-            partnerName: 'Dapur Bu Eni - Keripik Nusantara',
-            regCode: 'UMKM-JKT-042',
-            name: 'Keripik Singkong Balado Renyah 150gr',
-            barcode: 'KNS-8991204-551',
-            category: 'Makanan Ringan Tradisional',
-            shelfLife: 'Kemasan Awet (3-6 Bln)',
-            expDate: '11/14/2025',
-            netPrice: 8500,
-            posMargin: 1500,
-            sellPrice: 10000,
-            stockQty: 50,
-            rack: 'Cabang Utama - Rak Display UMKM 01',
-            returnPolicy: 'Retur 100% ke Mitra UMKM',
-            settlement: 'Mingguan (Tiap Jumat Sore)'
-        },
-        {
-            id: 102,
-            partnerKey: 'keripik_ibu_siti',
-            partnerName: 'Keripik Ibu Siti',
-            regCode: 'UMKM-YGY-018',
-            name: 'Keripik Singkong Pedas Daun Jeruk 250g',
-            barcode: 'KNS-8991204-118',
-            category: 'Makanan Ringan Tradisional',
-            shelfLife: 'Kemasan Awet (3-6 Bln)',
-            expDate: '10/20/2025',
-            netPrice: 12750,
-            posMargin: 2250,
-            sellPrice: 15000,
-            stockQty: 5,
-            rack: 'Cabang Utama - Rak Display UMKM 01',
-            returnPolicy: 'Retur 100% ke Mitra UMKM',
-            settlement: 'Mingguan (Tiap Jumat Sore)'
-        },
-        {
-            id: 103,
-            partnerKey: 'batik_cantik_arum',
-            partnerName: 'Batik Cantik Arum',
-            regCode: 'UMKM-SLO-009',
-            name: 'Kain Batik Parang Klasik Solo',
-            barcode: 'KNS-8991204-210',
-            category: 'Kerajinan & Wastra Lokal',
-            shelfLife: 'Kemasan Awet (Non-Expired)',
-            expDate: '-',
-            netPrice: 72250,
-            posMargin: 12750,
-            sellPrice: 85000,
-            stockQty: 2,
-            rack: 'Cabang Utama - Galeri Kerajinan 02',
-            returnPolicy: 'Retur 100% ke Mitra UMKM',
-            settlement: 'Bulanan (Tanggal 1)'
-        },
-        {
-            id: 104,
-            partnerKey: 'madu_hutan_asli',
-            partnerName: 'Madu Hutan Asli',
-            regCode: 'UMKM-BGR-027',
-            name: 'Madu Hutan Odeng Murni 350ml',
-            barcode: 'KNS-8991204-305',
-            category: 'Minuman Herbal & Kesehatan',
-            shelfLife: 'Kemasan Awet (3-6 Bln)',
-            expDate: '12/30/2025',
-            netPrice: 55250,
-            posMargin: 9750,
-            sellPrice: 65000,
-            stockQty: 28,
-            rack: 'Cabang Utama - Rak Kesehatan 03',
-            returnPolicy: 'Diskon Clearance Toko (-30%)',
-            settlement: 'Bi-Weekly (2 Minggu Sekali)'
+        const storedProducts = localStorage.getItem('pos_ilp_umkm_products_v1');
+        if (storedProducts) {
+            try { this.partnerProducts = JSON.parse(storedProducts); } catch(e) { this.partnerProducts = this.getDefaultProducts(); }
+        } else {
+            this.partnerProducts = this.getDefaultProducts();
+            this.saveUmkm();
         }
-    ],
+    },
+
+    saveUmkm() {
+        localStorage.setItem('pos_ilp_umkm_partners_v1', JSON.stringify(this.partners));
+        localStorage.setItem('pos_ilp_umkm_products_v1', JSON.stringify(this.partnerProducts));
+    },
+
+    partners: [],
+
+    getDefaultPartners() {
+        return [
+            {
+                id: 5,
+                key: 'dapur_bu_eni',
+                initial: 'D',
+                name: 'Dapur Bu Eni - Keripik Nusantara',
+                location: 'Jakarta Timur, DKI Jakarta',
+                category: 'Snack',
+                sku: 8,
+                stockStatus: 'aman',
+                stockLabel: 'Aman',
+                totalSales: 'Rp 6.450.000',
+                status: 'AKTIF',
+                regCode: 'UMKM-JKT-042',
+                picWhatsapp: 'Ibu Eni Suhartini - 0813-8899-7711',
+                bankName: 'BCA',
+                bankAccount: '8830-192-881',
+                bankHolder: 'a/n Dapur Eni Nusantara',
+                phone: '0813-8899-7711'
+            },
+            {
+                id: 1,
+                key: 'keripik_ibu_siti',
+                initial: 'K',
+                name: 'Keripik Ibu Siti',
+                location: 'Sleman, Yogyakarta',
+                category: 'Snack',
+                sku: 12,
+                stockStatus: 'aman',
+                stockLabel: 'Aman',
+                totalSales: 'Rp 4.250.000',
+                status: 'AKTIF',
+                regCode: 'UMKM-YGY-018',
+                picWhatsapp: 'Ibu Siti Aminah - 0812-8890-1122',
+                bankName: 'BRI',
+                bankAccount: '0341-01-029384-502',
+                bankHolder: 'a/n Keripik Ibu Siti Sleman',
+                phone: '0812-8890-1122'
+            },
+            {
+                id: 2,
+                key: 'batik_cantik_arum',
+                initial: 'B',
+                name: 'Batik Cantik Arum',
+                location: 'Solo, Jawa Tengah',
+                category: 'Kerajinan',
+                sku: 45,
+                stockStatus: 'restock',
+                stockLabel: 'Perlu Restock',
+                totalSales: 'Rp 15.800.000',
+                status: 'AKTIF',
+                regCode: 'UMKM-SLO-009',
+                picWhatsapp: 'Ibu Arum Kusuma - 0813-4455-9900',
+                bankName: 'MANDIRI',
+                bankAccount: '138-00-1928374-2',
+                bankHolder: 'a/n Galeri Batik Cantik Arum',
+                phone: '0813-4455-9900'
+            },
+            {
+                id: 3,
+                key: 'madu_hutan_asli',
+                initial: 'M',
+                name: 'Madu Hutan Asli',
+                location: 'Bogor, Jawa Barat',
+                category: 'Minuman',
+                sku: 5,
+                stockStatus: 'aman',
+                stockLabel: 'Aman',
+                totalSales: 'Rp 2.100.000',
+                status: 'AKTIF',
+                regCode: 'UMKM-BGR-027',
+                picWhatsapp: 'Bpk. Hendra Wijaya - 0857-1122-3344',
+                bankName: 'BSI',
+                bankAccount: '7192-8374-11',
+                bankHolder: 'a/n Koperasi Madu Hutan Bogor',
+                phone: '0857-1122-3344'
+            },
+            {
+                id: 4,
+                key: 'telor_asin_brebes',
+                initial: 'T',
+                name: 'Telor Asin Brebes Maknyus',
+                location: 'Brebes, Jawa Tengah',
+                category: 'Snack',
+                sku: 2,
+                stockStatus: 'kosong',
+                stockLabel: 'Kosong',
+                totalSales: 'Rp 0',
+                status: 'NON-AKTIF',
+                regCode: 'UMKM-BRB-034',
+                picWhatsapp: 'Bpk. Wahyu Hidayat - 0819-7788-5566',
+                bankName: 'BNI',
+                bankAccount: '0892-1123-44',
+                bankHolder: 'a/n Telor Asin Maknyus Brebes',
+                phone: '0819-7788-5566'
+            }
+        ];
+    },
+
+    partnerProducts: [],
+
+    getDefaultProducts() {
+        return [
+            {
+                id: 101,
+                partnerKey: 'dapur_bu_eni',
+                partnerName: 'Dapur Bu Eni - Keripik Nusantara',
+                regCode: 'UMKM-JKT-042',
+                name: 'Keripik Singkong Balado Renyah 150gr',
+                barcode: 'KNS-8991204-551',
+                category: 'Makanan Ringan Tradisional',
+                shelfLife: 'Kemasan Awet (3-6 Bln)',
+                expDate: '11/14/2025',
+                netPrice: 8500,
+                posMargin: 1500,
+                sellPrice: 10000,
+                stockQty: 50,
+                rack: 'Cabang Utama - Rak Display UMKM 01',
+                returnPolicy: 'Retur 100% ke Mitra UMKM',
+                settlement: 'Mingguan (Tiap Jumat Sore)'
+            },
+            {
+                id: 102,
+                partnerKey: 'keripik_ibu_siti',
+                partnerName: 'Keripik Ibu Siti',
+                regCode: 'UMKM-YGY-018',
+                name: 'Keripik Singkong Pedas Daun Jeruk 250g',
+                barcode: 'KNS-8991204-118',
+                category: 'Makanan Ringan Tradisional',
+                shelfLife: 'Kemasan Awet (3-6 Bln)',
+                expDate: '10/20/2025',
+                netPrice: 12750,
+                posMargin: 2250,
+                sellPrice: 15000,
+                stockQty: 5,
+                rack: 'Cabang Utama - Rak Display UMKM 01',
+                returnPolicy: 'Retur 100% ke Mitra UMKM',
+                settlement: 'Mingguan (Tiap Jumat Sore)'
+            },
+            {
+                id: 103,
+                partnerKey: 'batik_cantik_arum',
+                partnerName: 'Batik Cantik Arum',
+                regCode: 'UMKM-SLO-009',
+                name: 'Kain Batik Parang Klasik Solo',
+                barcode: 'KNS-8991204-210',
+                category: 'Kerajinan & Wastra Lokal',
+                shelfLife: 'Kemasan Awet (Non-Expired)',
+                expDate: '-',
+                netPrice: 72250,
+                posMargin: 12750,
+                sellPrice: 85000,
+                stockQty: 2,
+                rack: 'Cabang Utama - Galeri Kerajinan 02',
+                returnPolicy: 'Retur 100% ke Mitra UMKM',
+                settlement: 'Bulanan (Tanggal 1)'
+            },
+            {
+                id: 104,
+                partnerKey: 'madu_hutan_asli',
+                partnerName: 'Madu Hutan Asli',
+                regCode: 'UMKM-BGR-027',
+                name: 'Madu Hutan Odeng Murni 350ml',
+                barcode: 'KNS-8991204-305',
+                category: 'Minuman Herbal & Kesehatan',
+                shelfLife: 'Kemasan Awet (3-6 Bln)',
+                expDate: '12/30/2025',
+                netPrice: 55250,
+                posMargin: 9750,
+                sellPrice: 65000,
+                stockQty: 28,
+                rack: 'Cabang Utama - Rak Kesehatan 03',
+                returnPolicy: 'Diskon Clearance Toko (-30%)',
+                settlement: 'Bi-Weekly (2 Minggu Sekali)'
+            }
+        ];
+    },
 
     get currentFormMitra() {
         return this.partners.find(p => p.key === this.selectedMitraKey) || this.partners[0];
@@ -320,13 +351,13 @@
             return;
         }
         const mitra = this.currentFormMitra;
-        this.partnerProducts.unshift({
+        const newProduct = {
             id: Date.now(),
             partnerKey: mitra.key,
             partnerName: mitra.name,
             regCode: mitra.regCode,
             name: this.formProductName.trim(),
-            barcode: this.formBarcode.trim() || 'KNS-8991204-999',
+            barcode: this.formBarcode.trim() || ('KNS-' + Date.now()),
             category: this.formProductCategory,
             shelfLife: this.formShelfLife === 'awet' ? 'Kemasan Awet (3-6 Bln)' : 'Cepat Basi (< 3 Hari)',
             expDate: this.formExpDate,
@@ -337,11 +368,35 @@
             rack: this.formRackLocation,
             returnPolicy: this.formReturnPolicy === 'retur_100' ? 'Retur 100% ke Mitra UMKM' : 'Diskon Clearance Toko (-30%)',
             settlement: this.formSettlement === 'mingguan' ? 'Mingguan (Tiap Jumat Sore)' : (this.formSettlement === 'biweekly' ? 'Bi-Weekly (2 Minggu Sekali)' : 'Bulanan (Tanggal 1)')
-        });
+        };
+
+        this.partnerProducts.unshift(newProduct);
         mitra.sku = (parseInt(mitra.sku) || 0) + 1;
+        this.saveUmkm();
+
+        // Also sync product into pos_ilp_inventory_products_v1 so it is available in POS kasir!
+        const rawInventory = localStorage.getItem('pos_ilp_inventory_products_v1');
+        if (rawInventory) {
+            try {
+                let inv = JSON.parse(rawInventory);
+                inv.unshift({
+                    sku: newProduct.barcode,
+                    barcode: newProduct.barcode,
+                    nama: newProduct.name + ' (' + mitra.name + ')',
+                    kategori: 'Konsinyasi UMKM',
+                    hargaBeli: newProduct.netPrice,
+                    hargaJual: newProduct.sellPrice,
+                    stok: newProduct.stockQty,
+                    satuan: 'Pcs',
+                    status: 'AKTIF'
+                });
+                localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(inv));
+            } catch(e) {}
+        }
+
         this.productPartnerFilter = 'all';
         this.subPage = 'produk';
-        this.triggerToast('Produk konsinyasi (' + this.formProductName.trim() + ') berhasil disimpan ke List Produk Mitra!');
+        this.triggerToast('Produk konsinyasi (' + this.formProductName.trim() + ') berhasil disimpan ke katalog master POS & list mitra!');
     },
 
     addPartner() {
@@ -368,6 +423,7 @@
             bankHolder: 'a/n ' + this.newName.trim(),
             phone: this.newPhone
         });
+        this.saveUmkm();
         this.selectedMitraKey = keySlug;
         this.showAddModal = false;
         this.triggerToast('Mitra UMKM (' + this.newName.trim() + ') berhasil didaftarkan.');
@@ -378,14 +434,18 @@
 
     deletePartner(id, name) {
         this.partners = this.partners.filter(p => p.id !== id);
+        this.saveUmkm();
         this.triggerToast('Data mitra (' + name + ') telah dihapus.');
     },
 
     toggleStatus(partner) {
         partner.status = partner.status === 'AKTIF' ? 'NON-AKTIF' : 'AKTIF';
+        this.saveUmkm();
         this.triggerToast('Status mitra (' + partner.name + ') diubah menjadi ' + partner.status + '.');
     }
-}" class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidden">
+}"
+x-init="initUmkm()"
+class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidden">
 
     <!-- Manager Sidebar -->
     <x-manager-sidebar active="umkm" />
@@ -421,7 +481,7 @@
                 <!-- SUB-PAGE 1: DAFTAR MITRA UMKM (MANAJEMEN MITRA UMKM)      -->
                 <!-- ========================================================= -->
                 <div x-show="subPage === 'mitra'" class="space-y-6">
-                    
+
                     <!-- Breadcrumb, Title & Sub-Navigation Buttons -->
                     <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
                         <div>
@@ -576,7 +636,7 @@
                                     <template x-for="partner in filteredPartners" :key="partner.id">
                                         <tr class="hover:bg-slate-50/70 transition-colors"
                                             :class="partner.status === 'NON-AKTIF' ? 'bg-slate-50/30' : ''">
-                                            
+
                                             <!-- 1. NAMA MITRA -->
                                             <td class="py-4 px-6">
                                                 <div class="min-w-0">
@@ -779,7 +839,7 @@
                 <!-- SUB-PAGE 2: LIST PRODUK MITRA UMKM (KATALOG KONSINYASI)   -->
                 <!-- ========================================================= -->
                 <div x-show="subPage === 'produk'" style="display: none;" class="space-y-6">
-                    
+
                     <!-- Top Navigation & Action Bar -->
                     <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
                         <div>
