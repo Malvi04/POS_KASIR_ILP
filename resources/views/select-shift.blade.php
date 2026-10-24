@@ -182,7 +182,7 @@
                                     </template>
                                     <template x-if="term.status === 'ACTIVE_OTHER'">
                                         <span class="text-red-600 font-semibold flex items-center gap-1">
-                                            <span>Aktif: <strong x-text="term.activeCashierName"></strong></span>
+                                            <span>Aktif: <strong x-text="term.activeCashierName || 'Petugas Lain'"></strong></span>
                                         </span>
                                     </template>
                                     <template x-if="term.status === 'ACTIVE_MINE'">
@@ -222,7 +222,7 @@
                         <div x-show="selectedTerminalObj && selectedTerminalObj.status === 'ACTIVE_OTHER'" 
                              class="text-xs text-red-700 font-medium flex items-center gap-1.5 bg-red-50 px-3 py-2 rounded-lg border border-red-200 w-full sm:w-auto">
                             <span class="material-symbols-rounded text-[18px] text-red-500 shrink-0">lock</span>
-                            <span>Kasir sedang aktif digunakan oleh <strong x-text="selectedTerminalObj.activeCashierName"></strong>. Silakan pilih kasir lain.</span>
+                            <span>Kasir sedang aktif digunakan oleh <strong x-text="selectedTerminalObj.activeCashierName || 'Petugas Lain'"></strong>. Silakan pilih kasir lain.</span>
                         </div>
 
                         <!-- Info Kasir ACTIVE_MINE (Sesi Anda Masih Aktif) -->

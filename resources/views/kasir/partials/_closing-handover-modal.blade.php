@@ -252,6 +252,29 @@
                            class="w-full px-3 py-2 rounded-lg border border-red-200 bg-white text-xs text-gray-800 outline-none">
                 </div>
 
+                <!-- Pilihan Tipe Penutupan Kasir -->
+                <div class="space-y-2">
+                    <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider">Tipe Penutupan Kasir</label>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <label class="flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all"
+                               :class="closingWizard.handoverType === 'handover' ? 'border-[#0052cc] bg-blue-50/60 ring-1 ring-[#0052cc]' : 'border-gray-200 bg-white hover:bg-gray-50'">
+                            <input type="radio" value="handover" x-model="closingWizard.handoverType" class="mt-0.5 text-[#0052cc]">
+                            <div>
+                                <span class="block text-xs font-bold text-gray-900">Serah Terima Shift</span>
+                                <span class="block text-[11px] text-gray-500 mt-0.5">Uang fisik ditinggal di laci untuk kasir shift berikutnya</span>
+                            </div>
+                        </label>
+                        <label class="flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all"
+                               :class="closingWizard.handoverType === 'close_only' ? 'border-[#0052cc] bg-blue-50/60 ring-1 ring-[#0052cc]' : 'border-gray-200 bg-white hover:bg-gray-50'">
+                            <input type="radio" value="close_only" x-model="closingWizard.handoverType" class="mt-0.5 text-[#0052cc]">
+                            <div>
+                                <span class="block text-xs font-bold text-gray-900">Tutup Kasir Selesai</span>
+                                <span class="block text-[11px] text-gray-500 mt-0.5">Laci dikosongkan/setor brankas, terminal berstatus kosong</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
                 <!-- Catatan Laci (Opsional) -->
                 <div>
                     <label class="block text-xs font-bold text-gray-700 mb-1">Catatan Laci (Opsional)</label>
@@ -294,9 +317,11 @@
                 <button type="button"
                         x-show="closingWizard.step === 2"
                         @click="completeCloseAndHandover()"
-                        class="px-5 py-2 rounded-xl bg-[#16a34a] hover:bg-[#15803d] text-white text-xs font-bold shadow-sm flex items-center gap-1.5 cursor-pointer">
-                    <span class="material-symbols-rounded text-[16px]">logout</span>
-                    <span>Tutup Sesi Kasir</span>
+                        :disabled="closingWizard.isSubmitting"
+                        :class="closingWizard.isSubmitting ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:bg-[#15803d]'"
+                        class="px-5 py-2 rounded-xl bg-[#16a34a] text-white text-xs font-bold shadow-sm flex items-center gap-1.5">
+                    <span class="material-symbols-rounded text-[16px]" :class="{'animate-spin': closingWizard.isSubmitting}" x-text="closingWizard.isSubmitting ? 'sync' : 'logout'"></span>
+                    <span x-text="closingWizard.isSubmitting ? 'Memproses...' : 'Tutup Sesi Kasir'"></span>
                 </button>
             </div>
         </div>

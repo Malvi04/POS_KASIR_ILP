@@ -35,22 +35,50 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
                 <!-- 1. INFO SESI AKTIF -->
                 <div class="bg-white rounded-2xl border border-gray-200 shadow-xs p-6">
+                    <!-- Banner jika sesi telah ditutup -->
+                    <template x-if="activeSession.status !== 'OPEN'">
+                        <div class="mb-5 p-4 rounded-xl bg-amber-50/90 border border-amber-200 text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                            <div class="flex items-center gap-2.5">
+                                <span class="material-symbols-rounded text-amber-600 text-[22px] shrink-0">info</span>
+                                <div>
+                                    <span>Sesi kasir <strong class="font-mono text-gray-900" x-text="activeSession.sessionId"></strong> telah ditutup pada pukul <strong x-text="activeSession.endedAt || '-'"></strong> (Status: <strong x-text="activeSession.status"></strong>).</span>
+                                    <span class="block text-amber-700 mt-0.5">Laci telah siap/diserahterimakan. Silakan buka sesi baru untuk transaksi berikutnya.</span>
+                                </div>
+                            </div>
+                            <a href="/select-shift" class="px-4 py-2 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-xs flex items-center justify-center gap-1.5 shrink-0 shadow-xs transition-colors">
+                                <span class="material-symbols-rounded text-[16px]">point_of_sale</span>
+                                <span>Pilih Terminal / Buka Sesi</span>
+                            </a>
+                        </div>
+                    </template>
+
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-gray-100">
-                        <h1 class="text-xl font-black text-gray-900">Informasi Sesi Aktif</h1>
+                        <h1 class="text-xl font-black text-gray-900" x-text="activeSession.status === 'OPEN' ? 'Informasi Sesi Aktif' : 'Informasi Sesi Kasir (Ditutup)'">Informasi Sesi Aktif</h1>
 
                         <div class="flex flex-wrap items-center gap-2.5">
-                            <button type="button"
-                                    @click="showCashMovementModal = true"
-                                    class="px-4 py-2.5 rounded-xl bg-white hover:bg-gray-50 text-gray-800 border border-gray-300 font-bold text-xs flex items-center gap-2 cursor-pointer transition-colors">
-                                <span class="material-symbols-rounded text-[18px] text-[#0052cc]">account_balance_wallet</span>
-                                <span>Catat Kas Laci</span>
-                            </button>
-                            <button type="button"
-                                    @click="openClosingWizard()"
-                                    class="px-5 py-2.5 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer transition-colors">
-                                <span class="material-symbols-rounded text-[18px]">lock</span>
-                                <span>Tutup Sesi Kasir</span>
-                            </button>
+                            <template x-if="activeSession.status === 'OPEN'">
+                                <div class="flex items-center gap-2.5">
+                                    <button type="button"
+                                            @click="showCashMovementModal = true"
+                                            class="px-4 py-2.5 rounded-xl bg-white hover:bg-gray-50 text-gray-800 border border-gray-300 font-bold text-xs flex items-center gap-2 cursor-pointer transition-colors">
+                                        <span class="material-symbols-rounded text-[18px] text-[#0052cc]">account_balance_wallet</span>
+                                        <span>Catat Kas Laci</span>
+                                    </button>
+                                    <button type="button"
+                                            @click="openClosingWizard()"
+                                            class="px-5 py-2.5 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer transition-colors">
+                                        <span class="material-symbols-rounded text-[18px]">lock</span>
+                                        <span>Tutup Sesi Kasir</span>
+                                    </button>
+                                </div>
+                            </template>
+                            <template x-if="activeSession.status !== 'OPEN'">
+                                <a href="/select-shift"
+                                   class="px-5 py-2.5 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer transition-colors">
+                                    <span class="material-symbols-rounded text-[18px]">add_circle</span>
+                                    <span>Buka Sesi Baru</span>
+                                </a>
+                            </template>
                         </div>
                     </div>
 
@@ -77,11 +105,17 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <div class="p-4 rounded-xl bg-blue-50/60 border border-blue-200">
                             <div class="flex items-center justify-between">
                                 <span class="text-[10px] font-extrabold text-[#0052cc] uppercase tracking-wider">ID Sesi</span>
-                                <span class="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-100 text-emerald-800">OPEN</span>
+                                <span class="px-2 py-0.5 rounded-full text-[9px] font-black"
+                                      :class="{
+                                          'bg-emerald-100 text-emerald-800': activeSession.status === 'OPEN',
+                                          'bg-slate-200 text-slate-700': activeSession.status === 'CLOSED',
+                                          'bg-amber-100 text-amber-800': activeSession.status === 'PENDING_REVIEW'
+                                      }"
+                                      x-text="activeSession.status">OPEN</span>
                             </div>
                             <div class="text-base font-black font-mono text-[#0052cc] mt-1.5" x-text="activeSession.sessionId">CS-20261019-K01-003</div>
                             <div class="text-xs text-gray-600 mt-0.5">
-                                Mulai <strong x-text="activeSession.startedAt">10:00</strong> • <strong x-text="activeSession.trxCount">28</strong> Transaksi
+                                <span x-text="activeSession.status === 'OPEN' ? 'Mulai ' + activeSession.startedAt : 'Selesai ' + (activeSession.endedAt || '-')"></span> • <strong x-text="activeSession.trxCount">28</strong> Transaksi
                             </div>
                         </div>
 
@@ -260,18 +294,20 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-100">
-                                    <tr class="bg-blue-50/50 font-medium">
-                                        <td class="py-3.5 px-4 font-mono font-black text-[#0052cc]" x-text="activeSession.sessionId"></td>
-                                        <td class="py-3.5 px-4 font-bold text-gray-900" x-text="activeSession.terminalLabel"></td>
-                                        <td class="py-3.5 px-4 font-mono text-blue-700 font-bold" x-text="activeSession.startedAt + ' – Sekarang'"></td>
-                                        <td class="py-3.5 px-4 text-right font-mono font-bold text-gray-900" x-text="formatRupiah(activeSession.openingCash)"></td>
-                                        <td class="py-3.5 px-4 text-right font-mono font-bold text-[#0052cc]" x-text="formatRupiah(expectedClosingCash)"></td>
-                                        <td class="py-3.5 px-4 text-right font-mono text-gray-400">-</td>
-                                        <td class="py-3.5 px-4 text-right font-mono text-gray-400">-</td>
-                                        <td class="py-3.5 px-4 text-center">
-                                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-600 text-white uppercase">OPEN</span>
-                                        </td>
-                                    </tr>
+                                    <template x-if="activeSession.status === 'OPEN'">
+                                        <tr class="bg-blue-50/50 font-medium">
+                                            <td class="py-3.5 px-4 font-mono font-black text-[#0052cc]" x-text="activeSession.sessionId"></td>
+                                            <td class="py-3.5 px-4 font-bold text-gray-900" x-text="activeSession.terminalLabel"></td>
+                                            <td class="py-3.5 px-4 font-mono text-blue-700 font-bold" x-text="activeSession.startedAt + ' – Sekarang'"></td>
+                                            <td class="py-3.5 px-4 text-right font-mono font-bold text-gray-900" x-text="formatRupiah(activeSession.openingCash)"></td>
+                                            <td class="py-3.5 px-4 text-right font-mono font-bold text-[#0052cc]" x-text="formatRupiah(expectedClosingCash)"></td>
+                                            <td class="py-3.5 px-4 text-right font-mono text-gray-400">-</td>
+                                            <td class="py-3.5 px-4 text-right font-mono text-gray-400">-</td>
+                                            <td class="py-3.5 px-4 text-center">
+                                                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-600 text-white uppercase">OPEN</span>
+                                            </td>
+                                        </tr>
+                                    </template>
 
                                     <template x-for="sess in sessionHistory.filter(s => s.cashierId === activeSession.cashierId)" :key="sess.sessionId">
                                         <tr class="hover:bg-slate-50">

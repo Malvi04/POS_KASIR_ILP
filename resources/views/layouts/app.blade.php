@@ -258,13 +258,14 @@
                 closingWizard: {
                     open: false,
                     step: 1, // 1: Blind Count & Hold Cart, 2: Reconciliation & Variance, 3: Handover to Next Staff, 4: Completed Receipt
+                    isSubmitting: false,
                     holdAction: 'inherit', // 'inherit' | 'cancel'
                     actualCashStr: '',
                     actualCashNum: 0,
                     blindLocked: false,
                     varianceCategory: 'Selisih Kembalian Tunai',
                     varianceNote: '',
-                    handoverType: 'direct', // 'direct' | 'pending' | 'final'
+                    handoverType: 'handover', // 'handover' | 'close_only'
                     nextCashierId: 'USR-01',
                     nextCashierPin: '123456',
                     handoverNote: '',
@@ -404,8 +405,12 @@
 
                 syncTerminalStatuses() {
                     this.terminals.forEach(term => {
-                        if (term.activeCashierId || term.activeSessionId) {
+                        if (term.activeCashierId && term.activeSessionId) {
                             term.status = (term.activeCashierId === this.selectedStaffId) ? 'ACTIVE_MINE' : 'ACTIVE_OTHER';
+                        } else if (term.handover) {
+                            term.status = 'HANDOVER_PENDING';
+                        } else {
+                            term.status = 'AVAILABLE';
                         }
                     });
                 },
@@ -768,13 +773,14 @@
                 openClosingWizard() {
                     this.closingWizard.open = true;
                     this.closingWizard.step = 1;
+                    this.closingWizard.isSubmitting = false;
                     this.closingWizard.actualCashStr = '';
                     this.closingWizard.actualCashNum = 0;
                     this.closingWizard.blindLocked = false;
                     this.closingWizard.varianceNote = '';
                     this.closingWizard.handoverNote = '';
                     this.closingWizard.errorMsg = '';
-                    this.closingWizard.handoverType = 'pending';
+                    this.closingWizard.handoverType = 'handover';
                     this.denomListIdr.forEach(item => item.count = 0);
                     this.denomTotal = 0;
                 },
@@ -802,11 +808,15 @@
                 },
 
                 completeCloseAndHandover() {
+                    // Double-submission protection guard
+                    if (this.closingWizard.isSubmitting) return;
+
                     if (this.cashVariance !== 0 && !this.closingWizard.varianceNote.trim()) {
                         this.closingWizard.errorMsg = 'Terdapat selisih kas! Wajib mengisi alasan/keterangan selisih untuk ditinjau Manager.';
                         return;
                     }
                     this.closingWizard.errorMsg = '';
+                    this.closingWizard.isSubmitting = true;
 
                     const nowTime = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
                     const s = this.activeSession;
@@ -839,34 +849,58 @@
                         closeNote: diff === 0
                             ? (this.closingWizard.handoverNote || 'Saldo fisik sesuai perhitungan sistem.')
                             : `[${this.closingWizard.varianceCategory}] ${this.closingWizard.varianceNote}`,
-                        handoverToName: 'Menunggu Kasir Berikutnya',
+                        handoverToName: (this.closingWizard.handoverType === 'handover' || this.closingWizard.handoverType === 'pending')
+                            ? 'Menunggu Kasir Berikutnya'
+                            : 'Tutup Kasir Selesai (Tanpa Serah Terima)',
                         trxCount: s.trxCount || 0,
                         syncStatus: s.isOffline ? 'PENDING_SYNC' : 'SYNCED'
                     };
 
-                    this.sessionHistory.push(closedRecord);
+                    // Prevent duplicate entries in session history
+                    const existingIdx = this.sessionHistory.findIndex(h => h.sessionId === closedRecord.sessionId);
+                    if (existingIdx >= 0) {
+                        this.sessionHistory[existingIdx] = closedRecord;
+                    } else {
+                        this.sessionHistory.push(closedRecord);
+                    }
                     this.closingWizard.lastClosedRecord = closedRecord;
 
+                    // Update Terminal state accurately
                     const term = this.terminals.find(t => t.id === s.terminalId);
                     if (term) {
                         term.sessionsTodayCount = (term.sessionsTodayCount || 1) + 1;
-                        term.status = 'HANDOVER_PENDING';
                         term.activeCashierName = null;
                         term.activeCashierId = null;
-                        term.handover = {
-                            fromSessionId: closedRecord.sessionId,
-                            fromCashierId: closedRecord.cashierId,
-                            fromCashierName: closedRecord.cashierName,
-                            endedAt: nowTime,
-                            expectedCash: exp,
-                            actualCash: act,
-                            variance: diff,
-                            varianceStatus: diff === 0 ? 'SESUAI' : 'PENDING_REVIEW',
-                            varianceNote: closedRecord.closeNote,
-                            heldBillsCount: this.closingWizard.holdAction === 'inherit' ? (s.heldBillsCount || 0) : 0
-                        };
+                        term.activeStartedAt = null;
+                        term.activeSessionId = null; // CRITICAL ROOT CAUSE FIX: Reset activeSessionId so terminal is not treated as in-use!
+
+                        if (this.closingWizard.handoverType === 'handover' || this.closingWizard.handoverType === 'pending') {
+                            term.status = 'HANDOVER_PENDING';
+                            term.handover = {
+                                fromSessionId: closedRecord.sessionId,
+                                fromCashierId: closedRecord.cashierId,
+                                fromCashierName: closedRecord.cashierName,
+                                endedAt: nowTime,
+                                expectedCash: exp,
+                                actualCash: act,
+                                variance: diff,
+                                varianceStatus: diff === 0 ? 'SESUAI' : 'PENDING_REVIEW',
+                                varianceNote: closedRecord.closeNote,
+                                heldBillsCount: this.closingWizard.holdAction === 'inherit' ? (s.heldBillsCount || 0) : 0
+                            };
+                        } else {
+                            term.status = 'AVAILABLE';
+                            term.handover = null;
+                        }
                     }
 
+                    // Update activeSession state to reflect closed status
+                    this.activeSession.status = diff === 0 ? 'CLOSED' : 'PENDING_REVIEW';
+                    this.activeSession.endedAt = nowTime;
+                    this.activeSession.actualClosingCash = act;
+                    this.activeSession.cashVariance = diff;
+
+                    localStorage.setItem('pos_cashier_opened', 'false');
                     this.selectedShift = s.terminalId;
                     localStorage.setItem('pos_kasir_shift', s.terminalId);
                     this.persistAllState();
