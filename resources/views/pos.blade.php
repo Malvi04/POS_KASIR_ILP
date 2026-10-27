@@ -390,8 +390,11 @@
         } else if (method === 'campuran') {
             this.activeSession.splitCashPortion = (Number(this.activeSession.splitCashPortion) || 0) + this.paymentModal.splitCash;
             this.activeSession.splitNonCashPortion = (Number(this.activeSession.splitNonCashPortion) || 0) + this.paymentModal.splitNonCash;
+        } else if (method === 'kredit') {
+            this.activeSession.creditSales = (Number(this.activeSession.creditSales) || 0) + this.grandTotal;
         }
         this.activeSession.trxCount = (Number(this.activeSession.trxCount) || 0) + 1;
+        this.recalcClosingFigures();
         this.persistAllState();
 
         // 5. Clear Cart

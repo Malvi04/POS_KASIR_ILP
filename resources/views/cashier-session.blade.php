@@ -59,13 +59,13 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             <template x-if="activeSession.status === 'OPEN'">
                                 <div class="flex items-center gap-2.5">
                                     <button type="button"
-                                            @click="showCashMovementModal = true"
+                                            @click="$dispatch('open-cash-movement'); showCashMovementModal = true"
                                             class="px-4 py-2.5 rounded-xl bg-white hover:bg-gray-50 text-gray-800 border border-gray-300 font-bold text-xs flex items-center gap-2 cursor-pointer transition-colors">
                                         <span class="material-symbols-rounded text-[18px] text-[#0052cc]">account_balance_wallet</span>
                                         <span>Catat Kas Laci</span>
                                     </button>
                                     <button type="button"
-                                            @click="openClosingWizard()"
+                                            @click="$dispatch('open-closing-wizard'); openClosingWizard()"
                                             class="px-5 py-2.5 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer transition-colors">
                                         <span class="material-symbols-rounded text-[18px]">lock</span>
                                         <span>Tutup Sesi Kasir</span>
@@ -300,7 +300,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                             <td class="py-3.5 px-4 font-bold text-gray-900" x-text="activeSession.terminalLabel"></td>
                                             <td class="py-3.5 px-4 font-mono text-blue-700 font-bold" x-text="activeSession.startedAt + ' – Sekarang'"></td>
                                             <td class="py-3.5 px-4 text-right font-mono font-bold text-gray-900" x-text="formatRupiah(activeSession.openingCash)"></td>
-                                            <td class="py-3.5 px-4 text-right font-mono font-bold text-[#0052cc]" x-text="formatRupiah(expectedClosingCash)"></td>
+                                            <td class="py-3.5 px-4 text-right font-mono font-bold text-[#0052cc]" x-text="formatRupiah(getExpectedClosingCash())"></td>
                                             <td class="py-3.5 px-4 text-right font-mono text-gray-400">-</td>
                                             <td class="py-3.5 px-4 text-right font-mono text-gray-400">-</td>
                                             <td class="py-3.5 px-4 text-center">

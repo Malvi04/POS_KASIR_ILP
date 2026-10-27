@@ -178,17 +178,17 @@
 
                     <div class="mt-3 flex flex-wrap items-center gap-2">
                         <button type="button"
-                                @click="setQuickActualCash(expectedClosingCash)"
+                                @click="setQuickActualCash(getExpectedClosingCash())"
                                 class="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[11px] font-bold cursor-pointer">
-                            Sesuai Sistem (<span x-text="formatRupiah(expectedClosingCash)"></span>)
+                            Sesuai Sistem (<span x-text="formatRupiah(getExpectedClosingCash())"></span>)
                         </button>
                         <button type="button"
-                                @click="setQuickActualCash(expectedClosingCash - 10000)"
+                                @click="setQuickActualCash(getExpectedClosingCash() - 10000)"
                                 class="px-2.5 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-[11px] font-bold cursor-pointer">
                             Kurang Rp 10.000
                         </button>
                         <button type="button"
-                                @click="setQuickActualCash(expectedClosingCash + 5000)"
+                                @click="setQuickActualCash(getExpectedClosingCash() + 5000)"
                                 class="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-[11px] font-bold cursor-pointer">
                             Lebih Rp 5.000
                         </button>
@@ -209,7 +209,7 @@
                     </div>
                     <div class="flex justify-between text-emerald-700">
                         <span>(+) Kas Masuk</span>
-                        <span class="font-mono font-bold" x-text="'+ ' + formatRupiah(activeSession.cashIn)"></span>
+                        <span class="font-mono font-bold" x-text="'+ ' + formatRupiah(Number(activeSession.cashIn)||0)"></span>
                     </div>
                     <div class="flex justify-between text-red-600">
                         <span>(-) Retur &amp; Kas Keluar</span>
@@ -217,12 +217,12 @@
                     </div>
                     <div class="flex justify-between text-amber-700">
                         <span>(-) Setor Brankas</span>
-                        <span class="font-mono font-bold" x-text="'- ' + formatRupiah(activeSession.cashDrop)"></span>
+                        <span class="font-mono font-bold" x-text="'- ' + formatRupiah(Number(activeSession.cashDrop)||0)"></span>
                     </div>
 
                     <div class="pt-2 border-t border-gray-300 flex justify-between items-center text-sm">
                         <span class="font-black text-gray-900">Kas Sistem</span>
-                        <span class="font-mono font-black text-[#0052cc]" x-text="formatRupiah(expectedClosingCash)"></span>
+                        <span class="font-mono font-black text-[#0052cc]" x-text="formatRupiah(getExpectedClosingCash())"></span>
                     </div>
                     <div class="flex justify-between items-center text-sm">
                         <span class="font-black text-gray-900">Kas Fisik Laci</span>
@@ -231,14 +231,14 @@
 
                     <!-- Selisih -->
                     <div class="p-3 rounded-xl flex items-center justify-between mt-2"
-                         :class="cashVariance === 0 ? 'bg-emerald-100/80 border border-emerald-300 text-emerald-900' : 'bg-red-100/80 border border-red-300 text-red-900'">
-                        <span class="font-black text-xs uppercase" x-text="cashVariance === 0 ? 'SALDO SESUAI' : 'SELISIH KAS'"></span>
-                        <span class="font-mono font-black text-base" x-text="cashVariance > 0 ? '+' + formatRupiah(cashVariance) : formatRupiah(cashVariance)"></span>
+                         :class="getCashVariance() === 0 ? 'bg-emerald-100/80 border border-emerald-300 text-emerald-900' : 'bg-red-100/80 border border-red-300 text-red-900'">
+                        <span class="font-black text-xs uppercase" x-text="getCashVariance() === 0 ? 'SALDO SESUAI' : 'SELISIH KAS'"></span>
+                        <span class="font-mono font-black text-base" x-text="getCashVariance() > 0 ? '+' + formatRupiah(getCashVariance()) : formatRupiah(getCashVariance())"></span>
                     </div>
                 </div>
 
                 <!-- Form Alasan Selisih -->
-                <div x-show="cashVariance !== 0" class="p-3.5 rounded-xl bg-red-50/60 border border-red-200 space-y-2">
+                <div x-show="getCashVariance() !== 0" class="p-3.5 rounded-xl bg-red-50/60 border border-red-200 space-y-2">
                     <label class="block text-xs font-bold text-red-800">Keterangan Selisih (Wajib)</label>
                     <select x-model="closingWizard.varianceCategory" class="w-full px-3 py-2 rounded-lg border border-red-200 bg-white text-xs font-bold text-gray-800 outline-none">
                         <option value="Selisih Kembalian Tunai">Selisih Kembalian Tunai</option>

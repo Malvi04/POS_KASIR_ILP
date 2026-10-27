@@ -396,26 +396,60 @@
                 },
 
                 // Rumus Saldo Kas Seharusnya (Bagian 5 Dokumen):
-                // Uang Awal + Penerimaan Tunai Bersih + Kas Masuk Lain - Retur Tunai - Pengeluaran Tunai - Uang Ditarik ke Brankas
-                get expectedClosingCash() {
-                    const s = this.activeSession;
+                // Kas Sistem = Uang Awal + Penjualan Tunai + Kas Masuk - Retur & Kas Keluar - Setor Brankas
+                getExpectedClosingCash(session = null) {
+                    const s = session || this.activeSession;
                     if (!s) return 0;
-                    const totalCashSales = Math.round((Number(s.cashSalesNet) || 0) + (Number(s.splitCashPortion) || 0));
-                    return Math.round(
-                        (Number(s.openingCash) || 0)
-                        + totalCashSales
-                        + (Number(s.cashIn) || 0)
-                        - (Number(s.cashReturn) || 0)
-                        - (Number(s.cashOut) || 0)
-                        - (Number(s.cashDrop) || 0)
+                    const opening = Math.round(Number(s.openingCash) || 0);
+                    const cashSalesNet = Math.round(Number(s.cashSalesNet) || 0);
+                    const splitCash = Math.round(Number(s.splitCashPortion) || 0);
+                    const totalCashSales = cashSalesNet + splitCash;
+                    const cashIn = Math.round(Number(s.cashIn) || 0);
+                    const cashReturn = Math.round(Number(s.cashReturn) || 0);
+                    const cashOut = Math.round(Number(s.cashOut) || 0);
+                    const cashDrop = Math.round(Number(s.cashDrop) || 0);
+
+                    return opening + totalCashSales + cashIn - cashReturn - cashOut - cashDrop;
+                },
+
+                // Selisih Kas = Kas Fisik Laci - Kas Sistem
+                getCashVariance(actual = null, session = null) {
+                    const actualCash = actual !== null ? Math.round(Number(actual) || 0) : Math.round(Number(this.closingWizard?.actualCashNum) || 0);
+                    const expected = this.getExpectedClosingCash(session);
+                    return actualCash - expected;
+                },
+
+                recalcClosingFigures() {
+                    const exp = this.getExpectedClosingCash();
+                    const diff = this.getCashVariance();
+                    this.expectedClosingCash = exp;
+                    this.cashVariance = diff;
+                    if (this.activeSession) {
+                        this.activeSession.expectedClosingCash = exp;
+                    }
+                    this.totalNonCashSales = Math.round((Number(this.activeSession?.qrisSales) || 0) + (Number(this.activeSession?.splitNonCashPortion) || 0));
+                    this.totalSessionOmzet = Math.round(
+                        (Number(this.activeSession?.cashSalesNet) || 0)
+                        + (Number(this.activeSession?.splitCashPortion) || 0)
+                        + (Number(this.activeSession?.qrisSales) || 0)
+                        + (Number(this.activeSession?.splitNonCashPortion) || 0)
+                        + (Number(this.activeSession?.creditSales) || 0)
                     );
                 },
+
+                get expectedClosingCash() {
+                    return this.getExpectedClosingCash();
+                },
+
+                set expectedClosingCash(val) {},
 
                 get totalNonCashSales() {
                     const s = this.activeSession;
                     if (!s) return 0;
                     return Math.round((Number(s.qrisSales) || 0) + (Number(s.splitNonCashPortion) || 0));
                 },
+
+                set totalNonCashSales(val) {},
 
                 get totalSessionOmzet() {
                     const s = this.activeSession;
@@ -429,9 +463,13 @@
                     );
                 },
 
+                set totalSessionOmzet(val) {},
+
                 get cashVariance() {
-                    return Math.round((Number(this.closingWizard.actualCashNum) || 0) - this.expectedClosingCash);
+                    return this.getCashVariance();
                 },
+
+                set cashVariance(val) {},
 
                 initOpening() {
                     try {
@@ -468,6 +506,7 @@
                     if (savedStaff) this.selectedStaffId = savedStaff;
 
                     this.syncTerminalStatuses();
+                    this.recalcClosingFigures();
                 },
 
                 syncTerminalStatuses() {
@@ -704,6 +743,7 @@
                     if (this.denomTarget === 'closing') {
                         this.closingWizard.actualCashNum = this.denomTotal;
                         this.closingWizard.actualCashStr = new Intl.NumberFormat('id-ID').format(this.denomTotal);
+                        this.recalcClosingFigures();
                         this.showDenomModal = false;
                         return;
                     }
@@ -859,6 +899,7 @@
                     localStorage.setItem('pos_kasir_staff_id', this.selectedStaffId);
                     localStorage.setItem('pos_cashier_opened', 'true');
                     localStorage.setItem('pos_opened_at', nowTime);
+                    this.recalcClosingFigures();
                     this.persistAllState();
 
                     if (window.location.pathname.includes('/select-shift')) {
@@ -899,7 +940,7 @@
                         this.triggerToast('Nominal pergerakan kas harus lebih besar dari Rp 0.');
                         return;
                     }
-                    const currentDrawerCash = this.expectedClosingCash;
+                    const currentDrawerCash = this.getExpectedClosingCash();
                     if ((this.newMovement.type === 'PENGELUARAN_TUNAI' || this.newMovement.type === 'CASH_DROP' || this.newMovement.type === 'RETUR_TUNAI') && amt > currentDrawerCash) {
                         this.triggerToast(`Nominal (${this.formatRupiah(amt)}) melebihi saldo kas laci saat ini (${this.formatRupiah(currentDrawerCash)}).`);
                         return;
@@ -926,6 +967,8 @@
 
                     this.cashMovements.unshift({
                         id: 'CM-' + Math.floor(100 + Math.random() * 900),
+                        sessionId: this.activeSession.sessionId,
+                        terminalId: this.activeSession.terminalId,
                         time: nowTime,
                         type: this.newMovement.type,
                         label: this.newMovement.note.trim() || defaultLabels[this.newMovement.type],
@@ -934,6 +977,7 @@
                         actor: this.activeSession.cashierName
                     });
 
+                    this.recalcClosingFigures();
                     this.persistAllState();
                     this.showCashMovementModal = false;
                     this.newMovement.amount = '';
@@ -955,6 +999,7 @@
                     this.closingWizard.handoverType = 'handover';
                     this.denomListIdr.forEach(item => item.count = 0);
                     this.denomTotal = 0;
+                    this.recalcClosingFigures();
                 },
 
                 handleActualCashInput() {
@@ -962,11 +1007,14 @@
                     const num = parseInt(raw, 10) || 0;
                     this.closingWizard.actualCashNum = num;
                     this.closingWizard.actualCashStr = raw ? new Intl.NumberFormat('id-ID').format(num) : '';
+                    this.recalcClosingFigures();
                 },
 
                 setQuickActualCash(amount) {
-                    this.closingWizard.actualCashNum = amount;
-                    this.closingWizard.actualCashStr = new Intl.NumberFormat('id-ID').format(amount);
+                    const num = Math.round(Number(amount) || 0);
+                    this.closingWizard.actualCashNum = num;
+                    this.closingWizard.actualCashStr = new Intl.NumberFormat('id-ID').format(num);
+                    this.recalcClosingFigures();
                 },
 
                 lockBlindCountAndProceed() {
@@ -979,6 +1027,7 @@
                     this.closingWizard.actualCashNum = num;
                     this.closingWizard.errorMsg = '';
                     this.closingWizard.blindLocked = true;
+                    this.recalcClosingFigures();
                     this.closingWizard.step = 2;
                 },
 
@@ -986,7 +1035,11 @@
                     // Double-submission protection guard
                     if (this.closingWizard.isSubmitting) return;
 
-                    if (this.cashVariance !== 0 && !this.closingWizard.varianceNote.trim()) {
+                    const exp = this.getExpectedClosingCash();
+                    const act = Math.round(Number(this.closingWizard.actualCashNum) || 0);
+                    const diff = this.getCashVariance();
+
+                    if (diff !== 0 && !this.closingWizard.varianceNote.trim()) {
                         this.closingWizard.errorMsg = 'Terdapat selisih kas! Wajib mengisi alasan/keterangan selisih untuk ditinjau Manager.';
                         return;
                     }
@@ -995,9 +1048,6 @@
 
                     const nowTime = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
                     const s = this.activeSession;
-                    const exp = this.expectedClosingCash;
-                    const act = this.closingWizard.actualCashNum;
-                    const diff = act - exp;
 
                     const closedRecord = {
                         sessionId: s.sessionId,
