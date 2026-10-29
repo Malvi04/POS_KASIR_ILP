@@ -95,11 +95,11 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
                         <div class="p-4 rounded-xl bg-slate-50 border border-gray-200/80">
                             <div class="flex items-center justify-between">
-                                <span class="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">Petugas</span>
+                                <span class="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">Petugas Aktif</span>
                                 <span class="material-symbols-rounded text-emerald-600 text-[20px]">badge</span>
                             </div>
-                            <div class="text-lg font-black text-gray-900 mt-1.5" x-text="activeSession.cashierName">Budi Kurniawan</div>
-                            <div class="text-xs text-gray-500 font-mono mt-0.5" x-text="'NIK: ' + activeSession.cashierNik">NIK: 202409821002</div>
+                            <div class="text-lg font-black text-gray-900 mt-1.5" x-text="activeOperator ? activeOperator.name : activeSession.cashierName">Budi Kurniawan</div>
+                            <div class="text-xs text-gray-500 font-mono mt-0.5" x-text="'NIK: ' + (activeOperator ? activeOperator.nik : activeSession.cashierNik)">NIK: 202409821002</div>
                         </div>
 
                         <div class="p-4 rounded-xl bg-blue-50/60 border border-blue-200">
@@ -217,6 +217,13 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <span>Arus Kas Laci (<span x-text="cashMovements.length"></span>)</span>
                             </button>
                             <button type="button"
+                                    @click="activeTab = 'operators'"
+                                    :class="activeTab === 'operators' ? 'border-[#0052cc] text-[#0052cc] font-black' : 'border-transparent text-gray-500 hover:text-gray-800 font-bold'"
+                                    class="pb-3.5 border-b-2 text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all">
+                                <span class="material-symbols-rounded text-[18px]">switch_account</span>
+                                <span>Pergantian Operator (<span x-text="operatorHistory.length"></span>)</span>
+                            </button>
+                            <button type="button"
                                     @click="activeTab = 'my_sessions'"
                                     :class="activeTab === 'my_sessions' ? 'border-[#0052cc] text-[#0052cc] font-black' : 'border-transparent text-gray-500 hover:text-gray-800 font-bold'"
                                     class="pb-3.5 border-b-2 text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all">
@@ -245,29 +252,29 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             </button>
                         </div>
 
-                        <div class="overflow-x-auto border border-gray-200 rounded-xl">
-                            <table class="w-full text-left border-collapse text-xs">
+                        <div class="overflow-x-auto min-w-0 w-full border border-gray-200 rounded-xl bg-white">
+                            <table class="w-full text-left border-collapse text-xs min-w-[700px]">
                                 <thead>
-                                    <tr class="bg-slate-50 border-b border-gray-200 text-[10px] font-black text-gray-500 uppercase tracking-wider">
-                                        <th class="py-3 px-4">ID &amp; Jam</th>
-                                        <th class="py-3 px-4">Kategori</th>
-                                        <th class="py-3 px-4">Keterangan</th>
-                                        <th class="py-3 px-4">Petugas</th>
-                                        <th class="py-3 px-4 text-right">Nominal</th>
+                                    <tr class="bg-gray-50/80 border-b border-gray-200 text-gray-600 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                        <th class="py-3 px-4 text-left w-[150px]">ID &amp; Jam</th>
+                                        <th class="py-3 px-4 text-left w-[130px]">Kategori</th>
+                                        <th class="py-3 px-4 text-left w-[180px]">Keterangan</th>
+                                        <th class="py-3 px-4 text-left w-[120px]">Petugas</th>
+                                        <th class="py-3 px-4 text-right w-[120px]">Nominal</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-100">
                                     <template x-for="mv in cashMovements" :key="mv.id">
-                                        <tr class="hover:bg-slate-50">
-                                            <td class="py-3 px-4 font-mono text-gray-600" x-text="mv.id + ' • ' + mv.time"></td>
-                                            <td class="py-3 px-4">
+                                        <tr class="hover:bg-blue-50/30 transition-colors">
+                                            <td class="py-3 px-4 font-mono text-gray-600 whitespace-nowrap" x-text="mv.id + ' • ' + mv.time"></td>
+                                            <td class="py-3 px-4 whitespace-nowrap">
                                                 <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold"
                                                       :class="mv.direction === 'in' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-800 border border-amber-200'"
                                                       x-text="mv.type"></span>
                                             </td>
                                             <td class="py-3 px-4 font-medium text-gray-800" x-text="mv.label"></td>
-                                            <td class="py-3 px-4 text-gray-600 font-semibold" x-text="mv.actor"></td>
-                                            <td class="py-3 px-4 text-right font-mono font-bold"
+                                            <td class="py-3 px-4 text-gray-600 font-semibold whitespace-nowrap" x-text="mv.actor"></td>
+                                            <td class="py-3 px-4 text-right font-mono font-bold whitespace-nowrap"
                                                 :class="mv.direction === 'in' ? 'text-emerald-700' : 'text-red-600'"
                                                 x-text="(mv.direction === 'in' ? '+ ' : '- ') + formatRupiah(mv.amount)"></td>
                                         </tr>
@@ -277,50 +284,107 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         </div>
                     </div>
 
+                    <!-- TAB: RIWAYAT PERGANTIAN OPERATOR TERMINAL -->
+                    <div x-show="activeTab === 'operators'" style="display: none;" class="p-6 space-y-4">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h3 class="text-sm font-black text-gray-900">Riwayat Operator Terminal Ini</h3>
+                                <p class="text-xs text-gray-500 mt-0.5">Daftar petugas kasir yang bertugas pada sesi finansial berjalan.</p>
+                            </div>
+                            <span class="text-xs font-bold px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full"
+                                  x-text="'Operator Aktif: ' + (activeOperator ? activeOperator.name : activeSession.cashierName)"></span>
+                        </div>
+
+                        <div class="overflow-x-auto min-w-0 w-full border border-gray-200 rounded-xl bg-white">
+                            <table class="w-full text-left border-collapse text-xs min-w-[700px]">
+                                <thead>
+                                    <tr class="bg-gray-50/80 border-b border-gray-200 text-gray-600 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                        <th class="py-3 px-4 text-left w-[140px]">Waktu</th>
+                                        <th class="py-3 px-4 text-left w-[180px]">Kasir Sebelumnya</th>
+                                        <th class="py-3 px-4 text-left w-[180px]">Kasir Pengganti</th>
+                                        <th class="py-3 px-4 text-left w-[160px]">Alasan</th>
+                                        <th class="py-3 px-4 text-center w-[110px]">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100">
+                                    <template x-for="(op, idx) in operatorHistory" :key="op.id || idx">
+                                        <tr class="hover:bg-blue-50/30 transition-colors">
+                                            <td class="py-3 px-4 font-mono font-bold text-gray-800 whitespace-nowrap" x-text="op.switchedAt"></td>
+                                            <td class="py-3 px-4">
+                                                <span class="font-bold text-gray-700" x-text="op.fromStaff ? op.fromStaff.name : '(Buka Sesi)'"></span>
+                                                <span class="text-[10px] text-gray-400 font-mono block" x-text="op.fromStaff && op.fromStaff.nik ? 'NIK: ' + op.fromStaff.nik : ''"></span>
+                                            </td>
+                                            <td class="py-3 px-4">
+                                                <span class="font-bold text-[#0052cc]" x-text="op.toStaff ? op.toStaff.name : '-'"></span>
+                                                <span class="text-[10px] text-gray-400 font-mono block" x-text="op.toStaff && op.toStaff.nik ? 'NIK: ' + op.toStaff.nik : ''"></span>
+                                            </td>
+                                            <td class="py-3 px-4 font-medium text-gray-600" x-text="op.reason || 'Pergantian Kasir'"></td>
+                                            <td class="py-3 px-4 text-center whitespace-nowrap">
+                                                <template x-if="idx === 0">
+                                                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 uppercase">AKTIF</span>
+                                                </template>
+                                                <template x-if="idx > 0">
+                                                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600 border border-gray-200 uppercase">SELESAI</span>
+                                                </template>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                    <template x-if="operatorHistory.length === 0">
+                                        <tr>
+                                            <td colspan="5" class="p-6 text-center text-gray-400 font-medium">
+                                                Belum ada riwayat pergantian operator pada terminal ini.
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
                     <!-- TAB 2: RIWAYAT SESI SAYA -->
                     <div x-show="activeTab === 'my_sessions'" style="display: none;" class="p-6">
-                        <div class="overflow-x-auto border border-gray-200 rounded-xl">
-                            <table class="w-full text-left border-collapse text-xs">
+                        <div class="overflow-x-auto min-w-0 w-full border border-gray-200 rounded-xl bg-white">
+                            <table class="w-full text-left border-collapse text-xs min-w-[1050px]">
                                 <thead>
-                                    <tr class="bg-slate-50 border-b border-gray-200 text-[10px] font-black text-gray-500 uppercase tracking-wider">
-                                        <th class="py-3.5 px-4">ID Sesi</th>
-                                        <th class="py-3.5 px-4">Terminal</th>
-                                        <th class="py-3.5 px-4">Waktu</th>
-                                        <th class="py-3.5 px-4 text-right">Uang Awal</th>
-                                        <th class="py-3.5 px-4 text-right">Kas Sistem</th>
-                                        <th class="py-3.5 px-4 text-right">Kas Fisik</th>
-                                        <th class="py-3.5 px-4 text-right">Selisih</th>
-                                        <th class="py-3.5 px-4 text-center">Status</th>
+                                    <tr class="bg-gray-50/80 border-b border-gray-200 text-[11px] font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                                        <th class="py-3.5 px-4 text-left w-[130px]">ID Sesi</th>
+                                        <th class="py-3.5 px-4 text-left w-[150px]">Terminal</th>
+                                        <th class="py-3.5 px-4 text-left w-[180px]">Waktu</th>
+                                        <th class="py-3.5 px-4 text-right w-[120px]">Uang Awal</th>
+                                        <th class="py-3.5 px-4 text-right w-[130px]">Kas Sistem</th>
+                                        <th class="py-3.5 px-4 text-right w-[130px]">Kas Fisik</th>
+                                        <th class="py-3.5 px-4 text-right w-[120px]">Selisih</th>
+                                        <th class="py-3.5 px-4 text-center w-[110px]">Status</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-100">
                                     <template x-if="activeSession.status === 'OPEN'">
-                                        <tr class="bg-blue-50/50 font-medium">
-                                            <td class="py-3.5 px-4 font-mono font-black text-[#0052cc]" x-text="activeSession.sessionId"></td>
-                                            <td class="py-3.5 px-4 font-bold text-gray-900" x-text="activeSession.terminalLabel"></td>
-                                            <td class="py-3.5 px-4 font-mono text-blue-700 font-bold" x-text="activeSession.startedAt + ' – Sekarang'"></td>
-                                            <td class="py-3.5 px-4 text-right font-mono font-bold text-gray-900" x-text="formatRupiah(activeSession.openingCash)"></td>
-                                            <td class="py-3.5 px-4 text-right font-mono font-bold text-[#0052cc]" x-text="formatRupiah(getExpectedClosingCash())"></td>
-                                            <td class="py-3.5 px-4 text-right font-mono text-gray-400">-</td>
-                                            <td class="py-3.5 px-4 text-right font-mono text-gray-400">-</td>
-                                            <td class="py-3.5 px-4 text-center">
+                                        <tr class="bg-blue-50/40 font-medium">
+                                            <td class="py-3.5 px-4 font-mono font-black text-[#0052cc] whitespace-nowrap" x-text="activeSession.sessionId"></td>
+                                            <td class="py-3.5 px-4 font-bold text-gray-900 whitespace-nowrap" x-text="activeSession.terminalLabel"></td>
+                                            <td class="py-3.5 px-4 font-mono text-blue-700 font-bold whitespace-nowrap" x-text="activeSession.startedAt + ' – Sekarang'"></td>
+                                            <td class="py-3.5 px-4 text-right font-mono font-bold text-gray-900 whitespace-nowrap" x-text="formatRupiah(activeSession.openingCash)"></td>
+                                            <td class="py-3.5 px-4 text-right font-mono font-bold text-[#0052cc] whitespace-nowrap" x-text="formatRupiah(getExpectedClosingCash())"></td>
+                                            <td class="py-3.5 px-4 text-right font-mono text-gray-400 whitespace-nowrap">-</td>
+                                            <td class="py-3.5 px-4 text-right font-mono text-gray-400 whitespace-nowrap">-</td>
+                                            <td class="py-3.5 px-4 text-center whitespace-nowrap">
                                                 <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-600 text-white uppercase">OPEN</span>
                                             </td>
                                         </tr>
                                     </template>
 
                                     <template x-for="sess in sessionHistory.filter(s => s.cashierId === activeSession.cashierId)" :key="sess.sessionId">
-                                        <tr class="hover:bg-slate-50">
-                                            <td class="py-3.5 px-4 font-mono font-bold text-[#0052cc]" x-text="sess.sessionId"></td>
-                                            <td class="py-3.5 px-4 font-bold text-gray-800" x-text="sess.terminalLabel"></td>
-                                            <td class="py-3.5 px-4 font-mono text-gray-600" x-text="sess.startedAt + ' – ' + sess.endedAt"></td>
-                                            <td class="py-3.5 px-4 text-right font-mono text-gray-700" x-text="formatRupiah(sess.openingCash)"></td>
-                                            <td class="py-3.5 px-4 text-right font-mono text-gray-800" x-text="formatRupiah(sess.expectedClosingCash)"></td>
-                                            <td class="py-3.5 px-4 text-right font-mono font-bold text-gray-900" x-text="formatRupiah(sess.actualClosingCash)"></td>
-                                            <td class="py-3.5 px-4 text-right font-mono font-black"
+                                        <tr class="hover:bg-blue-50/30 transition-colors">
+                                            <td class="py-3.5 px-4 font-mono font-bold text-[#0052cc] whitespace-nowrap" x-text="sess.sessionId"></td>
+                                            <td class="py-3.5 px-4 font-bold text-gray-800 whitespace-nowrap" x-text="sess.terminalLabel"></td>
+                                            <td class="py-3.5 px-4 font-mono text-gray-600 whitespace-nowrap" x-text="sess.startedAt + ' – ' + sess.endedAt"></td>
+                                            <td class="py-3.5 px-4 text-right font-mono text-gray-700 whitespace-nowrap" x-text="formatRupiah(sess.openingCash)"></td>
+                                            <td class="py-3.5 px-4 text-right font-mono text-gray-800 whitespace-nowrap" x-text="formatRupiah(sess.expectedClosingCash)"></td>
+                                            <td class="py-3.5 px-4 text-right font-mono font-bold text-gray-900 whitespace-nowrap" x-text="formatRupiah(sess.actualClosingCash)"></td>
+                                            <td class="py-3.5 px-4 text-right font-mono font-black whitespace-nowrap"
                                                 :class="sess.cashVariance === 0 ? 'text-emerald-600' : 'text-red-600'"
                                                 x-text="formatRupiah(sess.cashVariance)"></td>
-                                            <td class="py-3.5 px-4 text-center">
+                                            <td class="py-3.5 px-4 text-center whitespace-nowrap">
                                                 <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase"
                                                       x-text="sess.status"></span>
                                             </td>

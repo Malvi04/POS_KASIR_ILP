@@ -19,6 +19,7 @@
     selectedRefundDoc: null,
     toastMessage: '',
     showToast: false,
+    refundHistory: [],
 
     // Database Mock Faktur Asli
     fakturDatabase: {
@@ -438,15 +439,15 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <span class="text-xs text-gray-400 font-medium">Centang item dan tentukan kuantitas</span>
                             </div>
 
-                            <div class="overflow-x-auto">
-                                <table class="w-full text-left text-xs border-collapse">
-                                    <thead class="bg-slate-50 border-b border-gray-200 text-gray-500 font-bold uppercase text-[10px] tracking-wider">
+                            <div class="overflow-x-auto min-w-0 w-full">
+                                <table class="w-full text-left text-xs border-collapse min-w-[650px]">
+                                    <thead class="bg-gray-50/80 border-b border-gray-200 text-gray-600 font-bold uppercase text-[11px] tracking-wider whitespace-nowrap">
                                         <tr>
-                                            <th class="px-4 py-3 text-center">PILIH</th>
-                                            <th class="px-4 py-3">PRODUK</th>
-                                            <th class="px-3 py-3 text-center">QTY BELI</th>
-                                            <th class="px-4 py-3 text-center">QTY REFUND</th>
-                                            <th class="px-5 py-3 text-right">NILAI REFUND</th>
+                                            <th class="px-4 py-3 text-center w-[70px]">PILIH</th>
+                                            <th class="px-4 py-3 text-left w-[240px]">PRODUK</th>
+                                            <th class="px-3 py-3 text-center w-[110px]">QTY BELI</th>
+                                            <th class="px-4 py-3 text-center w-[130px]">QTY REFUND</th>
+                                            <th class="px-5 py-3 text-right w-[140px]">NILAI REFUND</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-gray-100">
@@ -566,16 +567,16 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             <span class="text-xs text-gray-500 font-medium" x-text="'Total ' + refundHistory.length + ' dokumen refund tercatat'"></span>
                         </div>
 
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-left border-collapse text-xs">
+                        <div class="overflow-x-auto min-w-0 w-full">
+                            <table class="w-full text-left border-collapse text-xs min-w-[850px]">
                                 <thead>
-                                    <tr class="bg-slate-50 border-b border-gray-200 text-gray-500 font-bold uppercase text-[10px] tracking-wider">
-                                        <th class="px-6 py-3.5">NO. REFUND & WAKTU</th>
-                                        <th class="px-4 py-3.5">FAKTUR ASLI</th>
-                                        <th class="px-4 py-3.5">ALASAN KLAIM</th>
-                                        <th class="px-4 py-3.5 text-right">NILAI REFUND</th>
-                                        <th class="px-4 py-3.5 text-center">STATUS</th>
-                                        <th class="px-6 py-3.5 text-right">BUKTI NOTA</th>
+                                    <tr class="bg-gray-50/80 border-b border-gray-200 text-gray-600 font-bold uppercase text-[11px] tracking-wider whitespace-nowrap">
+                                        <th class="px-6 py-3.5 text-left w-[180px]">NO. REFUND & WAKTU</th>
+                                        <th class="px-4 py-3.5 text-left w-[160px]">FAKTUR ASLI</th>
+                                        <th class="px-4 py-3.5 text-left w-[180px]">ALASAN KLAIM</th>
+                                        <th class="px-4 py-3.5 text-right w-[140px]">NILAI REFUND</th>
+                                        <th class="px-4 py-3.5 text-center w-[120px]">STATUS</th>
+                                        <th class="px-6 py-3.5 text-right w-[140px]">BUKTI NOTA</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-100 text-sm">
@@ -673,15 +674,16 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         </div>
                     </div>
 
-                    <div class="border border-gray-200 rounded-xl overflow-hidden">
-                        <table class="w-full text-left border-collapse">
-                            <thead class="bg-gray-100 font-bold text-gray-600 text-[11px]">
-                                <tr>
-                                    <th class="px-3 py-2">PRODUK</th>
-                                    <th class="px-2 py-2 text-center">QTY</th>
-                                    <th class="px-3 py-2 text-right">TOTAL</th>
-                                </tr>
-                            </thead>
+                    <div class="border border-gray-200 rounded-xl overflow-hidden bg-white">
+                        <div class="overflow-x-auto min-w-0 w-full">
+                            <table class="w-full text-left border-collapse text-xs min-w-[450px]">
+                                <thead class="bg-gray-50/80 border-b border-gray-200 font-bold text-gray-600 text-[11px] uppercase tracking-wider whitespace-nowrap">
+                                    <tr>
+                                        <th class="px-3.5 py-2.5 text-left w-[240px]">PRODUK</th>
+                                        <th class="px-2.5 py-2.5 text-center w-[90px]">QTY</th>
+                                        <th class="px-3.5 py-2.5 text-right w-[120px]">TOTAL</th>
+                                    </tr>
+                                </thead>
                             <tbody class="divide-y divide-gray-100">
                                 <template x-for="(it, idx) in selectedRefundDoc?.items" :key="idx">
                                     <tr>

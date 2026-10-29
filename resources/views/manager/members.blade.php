@@ -311,36 +311,36 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
             <!-- Data Table -->
             <div class="bg-white border border-gray-200 rounded-2xl shadow-xs overflow-hidden flex flex-col mb-6">
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left text-[13px] whitespace-nowrap">
-                        <thead class="bg-gray-50 border-b border-gray-200 text-gray-600 text-[11px] font-bold tracking-wider uppercase">
+                <div class="overflow-x-auto min-w-0 w-full">
+                    <table class="w-full text-left text-[13px] min-w-[950px] border-collapse">
+                        <thead class="bg-gray-50/80 border-b border-gray-200 text-gray-600 text-[11px] font-bold tracking-wider uppercase whitespace-nowrap">
                             <tr>
-                                <th class="px-6 py-4">NAMA ANGGOTA</th>
-                                <th class="px-6 py-4">NIK / ID</th>
-                                <th class="px-6 py-4">DEPARTEMEN</th>
-                                <th class="px-6 py-4 text-right">SISA PLAFON</th>
-                                <th class="px-6 py-4 text-right">TOTAL PIUTANG</th>
-                                <th class="px-6 py-4 text-center">STATUS</th>
-                                <th class="px-6 py-4 text-center">AKSI</th>
+                                <th class="px-6 py-3.5 text-left w-[240px]">NAMA ANGGOTA</th>
+                                <th class="px-6 py-3.5 text-left w-[150px]">NIK / ID</th>
+                                <th class="px-6 py-3.5 text-left w-[160px]">DEPARTEMEN</th>
+                                <th class="px-6 py-3.5 text-right w-[150px]">SISA PLAFON</th>
+                                <th class="px-6 py-3.5 text-right w-[150px]">TOTAL PIUTANG</th>
+                                <th class="px-6 py-3.5 text-center w-[110px]">STATUS</th>
+                                <th class="px-6 py-3.5 text-center w-[120px]">AKSI</th>
                             </tr>
                         </thead>
                         <tbody class="text-gray-700 divide-y divide-gray-100">
                             <template x-for="m in filteredMembers" :key="m.id">
-                                <tr class="hover:bg-gray-50 transition-colors">
-                                    <td class="px-6 py-4">
+                                <tr class="hover:bg-blue-50/30 transition-colors">
+                                    <td class="px-6 py-3.5">
                                         <div class="font-bold text-gray-900 leading-tight" x-text="m.name"></div>
                                         <span class="text-[11px] text-gray-500" x-text="m.phone"></span>
                                     </td>
-                                    <td class="px-6 py-4 font-mono font-medium text-gray-600">
-                                        <span class="block font-bold" x-text="m.nik"></span>
+                                    <td class="px-6 py-3.5 font-mono font-medium text-gray-600 whitespace-nowrap">
+                                        <span class="block font-bold text-xs" x-text="m.nik"></span>
                                         <span class="text-[10px] text-gray-400" x-text="m.id"></span>
                                     </td>
-                                    <td class="px-6 py-4 text-gray-600 font-medium" x-text="m.dept"></td>
-                                    <td class="px-6 py-4 text-right font-mono font-bold text-gray-800" x-text="formatRupiah(Math.max(0, m.creditLimit - m.currentDebt))"></td>
-                                    <td class="px-6 py-4 text-right font-mono font-bold"
+                                    <td class="px-6 py-3.5 text-gray-600 font-medium whitespace-nowrap" x-text="m.dept"></td>
+                                    <td class="px-6 py-3.5 text-right font-mono font-bold text-gray-800 whitespace-nowrap" x-text="formatRupiah(Math.max(0, m.creditLimit - m.currentDebt))"></td>
+                                    <td class="px-6 py-3.5 text-right font-mono font-bold whitespace-nowrap"
                                         :class="m.currentDebt > 0 ? 'text-[#b45309]' : 'text-gray-400'"
                                         x-text="formatRupiah(m.currentDebt)"></td>
-                                    <td class="px-6 py-4 text-center">
+                                    <td class="px-6 py-3.5 text-center whitespace-nowrap">
                                         <button type="button"
                                                 @click="toggleStatus(m)"
                                                 title="Klik untuk ubah status aktif/blokir"
@@ -348,8 +348,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                 :class="m.status === 'AKTIF' ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-red-100 text-red-600 hover:bg-red-200'"
                                                 x-text="m.status"></button>
                                     </td>
-                                    <td class="px-6 py-4 text-center">
-                                        <div class="flex items-center justify-center gap-2">
+                                    <td class="px-6 py-3.5 text-center whitespace-nowrap">
+                                        <div class="inline-flex items-center justify-center gap-1.5">
                                             <a :href="'{{ url('/member-detail') }}?nik=' + encodeURIComponent(m.nik)"
                                                title="Detail Profil & Mutasi"
                                                class="p-1.5 text-gray-500 hover:text-[#0052cc] hover:bg-blue-50 rounded-lg transition-colors">

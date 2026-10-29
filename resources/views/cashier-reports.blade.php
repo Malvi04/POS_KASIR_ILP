@@ -257,71 +257,73 @@ class="flex flex-col h-screen w-full font-sans">
 
                 <!-- Table -->
                 <div class="bg-white rounded-b-xl border border-gray-200 shadow-xs overflow-hidden">
-                    <table class="w-full text-left border-collapse">
-                        <thead>
-                            <tr class="bg-[#f8fafc] border-b border-gray-200 text-gray-500 text-[10px] font-black uppercase tracking-widest">
-                                <th class="px-5 py-3.5">No. Transaksi</th>
-                                <th class="px-5 py-3.5">ID Sesi</th>
-                                <th class="px-5 py-3.5">Petugas Kasir</th>
-                                <th class="px-5 py-3.5">Waktu</th>
-                                <th class="px-5 py-3.5">Metode Bayar</th>
-                                <th class="px-5 py-3.5 text-right">Subtotal</th>
-                                <th class="px-5 py-3.5 text-right">PPN (11%)</th>
-                                <th class="px-5 py-3.5 text-right">Total Transaksi</th>
-                                <th class="px-5 py-3.5 text-center">Status</th>
-                                <th class="px-5 py-3.5 text-center">Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-100 text-xs">
-                            <template x-for="trx in filteredTransactions" :key="trx.id">
-                                <tr class="hover:bg-blue-50/20 transition-colors">
-                                    <td class="px-5 py-3.5 font-mono font-bold text-[#0052cc]" x-text="trx.id"></td>
-                                    <td class="px-5 py-3.5 font-mono text-gray-600" x-text="trx.sessionId"></td>
-                                    <td class="px-5 py-3.5 font-bold text-gray-900" x-text="trx.cashier"></td>
-                                    <td class="px-5 py-3.5 text-gray-600 whitespace-nowrap" x-text="trx.time"></td>
-                                    <td class="px-5 py-3.5">
-                                        <span class="px-2.5 py-1 rounded-full text-[10px] font-extrabold"
-                                              :class="{
-                                                  'bg-emerald-50 text-emerald-700 border border-emerald-200': trx.method === 'TUNAI',
-                                                  'bg-blue-50 text-[#0052cc] border border-blue-200': trx.method === 'QRIS',
-                                                  'bg-orange-50 text-orange-700 border border-orange-200': trx.method === 'KREDIT ANGGOTA',
-                                                  'bg-purple-50 text-purple-700 border border-purple-200': trx.method === 'CAMPURAN'
-                                              }"
-                                              x-text="trx.method"></span>
-                                    </td>
-                                    <td class="px-5 py-3.5 text-right font-mono text-gray-600" x-text="formatRupiah(trx.subtotal || Math.round(trx.total / 1.11))"></td>
-                                    <td class="px-5 py-3.5 text-right font-mono text-gray-500" x-text="formatRupiah(trx.tax || Math.round(trx.total - (trx.total / 1.11)))"></td>
-                                    <td class="px-5 py-3.5 text-right font-mono font-black text-gray-900" x-text="formatRupiah(trx.total)"></td>
-                                    <td class="px-5 py-3.5 text-center">
-                                        <span class="px-2.5 py-0.5 rounded text-[10px] font-black uppercase"
-                                              :class="trx.status === 'SELESAI' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-600 border border-red-200'"
-                                              x-text="trx.status"></span>
-                                    </td>
-                                    <td class="px-5 py-3.5 text-center">
-                                        <div class="flex items-center justify-center gap-1.5">
-                                            <a :href="'{{ url('/kasir/transaksi/riwayat') }}?cari=' + encodeURIComponent(trx.id)"
-                                               title="Buka di Riwayat Transaksi"
-                                               class="p-1 rounded-lg text-gray-500 hover:text-[#0052cc] hover:bg-blue-50 transition-colors">
-                                                <span class="material-symbols-rounded text-[18px]">visibility</span>
-                                            </a>
-                                            <a href="{{ url('/cetak-struk') }}"
-                                               title="Cetak Ulang Struk"
-                                               class="p-1 rounded-lg text-[#0052cc] hover:text-blue-800 hover:bg-blue-50 transition-colors">
-                                                <span class="material-symbols-rounded text-[18px]">print</span>
-                                            </a>
-                                        </div>
+                    <div class="overflow-x-auto min-w-0 w-full">
+                        <table class="w-full text-left border-collapse text-xs min-w-[1250px]">
+                            <thead>
+                                <tr class="bg-gray-50/80 border-b border-gray-200 text-gray-600 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                    <th class="px-5 py-3.5 text-left w-[140px]">No. Transaksi</th>
+                                    <th class="px-5 py-3.5 text-left w-[120px]">ID Sesi</th>
+                                    <th class="px-5 py-3.5 text-left w-[160px]">Petugas Kasir</th>
+                                    <th class="px-5 py-3.5 text-left w-[140px]">Waktu</th>
+                                    <th class="px-5 py-3.5 text-left w-[140px]">Metode Bayar</th>
+                                    <th class="px-5 py-3.5 text-right w-[130px]">Subtotal</th>
+                                    <th class="px-5 py-3.5 text-right w-[110px]">PPN (11%)</th>
+                                    <th class="px-5 py-3.5 text-right w-[140px]">Total Transaksi</th>
+                                    <th class="px-5 py-3.5 text-center w-[110px]">Status</th>
+                                    <th class="px-5 py-3.5 text-center w-[100px]">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 text-xs">
+                                <template x-for="trx in filteredTransactions" :key="trx.id">
+                                    <tr class="hover:bg-blue-50/30 transition-colors">
+                                        <td class="px-5 py-3.5 font-mono font-bold text-[#0052cc] whitespace-nowrap" x-text="trx.id"></td>
+                                        <td class="px-5 py-3.5 font-mono text-gray-600 whitespace-nowrap" x-text="trx.sessionId"></td>
+                                        <td class="px-5 py-3.5 font-bold text-gray-900 whitespace-nowrap" x-text="trx.cashier"></td>
+                                        <td class="px-5 py-3.5 text-gray-600 whitespace-nowrap" x-text="trx.time"></td>
+                                        <td class="px-5 py-3.5 whitespace-nowrap">
+                                            <span class="px-2.5 py-1 rounded-full text-[10px] font-extrabold"
+                                                  :class="{
+                                                      'bg-emerald-50 text-emerald-700 border border-emerald-200': trx.method === 'TUNAI',
+                                                      'bg-blue-50 text-[#0052cc] border border-blue-200': trx.method === 'QRIS',
+                                                      'bg-orange-50 text-orange-700 border border-orange-200': trx.method === 'KREDIT ANGGOTA',
+                                                      'bg-purple-50 text-purple-700 border border-purple-200': trx.method === 'CAMPURAN'
+                                                  }"
+                                                  x-text="trx.method"></span>
+                                        </td>
+                                        <td class="px-5 py-3.5 text-right font-mono text-gray-600 whitespace-nowrap" x-text="formatRupiah(trx.subtotal || Math.round(trx.total / 1.11))"></td>
+                                        <td class="px-5 py-3.5 text-right font-mono text-gray-500 whitespace-nowrap" x-text="formatRupiah(trx.tax || Math.round(trx.total - (trx.total / 1.11)))"></td>
+                                        <td class="px-5 py-3.5 text-right font-mono font-black text-gray-900 whitespace-nowrap" x-text="formatRupiah(trx.total)"></td>
+                                        <td class="px-5 py-3.5 text-center whitespace-nowrap">
+                                            <span class="px-2.5 py-0.5 rounded text-[10px] font-black uppercase"
+                                                  :class="trx.status === 'SELESAI' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-600 border border-red-200'"
+                                                  x-text="trx.status"></span>
+                                        </td>
+                                        <td class="px-5 py-3.5 text-center whitespace-nowrap">
+                                            <div class="inline-flex items-center justify-center gap-1.5">
+                                                <a :href="'{{ url('/kasir/transaksi/riwayat') }}?cari=' + encodeURIComponent(trx.id)"
+                                                   title="Buka di Riwayat Transaksi"
+                                                   class="p-1 rounded-lg text-gray-500 hover:text-[#0052cc] hover:bg-blue-50 transition-colors">
+                                                    <span class="material-symbols-rounded text-[18px]">visibility</span>
+                                                </a>
+                                                <a href="{{ url('/cetak-struk') }}"
+                                                   title="Cetak Ulang Struk"
+                                                   class="p-1 rounded-lg text-[#0052cc] hover:text-blue-800 hover:bg-blue-50 transition-colors">
+                                                    <span class="material-symbols-rounded text-[18px]">print</span>
+                                                </a>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
+                                <tr x-show="filteredTransactions.length === 0">
+                                    <td colspan="10" class="text-center py-12 text-gray-400">
+                                        <span class="material-symbols-rounded text-4xl mb-2 text-gray-300">receipt_long</span>
+                                        <p class="font-bold text-gray-600">Tidak ada transaksi yang cocok dengan filter</p>
+                                        <p class="text-xs text-gray-400 mt-0.5">Silakan sesuaikan filter sesi, metode bayar, atau periode.</p>
                                     </td>
                                 </tr>
-                            </template>
-                            <tr x-show="filteredTransactions.length === 0">
-                                <td colspan="10" class="text-center py-12 text-gray-400">
-                                    <span class="material-symbols-rounded text-4xl mb-2 text-gray-300">receipt_long</span>
-                                    <p class="font-bold text-gray-600">Tidak ada transaksi yang cocok dengan filter</p>
-                                    <p class="text-xs text-gray-400 mt-0.5">Silakan sesuaikan filter sesi, metode bayar, atau periode.</p>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
             </main>

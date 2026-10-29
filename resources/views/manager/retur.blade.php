@@ -568,7 +568,7 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
                     </div>
 
                     <!-- Responsive Table Container -->
-                    <div class="overflow-x-auto">
+                    <div class="overflow-x-auto min-w-0 w-full">
                         <table class="w-full text-left border-collapse min-w-[1160px]">
                             <thead>
                                 <tr class="bg-[#f8fafc] border-b border-slate-200/80 text-[10.5px] font-extrabold text-slate-500 uppercase tracking-wider">

@@ -352,35 +352,35 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             </div>
                         </div>
 
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-left border-collapse text-xs">
+                        <div class="overflow-x-auto min-w-0 w-full">
+                            <table class="w-full text-left border-collapse text-xs min-w-[850px]">
                                 <thead>
-                                    <tr class="bg-gray-50 border-b border-gray-200 text-gray-500 text-[10px] font-black uppercase tracking-wider">
-                                        <th class="py-3 px-6">Terminal Kasir</th>
-                                        <th class="py-3 px-6">Nama Staf</th>
-                                        <th class="py-3 px-6 text-center">Masuk</th>
-                                        <th class="py-3 px-6 text-center">Pulang</th>
-                                        <th class="py-3 px-6">Status / Keterangan</th>
-                                        <th class="py-3 px-6">Lokasi Cabang</th>
+                                    <tr class="bg-gray-50/80 border-b border-gray-200 text-gray-600 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                        <th class="py-3.5 px-6 text-left w-[150px]">Terminal Kasir</th>
+                                        <th class="py-3.5 px-6 text-left w-[180px]">Nama Staf</th>
+                                        <th class="py-3.5 px-6 text-center w-[110px]">Masuk</th>
+                                        <th class="py-3.5 px-6 text-center w-[110px]">Pulang</th>
+                                        <th class="py-3.5 px-6 text-left w-[150px]">Status / Keterangan</th>
+                                        <th class="py-3.5 px-6 text-left w-[150px]">Lokasi Cabang</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-100">
                                     <template x-for="row in filteredAttendance" :key="row.id">
-                                        <tr class="hover:bg-gray-50/70 transition-colors">
-                                            <td class="py-3.5 px-6 font-bold text-gray-800" x-text="row.terminal"></td>
+                                        <tr class="hover:bg-blue-50/30 transition-colors">
+                                            <td class="py-3.5 px-6 font-bold text-gray-800 whitespace-nowrap" x-text="row.terminal"></td>
                                             <td class="py-3.5 px-6">
                                                 <div class="font-bold text-gray-900" x-text="row.staffName"></div>
                                             </td>
-                                            <td class="py-3.5 px-6 text-center font-mono font-bold"
+                                            <td class="py-3.5 px-6 text-center font-mono font-bold whitespace-nowrap"
                                                 :class="row.status === 'TERLAMBAT' ? 'text-red-600' : 'text-gray-800'"
                                                 x-text="row.checkIn"></td>
-                                            <td class="py-3.5 px-6 text-center font-mono font-bold text-gray-800" x-text="row.checkOut"></td>
-                                            <td class="py-3.5 px-6">
+                                            <td class="py-3.5 px-6 text-center font-mono font-bold text-gray-800 whitespace-nowrap" x-text="row.checkOut"></td>
+                                            <td class="py-3.5 px-6 whitespace-nowrap">
                                                 <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
                                                       :class="row.status === 'TERLAMBAT' ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'"
                                                       x-text="row.status === 'TERLAMBAT' ? 'Terlambat' : 'Tepat Waktu'"></span>
                                             </td>
-                                            <td class="py-3.5 px-6 text-gray-600" x-text="row.branch"></td>
+                                            <td class="py-3.5 px-6 text-gray-600 whitespace-nowrap" x-text="row.branch"></td>
                                         </tr>
                                     </template>
                                     <tr x-show="filteredAttendance.length === 0">
@@ -455,64 +455,66 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                 </div>
 
                 <div class="bg-white border border-gray-200 rounded-2xl shadow-xs overflow-hidden">
-                    <table class="w-full text-left text-xs">
-                        <thead class="bg-gray-50 border-b border-gray-200 text-gray-500 text-[10px] font-black uppercase tracking-wider">
-                            <tr>
-                                <th class="py-3.5 px-6">Nama Personel</th>
-                                <th class="py-3.5 px-6">Tipe</th>
-                                <th class="py-3.5 px-6">Tanggal</th>
-                                <th class="py-3.5 px-6">Alasan</th>
-                                <th class="py-3.5 px-6 text-center">Status</th>
-                                <th class="py-3.5 px-6 text-center">Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-100">
-                            <template x-for="req in leaveRequests" :key="req.id">
+                    <div class="overflow-x-auto min-w-0 w-full">
+                        <table class="w-full text-left text-xs min-w-[850px] border-collapse">
+                            <thead class="bg-gray-50/80 border-b border-gray-200 text-gray-600 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
                                 <tr>
-                                    <td class="py-3.5 px-6 font-bold text-gray-900" x-text="req.staffName"></td>
-                                    <td class="py-3.5 px-6">
-                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold"
-                                              :class="{
-                                                  'bg-red-50 text-red-600': req.type === 'SAKIT',
-                                                  'bg-blue-50 text-blue-700': req.type === 'CUTI',
-                                                  'bg-amber-50 text-amber-700': req.type === 'IZIN'
-                                              }"
-                                              x-text="req.type"></span>
-                                    </td>
-                                    <td class="py-3.5 px-6 font-mono" x-text="req.date"></td>
-                                    <td class="py-3.5 px-6 text-gray-600" x-text="req.reason"></td>
-                                    <td class="py-3.5 px-6 text-center">
-                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
-                                              :class="{
-                                                  'bg-green-50 text-green-700': req.status === 'DISETUJUI',
-                                                  'bg-amber-50 text-amber-700': req.status === 'MENUNGGU',
-                                                  'bg-red-50 text-red-600': req.status === 'DITOLAK'
-                                              }"
-                                              x-text="req.status"></span>
-                                    </td>
-                                    <td class="py-3.5 px-6 text-center">
-                                        <template x-if="req.status === 'MENUNGGU'">
-                                            <div class="flex items-center justify-center gap-2">
-                                                <button type="button"
-                                                        @click="approveLeave(req)"
-                                                        class="px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-[11px] font-bold cursor-pointer">
-                                                    Setujui
-                                                </button>
-                                                <button type="button"
-                                                        @click="rejectLeave(req)"
-                                                        class="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-[11px] font-bold cursor-pointer">
-                                                    Tolak
-                                                </button>
-                                            </div>
-                                        </template>
-                                        <template x-if="req.status !== 'MENUNGGU'">
-                                            <span class="text-gray-400 font-medium text-[11px]">Selesai</span>
-                                        </template>
-                                    </td>
+                                    <th class="py-3.5 px-6 text-left w-[200px]">Nama Personel</th>
+                                    <th class="py-3.5 px-6 text-left w-[120px]">Tipe</th>
+                                    <th class="py-3.5 px-6 text-left w-[140px]">Tanggal</th>
+                                    <th class="py-3.5 px-6 text-left w-[220px]">Alasan</th>
+                                    <th class="py-3.5 px-6 text-center w-[120px]">Status</th>
+                                    <th class="py-3.5 px-6 text-center w-[140px]">Aksi</th>
                                 </tr>
-                            </template>
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                <template x-for="req in leaveRequests" :key="req.id">
+                                    <tr class="hover:bg-blue-50/30 transition-colors">
+                                        <td class="py-3.5 px-6 font-bold text-gray-900" x-text="req.staffName"></td>
+                                        <td class="py-3.5 px-6 whitespace-nowrap">
+                                            <span class="px-2 py-0.5 rounded text-[10px] font-bold"
+                                                  :class="{
+                                                      'bg-red-50 text-red-600': req.type === 'SAKIT',
+                                                      'bg-blue-50 text-blue-700': req.type === 'CUTI',
+                                                      'bg-amber-50 text-amber-700': req.type === 'IZIN'
+                                                  }"
+                                                  x-text="req.type"></span>
+                                        </td>
+                                        <td class="py-3.5 px-6 font-mono whitespace-nowrap" x-text="req.date"></td>
+                                        <td class="py-3.5 px-6 text-gray-600" x-text="req.reason"></td>
+                                        <td class="py-3.5 px-6 text-center whitespace-nowrap">
+                                            <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
+                                                  :class="{
+                                                      'bg-green-50 text-green-700': req.status === 'DISETUJUI',
+                                                      'bg-amber-50 text-amber-700': req.status === 'MENUNGGU',
+                                                      'bg-red-50 text-red-600': req.status === 'DITOLAK'
+                                                  }"
+                                                  x-text="req.status"></span>
+                                        </td>
+                                        <td class="py-3.5 px-6 text-center whitespace-nowrap">
+                                            <template x-if="req.status === 'MENUNGGU'">
+                                                <div class="inline-flex items-center justify-center gap-2">
+                                                    <button type="button"
+                                                            @click="approveLeave(req)"
+                                                            class="px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-[11px] font-bold cursor-pointer">
+                                                        Setujui
+                                                    </button>
+                                                    <button type="button"
+                                                            @click="rejectLeave(req)"
+                                                            class="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-[11px] font-bold cursor-pointer">
+                                                        Tolak
+                                                    </button>
+                                                </div>
+                                            </template>
+                                            <template x-if="req.status !== 'MENUNGGU'">
+                                                <span class="text-gray-400 font-medium text-[11px]">Selesai</span>
+                                            </template>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 

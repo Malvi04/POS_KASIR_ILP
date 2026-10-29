@@ -331,7 +331,10 @@
             time: timeStr,
             date: dateStr,
             terminal: this.activeSession.terminalLabel || 'Kasir 01',
-            cashier: this.activeSession.cashierName || 'Budi Kurniawan',
+            cashier: (this.activeOperator && this.activeOperator.name) ? this.activeOperator.name : (this.activeSession.cashierName || 'Budi Kurniawan'),
+            operatorId: (this.activeOperator && this.activeOperator.id) ? this.activeOperator.id : (this.activeSession.cashierId || 'USR-02'),
+            operatorNik: (this.activeOperator && this.activeOperator.nik) ? this.activeOperator.nik : (this.activeSession.cashierNik || ''),
+            sessionId: this.activeSession.sessionId || 'CS-20261019-K01-003',
             method: method.toUpperCase(),
             methodLabel: method === 'tunai' ? 'Uang Tunai' : (method === 'qris' ? 'QRIS Dinamis' : (method === 'campuran' ? 'Tunai + QRIS' : 'Kredit Anggota')),
             cashPortion: method === 'tunai' ? this.grandTotal : (method === 'campuran' ? this.paymentModal.splitCash : 0),
@@ -434,13 +437,37 @@ class="flex w-full h-full relative text-gray-800">
         <!-- Header -->
         <x-cashier-header title="Terminal POS">
             <div class="flex flex-wrap items-center gap-2">
+                <!-- Terminal & Active Operator Pill -->
                 <a href="{{ url('/kasir/sesi') }}"
-                   class="flex items-center gap-2 bg-blue-50 hover:bg-blue-100 text-[#0052cc] border border-blue-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all">
+                   class="flex items-center gap-2 bg-blue-50 hover:bg-blue-100 text-[#0052cc] border border-blue-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
+                   :title="'ID Sesi: ' + (activeSession.sessionId || '-')">
                     <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                     <span class="font-extrabold text-[#0052cc]" x-text="activeSession.terminalLabel">Kasir 01</span>
                     <span class="text-gray-300">•</span>
-                    <span class="text-gray-700 font-bold" x-text="activeSession.cashierName">Budi Kurniawan</span>
+                    <span class="material-symbols-rounded text-[15px] text-[#0052cc]">badge</span>
+                    <span class="text-gray-800 font-black" x-text="activeOperator ? activeOperator.name : activeSession.cashierName">Budi Kurniawan</span>
+                    <template x-if="activeOperator && activeSession && activeOperator.id !== activeSession.cashierId">
+                        <span class="text-[9px] bg-amber-100 text-amber-800 px-1 py-0.2 rounded font-extrabold tracking-tight">Sub</span>
+                    </template>
                 </a>
+
+                <!-- Ganti Operator Kasir -->
+                <button type="button"
+                        @click="openOperatorSwitchModal()"
+                        class="flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                        title="Pergantian operator kasir tanpa menutup sesi keuangan">
+                    <span class="material-symbols-rounded text-[16px]">switch_account</span>
+                    <span>Ganti Operator</span>
+                </button>
+
+                <!-- Kunci Layar Terminal -->
+                <button type="button"
+                        @click="lockTerminal()"
+                        class="flex items-center gap-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                        title="Kunci Layar Terminal Sementara">
+                    <span class="material-symbols-rounded text-[16px]">lock</span>
+                    <span class="hidden sm:inline">Kunci</span>
+                </button>
 
                 <button type="button"
                         @click="$dispatch('open-cash-movement')"
@@ -775,6 +802,189 @@ class="flex w-full h-full relative text-gray-800">
 
     <!-- MODAL 3: KONTROL PEMBUKAAN / OPENING KASIR -->
     @include('kasir.partials._opening-modal')
+
+    <!-- MODAL 4: PERGANTIAN OPERATOR TERMINAL (OPERATOR SWITCHING) -->
+    <template x-if="operatorSwitchModal.open">
+        <div class="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-xs">
+            <div @click.away="operatorSwitchModal.open = false"
+                 class="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-gray-100 overflow-hidden flex flex-col">
+                <!-- Header -->
+                <div class="px-6 py-4.5 border-b border-gray-100 flex items-center justify-between bg-slate-50/70">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                            <span class="material-symbols-rounded text-[22px]">switch_account</span>
+                        </div>
+                        <div>
+                            <h3 class="text-base font-black text-gray-900">Ganti Operator Kasir</h3>
+                            <p class="text-xs text-gray-500 font-medium">Sesi keuangan terminal tetap berjalan aktif.</p>
+                        </div>
+                    </div>
+                    <button type="button" @click="operatorSwitchModal.open = false" class="text-gray-400 hover:text-gray-700 cursor-pointer p-1">
+                        <span class="material-symbols-rounded text-[20px]">close</span>
+                    </button>
+                </div>
+
+                <!-- Body -->
+                <div class="p-6 space-y-4">
+                    <!-- Status Sesi & Operator Saat Ini -->
+                    <div class="p-3.5 rounded-xl bg-slate-50 border border-gray-200/90 text-xs space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-500 font-medium">Terminal &amp; Sesi:</span>
+                            <span class="font-bold text-gray-900" x-text="(activeSession.terminalLabel || 'Kasir 01') + ' (' + (activeSession.sessionId || '-') + ')'"></span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-500 font-medium">Operator Aktif:</span>
+                            <span class="font-bold text-[#0052cc]" x-text="activeOperator ? activeOperator.name : activeSession.cashierName"></span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-500 font-medium">Cabang Terminal:</span>
+                            <span class="font-mono font-bold text-gray-700" x-text="normalizeBranchName(activeSession.storeLocation || selectedLocation)"></span>
+                        </div>
+                    </div>
+
+                    <!-- Cart Warning jika masih ada keranjang berjalan -->
+                    <template x-if="cart.length > 0">
+                        <div class="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-2">
+                            <div class="flex items-center gap-2 font-bold text-amber-800">
+                                <span class="material-symbols-rounded text-[18px]">warning</span>
+                                <span>Keranjang Belanja Masih Berisi Produk</span>
+                            </div>
+                            <p class="text-[11px] text-amber-700 leading-relaxed">
+                                Masih ada <strong x-text="cart.length"></strong> jenis barang di keranjang aktif. Selesaikan pembayaran atau tahan transaksi sebelum mengganti kasir.
+                            </p>
+                            <button type="button"
+                                    @click="operatorSwitchModal.open = false; holdCurrentBill();"
+                                    class="w-full py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs shadow-2xs cursor-pointer">
+                                Tahan Transaksi (Hold Bill) Sekarang
+                            </button>
+                        </div>
+                    </template>
+
+                    <!-- Alert Error -->
+                    <template x-if="operatorSwitchModal.errorMsg">
+                        <div class="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-bold flex items-center gap-2">
+                            <span class="material-symbols-rounded text-[18px]">error</span>
+                            <span x-text="operatorSwitchModal.errorMsg"></span>
+                        </div>
+                    </template>
+
+                    <!-- Form Input: Pilih Kasir Pengganti -->
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1.5">Kasir Pengganti (Cabang Sama)</label>
+                        <template x-if="getEligibleCashiersForSwitch().length > 0">
+                            <select x-model="operatorSwitchModal.targetStaffId"
+                                    class="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:bg-white focus:border-[#0052cc] outline-none cursor-pointer">
+                                <template x-for="st in getEligibleCashiersForSwitch()" :key="st.id">
+                                    <option :value="st.id" x-text="st.name + (st.nik ? ' (NIK: ' + st.nik + ')' : '')"></option>
+                                </template>
+                            </select>
+                        </template>
+                        <template x-if="getEligibleCashiersForSwitch().length === 0">
+                            <div class="p-3 rounded-xl bg-gray-100 border border-gray-200 text-gray-500 text-xs font-medium">
+                                Tidak ada petugas kasir lain yang terdaftar aktif di cabang ini. Daftarkan kasir baru melalui menu <strong>Kelola Akun (Manager)</strong>.
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Alasan Pergantian -->
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1.5">Alasan Pergantian</label>
+                        <select x-model="operatorSwitchModal.reason"
+                                class="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-800 focus:bg-white focus:border-[#0052cc] outline-none cursor-pointer">
+                            <option value="Istirahat / Sholat">Istirahat / Sholat</option>
+                            <option value="Pergantian Shift Kerja">Pergantian Shift Kerja</option>
+                            <option value="Bantuan Antrean Kasir">Bantuan Antrean Kasir</option>
+                            <option value="Keperluan Operasional">Keperluan Operasional Lainnya</option>
+                        </select>
+                    </div>
+
+                    <!-- Input PIN Kasir Pengganti -->
+                    <div>
+                        <div class="flex items-center justify-between mb-1.5">
+                            <label class="block text-xs font-bold text-gray-700">PIN Kasir Pengganti</label>
+                            <span class="text-[10px] text-gray-400">Verifikasi otorisasi kasir</span>
+                        </div>
+                        <input type="password"
+                               x-model="operatorSwitchModal.targetPin"
+                               @keydown.enter.prevent="submitOperatorSwitch()"
+                               placeholder="Masukkan PIN kasir pengganti..."
+                               class="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl font-mono text-xs font-bold text-gray-900 focus:bg-white focus:border-[#0052cc] outline-none">
+                        <p class="text-[10px] text-gray-500 mt-1">Demo PIN Kasir: <span class="font-mono font-bold text-amber-700">123456</span></p>
+                    </div>
+                </div>
+
+                <!-- Footer Buttons -->
+                <div class="px-6 py-4 bg-slate-50 border-t border-gray-100 flex items-center justify-between">
+                    <button type="button"
+                            @click="operatorSwitchModal.open = false"
+                            class="px-4 py-2 bg-white border border-gray-300 rounded-xl text-xs font-bold text-gray-700 hover:bg-gray-100 cursor-pointer">
+                        Batal
+                    </button>
+                    <button type="button"
+                            @click="submitOperatorSwitch()"
+                            :disabled="cart.length > 0 || getEligibleCashiersForSwitch().length === 0 || operatorSwitchModal.isSubmitting"
+                            :class="(cart.length > 0 || getEligibleCashiersForSwitch().length === 0 || operatorSwitchModal.isSubmitting) ? 'opacity-50 cursor-not-allowed bg-gray-400' : 'bg-indigo-600 hover:bg-indigo-700 cursor-pointer'"
+                            class="px-5 py-2 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-2">
+                        <span class="material-symbols-rounded text-[18px]">verified_user</span>
+                        <span>Konfirmasi Ganti Kasir</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- MODAL 5: LAYAR KUNCI TERMINAL (TERMINAL LOCK SCREEN) -->
+    <template x-if="isTerminalLocked">
+        <div class="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/95 backdrop-blur-md">
+            <div class="bg-white rounded-3xl max-w-sm w-full p-8 shadow-2xl text-center space-y-5 border border-slate-700/30">
+                <div class="w-16 h-16 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto ring-8 ring-amber-50/50">
+                    <span class="material-symbols-rounded text-3xl">lock</span>
+                </div>
+
+                <div>
+                    <h3 class="text-lg font-black text-gray-900">Terminal Kasir Dikunci</h3>
+                    <p class="text-xs text-gray-500 mt-1">Terminal diamankan sementara dari akses yang tidak berwenang.</p>
+                </div>
+
+                <div class="p-3.5 rounded-2xl bg-slate-50 border border-gray-200 text-xs space-y-1">
+                    <div class="flex items-center justify-between text-gray-500">
+                        <span>Terminal:</span>
+                        <strong class="text-gray-900 font-bold" x-text="activeSession.terminalLabel || 'Kasir 01'"></strong>
+                    </div>
+                    <div class="flex items-center justify-between text-gray-500">
+                        <span>Operator Aktif:</span>
+                        <strong class="text-[#0052cc] font-bold" x-text="activeOperator ? activeOperator.name : activeSession.cashierName"></strong>
+                    </div>
+                </div>
+
+                <!-- Error Alert -->
+                <template x-if="lockErrorMsg">
+                    <div class="p-2.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-bold text-left flex items-center gap-1.5">
+                        <span class="material-symbols-rounded text-[16px] shrink-0">error</span>
+                        <span x-text="lockErrorMsg"></span>
+                    </div>
+                </template>
+
+                <div class="space-y-3">
+                    <input type="password"
+                           x-model="lockPinInput"
+                           @keydown.enter.prevent="unlockTerminal()"
+                           placeholder="Masukkan PIN Operator..."
+                           autofocus
+                           class="w-full text-center tracking-widest font-mono text-xl py-3 px-4 bg-gray-50 border border-gray-300 rounded-2xl focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 outline-none">
+                    
+                    <button type="button"
+                            @click="unlockTerminal()"
+                            class="w-full py-3 bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-xs rounded-2xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer">
+                        <span class="material-symbols-rounded text-[18px]">lock_open</span>
+                        <span>Buka Kunci Terminal</span>
+                    </button>
+                </div>
+
+                <p class="text-[11px] text-gray-400">Gunakan PIN pribadi operator yang sedang aktif (Demo PIN: 123456).</p>
+            </div>
+        </div>
+    </template>
 
 </div>
 @endsection

@@ -118,23 +118,7 @@
                 { name: 'Ultra Milk Full Cream 1L', qty: 2, unit: 'Tetra', price: 19200, total: 38400 },
                 { name: 'Aqua Mineral 600ml', qty: 2, unit: 'Botol', price: 5500, total: 11000 }
             ]
-        }
-    ],
-
-    initTransactions() {
-        try {
-            const raw = localStorage.getItem('pos_ilp_transactions_v1');
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    this.transactions = parsed;
-                    return;
-                }
-            }
-        } catch (e) {}
-        this.transactions = JSON.parse(JSON.stringify(this.defaultTransactions));
-        localStorage.setItem('pos_ilp_transactions_v1', JSON.stringify(this.transactions));
-    },
+        },
         {
             id: '#TRX-20261024-0024',
             rawId: 'TRX-0024',
@@ -184,6 +168,21 @@
             ]
         }
     ],
+
+    initTransactions() {
+        try {
+            const raw = localStorage.getItem('pos_ilp_transactions_v1');
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    this.transactions = parsed;
+                    return;
+                }
+            }
+        } catch (e) {}
+        this.transactions = JSON.parse(JSON.stringify(this.defaultTransactions));
+        localStorage.setItem('pos_ilp_transactions_v1', JSON.stringify(this.transactions));
+    },
 
     get filteredTransactions() {
         return this.transactions.filter(t => {
@@ -369,23 +368,23 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <span class="text-xs text-gray-500 font-medium" x-text="'Menampilkan ' + filteredTransactions.length + ' transaksi'"></span>
                     </div>
 
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left border-collapse text-xs">
+                    <div class="overflow-x-auto min-w-0 w-full">
+                        <table class="w-full text-left border-collapse text-xs min-w-[900px]">
                             <thead>
-                                <tr class="bg-slate-50 border-b border-gray-200 text-gray-500 font-bold uppercase text-[10px] tracking-wider">
-                                    <th class="px-6 py-3.5">FAKTUR / WAKTU</th>
-                                    <th class="px-4 py-3.5">KASIR & TERMINAL</th>
-                                    <th class="px-4 py-3.5">METODE PEMBAYARAN</th>
-                                    <th class="px-4 py-3.5 text-right">TOTAL BELANJA</th>
-                                    <th class="px-4 py-3.5 text-center">STATUS SYNC</th>
-                                    <th class="px-6 py-3.5 text-right">AKSI NOTA</th>
+                                <tr class="bg-gray-50/80 border-b border-gray-200 text-gray-600 font-bold uppercase text-[11px] tracking-wider whitespace-nowrap">
+                                    <th class="px-6 py-3.5 text-left w-[180px]">FAKTUR / WAKTU</th>
+                                    <th class="px-4 py-3.5 text-left w-[150px]">KASIR & TERMINAL</th>
+                                    <th class="px-4 py-3.5 text-left w-[150px]">METODE PEMBAYARAN</th>
+                                    <th class="px-4 py-3.5 text-right w-[140px]">TOTAL BELANJA</th>
+                                    <th class="px-4 py-3.5 text-center w-[120px]">STATUS SYNC</th>
+                                    <th class="px-6 py-3.5 text-right w-[180px]">AKSI NOTA</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100 text-sm">
                                 <template x-for="t in filteredTransactions" :key="t.id">
-                                    <tr class="hover:bg-slate-50/50 transition-colors">
+                                    <tr class="hover:bg-blue-50/30 transition-colors">
                                         <!-- No Faktur & Waktu -->
-                                        <td class="px-6 py-4">
+                                        <td class="px-6 py-3.5 whitespace-nowrap">
                                             <div class="flex flex-col">
                                                 <span class="font-mono font-bold text-gray-900 text-[13px]" x-text="t.id"></span>
                                                 <span class="text-[11px] text-gray-500 mt-0.5" x-text="t.time + ' • ' + t.date"></span>
@@ -393,7 +392,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         </td>
 
                                         <!-- Kasir & Terminal -->
-                                        <td class="px-4 py-4">
+                                        <td class="px-4 py-3.5 whitespace-nowrap">
                                             <div class="flex flex-col">
                                                 <span class="font-bold text-gray-800 text-xs" x-text="t.cashier"></span>
                                                 <span class="text-[11px] text-gray-400" x-text="t.terminal"></span>
@@ -401,20 +400,20 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         </td>
 
                                         <!-- Metode Pembayaran -->
-                                        <td class="px-4 py-4">
+                                        <td class="px-4 py-3.5 whitespace-nowrap">
                                             <span class="px-2.5 py-1 rounded-full text-[11px] font-bold"
                                                   :class="t.method === 'TUNAI' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : (t.method === 'QRIS' ? 'bg-blue-50 text-[#0052cc] border border-blue-200' : (t.method === 'KREDIT ANGGOTA' ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-amber-50 text-amber-700 border border-amber-200'))"
                                                   x-text="t.methodLabel"></span>
                                         </td>
 
                                         <!-- Total -->
-                                        <td class="px-4 py-4 text-right">
+                                        <td class="px-4 py-3.5 text-right whitespace-nowrap">
                                             <span class="font-mono font-bold text-gray-900 text-sm" x-text="formatRupiah(t.total)"></span>
                                             <span class="text-[10px] text-gray-400 block" x-text="t.items.length + ' Macam Produk'"></span>
                                         </td>
 
                                         <!-- Status Sync -->
-                                        <td class="px-4 py-4 text-center">
+                                        <td class="px-4 py-3.5 text-center whitespace-nowrap">
                                             <template x-if="t.status === 'SELESAI'">
                                                 <span class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
                                                     <span class="material-symbols-rounded text-[13px]">cloud_done</span>
@@ -430,25 +429,31 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         </td>
 
                                         <!-- Aksi -->
-                                        <td class="px-6 py-4 text-right">
-                                            <div class="flex items-center justify-end gap-1.5">
+                                        <td class="px-6 py-3.5 text-right whitespace-nowrap">
+                                            <div class="inline-flex items-center justify-end gap-1.5">
                                                 <button type="button"
                                                         @click="openDetail(t)"
-                                                        class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-gray-700 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer">
+                                                        class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-gray-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer">
                                                     <span class="material-symbols-rounded text-[16px]">visibility</span>
                                                     <span>Detail</span>
                                                 </button>
                                                 <button type="button"
                                                         @click="printStruk(t)"
-                                                        class="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#0052cc] rounded-lg text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer">
+                                                        class="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#0052cc] rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer">
                                                     <span class="material-symbols-rounded text-[16px]">print</span>
                                                     <span>Struk</span>
                                                 </button>
                                                 <button type="button"
                                                         @click="goToRefund(t)"
                                                         title="Ajukan Refund untuk Faktur ini"
-                                                        class="px-2 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer">
+                                                        class="px-2 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer">
                                                     <span class="material-symbols-rounded text-[16px]">currency_exchange</span>
+                                                    <span>Refund</span>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
                                                     <span>Refund</span>
                                                 </button>
                                             </div>
@@ -505,16 +510,17 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
 
                     <!-- Items Table -->
-                    <div class="border border-gray-200 rounded-xl overflow-hidden">
-                        <table class="w-full text-left border-collapse">
-                            <thead class="bg-gray-100 font-bold text-gray-600">
-                                <tr>
-                                    <th class="px-4 py-2.5">PRODUK</th>
-                                    <th class="px-3 py-2.5 text-center">QTY</th>
-                                    <th class="px-4 py-2.5 text-right">HARGA</th>
-                                    <th class="px-4 py-2.5 text-right">SUBTOTAL</th>
-                                </tr>
-                            </thead>
+                    <div class="border border-gray-200 rounded-xl overflow-hidden bg-white">
+                        <div class="overflow-x-auto min-w-0 w-full">
+                            <table class="w-full text-left border-collapse text-xs min-w-[450px]">
+                                <thead class="bg-gray-50/80 border-b border-gray-200 font-bold text-gray-600 uppercase tracking-wider text-[11px] whitespace-nowrap">
+                                    <tr>
+                                        <th class="px-4 py-2.5 text-left w-[200px]">PRODUK</th>
+                                        <th class="px-3 py-2.5 text-center w-[80px]">QTY</th>
+                                        <th class="px-4 py-2.5 text-right w-[110px]">HARGA</th>
+                                        <th class="px-4 py-2.5 text-right w-[110px]">SUBTOTAL</th>
+                                    </tr>
+                                </thead>
                             <tbody class="divide-y divide-gray-100">
                                 <template x-for="(it, idx) in selectedTrx?.items" :key="idx">
                                     <tr>

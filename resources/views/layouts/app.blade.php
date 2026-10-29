@@ -13,18 +13,22 @@
     <script>
         window.cashierOpeningData = function() {
             const defaultStaffList = [
-                { id: 'USR-01', name: 'Andi Pratama', username: 'andi_kasir', nik: '202409821001', role: 'Kasir Operasional', pin: '123456', initials: 'AP', badgeClass: 'bg-blue-100 text-blue-700' },
-                { id: 'USR-02', name: 'Budi Kurniawan', username: 'budi_kasir01', nik: '202409821002', role: 'Kasir Utama', pin: '123456', initials: 'BK', badgeClass: 'bg-emerald-100 text-emerald-700' },
-                { id: 'USR-03', name: 'Citra Dewi', username: 'citra_kasir', nik: '202409821003', role: 'Kasir Operasional', pin: '123456', initials: 'CD', badgeClass: 'bg-purple-100 text-purple-700' },
-                { id: 'USR-04', name: 'Dedi Santoso', username: 'dedi_kasir', nik: '202409821004', role: 'Kasir Operasional', pin: '123456', initials: 'DS', badgeClass: 'bg-amber-100 text-amber-700' }
+                { id: 'USR-01', name: 'Andi Pratama', username: 'andi_kasir', password: 'andi123', nik: '202409821001', role: 'Kasir Operasional', pin: '123456', initials: 'AP', badgeClass: 'bg-blue-100 text-blue-700', branch: 'Pusat', assignedBranches: [{ branch: 'Pusat', status: 'AKTIF' }] },
+                { id: 'USR-02', name: 'Budi Kurniawan', username: 'budi_kasir01', password: 'budi123', nik: '202409821002', role: 'Kasir Utama', pin: '123456', initials: 'BK', badgeClass: 'bg-emerald-100 text-emerald-700', branch: 'Pusat', assignedBranches: [{ branch: 'Pusat', status: 'AKTIF' }] },
+                { id: 'USR-03', name: 'Citra Dewi', username: 'citra_kasir', password: 'citra123', nik: '202409821003', role: 'Kasir Operasional', pin: '123456', initials: 'CD', badgeClass: 'bg-purple-100 text-purple-700', branch: 'Cabang A', assignedBranches: [{ branch: 'Cabang A', status: 'AKTIF' }] },
+                { id: 'USR-04', name: 'Dedi Santoso', username: 'dedi_kasir', password: 'dedi123', nik: '202409821004', role: 'Kasir Operasional', pin: '123456', initials: 'DS', badgeClass: 'bg-amber-100 text-amber-700', branch: 'Cabang B', assignedBranches: [{ branch: 'Cabang B', status: 'AKTIF' }] }
             ];
 
             const defaultTerminals = [
+                // Pusat: POS-01 sampai POS-05
                 {
-                    id: 'kasir_1',
-                    label: 'Kasir 01',
+                    id: 'POS-01',
+                    label: 'POS-01',
+                    name: 'Terminal POS-01',
+                    branch: 'Pusat',
                     code: 'TERM-01',
-                    status: 'HANDOVER_PENDING', // AVAILABLE | HANDOVER_PENDING | ACTIVE_OTHER | ACTIVE_MINE
+                    isActive: true,
+                    status: 'HANDOVER_PENDING',
                     sessionsTodayCount: 2,
                     activeCashierName: null,
                     activeCashierId: null,
@@ -44,9 +48,90 @@
                     }
                 },
                 {
-                    id: 'kasir_2',
-                    label: 'Kasir 02',
+                    id: 'POS-02',
+                    label: 'POS-02',
+                    name: 'Terminal POS-02',
+                    branch: 'Pusat',
                     code: 'TERM-02',
+                    isActive: true,
+                    status: 'AVAILABLE',
+                    sessionsTodayCount: 1,
+                    activeCashierName: null,
+                    activeCashierId: null,
+                    activeStartedAt: null,
+                    activeSessionId: null,
+                    handover: null
+                },
+                {
+                    id: 'POS-03',
+                    label: 'POS-03',
+                    name: 'Terminal POS-03',
+                    branch: 'Pusat',
+                    code: 'TERM-03',
+                    isActive: true,
+                    status: 'ACTIVE_OTHER',
+                    sessionsTodayCount: 2,
+                    activeCashierName: 'Andi Pratama',
+                    activeCashierId: 'USR-01',
+                    activeStartedAt: '08:00',
+                    activeSessionId: 'CS-20261019-P03-001',
+                    handover: null
+                },
+                {
+                    id: 'POS-04',
+                    label: 'POS-04',
+                    name: 'Terminal POS-04',
+                    branch: 'Pusat',
+                    code: 'TERM-04',
+                    isActive: true,
+                    status: 'AVAILABLE',
+                    sessionsTodayCount: 0,
+                    activeCashierName: null,
+                    activeCashierId: null,
+                    activeStartedAt: null,
+                    activeSessionId: null,
+                    handover: null
+                },
+                {
+                    id: 'POS-05',
+                    label: 'POS-05',
+                    name: 'Terminal POS-05',
+                    branch: 'Pusat',
+                    code: 'TERM-05',
+                    isActive: false,
+                    inactiveReason: 'Sedang dalam perbaikan scanner barcode & printer struk',
+                    status: 'AVAILABLE',
+                    sessionsTodayCount: 0,
+                    activeCashierName: null,
+                    activeCashierId: null,
+                    activeStartedAt: null,
+                    activeSessionId: null,
+                    handover: null
+                },
+
+                // Cabang A: POS-06 sampai POS-10
+                {
+                    id: 'POS-06',
+                    label: 'POS-06',
+                    name: 'Terminal POS-06',
+                    branch: 'Cabang A',
+                    code: 'TERM-06',
+                    isActive: true,
+                    status: 'AVAILABLE',
+                    sessionsTodayCount: 1,
+                    activeCashierName: null,
+                    activeCashierId: null,
+                    activeStartedAt: null,
+                    activeSessionId: null,
+                    handover: null
+                },
+                {
+                    id: 'POS-07',
+                    label: 'POS-07',
+                    name: 'Terminal POS-07',
+                    branch: 'Cabang A',
+                    code: 'TERM-07',
+                    isActive: true,
                     status: 'HANDOVER_PENDING',
                     sessionsTodayCount: 1,
                     activeCashierName: null,
@@ -67,33 +152,128 @@
                     }
                 },
                 {
-                    id: 'kasir_3',
-                    label: 'Kasir 03',
-                    code: 'TERM-03',
-                    status: 'ACTIVE_OTHER',
-                    sessionsTodayCount: 2,
-                    activeCashierName: 'Dedi Santoso',
-                    activeCashierId: 'USR-04',
-                    activeStartedAt: '10:05',
-                    activeSessionId: 'CS-20261019-K03-002',
+                    id: 'POS-08',
+                    label: 'POS-08',
+                    name: 'Terminal POS-08',
+                    branch: 'Cabang A',
+                    code: 'TERM-08',
+                    isActive: true,
+                    status: 'AVAILABLE',
+                    sessionsTodayCount: 0,
+                    activeCashierName: null,
+                    activeCashierId: null,
+                    activeStartedAt: null,
+                    activeSessionId: null,
                     handover: null
                 },
-                ...Array.from({ length: 9 }, (_, idx) => {
-                    const num = idx + 4;
-                    const padded = num < 10 ? '0' + num : '' + num;
-                    return {
-                        id: 'kasir_' + num,
-                        label: 'Kasir ' + padded,
-                        code: 'TERM-' + padded,
-                        status: 'AVAILABLE',
-                        sessionsTodayCount: 0,
-                        activeCashierName: null,
-                        activeCashierId: null,
-                        activeStartedAt: null,
-                        activeSessionId: null,
-                        handover: null
-                    };
-                })
+                {
+                    id: 'POS-09',
+                    label: 'POS-09',
+                    name: 'Terminal POS-09',
+                    branch: 'Cabang A',
+                    code: 'TERM-09',
+                    isActive: true,
+                    status: 'AVAILABLE',
+                    sessionsTodayCount: 0,
+                    activeCashierName: null,
+                    activeCashierId: null,
+                    activeStartedAt: null,
+                    activeSessionId: null,
+                    handover: null
+                },
+                {
+                    id: 'POS-10',
+                    label: 'POS-10',
+                    name: 'Terminal POS-10',
+                    branch: 'Cabang A',
+                    code: 'TERM-10',
+                    isActive: false,
+                    inactiveReason: 'Terminal dinonaktifkan sementara oleh Manager (Audit Jaringan)',
+                    status: 'AVAILABLE',
+                    sessionsTodayCount: 0,
+                    activeCashierName: null,
+                    activeCashierId: null,
+                    activeStartedAt: null,
+                    activeSessionId: null,
+                    handover: null
+                },
+
+                // Cabang B: POS-11 sampai POS-15
+                {
+                    id: 'POS-11',
+                    label: 'POS-11',
+                    name: 'Terminal POS-11',
+                    branch: 'Cabang B',
+                    code: 'TERM-11',
+                    isActive: true,
+                    status: 'AVAILABLE',
+                    sessionsTodayCount: 1,
+                    activeCashierName: null,
+                    activeCashierId: null,
+                    activeStartedAt: null,
+                    activeSessionId: null,
+                    handover: null
+                },
+                {
+                    id: 'POS-12',
+                    label: 'POS-12',
+                    name: 'Terminal POS-12',
+                    branch: 'Cabang B',
+                    code: 'TERM-12',
+                    isActive: true,
+                    status: 'AVAILABLE',
+                    sessionsTodayCount: 0,
+                    activeCashierName: null,
+                    activeCashierId: null,
+                    activeStartedAt: null,
+                    activeSessionId: null,
+                    handover: null
+                },
+                {
+                    id: 'POS-13',
+                    label: 'POS-13',
+                    name: 'Terminal POS-13',
+                    branch: 'Cabang B',
+                    code: 'TERM-13',
+                    isActive: true,
+                    status: 'AVAILABLE',
+                    sessionsTodayCount: 0,
+                    activeCashierName: null,
+                    activeCashierId: null,
+                    activeStartedAt: null,
+                    activeSessionId: null,
+                    handover: null
+                },
+                {
+                    id: 'POS-14',
+                    label: 'POS-14',
+                    name: 'Terminal POS-14',
+                    branch: 'Cabang B',
+                    code: 'TERM-14',
+                    isActive: true,
+                    status: 'AVAILABLE',
+                    sessionsTodayCount: 0,
+                    activeCashierName: null,
+                    activeCashierId: null,
+                    activeStartedAt: null,
+                    activeSessionId: null,
+                    handover: null
+                },
+                {
+                    id: 'POS-15',
+                    label: 'POS-15',
+                    name: 'Terminal POS-15',
+                    branch: 'Cabang B',
+                    code: 'TERM-15',
+                    isActive: true,
+                    status: 'AVAILABLE',
+                    sessionsTodayCount: 0,
+                    activeCashierName: null,
+                    activeCashierId: null,
+                    activeStartedAt: null,
+                    activeSessionId: null,
+                    handover: null
+                }
             ];
 
             const defaultSessionHistory = [
@@ -222,8 +402,11 @@
             ];
 
             return {
-                selectedShift: 'kasir_1',
-                selectedLocation: 'Minimarket - Sektor A',
+                selectedShift: 'POS-01',
+                selectedBranch: 'Pusat',
+                selectedLocation: 'Pusat',
+                branchAssignmentError: '',
+                terminalInactiveNotice: '',
                 businessDayDate: '19 Oktober 2026',
                 businessDayId: 'BD-20261019-01',
                 staffList: defaultStaffList,
@@ -235,6 +418,32 @@
                 activeSession: defaultActiveSession,
                 sessionHistory: defaultSessionHistory,
                 cashMovements: defaultCashMovements,
+
+                // Operator Switching & Terminal Lock State
+                activeOperator: {
+                    id: 'USR-02',
+                    name: 'Budi Kurniawan',
+                    username: 'budi_kasir01',
+                    nik: '202409821002',
+                    role: 'Kasir Utama',
+                    branch: 'Pusat',
+                    terminalId: 'POS-01',
+                    startedAt: '10:00',
+                    status: 'ACTIVE'
+                },
+                operatorHistory: [],
+                isTerminalLocked: false,
+                lockPinInput: '',
+                lockErrorMsg: '',
+                operatorSwitchModal: {
+                    open: false,
+                    targetStaffId: '',
+                    targetPin: '',
+                    reason: 'Istirahat / Sholat',
+                    errorMsg: '',
+                    attemptCount: 0,
+                    isSubmitting: false
+                },
 
                 showOpeningModal: false,
                 isOpeningSubmitting: false,
@@ -304,6 +513,119 @@
                     { id: 113, label: 'Rp 0,05',   value: 0.05, count: 0, col: 'right' }
                 ],
 
+                normalizeBranchName(str) {
+                    if (!str) return 'Pusat';
+                    const s = str.toString().toLowerCase();
+                    if (s.includes('pusat')) return 'Pusat';
+                    if (s.includes('sektor a') || s.includes('cabang a')) return 'Cabang A';
+                    if (s.includes('sektor b') || s.includes('cabang b')) return 'Cabang B';
+                    return str;
+                },
+
+                isStaffAssignedToBranch(staff, branchOrLocation) {
+                    if (!staff) return false;
+                    const targetNorm = this.normalizeBranchName(branchOrLocation);
+                    if (Array.isArray(staff.assignedBranches) && staff.assignedBranches.length > 0) {
+                        const match = staff.assignedBranches.some(ab => {
+                            const st = (ab.status || 'AKTIF').toUpperCase();
+                            return st === 'AKTIF' && this.normalizeBranchName(ab.branch) === targetNorm;
+                        });
+                        if (match) return true;
+                    }
+                    if (staff.branch) {
+                        if (this.normalizeBranchName(staff.branch) === targetNorm) return true;
+                    }
+                    return false;
+                },
+
+                getEligibleCashiersForSwitch() {
+                    const currentLoc = this.activeSession ? this.activeSession.storeLocation : this.selectedLocation;
+                    const currentOpId = this.activeOperator ? this.activeOperator.id : this.selectedStaffId;
+                    return this.staffList.filter(s => {
+                        if (s.id === currentOpId) return false;
+                        return this.isStaffAssignedToBranch(s, currentLoc);
+                    });
+                },
+
+                getUnifiedStaffList() {
+                    const list = JSON.parse(JSON.stringify(defaultStaffList));
+                    try {
+                        const rawUsers = localStorage.getItem('pos_ilp_users_v1');
+                        if (rawUsers) {
+                            const parsed = JSON.parse(rawUsers);
+                            if (Array.isArray(parsed)) {
+                                parsed.forEach(u => {
+                                    if (u.role && u.role.toUpperCase() === 'KASIR' && u.status !== 'NONAKTIF') {
+                                        const existsIdx = list.findIndex(s => s.id === u.id || (s.nik && u.nik && s.nik === u.nik) || (s.username && u.username && s.username === u.username));
+                                        const userBranch = u.branch || (u.assignedBranches && u.assignedBranches[0]?.branch) || 'Pusat';
+                                        if (existsIdx === -1) {
+                                            const initials = (u.name || 'Kasir').split(' ').filter(Boolean).map(w => w[0]).join('').substring(0, 2).toUpperCase();
+                                            list.push({
+                                                id: u.id || ('USR-' + Math.floor(10 + Math.random() * 90)),
+                                                name: u.name,
+                                                username: u.username || 'cashier_' + u.name.toLowerCase().replace(/\s+/g, '_'),
+                                                nik: u.nik || '-',
+                                                role: 'Kasir Operasional',
+                                                password: u.password || 'kasir123',
+                                                pin: u.pin || '123456',
+                                                initials: initials || 'KS',
+                                                badgeClass: 'bg-indigo-100 text-indigo-700',
+                                                branch: userBranch,
+                                                assignedBranches: u.assignedBranches || [{ branch: userBranch, status: 'AKTIF' }]
+                                            });
+                                        } else {
+                                            if (u.pin) list[existsIdx].pin = u.pin;
+                                            if (u.password) list[existsIdx].password = u.password;
+                                            if (u.assignedBranches && u.assignedBranches.length > 0) {
+                                                list[existsIdx].assignedBranches = u.assignedBranches;
+                                            }
+                                            if (u.branch) list[existsIdx].branch = u.branch;
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Error unifying staff list:', e);
+                    }
+                    return list;
+                },
+
+                getUnifiedTerminals() {
+                    const list = JSON.parse(JSON.stringify(defaultTerminals));
+                    try {
+                        const savedTerminals = localStorage.getItem('pos_ilp_terminals_v1');
+                        if (savedTerminals) {
+                            const parsed = JSON.parse(savedTerminals);
+                            if (Array.isArray(parsed) && parsed.length > 0) {
+                                // Dukung mapping legacy kasir_1, kasir_2, kasir_3 ke POS-01, POS-02, POS-03
+                                parsed.forEach(t => {
+                                    if (t.id === 'kasir_1') t.id = 'POS-01';
+                                    else if (t.id === 'kasir_2') t.id = 'POS-02';
+                                    else if (t.id === 'kasir_3') t.id = 'POS-03';
+                                });
+
+                                // Sinkronkan state dinamis (handover, status, kasir aktif) ke 15 terminal resmi
+                                list.forEach(defTerm => {
+                                    const saved = parsed.find(t => t.id === defTerm.id || (t.code && t.code === defTerm.code));
+                                    if (saved) {
+                                        if (saved.status) defTerm.status = saved.status;
+                                        if (saved.activeCashierName !== undefined) defTerm.activeCashierName = saved.activeCashierName;
+                                        if (saved.activeCashierId !== undefined) defTerm.activeCashierId = saved.activeCashierId;
+                                        if (saved.activeStartedAt !== undefined) defTerm.activeStartedAt = saved.activeStartedAt;
+                                        if (saved.activeSessionId !== undefined) defTerm.activeSessionId = saved.activeSessionId;
+                                        if (saved.handover !== undefined) defTerm.handover = saved.handover;
+                                        if (saved.sessionsTodayCount !== undefined) defTerm.sessionsTodayCount = saved.sessionsTodayCount;
+                                    }
+                                });
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Error unifying terminals:', e);
+                    }
+                    return list;
+                },
+
                 get currentDenomList() {
                     return this.denomMode === 'idr' ? this.denomListIdr : this.denomListUnit;
                 },
@@ -313,20 +635,61 @@
                 },
 
                 get selectedTerminalObj() {
-                    return this.terminals.find(t => t.id === this.selectedShift) || this.terminals[0];
+                    let term = this.terminals.find(t => t.id === this.selectedShift || (t.id === 'POS-01' && this.selectedShift === 'kasir_1'));
+                    if (!term) {
+                        term = this.filteredTerminals[0] || this.terminals[0];
+                    }
+                    return term;
                 },
 
                 get filteredTerminals() {
+                    if (!Array.isArray(this.terminals) || this.terminals.length < 15) {
+                        this.terminals = this.getUnifiedTerminals();
+                        try {
+                            localStorage.setItem('pos_ilp_terminals_v1', JSON.stringify(this.terminals));
+                        } catch (e) {}
+                    }
+                    const normBranch = this.normalizeBranchName(this.selectedBranch || this.selectedLocation || 'Pusat');
+                    let list = this.terminals.filter(t => this.normalizeBranchName(t.branch) === normBranch);
+                    if (list.length === 0) {
+                        this.terminals = this.getUnifiedTerminals();
+                        list = this.terminals.filter(t => this.normalizeBranchName(t.branch) === normBranch);
+                    }
                     if (this.terminalFilter === 'handover') {
-                        return this.terminals.filter(t => t.status === 'HANDOVER_PENDING');
+                        return list.filter(t => t.status === 'HANDOVER_PENDING');
                     }
                     if (this.terminalFilter === 'available') {
-                        return this.terminals.filter(t => t.status === 'AVAILABLE');
+                        return list.filter(t => t.status === 'AVAILABLE');
                     }
                     if (this.terminalFilter === 'active') {
-                        return this.terminals.filter(t => t.status === 'ACTIVE_OTHER' || t.status === 'ACTIVE_MINE');
+                        return list.filter(t => t.status === 'ACTIVE_OTHER' || t.status === 'ACTIVE_MINE');
                     }
-                    return this.terminals;
+                    return list;
+                },
+
+                selectBranch(branchName) {
+                    const norm = this.normalizeBranchName(branchName);
+                    this.selectedBranch = norm;
+                    this.selectedLocation = norm;
+                    localStorage.setItem('pos_kasir_branch', norm);
+                    localStorage.setItem('pos_kasir_location', norm);
+                    this.branchAssignmentError = '';
+                    this.terminalInactiveNotice = '';
+
+                    if (!this.isStaffAssignedToBranch(this.selectedStaffObj, norm)) {
+                        this.branchAssignmentError = `Akses Cabang Ditolak: Akun kasir Anda (${this.selectedStaffObj.name}) belum memiliki penugasan resmi di ${norm}. Silakan hubungi Manager untuk menambahkan penugasan cabang pada akun Anda.`;
+                    }
+
+                    // Auto-select terminal pertama yang aktif dan tersedia di cabang terpilih
+                    const branchTerms = this.filteredTerminals;
+                    if (branchTerms.length > 0) {
+                        const firstAvailable = branchTerms.find(t => t.isActive && t.status !== 'ACTIVE_OTHER') || branchTerms.find(t => t.isActive) || branchTerms[0];
+                        if (firstAvailable) {
+                            this.selectedShift = firstAvailable.id;
+                            localStorage.setItem('pos_kasir_shift', firstAvailable.id);
+                            this.selectTerminalCard(firstAvailable);
+                        }
+                    }
                 },
 
                 get selectedTerminalSessionsToday() {
@@ -472,15 +835,17 @@
                 set cashVariance(val) {},
 
                 initOpening() {
+                    // 1. Sinkronisasi daftar staf terpadu (Members / Kelola Akun)
+                    this.staffList = this.getUnifiedStaffList();
+
                     try {
                         const savedActive = localStorage.getItem('pos_ilp_active_session_v1');
                         if (savedActive) {
                             this.activeSession = { ...this.activeSession, ...JSON.parse(savedActive) };
                         }
-                        const savedTerminals = localStorage.getItem('pos_ilp_terminals_v1');
-                        if (savedTerminals) {
-                            this.terminals = JSON.parse(savedTerminals);
-                        }
+                        // 2. Sinkronisasi master 15 terminal terpadu (Pusat, Cabang A, Cabang B)
+                        this.terminals = this.getUnifiedTerminals();
+                        localStorage.setItem('pos_ilp_terminals_v1', JSON.stringify(this.terminals));
                         const savedHistory = localStorage.getItem('pos_ilp_session_history_v1');
                         if (savedHistory) {
                             this.sessionHistory = JSON.parse(savedHistory);
@@ -489,21 +854,96 @@
                         if (savedMovements) {
                             this.cashMovements = JSON.parse(savedMovements);
                         }
+                        const savedOperator = localStorage.getItem('pos_ilp_active_operator_v1');
+                        if (savedOperator) {
+                            this.activeOperator = JSON.parse(savedOperator);
+                        } else {
+                            const cur = this.selectedStaffObj;
+                            this.activeOperator = {
+                                id: cur.id,
+                                name: cur.name,
+                                username: cur.username,
+                                nik: cur.nik,
+                                role: cur.role,
+                                branch: this.activeSession ? this.activeSession.storeLocation : this.selectedLocation,
+                                terminalId: this.activeSession ? this.activeSession.terminalId : this.selectedShift,
+                                startedAt: (this.activeSession && this.activeSession.startedAt) ? this.activeSession.startedAt : '10:00',
+                                status: 'ACTIVE'
+                            };
+                        }
+                        const savedOpHist = localStorage.getItem('pos_ilp_operator_history_v1');
+                        if (savedOpHist) {
+                            this.operatorHistory = JSON.parse(savedOpHist);
+                        } else {
+                            this.operatorHistory = [
+                                {
+                                    id: 'OPH-001',
+                                    sessionId: this.activeSession ? this.activeSession.sessionId : 'CS-20261019-K01-003',
+                                    terminalId: this.activeSession ? this.activeSession.terminalId : 'kasir_1',
+                                    fromStaff: null,
+                                    toStaff: { id: this.activeOperator.id, name: this.activeOperator.name, nik: this.activeOperator.nik },
+                                    switchedAt: (this.activeSession && this.activeSession.startedAt) ? this.activeSession.startedAt : '10:00',
+                                    reason: 'Pembukaan Sesi Terminal'
+                                }
+                            ];
+                        }
                     } catch (e) {
                         console.warn('Failed to parse session storage', e);
                     }
 
+                    const branch = localStorage.getItem('pos_kasir_branch');
                     const loc = localStorage.getItem('pos_kasir_location');
                     const shift = localStorage.getItem('pos_kasir_shift');
                     const savedOpening = localStorage.getItem('pos_kas_opening');
                     const savedCatatan = localStorage.getItem('pos_catatan_opening');
+                    const portalStaff = localStorage.getItem('pos_portal_logged_in_staff_id');
                     const savedStaff = localStorage.getItem('pos_kasir_staff_id');
 
-                    if (loc) this.selectedLocation = loc;
+                    // Prioritaskan akun yang baru login dari portal
+                    if (portalStaff) {
+                        this.selectedStaffId = portalStaff;
+                    } else if (savedStaff) {
+                        this.selectedStaffId = savedStaff;
+                    }
+
+                    if (branch) {
+                        this.selectedBranch = this.normalizeBranchName(branch);
+                        this.selectedLocation = this.selectedBranch;
+                    } else if (loc) {
+                        this.selectedBranch = this.normalizeBranchName(loc);
+                        this.selectedLocation = loc;
+                    } else if (this.selectedStaffObj && this.selectedStaffObj.assignedBranches && this.selectedStaffObj.assignedBranches.length > 0) {
+                        this.selectedBranch = this.normalizeBranchName(this.selectedStaffObj.assignedBranches[0].branch);
+                        this.selectedLocation = this.selectedBranch;
+                    } else if (this.selectedStaffObj && this.selectedStaffObj.branch) {
+                        this.selectedBranch = this.normalizeBranchName(this.selectedStaffObj.branch);
+                        this.selectedLocation = this.selectedBranch;
+                    } else {
+                        this.selectedBranch = 'Pusat';
+                        this.selectedLocation = 'Pusat';
+                    }
+
                     if (shift) this.selectedShift = shift;
                     if (savedOpening) this.kasOpening = savedOpening;
                     if (savedCatatan) this.catatanOpening = savedCatatan;
-                    if (savedStaff) this.selectedStaffId = savedStaff;
+
+                    // Rekonsiliasi Terminal Shift ke Cabang Terpilih
+                    const branchTerms = this.filteredTerminals;
+                    if (!branchTerms.some(t => t.id === this.selectedShift)) {
+                        const firstAvailable = branchTerms.find(t => t.isActive && t.status !== 'ACTIVE_OTHER') || branchTerms.find(t => t.isActive) || branchTerms[0];
+                        if (firstAvailable) {
+                            this.selectedShift = firstAvailable.id;
+                            localStorage.setItem('pos_kasir_shift', firstAvailable.id);
+                            this.selectTerminalCard(firstAvailable);
+                        }
+                    } else {
+                        const currentTerm = branchTerms.find(t => t.id === this.selectedShift);
+                        if (currentTerm) {
+                            this.selectTerminalCard(currentTerm);
+                        }
+                    }
+
+                    this.isTerminalLocked = localStorage.getItem('pos_ilp_terminal_locked_v1') === 'true';
 
                     this.syncTerminalStatuses();
                     this.recalcClosingFigures();
@@ -584,13 +1024,148 @@
                     localStorage.setItem('pos_ilp_terminals_v1', JSON.stringify(this.terminals));
                     localStorage.setItem('pos_ilp_session_history_v1', JSON.stringify(this.sessionHistory));
                     localStorage.setItem('pos_ilp_cash_movements_v1', JSON.stringify(this.cashMovements));
+                    localStorage.setItem('pos_ilp_active_operator_v1', JSON.stringify(this.activeOperator));
+                    localStorage.setItem('pos_ilp_operator_history_v1', JSON.stringify(this.operatorHistory));
                     window.dispatchEvent(new CustomEvent('pos-session-sync'));
                 },
 
+                // Fitur Pergantian Operator Terminal Kasir (Operator Switching)
+                openOperatorSwitchModal() {
+                    // Validasi keranjang belanja aktif (Cart Guard)
+                    if (this.cart && this.cart.length > 0) {
+                        alert('Peringatan Transaksi Berjalan:\nKeranjang belanja masih memiliki produk! Harap selesaikan pembayaran terlebih dahulu atau simpan antrean melalui fitur "Tahan Tagihan" (F3 / Tahan Bill) sebelum pergantian kasir.');
+                        return;
+                    }
+
+                    const eligible = this.getEligibleCashiersForSwitch();
+                    this.operatorSwitchModal.targetStaffId = eligible.length > 0 ? eligible[0].id : '';
+                    this.operatorSwitchModal.targetPin = '';
+                    this.operatorSwitchModal.reason = 'Istirahat / Sholat';
+                    this.operatorSwitchModal.errorMsg = '';
+                    this.operatorSwitchModal.attemptCount = 0;
+                    this.operatorSwitchModal.isSubmitting = false;
+                    this.operatorSwitchModal.open = true;
+                },
+
+                submitOperatorSwitch() {
+                    if (this.operatorSwitchModal.isSubmitting) return;
+
+                    if (!this.operatorSwitchModal.targetStaffId) {
+                        this.operatorSwitchModal.errorMsg = 'Silakan pilih kasir pengganti dari daftar yang tersedia!';
+                        return;
+                    }
+
+                    const targetStaff = this.staffList.find(s => s.id === this.operatorSwitchModal.targetStaffId);
+                    if (!targetStaff) {
+                        this.operatorSwitchModal.errorMsg = 'Akun kasir pengganti tidak ditemukan.';
+                        return;
+                    }
+
+                    const currentLoc = this.activeSession ? this.activeSession.storeLocation : this.selectedLocation;
+                    if (!this.isStaffAssignedToBranch(targetStaff, currentLoc)) {
+                        this.operatorSwitchModal.errorMsg = `Kasir ${targetStaff.name} tidak memiliki penugasan di cabang ${this.normalizeBranchName(currentLoc)}.`;
+                        return;
+                    }
+
+                    const enteredPin = (this.operatorSwitchModal.targetPin || '').trim();
+                    const validPin = targetStaff.pin || '123456';
+                    if (!enteredPin) {
+                        this.operatorSwitchModal.errorMsg = 'Masukkan PIN pribadi kasir pengganti untuk verifikasi!';
+                        return;
+                    }
+
+                    if (enteredPin !== validPin && enteredPin !== '123456') {
+                        this.operatorSwitchModal.attemptCount = (this.operatorSwitchModal.attemptCount || 0) + 1;
+                        if (this.operatorSwitchModal.attemptCount >= 3) {
+                            this.operatorSwitchModal.errorMsg = 'Batas percobaan PIN tercapai (3x). Akses pergantian dibatalkan.';
+                            setTimeout(() => {
+                                this.operatorSwitchModal.open = false;
+                            }, 2500);
+                            return;
+                        }
+                        this.operatorSwitchModal.errorMsg = `PIN tidak sesuai untuk ${targetStaff.name} (Percobaan ${this.operatorSwitchModal.attemptCount}/3). Demo PIN: ${validPin}`;
+                        return;
+                    }
+
+                    this.operatorSwitchModal.isSubmitting = true;
+                    const nowTime = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
+                    const fromStaff = { ...(this.activeOperator || this.selectedStaffObj) };
+
+                    const toStaff = {
+                        id: targetStaff.id,
+                        name: targetStaff.name,
+                        username: targetStaff.username,
+                        nik: targetStaff.nik,
+                        role: targetStaff.role || 'Kasir Operasional',
+                        branch: currentLoc,
+                        terminalId: this.activeSession ? this.activeSession.terminalId : this.selectedShift,
+                        startedAt: nowTime,
+                        status: 'ACTIVE'
+                    };
+
+                    // 1. Perbarui Operator Aktif
+                    this.activeOperator = toStaff;
+                    localStorage.setItem('pos_ilp_active_operator_v1', JSON.stringify(this.activeOperator));
+
+                    // 2. Catat Log Riwayat Pergantian Operator
+                    const logEntry = {
+                        id: 'OPH-' + Date.now(),
+                        sessionId: this.activeSession ? this.activeSession.sessionId : null,
+                        terminalId: this.activeSession ? this.activeSession.terminalId : this.selectedShift,
+                        fromStaff: { id: fromStaff.id, name: fromStaff.name, nik: fromStaff.nik },
+                        toStaff: { id: toStaff.id, name: toStaff.name, nik: toStaff.nik },
+                        switchedAt: nowTime,
+                        reason: this.operatorSwitchModal.reason || 'Pergantian Operator'
+                    };
+                    this.operatorHistory.unshift(logEntry);
+                    localStorage.setItem('pos_ilp_operator_history_v1', JSON.stringify(this.operatorHistory));
+
+                    // 3. Sesi Keuangan Tetap Terbuka (Tidak Ditutup)
+                    // Update activeCashierId di terminal
+                    const currentTerm = this.terminals.find(t => t.id === (this.activeSession ? this.activeSession.terminalId : this.selectedShift));
+                    if (currentTerm) {
+                        currentTerm.activeCashierId = toStaff.id;
+                        currentTerm.activeCashierName = toStaff.name;
+                    }
+
+                    localStorage.setItem('pos_kasir_staff_id', toStaff.id);
+                    this.selectedStaffId = toStaff.id;
+
+                    this.persistAllState();
+                    this.operatorSwitchModal.open = false;
+                    this.operatorSwitchModal.isSubmitting = false;
+
+                    this.triggerToast(`Operator kasir berganti ke ${toStaff.name}. Sesi keuangan tetap aktif.`);
+                },
+
+                // Kunci & Buka Terminal Sementara
+                lockTerminal() {
+                    this.isTerminalLocked = true;
+                    this.lockPinInput = '';
+                    this.lockErrorMsg = '';
+                    localStorage.setItem('pos_ilp_terminal_locked_v1', 'true');
+                },
+
+                unlockTerminal() {
+                    const currentOp = this.activeOperator || this.selectedStaffObj;
+                    const validPin = currentOp.pin || '123456';
+                    if (this.lockPinInput === validPin || this.lockPinInput === '123456') {
+                        this.isTerminalLocked = false;
+                        this.lockPinInput = '';
+                        this.lockErrorMsg = '';
+                        localStorage.removeItem('pos_ilp_terminal_locked_v1');
+                        this.triggerToast('Kunci terminal berhasil dibuka.');
+                    } else {
+                        this.lockErrorMsg = `PIN operator tidak sesuai untuk ${currentOp.name}. (Demo PIN: ${validPin})`;
+                    }
+                },
+
                 formatShiftLabel(shift) {
-                    if (!shift) return 'Kasir 01';
-                    let num = parseInt(shift.replace(/\D/g, ''), 10) || 1;
-                    return 'Kasir ' + (num < 10 ? '0' + num : num);
+                    if (!shift) return 'POS-01';
+                    const s = String(shift).trim();
+                    if (s.toUpperCase().startsWith('POS-')) return s.toUpperCase();
+                    let num = parseInt(s.replace(/\D/g, ''), 10) || 1;
+                    return 'POS-' + (num < 10 ? '0' + num : num);
                 },
 
                 formatRupiah(val) {
@@ -616,7 +1191,14 @@
                 },
 
                 selectTerminalCard(terminal) {
+                    if (terminal.isActive === false) {
+                        this.terminalInactiveNotice = `Terminal ${terminal.label} sedang NONAKTIF (${terminal.inactiveReason || 'Maintenance'}). Akses ditolak.`;
+                        this.triggerToast(this.terminalInactiveNotice);
+                        return;
+                    }
+                    this.terminalInactiveNotice = '';
                     this.selectedShift = terminal.id;
+                    localStorage.setItem('pos_kasir_shift', terminal.id);
                     this.openingPinError = '';
                     if (terminal.status === 'ACTIVE_MINE') {
                         if (this.activeSession && this.activeSession.openingCash) {
@@ -637,14 +1219,35 @@
                 openOpeningModal() {
                     this.openingPinError = '';
                     this.isOpeningSubmitting = false;
-                    const term = this.selectedTerminalObj;
 
-                    // Terminal yang sedang dipakai petugas lain dinonaktifkan
-                    if (term && term.status === 'ACTIVE_OTHER') {
+                    // 1. Validasi penugasan cabang kasir
+                    const currentBranch = this.selectedBranch || this.selectedLocation || 'Pusat';
+                    if (!this.isStaffAssignedToBranch(this.selectedStaffObj, currentBranch)) {
+                        const errMsg = `Akses Cabang Ditolak: Akun kasir Anda (${this.selectedStaffObj.name}) belum memiliki penugasan resmi di ${currentBranch}. Silakan hubungi Manager.`;
+                        this.openingPinError = errMsg;
+                        this.triggerToast(errMsg);
                         return;
                     }
 
-                    // Validasi: Cek apakah petugas ini sudah memiliki sesi OPEN di terminal lain
+                    const term = this.selectedTerminalObj;
+
+                    // 2. Validasi status aktif terminal
+                    if (term && term.isActive === false) {
+                        const errMsg = `Terminal ${term.label} sedang NONAKTIF: ${term.inactiveReason || 'Maintenance'}. Akses ditolak.`;
+                        this.openingPinError = errMsg;
+                        this.triggerToast(errMsg);
+                        return;
+                    }
+
+                    // 3. Validasi terminal sedang dipakai orang lain
+                    if (term && term.status === 'ACTIVE_OTHER') {
+                        const errMsg = `Terminal ${term.label} sedang digunakan oleh ${term.activeCashierName || 'Petugas Lain'}.`;
+                        this.openingPinError = errMsg;
+                        this.triggerToast(errMsg);
+                        return;
+                    }
+
+                    // 4. Validasi sesi aktif di terminal lain
                     const staffActive = this.getActiveSessionForStaff(this.selectedStaffId);
                     if (staffActive) {
                         const activeLabel = staffActive.terminalLabel || this.formatShiftLabel(staffActive.terminalId);
@@ -766,8 +1369,23 @@
 
                     const staff = this.selectedStaffObj;
                     const term = this.selectedTerminalObj;
+                    const currentBranch = this.selectedBranch || this.selectedLocation || 'Pusat';
 
-                    // 1. Validasi Global: Cek apakah kasir ini sudah punya sesi OPEN di terminal lain
+                    // 1. Validasi Penugasan Cabang Kasir
+                    if (!this.isStaffAssignedToBranch(staff, currentBranch)) {
+                        this.openingPinError = `Akses Cabang Ditolak: Akun kasir Anda (${staff.name}) belum memiliki penugasan resmi di ${currentBranch}. Silakan hubungi Manager.`;
+                        this.triggerToast(this.openingPinError);
+                        return;
+                    }
+
+                    // 2. Validasi Keaktifan Terminal (Nonaktif ditolak)
+                    if (term && term.isActive === false) {
+                        this.openingPinError = `Terminal ${term.label} sedang NONAKTIF (${term.inactiveReason || 'Maintenance'}). Silakan pilih terminal aktif lain.`;
+                        this.triggerToast(this.openingPinError);
+                        return;
+                    }
+
+                    // 3. Validasi Global: Cek apakah kasir ini sudah punya sesi OPEN di terminal lain
                     const staffActive = this.getActiveSessionForStaff(staff.id);
                     if (staffActive) {
                         const activeLabel = staffActive.terminalLabel || this.formatShiftLabel(staffActive.terminalId);
@@ -790,7 +1408,7 @@
                         }
                     }
 
-                    // 2. Validasi Terminal Target: Cegah pembukaan terminal yang sedang dipakai petugas lain
+                    // 4. Validasi Terminal Target: Cegah pembukaan terminal yang sedang dipakai petugas lain
                     if (term && term.activeCashierId && term.activeSessionId && term.activeCashierId !== staff.id) {
                         const errorMsg = `Terminal ${term.label} sedang digunakan oleh ${term.activeCashierName || 'Petugas Lain'}.`;
                         this.openingPinError = errorMsg;
@@ -798,17 +1416,18 @@
                         return;
                     }
 
-                    // 3. Validasi PIN Petugas (Simulasi Demo PIN: 123456)
+                    // 5. Validasi PIN Petugas (Demo PIN: 123456 atau PIN akun petugas)
+                    const validStaffPin = staff.pin || '123456';
                     if (!this.staffPinInput || this.staffPinInput.length < 4) {
-                        this.openingPinError = 'Masukkan PIN pribadi petugas (Simulasi Demo PIN: 123456).';
+                        this.openingPinError = `Masukkan PIN pribadi petugas ${staff.name} (Demo PIN: ${validStaffPin}).`;
                         return;
                     }
-                    if (this.staffPinInput !== staff.pin && this.staffPinInput !== '123456') {
-                        this.openingPinError = 'PIN petugas tidak sesuai. Gunakan Demo PIN: 123456.';
+                    if (this.staffPinInput !== validStaffPin && this.staffPinInput !== '123456') {
+                        this.openingPinError = `PIN petugas tidak sesuai untuk akun ${staff.name}. Gunakan PIN akun atau Demo PIN: ${validStaffPin}.`;
                         return;
                     }
 
-                    // 4. Validasi Uang Awal Laci
+                    // 6. Validasi Uang Awal Laci
                     const openingNumeric = this.parseRupiahString(this.kasOpening);
                     if (isNaN(openingNumeric) || openingNumeric < 0) {
                         this.openingPinError = 'Nominal uang awal laci tidak valid.';
@@ -818,7 +1437,8 @@
                     this.isOpeningSubmitting = true;
                     const nowTime = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
                     const termNum = (term ? term.id.replace(/\D/g, '') : '1').padStart(2, '0');
-                    const nextSeq = String((term ? term.sessionsTodayCount : 0) + 1).padStart(3, '0');
+                    const termMatchingHistory = this.sessionHistory.filter(h => h.terminalId === this.selectedShift || h.terminalId === ('kasir_' + parseInt(termNum, 10)) || (h.sessionId && h.sessionId.includes(`-K${termNum}-`)));
+                    const nextSeq = String(Math.max((term ? term.sessionsTodayCount : 0), termMatchingHistory.length) + 1).padStart(3, '0');
                     const newSessionId = `CS-20261019-K${termNum}-${nextSeq}`;
 
                     const isHandover = !!(term && term.status === 'HANDOVER_PENDING' && term.handover);
@@ -830,7 +1450,7 @@
                         sessionId: newSessionId,
                         businessDayId: this.businessDayId,
                         businessDayDate: this.businessDayDate,
-                        storeLocation: this.selectedLocation,
+                        storeLocation: currentBranch,
                         terminalId: this.selectedShift,
                         terminalLabel: this.formatShiftLabel(this.selectedShift),
                         cashierId: staff.id,
@@ -892,7 +1512,34 @@
                         { id: 'CM-005', time: nowTime, type: 'CASH_DROP', label: 'Setor Kas Sementara ke Brankas (Amankan Laci)', amount: 500000, direction: 'out', actor: staff.name }
                     ];
 
-                    localStorage.setItem('pos_kasir_location', this.selectedLocation);
+                    // Inisialisasi Operator Aktif & Catatan Riwayat
+                    this.activeOperator = {
+                        id: staff.id,
+                        name: staff.name,
+                        username: staff.username,
+                        nik: staff.nik,
+                        role: staff.role || 'Kasir Operasional',
+                        branch: currentBranch,
+                        terminalId: this.selectedShift,
+                        startedAt: nowTime,
+                        status: 'ACTIVE'
+                    };
+                    localStorage.setItem('pos_ilp_active_operator_v1', JSON.stringify(this.activeOperator));
+
+                    const opLog = {
+                        id: 'OPH-' + Date.now(),
+                        sessionId: newSessionId,
+                        terminalId: this.selectedShift,
+                        fromStaff: null,
+                        toStaff: { id: staff.id, name: staff.name, nik: staff.nik },
+                        switchedAt: nowTime,
+                        reason: 'Pembukaan Sesi Terminal'
+                    };
+                    this.operatorHistory = [opLog];
+                    localStorage.setItem('pos_ilp_operator_history_v1', JSON.stringify(this.operatorHistory));
+
+                    localStorage.setItem('pos_kasir_location', currentBranch);
+                    localStorage.setItem('pos_kasir_branch', currentBranch);
                     localStorage.setItem('pos_kasir_shift', this.selectedShift);
                     localStorage.setItem('pos_kas_opening', this.kasOpening);
                     localStorage.setItem('pos_catatan_opening', this.catatanOpening);

@@ -19,12 +19,21 @@
     myTransactions: [],
 
     initMyReport() {
+        if (this.activeOperator) {
+            this.activeCashierProfile.id = this.activeOperator.id;
+            this.activeCashierProfile.name = this.activeOperator.name;
+            this.activeCashierProfile.username = this.activeOperator.username;
+            this.activeCashierProfile.nik = this.activeOperator.nik;
+            this.activeCashierProfile.role = this.activeOperator.role || 'Kasir Operasional';
+        }
         const raw = localStorage.getItem('pos_ilp_transactions_v1');
         if (raw) {
             try {
                 const trxs = JSON.parse(raw);
                 if (trxs && trxs.length > 0) {
-                    this.myTransactions = trxs.map(t => ({
+                    const myName = (this.activeOperator ? this.activeOperator.name : (this.activeSession.cashierName || 'Budi Kurniawan')).toLowerCase();
+                    const filtered = trxs.filter(t => !t.cashier || t.cashier.toLowerCase() === myName);
+                    this.myTransactions = (filtered.length > 0 ? filtered : trxs).map(t => ({
                         id: t.id || t.trxId || '#TRX-001',
                         time: t.time || '11:42 WIB',
                         method: t.method || (t.paymentMethod || 'TUNAI'),
@@ -227,31 +236,33 @@ class="flex flex-col h-screen w-full font-sans">
 
                             <!-- Refund log by this cashier -->
                             <h4 class="text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-2">Riwayat Refund Ditangani Kasir Ini:</h4>
-                            <div class="border border-gray-100 rounded-xl overflow-hidden text-xs">
-                                <table class="w-full text-left">
-                                    <thead class="bg-gray-50 text-gray-500 text-[10px] font-bold uppercase">
-                                        <tr>
-                                            <th class="px-3 py-2">No. Dokumen</th>
-                                            <th class="px-3 py-2">Faktur Asal</th>
-                                            <th class="px-3 py-2">Alasan</th>
-                                            <th class="px-3 py-2 text-right">Nilai Refund</th>
-                                            <th class="px-3 py-2 text-center">Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="divide-y divide-gray-100">
-                                        <template x-for="(rf, idx) in refundActivities" :key="idx">
+                            <div class="border border-gray-100 rounded-xl overflow-hidden bg-white text-xs">
+                                <div class="overflow-x-auto min-w-0 w-full">
+                                    <table class="w-full text-left text-xs min-w-[650px] border-collapse">
+                                        <thead class="bg-gray-50/80 border-b border-gray-200 text-gray-600 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">
                                             <tr>
-                                                <td class="px-3 py-2 font-mono font-bold text-gray-800" x-text="rf.refundNo"></td>
-                                                <td class="px-3 py-2 font-mono text-blue-600" x-text="rf.trxId"></td>
-                                                <td class="px-3 py-2 text-gray-600" x-text="rf.reason"></td>
-                                                <td class="px-3 py-2 font-mono font-bold text-rose-600 text-right" x-text="formatRupiah(rf.amount)"></td>
-                                                <td class="px-3 py-2 text-center">
-                                                    <span class="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-[10px] font-bold">Disetujui SPV</span>
-                                                </td>
+                                                <th class="px-3.5 py-2.5 text-left w-[140px]">No. Dokumen</th>
+                                                <th class="px-3.5 py-2.5 text-left w-[140px]">Faktur Asal</th>
+                                                <th class="px-3.5 py-2.5 text-left w-[180px]">Alasan</th>
+                                                <th class="px-3.5 py-2.5 text-right w-[110px]">Nilai Refund</th>
+                                                <th class="px-3.5 py-2.5 text-center w-[110px]">Status</th>
                                             </tr>
-                                        </template>
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody class="divide-y divide-gray-100">
+                                            <template x-for="(rf, idx) in refundActivities" :key="idx">
+                                                <tr class="hover:bg-blue-50/30 transition-colors">
+                                                    <td class="px-3.5 py-2.5 font-mono font-bold text-gray-800 whitespace-nowrap" x-text="rf.refundNo"></td>
+                                                    <td class="px-3.5 py-2.5 font-mono text-blue-600 whitespace-nowrap" x-text="rf.trxId"></td>
+                                                    <td class="px-3.5 py-2.5 text-gray-600" x-text="rf.reason"></td>
+                                                    <td class="px-3.5 py-2.5 font-mono font-bold text-rose-600 text-right whitespace-nowrap" x-text="formatRupiah(rf.amount)"></td>
+                                                    <td class="px-3.5 py-2.5 text-center whitespace-nowrap">
+                                                        <span class="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-[10px] font-bold">Disetujui SPV</span>
+                                                    </td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
 
@@ -274,51 +285,53 @@ class="flex flex-col h-screen w-full font-sans">
                             <span class="material-symbols-rounded text-[16px]">arrow_forward</span>
                         </a>
                     </div>
-                    <table class="w-full text-left border-collapse text-xs">
-                        <thead>
-                            <tr class="bg-gray-50 border-b border-gray-200 text-gray-500 text-[10px] font-black uppercase tracking-widest">
-                                <th class="px-5 py-3">No. Faktur</th>
-                                <th class="px-5 py-3">Waktu</th>
-                                <th class="px-5 py-3">Metode Bayar</th>
-                                <th class="px-5 py-3 text-center">Jumlah Item</th>
-                                <th class="px-5 py-3 text-right">Diskon</th>
-                                <th class="px-5 py-3 text-right">Total Bayar</th>
-                                <th class="px-5 py-3 text-center">Status</th>
-                                <th class="px-5 py-3 text-center">Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-100">
-                            <template x-for="trx in myTransactions" :key="trx.id">
-                                <tr class="hover:bg-blue-50/20 transition-colors">
-                                    <td class="px-5 py-3 font-mono font-bold text-[#0052cc]" x-text="trx.id"></td>
-                                    <td class="px-5 py-3 text-gray-600 font-mono" x-text="trx.time"></td>
-                                    <td class="px-5 py-3">
-                                        <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold"
-                                              :class="{
-                                                  'bg-emerald-50 text-emerald-700 border border-emerald-200': trx.method === 'TUNAI',
-                                                  'bg-blue-50 text-[#0052cc] border border-blue-200': trx.method === 'QRIS',
-                                                  'bg-orange-50 text-orange-700 border border-orange-200': trx.method === 'KREDIT ANGGOTA',
-                                                  'bg-purple-50 text-purple-700 border border-purple-200': trx.method === 'CAMPURAN'
-                                              }"
-                                              x-text="trx.method"></span>
-                                    </td>
-                                    <td class="px-5 py-3 text-center font-bold text-gray-700" x-text="trx.itemCount + ' item'"></td>
-                                    <td class="px-5 py-3 text-right font-mono text-amber-600 font-bold" x-text="trx.discount > 0 ? formatRupiah(trx.discount) : '-'"></td>
-                                    <td class="px-5 py-3 text-right font-mono font-black text-gray-900" x-text="formatRupiah(trx.total)"></td>
-                                    <td class="px-5 py-3 text-center">
-                                        <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-green-50 text-green-700 border border-green-200" x-text="trx.status"></span>
-                                    </td>
-                                    <td class="px-5 py-3 text-center">
-                                        <a href="{{ url('/cetak-struk') }}"
-                                           title="Cetak Struk"
-                                           class="p-1 rounded-lg text-[#0052cc] hover:text-blue-800 hover:bg-blue-50 transition-colors inline-block">
-                                            <span class="material-symbols-rounded text-[18px]">print</span>
-                                        </a>
-                                    </td>
+                    <div class="overflow-x-auto min-w-0 w-full">
+                        <table class="w-full text-left border-collapse text-xs min-w-[1000px]">
+                            <thead>
+                                <tr class="bg-gray-50/80 border-b border-gray-200 text-gray-600 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                    <th class="px-5 py-3 text-left w-[140px]">No. Faktur</th>
+                                    <th class="px-5 py-3 text-left w-[130px]">Waktu</th>
+                                    <th class="px-5 py-3 text-left w-[140px]">Metode Bayar</th>
+                                    <th class="px-5 py-3 text-center w-[120px]">Jumlah Item</th>
+                                    <th class="px-5 py-3 text-right w-[110px]">Diskon</th>
+                                    <th class="px-5 py-3 text-right w-[140px]">Total Bayar</th>
+                                    <th class="px-5 py-3 text-center w-[110px]">Status</th>
+                                    <th class="px-5 py-3 text-center w-[100px]">Aksi</th>
                                 </tr>
-                            </template>
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                <template x-for="trx in myTransactions" :key="trx.id">
+                                    <tr class="hover:bg-blue-50/30 transition-colors">
+                                        <td class="px-5 py-3 font-mono font-bold text-[#0052cc] whitespace-nowrap" x-text="trx.id"></td>
+                                        <td class="px-5 py-3 text-gray-600 font-mono whitespace-nowrap" x-text="trx.time"></td>
+                                        <td class="px-5 py-3 whitespace-nowrap">
+                                            <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold"
+                                                  :class="{
+                                                      'bg-emerald-50 text-emerald-700 border border-emerald-200': trx.method === 'TUNAI',
+                                                      'bg-blue-50 text-[#0052cc] border border-blue-200': trx.method === 'QRIS',
+                                                      'bg-orange-50 text-orange-700 border border-orange-200': trx.method === 'KREDIT ANGGOTA',
+                                                      'bg-purple-50 text-purple-700 border border-purple-200': trx.method === 'CAMPURAN'
+                                                  }"
+                                                  x-text="trx.method"></span>
+                                        </td>
+                                        <td class="px-5 py-3 text-center font-bold text-gray-700 whitespace-nowrap" x-text="trx.itemCount + ' item'"></td>
+                                        <td class="px-5 py-3 text-right font-mono text-amber-600 font-bold whitespace-nowrap" x-text="trx.discount > 0 ? formatRupiah(trx.discount) : '-'"></td>
+                                        <td class="px-5 py-3 text-right font-mono font-black text-gray-900 whitespace-nowrap" x-text="formatRupiah(trx.total)"></td>
+                                        <td class="px-5 py-3 text-center whitespace-nowrap">
+                                            <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-green-50 text-green-700 border border-green-200" x-text="trx.status"></span>
+                                        </td>
+                                        <td class="px-5 py-3 text-center whitespace-nowrap">
+                                            <a href="{{ url('/cetak-struk') }}"
+                                               title="Cetak Struk"
+                                               class="p-1 rounded-lg text-[#0052cc] hover:text-blue-800 hover:bg-blue-50 transition-colors inline-block">
+                                                <span class="material-symbols-rounded text-[18px]">print</span>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
             </main>

@@ -250,14 +250,14 @@
                             </span>
                         </div>
 
-                        <div class="overflow-x-auto flex-1">
-                            <table class="w-full text-left border-collapse">
+                        <div class="overflow-x-auto min-w-0 w-full flex-1">
+                            <table class="w-full text-left border-collapse min-w-[550px]">
                                 <thead>
-                                    <tr class="bg-[#f8f9fa] border-b border-gray-100 text-gray-500 text-[11.5px] font-bold">
-                                        <th class="pl-6 pr-3 py-3.5 w-[40%]">Nama Produk</th>
-                                        <th class="px-3 py-3.5 w-[22%]">Kategori</th>
-                                        <th class="px-3 py-3.5 text-center w-[14%]">Terjual</th>
-                                        <th class="pl-3 pr-6 py-3.5 text-right w-[24%]">Pendapatan</th>
+                                    <tr class="bg-[#f8f9fa] border-b border-gray-100 text-gray-500 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                        <th class="pl-6 pr-3 py-3.5 text-left w-[220px]">Nama Produk</th>
+                                        <th class="px-3 py-3.5 text-left w-[130px]">Kategori</th>
+                                        <th class="px-3 py-3.5 text-center w-[90px]">Terjual</th>
+                                        <th class="pl-3 pr-6 py-3.5 text-right w-[140px]">Pendapatan</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-100 text-[13px]">
@@ -338,14 +338,14 @@
                                 <span class="text-[11px] font-semibold text-gray-400">12 Terminal Kasir</span>
                             </div>
 
-                            <div class="overflow-x-auto max-h-[255px] overflow-y-auto">
-                                <table class="w-full text-left border-collapse">
+                            <div class="overflow-x-auto min-w-0 w-full max-h-[255px] overflow-y-auto">
+                                <table class="w-full text-left border-collapse min-w-[500px]">
                                     <thead class="sticky top-0 z-10 bg-[#f8f9fa] shadow-[0_1px_0_0_#f3f4f6]">
-                                        <tr class="border-b border-gray-100 text-gray-500 text-[11.5px] font-bold">
-                                            <th class="pl-6 pr-3 py-3.5 w-[38%]">No. Kasir</th>
-                                            <th class="px-3 py-3.5 text-center w-[20%]">Transaksi</th>
-                                            <th class="px-3 py-3.5 text-right w-[28%]">Total Penjualan</th>
-                                            <th class="pl-3 pr-6 py-3.5 text-center w-[14%]">Void</th>
+                                        <tr class="border-b border-gray-100 text-gray-500 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                            <th class="pl-6 pr-3 py-3.5 text-left w-[180px]">No. Kasir</th>
+                                            <th class="px-3 py-3.5 text-center w-[100px]">Transaksi</th>
+                                            <th class="px-3 py-3.5 text-right w-[140px]">Total Penjualan</th>
+                                            <th class="pl-3 pr-6 py-3.5 text-center w-[80px]">Void</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-gray-100 text-[13px]">

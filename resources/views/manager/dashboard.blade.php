@@ -263,37 +263,38 @@ class="flex h-screen w-full bg-[#f4f7fb] font-sans text-gray-800 overflow-hidden
                     </div>
                 </div>
 
-                <div class="w-full overflow-x-auto">
-                    <table class="w-full text-left border-collapse text-xs">
+                <div class="w-full overflow-x-auto min-w-0">
+                    <table class="w-full text-left border-collapse text-xs min-w-[750px]">
                         <thead>
-                            <tr class="border-b border-gray-100 text-gray-500 text-[10px] font-black uppercase tracking-wider">
-                                <th class="pb-3 pl-4">Petugas Kasir</th>
-                                <th class="pb-3">Nomor Terminal</th>
-                                <th class="pb-3">Total Transaksi Hari Ini</th>
-                                <th class="pb-3">Status</th>
-                                <th class="pb-3 pr-4 text-center">Navigasi</th>
+                            <tr class="bg-gray-50/80 border-b border-gray-200 text-gray-600 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                <th class="py-3 px-4">Petugas Kasir</th>
+                                <th class="py-3 px-4">Nomor Terminal</th>
+                                <th class="py-3 px-4">Total Transaksi Hari Ini</th>
+                                <th class="py-3 px-4">Status</th>
+                                <th class="py-3 px-4 text-center">Navigasi</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-gray-50">
+                        <tbody class="divide-y divide-gray-100">
                             <template x-for="(cashier, idx) in cashierList" :key="idx">
                                 <tr class="hover:bg-gray-50/50 transition-colors">
-                                    <td class="py-3.5 pl-4">
+                                    <td class="py-3 px-4 whitespace-nowrap">
                                         <div class="flex items-center gap-3">
                                             <div class="w-8 h-8 rounded-full bg-blue-100 text-[#0052cc] flex items-center justify-center font-bold text-xs" x-text="cashier.initial"></div>
                                             <span class="font-bold text-gray-900" x-text="cashier.name"></span>
                                         </div>
                                     </td>
-                                    <td class="py-3.5 text-gray-600 font-semibold" x-text="cashier.terminal"></td>
-                                    <td class="py-3.5 font-mono font-bold text-gray-800" x-text="cashier.total"></td>
-                                    <td class="py-3.5">
+                                    <td class="py-3 px-4 text-gray-600 font-semibold whitespace-nowrap" x-text="cashier.terminal"></td>
+                                    <td class="py-3 px-4 font-mono font-bold text-gray-800 whitespace-nowrap" x-text="cashier.total"></td>
+                                    <td class="py-3 px-4 whitespace-nowrap">
                                         <div class="flex items-center gap-1.5">
                                             <div class="w-2 h-2 rounded-full" :class="cashier.color"></div>
                                             <span class="font-bold" :class="cashier.status === 'Aktif' ? 'text-green-600' : 'text-gray-500'" x-text="cashier.status"></span>
                                         </div>
                                     </td>
-                                    <td class="py-3.5 pr-4 text-center">
-                                        <a href="/kasir/transaksi" class="text-[#0052cc] hover:underline font-bold">
+                                    <td class="py-3 px-4 text-center whitespace-nowrap">
+                                        <a href="/kasir/transaksi" class="inline-flex items-center gap-1 text-[#0052cc] hover:underline font-bold text-xs">
                                             Lihat Sesi
+                                            <span class="material-symbols-rounded text-sm">arrow_forward</span>
                                         </a>
                                     </td>
                                 </tr>

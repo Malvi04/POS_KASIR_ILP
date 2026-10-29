@@ -619,7 +619,7 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
 
                     <!-- Partners Data Table Card -->
                     <div class="bg-white border border-slate-200/80 rounded-2xl shadow-2xs overflow-hidden">
-                        <div class="overflow-x-auto">
+                        <div class="overflow-x-auto min-w-0 w-full">
                             <table class="w-full text-left border-collapse min-w-[960px]">
                                 <thead>
                                     <tr class="bg-[#f8fafc] border-b border-slate-200/80 text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
@@ -900,7 +900,7 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
 
                     <!-- Products Table -->
                     <div class="bg-white border border-slate-200/80 rounded-2xl shadow-2xs overflow-hidden">
-                        <div class="overflow-x-auto">
+                        <div class="overflow-x-auto min-w-0 w-full">
                             <table class="w-full text-left border-collapse min-w-[1060px]">
                                 <thead>
                                     <tr class="bg-[#f8fafc] border-b border-slate-200/80 text-[10.5px] font-extrabold text-slate-500 uppercase tracking-wider">

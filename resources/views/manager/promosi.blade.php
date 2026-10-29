@@ -216,7 +216,7 @@
     confirmDeletePromo() {
         if (!this.selectedPromo) return;
         if (this.deleteInputText.trim().toLowerCase() !== 'hapus') {
-            alert('Ketik "hapus" untuk konfirmasi penghapusan!');
+            alert('Ketik \'hapus\' untuk konfirmasi penghapusan!');
             return;
         }
         const name = this.selectedPromo.name;
@@ -394,31 +394,31 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         </div>
 
                         <!-- Table -->
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-left border-collapse">
+                        <div class="overflow-x-auto min-w-0 w-full">
+                            <table class="w-full text-left border-collapse min-w-[850px]">
                                 <thead>
-                                    <tr class="bg-[#f8f9fa] border-y border-gray-100 text-gray-600 text-[11.5px] font-bold">
-                                        <th class="pl-8 pr-4 py-3.5 w-[35%]">Nama Promo</th>
-                                        <th class="px-4 py-3.5 w-[20%]">Tipe</th>
-                                        <th class="px-4 py-3.5 w-[20%]">Periode</th>
-                                        <th class="px-4 py-3.5 w-[15%]">Status</th>
-                                        <th class="pl-4 pr-8 py-3.5 text-center w-[10%]">Aksi</th>
+                                    <tr class="bg-gray-50/80 border-y border-gray-200 text-gray-600 text-[11px] font-bold tracking-wider uppercase whitespace-nowrap">
+                                        <th class="pl-8 pr-4 py-3.5 text-left w-[320px]">Nama Promo</th>
+                                        <th class="px-4 py-3.5 text-left w-[150px]">Tipe</th>
+                                        <th class="px-4 py-3.5 text-left w-[180px]">Periode</th>
+                                        <th class="px-4 py-3.5 text-left w-[120px]">Status</th>
+                                        <th class="pl-4 pr-8 py-3.5 text-center w-[100px]">Aksi</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-100 text-[13px]">
                                     <template x-for="p in filteredPromotions" :key="p.id">
-                                        <tr class="hover:bg-gray-50/70 transition-colors">
-                                            <td class="pl-8 pr-4 py-4 align-middle">
+                                        <tr class="hover:bg-blue-50/30 transition-colors">
+                                            <td class="pl-8 pr-4 py-3.5 align-middle">
                                                 <div class="font-bold text-gray-900 text-[13.5px]" x-text="p.name"></div>
                                                 <div class="text-[11.5px] text-gray-500 mt-0.5" x-text="p.condition"></div>
                                             </td>
-                                            <td class="px-4 py-4 align-middle">
+                                            <td class="px-4 py-3.5 align-middle whitespace-nowrap">
                                                 <span class="inline-block px-3 py-1 rounded-full text-[11px] font-bold"
                                                       :class="p.badgeClass"
                                                       x-text="p.typeLabel"></span>
                                             </td>
-                                            <td class="px-4 py-4 align-middle font-mono text-[12px] text-gray-700" x-text="p.period"></td>
-                                            <td class="px-4 py-4 align-middle">
+                                            <td class="px-4 py-3.5 align-middle font-mono text-[12px] text-gray-700 whitespace-nowrap" x-text="p.period"></td>
+                                            <td class="px-4 py-3.5 align-middle whitespace-nowrap">
                                                 <button type="button"
                                                         @click="toggleStatus(p)"
                                                         title="Klik untuk ubah status"
@@ -437,8 +437,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                     <span x-text="p.status"></span>
                                                 </button>
                                             </td>
-                                            <td class="pl-4 pr-8 py-4 align-middle text-center">
-                                                <div class="flex items-center justify-center gap-2 text-gray-500">
+                                            <td class="pl-4 pr-8 py-3.5 align-middle text-center whitespace-nowrap">
+                                                <div class="inline-flex items-center justify-center gap-2 text-gray-500">
                                                     <button type="button"
                                                             @click="openEditPromo(p)"
                                                             title="Edit Promo"
@@ -694,7 +694,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </button>
                 </div>
 
-                <form @submit.prevent="saveEditPromo()" class="p-6 space-y-4 text-xs font-sans" x-if="editingPromo">
+                <template x-if="editingPromo">
+                    <form @submit.prevent="saveEditPromo()" class="p-6 space-y-4 text-xs font-sans">
                     <div>
                         <label class="font-bold text-gray-700 block mb-1">Nama Promo</label>
                         <input type="text"
@@ -745,6 +746,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         </button>
                     </div>
                 </form>
+            </template>
 
             </div>
         </div>

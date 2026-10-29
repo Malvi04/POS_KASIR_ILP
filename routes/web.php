@@ -15,7 +15,7 @@ Route::get('/login-manager', function () {
 })->name('manager.login');
 
 Route::get('/inventory', function () {
-    return view('inventory');
+    return view('manager.inventory');
 });
 
 Route::get('/pos', function () {
@@ -23,19 +23,19 @@ Route::get('/pos', function () {
 });
 
 Route::get('/settings', function () {
-    return view('settings');
+    return view('manager.settings');
 });
 
 Route::get('/members', function () {
-    return view('members');
+    return view('manager.members');
 });
 
 Route::get('/dashboard', function () {
-    return view('dashboard');
+    return view('manager.dashboard');
 });
 
 Route::get('/reports', function () {
-    return view('reports');
+    return view('manager.reports');
 });
 
 Route::get('/select-shift', function () {
@@ -51,7 +51,7 @@ Route::get('/kupon', function () {
 });
 
 Route::get('/retur', function () {
-    return view('retur');
+    return view('manager.retur');
 });
 
 Route::get('/cetak-struk', function () {
@@ -59,27 +59,27 @@ Route::get('/cetak-struk', function () {
 });
 
 Route::get('/absensi', function () {
-    return view('absensi');
+    return view('manager.absensi');
 });
 
 Route::get('/member-detail', function () {
-    return view('member-detail');
+    return view('manager.member-detail');
 });
 
 Route::get('/stock-opname', function () {
-    return view('stock-opname');
+    return view('manager.stock-opname');
 });
 
 Route::get('/promosi', function () {
-    return view('promosi');
+    return view('manager.promosi');
 });
 
 Route::get('/kelola-akun', function () {
-    return view('kelola-akun');
+    return view('manager.kelola-akun');
 });
 
 Route::get('/umkm-partners', function () {
-    return view('umkm-partners');
+    return view('manager.umkm-partners');
 });
 
 /*

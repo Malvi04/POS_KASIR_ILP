@@ -580,20 +580,20 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 </div>
                             </div>
 
-                            <div class="overflow-x-auto">
-                                <table class="w-full text-left text-xs border-collapse">
-                                    <thead class="bg-slate-50 border-b border-gray-200 text-gray-500 font-bold tracking-wider uppercase text-[10px]">
+                            <div class="overflow-x-auto min-w-0 w-full">
+                                <table class="w-full text-left text-xs border-collapse min-w-[650px]">
+                                    <thead class="bg-gray-50/80 border-b border-gray-200 text-gray-600 font-bold tracking-wider uppercase text-[11px] whitespace-nowrap">
                                         <tr>
-                                            <th class="px-5 py-3">PRODUK & SKU</th>
-                                            <th class="px-4 py-3">KONDISI / ALASAN</th>
-                                            <th class="px-3 py-3 text-center">QTY</th>
-                                            <th class="px-4 py-3 text-right">ESTIMASI KLAIM</th>
-                                            <th class="px-4 py-3 text-center">HAPUS</th>
+                                            <th class="px-5 py-3 text-left w-[240px]">PRODUK & SKU</th>
+                                            <th class="px-4 py-3 text-left w-[180px]">KONDISI / ALASAN</th>
+                                            <th class="px-3 py-3 text-center w-[90px]">QTY</th>
+                                            <th class="px-4 py-3 text-right w-[120px]">ESTIMASI KLAIM</th>
+                                            <th class="px-4 py-3 text-center w-[60px]">HAPUS</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-gray-100">
                                         <template x-for="item in draftItems" :key="item.id">
-                                            <tr class="hover:bg-slate-50/50">
+                                            <tr class="hover:bg-blue-50/30 transition-colors">
                                                 <td class="px-5 py-3.5">
                                                     <div class="flex flex-col">
                                                         <span class="font-bold text-gray-900" x-text="item.name"></span>
@@ -602,26 +602,26 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                 </td>
 
                                                 <td class="px-4 py-3.5">
-                                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold"
+                                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap inline-block"
                                                           :class="item.reason === 'RUSAK_BOCOR' ? 'bg-rose-50 text-rose-700 border border-rose-200' : (item.reason === 'KEDALUWARSA' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-blue-50 text-blue-700 border border-blue-200')"
                                                           x-text="item.reasonLabel"></span>
                                                     <p class="text-[10.5px] text-gray-500 mt-1 line-clamp-1" x-text="item.note"></p>
                                                 </td>
 
-                                                <td class="px-3 py-3.5 text-center font-bold text-gray-900">
+                                                <td class="px-3 py-3.5 text-center font-bold text-gray-900 whitespace-nowrap">
                                                     <span x-text="item.qty + ' ' + item.unit"></span>
                                                 </td>
 
-                                                <td class="px-4 py-3.5 text-right font-mono font-bold text-gray-900">
+                                                <td class="px-4 py-3.5 text-right font-mono font-bold text-gray-900 whitespace-nowrap">
                                                     <span x-text="formatRupiah(item.subtotal)"></span>
                                                 </td>
 
-                                                <td class="px-4 py-3.5 text-center">
+                                                <td class="px-4 py-3.5 text-center whitespace-nowrap">
                                                     <button type="button"
                                                             @click="removeDraftItem(item.id)"
                                                             :disabled="isProcessingDelete"
                                                             title="Hapus item ini dari draf retur"
-                                                            class="text-gray-400 hover:text-rose-600 transition-colors cursor-pointer p-1 rounded-lg hover:bg-rose-50">
+                                                            class="text-gray-400 hover:text-rose-600 transition-colors cursor-pointer p-1 rounded-lg hover:bg-rose-50 inline-flex items-center justify-center">
                                                         <span class="material-symbols-rounded text-[18px]">delete</span>
                                                     </button>
                                                 </td>
@@ -712,16 +712,16 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
                     <!-- History Table -->
                     <div class="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden flex flex-col">
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-left border-collapse text-xs">
+                        <div class="overflow-x-auto min-w-0 w-full">
+                            <table class="w-full text-left border-collapse text-xs min-w-[900px]">
                                 <thead>
-                                    <tr class="bg-slate-50 border-b border-gray-200 text-gray-500 font-bold uppercase text-[10px] tracking-wider">
-                                        <th class="px-6 py-3.5">NO. DOKUMEN RETUR</th>
-                                        <th class="px-4 py-3.5">GUDANG TUJUAN</th>
-                                        <th class="px-4 py-3.5 text-center">MUATAN</th>
-                                        <th class="px-4 py-3.5 text-right">TOTAL NILAI</th>
-                                        <th class="px-4 py-3.5 text-center">STATUS SOP SIKLUS</th>
-                                        <th class="px-6 py-3.5 text-right">RINCIAN</th>
+                                    <tr class="bg-gray-50/80 border-b border-gray-200 text-gray-600 font-bold uppercase text-[11px] tracking-wider whitespace-nowrap">
+                                        <th class="px-6 py-3.5 text-left w-[200px]">NO. DOKUMEN RETUR</th>
+                                        <th class="px-4 py-3.5 text-left w-[180px]">GUDANG TUJUAN</th>
+                                        <th class="px-4 py-3.5 text-center w-[120px]">MUATAN</th>
+                                        <th class="px-4 py-3.5 text-right w-[140px]">TOTAL NILAI</th>
+                                        <th class="px-4 py-3.5 text-center w-[160px]">STATUS SOP SIKLUS</th>
+                                        <th class="px-6 py-3.5 text-right w-[180px]">RINCIAN</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-100 text-sm">
@@ -854,15 +854,16 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
 
                     <!-- Items Table -->
-                    <div class="border border-gray-200 rounded-xl overflow-hidden">
-                        <table class="w-full text-left border-collapse">
-                            <thead class="bg-gray-100 font-bold text-gray-600">
-                                <tr>
-                                    <th class="px-4 py-2.5">PRODUK</th>
-                                    <th class="px-3 py-2.5 text-center">QTY</th>
-                                    <th class="px-4 py-2.5">ALASAN / KONDISI</th>
-                                </tr>
-                            </thead>
+                    <div class="border border-gray-200 rounded-xl overflow-hidden bg-white">
+                        <div class="overflow-x-auto min-w-0 w-full">
+                            <table class="w-full text-left border-collapse text-xs min-w-[500px]">
+                                <thead class="bg-gray-50/80 border-b border-gray-200 font-bold text-gray-600 uppercase tracking-wider text-[11px] whitespace-nowrap">
+                                    <tr>
+                                        <th class="px-4 py-2.5 text-left w-[220px]">PRODUK</th>
+                                        <th class="px-3 py-2.5 text-center w-[90px]">QTY</th>
+                                        <th class="px-4 py-2.5 text-left w-[190px]">ALASAN / KONDISI</th>
+                                    </tr>
+                                </thead>
                             <tbody class="divide-y divide-gray-100">
                                 <template x-for="(it, idx) in selectedDoc?.items" :key="idx">
                                     <tr>

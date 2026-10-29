@@ -704,23 +704,23 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <span class="text-xs text-gray-500 font-medium" x-text="'Menampilkan ' + filteredProducts.length + ' dari ' + totalItems + ' produk'"></span>
                     </div>
 
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left border-collapse">
+                    <div class="overflow-x-auto min-w-0 w-full">
+                        <table class="w-full text-left border-collapse min-w-[850px]">
                             <thead>
-                                <tr class="bg-slate-50/80 border-b border-gray-200">
-                                    <th class="px-6 py-3.5 text-[10px] font-bold text-gray-500 tracking-wider uppercase">PRODUK & BRAND</th>
-                                    <th class="px-4 py-3.5 text-[10px] font-bold text-gray-500 tracking-wider uppercase">BARCODE / SKU</th>
-                                    <th class="px-4 py-3.5 text-[10px] font-bold text-gray-500 tracking-wider uppercase text-center">SISA STOK</th>
-                                    <th class="px-4 py-3.5 text-[10px] font-bold text-gray-500 tracking-wider uppercase text-right">HARGA UMUM & MEMBER</th>
-                                    <th class="px-4 py-3.5 text-[10px] font-bold text-gray-500 tracking-wider uppercase text-center">STATUS</th>
-                                    <th class="px-6 py-3.5 text-[10px] font-bold text-gray-500 tracking-wider uppercase text-center">AKSI</th>
+                                <tr class="bg-gray-50/80 border-b border-gray-200 text-gray-600 font-bold tracking-wider uppercase text-[11px] whitespace-nowrap">
+                                    <th class="px-6 py-3.5 text-left w-[260px]">PRODUK & BRAND</th>
+                                    <th class="px-4 py-3.5 text-left w-[150px]">BARCODE / SKU</th>
+                                    <th class="px-4 py-3.5 text-center w-[110px]">SISA STOK</th>
+                                    <th class="px-4 py-3.5 text-right w-[160px]">HARGA UMUM & MEMBER</th>
+                                    <th class="px-4 py-3.5 text-center w-[120px]">STATUS</th>
+                                    <th class="px-6 py-3.5 text-center w-[110px]">AKSI</th>
                                 </tr>
                             </thead>
                             <tbody class="text-sm divide-y divide-gray-100">
                                 <template x-for="p in filteredProducts" :key="p.sku">
-                                    <tr class="hover:bg-slate-50/60 transition-colors">
+                                    <tr class="hover:bg-blue-50/30 transition-colors">
                                         <!-- Produk & Brand -->
-                                        <td class="px-6 py-4">
+                                        <td class="px-6 py-3.5">
                                             <div class="flex flex-col">
                                                 <span class="font-bold text-gray-900 text-[13px]" x-text="p.name"></span>
                                                 <div class="flex items-center gap-2 mt-0.5">
@@ -732,7 +732,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         </td>
 
                                         <!-- Barcode / SKU -->
-                                        <td class="px-4 py-4">
+                                        <td class="px-4 py-3.5 whitespace-nowrap">
                                             <div class="flex flex-col">
                                                 <span class="font-mono text-[12px] font-bold text-gray-700" x-text="p.barcode"></span>
                                                 <span class="font-mono text-[10px] text-gray-400 mt-0.5" x-text="p.sku"></span>
@@ -740,7 +740,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         </td>
 
                                         <!-- Sisa Stok -->
-                                        <td class="px-4 py-4 text-center">
+                                        <td class="px-4 py-3.5 text-center whitespace-nowrap">
                                             <div class="inline-flex flex-col items-center">
                                                 <span class="font-black text-[14px]"
                                                       :class="p.stock === 0 ? 'text-gray-400 line-through' : (p.stock <= p.minStock ? 'text-amber-600' : 'text-gray-900')"
@@ -750,7 +750,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         </td>
 
                                         <!-- Harga Umum & Member -->
-                                        <td class="px-4 py-4 text-right">
+                                        <td class="px-4 py-3.5 text-right whitespace-nowrap">
                                             <div class="flex flex-col items-end">
                                                 <span class="font-mono font-bold text-gray-900 text-[13px]" x-text="formatRupiah(p.price)"></span>
                                                 <span class="text-[10px] text-emerald-600 font-semibold" x-text="'Member: ' + formatRupiah(p.memberPrice || p.price)"></span>
@@ -758,7 +758,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         </td>
 
                                         <!-- Status -->
-                                        <td class="px-4 py-4 text-center">
+                                        <td class="px-4 py-3.5 text-center whitespace-nowrap">
                                             <template x-if="p.status === 'TERSEDIA'">
                                                 <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                                                     <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
@@ -785,8 +785,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         </td>
 
                                         <!-- Aksi (CRUD Buttons) -->
-                                        <td class="px-6 py-4 text-center">
-                                            <div class="flex items-center justify-center gap-1.5">
+                                        <td class="px-6 py-3.5 text-center whitespace-nowrap">
+                                            <div class="inline-flex items-center justify-center gap-1.5">
                                                 <!-- Detail Button -->
                                                 <button type="button"
                                                         @click="openDetail(p)"

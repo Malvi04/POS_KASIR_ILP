@@ -304,7 +304,7 @@
     confirmDeleteKupon() {
         if (!this.selectedKupon) return;
         if (this.deleteInputText.trim().toLowerCase() !== 'hapus') {
-            alert('Ketik "hapus" untuk mengonfirmasi pembatalan kupon!');
+            alert('Ketik \'hapus\' untuk mengonfirmasi pembatalan kupon!');
             return;
         }
         const idToDelete = this.selectedKupon.id;
@@ -500,74 +500,75 @@ class="flex flex-col h-screen w-full font-sans">
 
                 <!-- Table of Coupons -->
                 <div class="bg-white rounded-b-xl border border-gray-200 shadow-xs overflow-hidden">
-                    <table class="w-full text-left border-collapse text-xs">
-                        <thead>
-                            <tr class="bg-gray-50 border-b border-gray-200 text-gray-500 text-[10px] font-black uppercase tracking-widest">
-                                <th class="px-5 py-3.5">No. Ref / Kupon</th>
-                                <th class="px-5 py-3.5">Kategori & Detail</th>
-                                <th class="px-5 py-3.5">Penerima / Karyawan</th>
-                                <th class="px-5 py-3.5 text-right">Qty / Volume</th>
-                                <th class="px-5 py-3.5">Waktu Registrasi</th>
-                                <th class="px-5 py-3.5 text-center">Status</th>
-                                <th class="px-5 py-3.5 text-center">Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-100">
-                            <template x-for="k in filteredCoupons" :key="k.id">
-                                <tr class="hover:bg-blue-50/20 transition-colors">
-                                    <td class="px-5 py-3.5">
-                                        <button type="button"
-                                                @click="openDetail(k)"
-                                                class="font-mono font-bold text-[#0052cc] hover:underline cursor-pointer"
-                                                x-text="k.id"></button>
-                                    </td>
-                                    <td class="px-5 py-3.5">
-                                        <div class="flex items-center gap-2">
-                                            <span class="w-2 h-2 rounded-full shrink-0" :class="k.dotClass"></span>
-                                            <div>
-                                                <div class="font-bold text-gray-900" x-text="k.itemDetail"></div>
-                                                <span class="text-[10px] text-gray-400 font-mono uppercase" x-text="k.categoryLabel"></span>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td class="px-5 py-3.5">
-                                        <div class="font-bold text-gray-900" x-text="k.recipientName"></div>
-                                        <div class="text-[11px] text-gray-500 flex items-center gap-1">
-                                            <span x-text="k.recipientRole"></span>
-                                            <template x-if="k.vehicleNo && k.vehicleNo !== '-'">
-                                                <span class="font-mono text-gray-400" x-text="'(' + k.vehicleNo + ')'"></span>
-                                            </template>
-                                        </div>
-                                    </td>
-                                    <td class="px-5 py-3.5 text-right font-mono font-black text-gray-900" x-text="k.qty"></td>
-                                    <td class="px-5 py-3.5 text-gray-600 whitespace-nowrap font-mono text-[11px]" x-text="k.date"></td>
-                                    <td class="px-5 py-3.5 text-center">
-                                        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider"
-                                              :class="{
-                                                  'bg-blue-50 text-blue-700 border border-blue-200': k.status === 'TERVALIDASI',
-                                                  'bg-amber-50 text-amber-700 border border-amber-200': k.status === 'SIAP_AMBIL',
-                                                  'bg-emerald-50 text-emerald-700 border border-emerald-200': k.status === 'SELESAI'
-                                              }"
-                                              x-text="k.statusLabel"></span>
-                                    </td>
-                                    <td class="px-5 py-3.5 text-center">
-                                        <div class="flex items-center justify-center gap-1">
+                    <div class="overflow-x-auto min-w-0 w-full">
+                        <table class="w-full text-left border-collapse text-xs min-w-[950px]">
+                            <thead>
+                                <tr class="bg-gray-50/80 border-b border-gray-200 text-gray-600 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                    <th class="px-5 py-3.5 text-left w-[140px]">No. Ref / Kupon</th>
+                                    <th class="px-5 py-3.5 text-left w-[200px]">Kategori & Detail</th>
+                                    <th class="px-5 py-3.5 text-left w-[180px]">Penerima / Karyawan</th>
+                                    <th class="px-5 py-3.5 text-right w-[110px]">Qty / Volume</th>
+                                    <th class="px-5 py-3.5 text-left w-[140px]">Waktu Registrasi</th>
+                                    <th class="px-5 py-3.5 text-center w-[120px]">Status</th>
+                                    <th class="px-5 py-3.5 text-center w-[120px]">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                <template x-for="k in filteredCoupons" :key="k.id">
+                                    <tr class="hover:bg-blue-50/30 transition-colors">
+                                        <td class="px-5 py-3.5 whitespace-nowrap">
                                             <button type="button"
                                                     @click="openDetail(k)"
-                                                    title="Lihat Detail & Cetak Bukti"
-                                                    class="p-1 rounded-lg text-gray-500 hover:text-[#0052cc] hover:bg-blue-50 transition-colors cursor-pointer">
-                                                <span class="material-symbols-rounded text-[18px]">receipt_long</span>
-                                            </button>
-                                            <button type="button"
-                                                    @click="openEditKupon(k)"
-                                                    title="Edit Data Kupon"
-                                                    class="p-1 rounded-lg text-gray-500 hover:text-amber-600 hover:bg-amber-50 transition-colors cursor-pointer">
-                                                <span class="material-symbols-rounded text-[18px]">edit</span>
-                                            </button>
-                                            <template x-if="k.status !== 'SELESAI'">
+                                                    class="font-mono font-bold text-[#0052cc] hover:underline cursor-pointer"
+                                                    x-text="k.id"></button>
+                                        </td>
+                                        <td class="px-5 py-3.5">
+                                            <div class="flex items-center gap-2">
+                                                <span class="w-2 h-2 rounded-full shrink-0" :class="k.dotClass"></span>
+                                                <div>
+                                                    <div class="font-bold text-gray-900" x-text="k.itemDetail"></div>
+                                                    <span class="text-[10px] text-gray-400 font-mono uppercase" x-text="k.categoryLabel"></span>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="px-5 py-3.5">
+                                            <div class="font-bold text-gray-900" x-text="k.recipientName"></div>
+                                            <div class="text-[11px] text-gray-500 flex items-center gap-1">
+                                                <span x-text="k.recipientRole"></span>
+                                                <template x-if="k.vehicleNo && k.vehicleNo !== '-'">
+                                                    <span class="font-mono text-gray-400" x-text="'(' + k.vehicleNo + ')'"></span>
+                                                </template>
+                                            </div>
+                                        </td>
+                                        <td class="px-5 py-3.5 text-right font-mono font-black text-gray-900 whitespace-nowrap" x-text="k.qty"></td>
+                                        <td class="px-5 py-3.5 text-gray-600 whitespace-nowrap font-mono text-[11px]" x-text="k.date"></td>
+                                        <td class="px-5 py-3.5 text-center whitespace-nowrap">
+                                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider"
+                                                  :class="{
+                                                      'bg-blue-50 text-blue-700 border border-blue-200': k.status === 'TERVALIDASI',
+                                                      'bg-amber-50 text-amber-700 border border-amber-200': k.status === 'SIAP_AMBIL',
+                                                      'bg-emerald-50 text-emerald-700 border border-emerald-200': k.status === 'SELESAI'
+                                                  }"
+                                                  x-text="k.statusLabel"></span>
+                                        </td>
+                                        <td class="px-5 py-3.5 text-center whitespace-nowrap">
+                                            <div class="inline-flex items-center justify-center gap-1">
                                                 <button type="button"
-                                                        @click="redeemKupon(k)"
-                                                        title="Tukarkan Kupon Sekarang"
+                                                        @click="openDetail(k)"
+                                                        title="Lihat Detail & Cetak Bukti"
+                                                        class="p-1 rounded-lg text-gray-500 hover:text-[#0052cc] hover:bg-blue-50 transition-colors cursor-pointer">
+                                                    <span class="material-symbols-rounded text-[18px]">receipt_long</span>
+                                                </button>
+                                                <button type="button"
+                                                        @click="openEditKupon(k)"
+                                                        title="Edit Data Kupon"
+                                                        class="p-1 rounded-lg text-gray-500 hover:text-amber-600 hover:bg-amber-50 transition-colors cursor-pointer">
+                                                    <span class="material-symbols-rounded text-[18px]">edit</span>
+                                                </button>
+                                                <template x-if="k.status !== 'SELESAI'">
+                                                    <button type="button"
+                                                            @click="redeemKupon(k)"
+                                                            title="Tukarkan Kupon Sekarang"
                                                         class="p-1 rounded-lg text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 transition-colors cursor-pointer">
                                                     <span class="material-symbols-rounded text-[18px]">check_circle</span>
                                                 </button>
@@ -756,7 +757,8 @@ class="flex flex-col h-screen w-full font-sans">
                     </button>
                 </div>
 
-                <form @submit.prevent="saveEditKupon()" class="p-6 space-y-4 text-xs font-sans" x-if="editingKupon">
+                <template x-if="editingKupon">
+                    <form @submit.prevent="saveEditKupon()" class="p-6 space-y-4 text-xs font-sans">
 
                     <!-- Kategori Kupon -->
                     <div>
@@ -835,6 +837,7 @@ class="flex flex-col h-screen w-full font-sans">
                     </div>
 
                 </form>
+            </template>
 
             </div>
         </div>

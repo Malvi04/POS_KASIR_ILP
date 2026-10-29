@@ -648,38 +648,38 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <span class="text-xs text-gray-500 font-medium" x-text="'Menampilkan ' + filteredProducts.length + ' dari ' + totalItems + ' produk'"></span>
                 </div>
 
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left border-collapse">
+                <div class="overflow-x-auto min-w-0 w-full">
+                    <table class="w-full text-left border-collapse min-w-[950px]">
                         <thead>
-                            <tr class="bg-gray-50 border-b border-gray-200">
-                                <th class="px-6 py-4 text-[11px] font-bold text-gray-500 uppercase tracking-widest w-[28%]">PRODUK & BRAND</th>
-                                <th class="px-4 py-4 text-[11px] font-bold text-gray-500 uppercase tracking-widest">BARCODE / SKU</th>
-                                <th class="px-4 py-4 text-[11px] font-bold text-gray-500 uppercase tracking-widest text-center">KATEGORI</th>
-                                <th class="px-4 py-4 text-[11px] font-bold text-gray-500 uppercase tracking-widest text-center">STOK</th>
-                                <th class="px-4 py-4 text-[11px] font-bold text-gray-500 uppercase tracking-widest text-right">HARGA JUAL</th>
-                                <th class="px-6 py-4 text-[11px] font-bold text-gray-500 uppercase tracking-widest text-center">STATUS</th>
-                                <th class="px-4 py-4 text-[11px] font-bold text-gray-500 uppercase tracking-widest text-center">AKSI</th>
+                            <tr class="bg-gray-50/80 border-b border-gray-200 text-gray-600 font-bold tracking-wider uppercase text-[11px] whitespace-nowrap">
+                                <th class="px-6 py-3.5 text-left w-[280px]">PRODUK & BRAND</th>
+                                <th class="px-4 py-3.5 text-left w-[150px]">BARCODE / SKU</th>
+                                <th class="px-4 py-3.5 text-center w-[130px]">KATEGORI</th>
+                                <th class="px-4 py-3.5 text-center w-[110px]">STOK</th>
+                                <th class="px-4 py-3.5 text-right w-[150px]">HARGA JUAL</th>
+                                <th class="px-6 py-3.5 text-center w-[130px]">STATUS</th>
+                                <th class="px-4 py-3.5 text-center w-[110px]">AKSI</th>
                             </tr>
                         </thead>
                         <tbody class="text-[13px] divide-y divide-gray-100">
                             <template x-for="p in filteredProducts" :key="p.sku">
-                                <tr class="hover:bg-gray-50/80 transition-colors">
-                                    <td class="px-6 py-4">
+                                <tr class="hover:bg-blue-50/30 transition-colors">
+                                    <td class="px-6 py-3.5">
                                         <div class="flex flex-col">
                                             <span class="font-bold text-gray-900 text-[14px]" x-text="p.name"></span>
                                             <span class="text-[12px] text-gray-500 mt-0.5" x-text="p.brand || 'Lokal'"></span>
                                         </div>
                                     </td>
-                                    <td class="px-4 py-4 font-mono font-medium text-gray-700">
+                                    <td class="px-4 py-3.5 font-mono font-medium text-gray-700 whitespace-nowrap">
                                         <div class="flex flex-col">
                                             <span class="font-bold text-[12px]" x-text="p.barcode"></span>
                                             <span class="text-[10px] text-gray-400" x-text="p.sku"></span>
                                         </div>
                                     </td>
-                                    <td class="px-4 py-4 text-center">
+                                    <td class="px-4 py-3.5 text-center whitespace-nowrap">
                                         <span class="bg-[#dbeafe] text-[#0052cc] text-[11px] font-bold px-3 py-1 rounded-full whitespace-nowrap" x-text="p.category"></span>
                                     </td>
-                                    <td class="px-4 py-4 text-center">
+                                    <td class="px-4 py-3.5 text-center whitespace-nowrap">
                                         <div class="flex flex-col items-center">
                                             <span class="font-bold text-[14px]"
                                                   :class="p.stock === 0 ? 'text-gray-400 line-through' : (p.stock <= p.minStock ? 'text-amber-600' : 'text-gray-900')"
@@ -687,13 +687,13 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                             <span class="text-[11px] text-gray-500" x-text="p.unit || 'Pcs'"></span>
                                         </div>
                                     </td>
-                                    <td class="px-4 py-4 text-right">
+                                    <td class="px-4 py-3.5 text-right whitespace-nowrap">
                                         <div class="flex flex-col items-end">
                                             <span class="font-mono font-bold text-gray-900 text-[14px]" x-text="formatRupiah(p.price)"></span>
                                             <span class="text-[10.5px] text-emerald-600 font-semibold" x-text="'Mbr: ' + formatRupiah(p.memberPrice || p.price)"></span>
                                         </div>
                                     </td>
-                                    <td class="px-6 py-4 text-center">
+                                    <td class="px-6 py-3.5 text-center whitespace-nowrap">
                                         <template x-if="p.status === 'TERSEDIA'">
                                             <div class="inline-flex items-center gap-1.5 text-green-600 font-bold text-[12px]">
                                                 <div class="w-2 h-2 rounded-full bg-green-500"></div>
@@ -718,8 +718,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                             </div>
                                         </template>
                                     </td>
-                                    <td class="px-4 py-4 text-center">
-                                        <div class="flex items-center justify-center gap-1.5">
+                                    <td class="px-4 py-3.5 text-center whitespace-nowrap">
+                                        <div class="inline-flex items-center justify-center gap-1.5">
                                             <button type="button"
                                                     @click="openDetail(p)"
                                                     title="Lihat Detail Produk"
@@ -738,6 +738,10 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                     class="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer">
                                                 <span class="material-symbols-rounded text-[20px]">delete</span>
                                             </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
                                         </div>
                                     </td>
                                 </tr>

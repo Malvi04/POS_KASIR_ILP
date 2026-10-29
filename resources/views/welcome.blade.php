@@ -9,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
     @vite(['resources/css/app.css'])
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
     <style>
         body {
             font-family: 'Instrument Sans', sans-serif;
@@ -78,52 +79,136 @@
         <div id="login-forms-container" class="w-full flex justify-center">
 
             <!-- FORM 1: LOGIN KASIR -->
-            <div id="form-kasir" class="hidden opacity-0 translate-y-4 transition-all duration-300 ease-out transform w-full max-w-md">
+            <div id="form-kasir" class="hidden opacity-0 translate-y-4 transition-all duration-300 ease-out transform w-full max-w-md"
+                 x-data="cashierPortalLogin()"
+                 x-init="init()">
                 <div class="bg-white border border-gray-200/90 rounded-2xl p-8 shadow-sm">
                     <div class="text-center mb-6">
                         <div class="w-14 h-14 bg-blue-50 text-[#0052cc] rounded-full flex items-center justify-center mx-auto mb-3">
                             <span class="material-symbols-rounded text-[28px]">point_of_sale</span>
                         </div>
                         <h2 class="text-[20px] font-bold text-gray-900">Login Akun Petugas Kasir</h2>
-                        <p class="text-[13px] text-gray-500 mt-1">Pilih akun petugas resmi &amp; masukkan PIN pribadi</p>
+                        <p class="text-[13px] text-gray-500 mt-1">Masukkan NIK atau username &amp; password akun portal</p>
                     </div>
 
-                    <form action="{{ url('/select-shift') }}" method="GET" onsubmit="localStorage.setItem('pos_kasir_staff_id', document.getElementById('kasir-staff-select').value);" class="space-y-4">
-                        <div>
-                            <label class="block text-[12.5px] font-bold text-gray-700 mb-1.5">Akun Petugas Terdaftar</label>
+                    <form action="{{ url('/select-shift') }}" method="GET"
+                          @submit="if (!handleSubmit($event)) return false;"
+                          class="space-y-4">
+
+                        <!-- Hidden fields for automated tests & backwards compatibility -->
+                        <input type="hidden" id="kasir-username" name="username" :value="selectedStaff ? selectedStaff.username : 'budi_kasir01'">
+                        <select id="kasir-staff-select" name="staff_id" class="hidden"></select>
+
+                        <!-- FIELD 1: NIK / USERNAME KASIR (Searchable Autocomplete Input) -->
+                        <div class="relative" @click.outside="isOpen = false">
+                            <div class="flex items-center justify-between mb-1.5">
+                                <label for="kasir-identifier" class="block text-[12.5px] font-bold text-gray-700">NIK / Username Kasir</label>
+                                <span class="text-[10px] text-[#0052cc] font-bold">Identitas Resmi Anggota</span>
+                            </div>
                             <div class="relative flex items-center">
-                                <span class="material-symbols-rounded absolute left-3 text-gray-400 text-[20px]">badge</span>
-                                <select id="kasir-staff-select" name="staff_id"
-                                        onchange="document.getElementById('kasir-username').value = this.options[this.selectedIndex].dataset.username"
-                                        class="w-full pl-10 pr-8 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-[14px] text-gray-800 focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 outline-none transition-all font-bold cursor-pointer">
-                                    <option value="USR-02" data-username="budi_kasir01" selected>Budi Kurniawan (NIK: 202409821002)</option>
-                                    <option value="USR-01" data-username="andi_kasir">Andi Pratama (NIK: 202409821001)</option>
-                                    <option value="USR-03" data-username="citra_kasir">Citra Dewi (NIK: 202409821003)</option>
-                                    <option value="USR-04" data-username="dedi_kasir">Dedi Santoso (NIK: 202409821004)</option>
-                                </select>
-                                <input type="hidden" id="kasir-username" name="username" value="budi_kasir01">
+                                <span class="material-symbols-rounded absolute left-3.5 text-gray-400 text-[20px] pointer-events-none">badge</span>
+                                <input type="text"
+                                       id="kasir-identifier"
+                                       name="identifier"
+                                       role="combobox"
+                                       aria-autocomplete="list"
+                                       :aria-expanded="isOpen"
+                                       aria-controls="kasir-combobox-listbox"
+                                       :aria-activedescendant="focusedIndex >= 0 ? 'opt-' + focusedIndex : ''"
+                                       x-model="identifierInput"
+                                       @focus="isOpen = true"
+                                       @input="onInput($event.target.value)"
+                                       @keydown="onKeydown($event)"
+                                       placeholder="Masukkan NIK atau username kasir..."
+                                       required
+                                       autocomplete="off"
+                                       class="w-full pl-10 pr-10 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-[14px] text-gray-800 focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 outline-none transition-all font-mono font-bold">
+                                
+                                <button type="button" x-show="identifierInput.length > 0"
+                                        @click="clearIdentifier()"
+                                        class="absolute right-3 text-gray-400 hover:text-gray-600 cursor-pointer p-0.5"
+                                        title="Hapus / Cari Kasir Lain">
+                                    <span class="material-symbols-rounded text-[18px]">cancel</span>
+                                </button>
+                            </div>
+
+                            <!-- Autocomplete Suggestions Popover (Floating Dropdown) -->
+                            <div id="kasir-combobox-listbox"
+                                 role="listbox"
+                                 x-show="isOpen && filteredSuggestions.length > 0"
+                                 x-transition:enter="transition ease-out duration-150"
+                                 x-transition:enter-start="opacity-0 translate-y-1"
+                                 x-transition:enter-end="opacity-100 translate-y-0"
+                                 x-transition:leave="transition ease-in duration-100"
+                                 x-transition:leave-start="opacity-100 translate-y-0"
+                                 x-transition:leave-end="opacity-0 translate-y-1"
+                                 class="absolute left-0 right-0 mt-1.5 bg-white border border-gray-200 rounded-xl shadow-xl z-50 max-h-56 overflow-y-auto divide-y divide-gray-100">
+                                
+                                <template x-for="(staff, idx) in filteredSuggestions" :key="staff.id">
+                                    <div :id="'opt-' + idx"
+                                         role="option"
+                                         :aria-selected="focusedIndex === idx"
+                                         @click="selectStaff(staff)"
+                                         @mouseenter="focusedIndex = idx"
+                                         :class="focusedIndex === idx ? 'bg-blue-50/80 text-gray-900' : 'hover:bg-gray-50 text-gray-800'"
+                                         class="p-2.5 flex items-center justify-between gap-3 cursor-pointer transition-colors">
+                                        <div class="flex items-center gap-2.5 min-w-0">
+                                            <div class="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0"
+                                                 :class="staff.avatarBg || 'bg-blue-100 text-[#0052cc]'"
+                                                 x-text="staff.initials || 'KS'">
+                                            </div>
+                                            <div class="min-w-0">
+                                                <div class="font-bold text-xs text-gray-900 truncate" x-text="staff.name"></div>
+                                                <div class="text-[10.5px] text-gray-500 font-mono truncate" x-text="'@' + staff.username"></div>
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center gap-1 shrink-0">
+                                            <span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 border border-gray-200" x-text="staff.branch || 'Pusat'"></span>
+                                        </div>
+                                    </div>
+                                </template>
                             </div>
                         </div>
 
+                        <!-- FIELD 2: PASSWORD AKUN PORTAL -->
                         <div>
                             <div class="flex items-center justify-between mb-1.5">
-                                <label class="text-[12.5px] font-bold text-gray-700">PIN Pribadi / Kata Sandi</label>
-                                <button type="button" onclick="alert('Silakan hubungi supervisor / manager untuk bantuan reset PIN petugas.')" class="text-[12px] text-[#0052cc] hover:underline font-semibold cursor-pointer">Lupa PIN?</button>
+                                <label for="kasir-password" class="text-[12.5px] font-bold text-gray-700">Password Akun Portal</label>
+                                <button type="button" onclick="alert('Silakan hubungi supervisor / manager untuk bantuan reset password portal atau PIN petugas.')" class="text-[12px] text-[#0052cc] hover:underline font-semibold cursor-pointer">Lupa Password?</button>
                             </div>
                             <div class="relative flex items-center">
-                                <span class="material-symbols-rounded absolute left-3 text-gray-400 text-[20px]">lock</span>
-                                <input type="password" id="kasir-password" name="password" value="123456" required
+                                <span class="material-symbols-rounded absolute left-3.5 text-gray-400 text-[20px]">key</span>
+                                <input type="password"
+                                       id="kasir-password"
+                                       name="password"
+                                       x-model="portalPassword"
+                                       placeholder="Masukkan password akun..."
+                                       required
                                        class="w-full pl-10 pr-11 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-[14px] font-mono text-gray-800 focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 outline-none transition-all font-bold">
                                 <button type="button" onclick="togglePassword('kasir-password', 'kasir-eye')" class="absolute right-3 text-gray-400 hover:text-gray-600 cursor-pointer p-1">
                                     <span id="kasir-eye" class="material-symbols-rounded text-[20px]">visibility</span>
                                 </button>
                             </div>
+                            <p class="text-[11px] text-gray-500 mt-1.5 flex items-center gap-1.5">
+                                <span class="material-symbols-rounded text-[15px] text-[#0052cc]">info</span>
+                                <span>Gunakan Password Akun untuk login portal. PIN 6-digit kasir digunakan saat membuka terminal POS.</span>
+                            </p>
                         </div>
 
+                        <!-- Error Message Alert -->
+                        <div x-show="errorMsg" class="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-bold flex items-center gap-2">
+                            <span class="material-symbols-rounded text-[18px] text-red-500">error</span>
+                            <span x-text="errorMsg"></span>
+                        </div>
+
+                        <!-- SUBMIT BUTTON -->
                         <div class="pt-2">
-                            <button type="submit" class="w-full h-12 bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-[14px] rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer">
-                                <span>Lanjut Pilih Terminal &amp; Buka Sesi</span>
-                                <span class="material-symbols-rounded text-[20px]">login</span>
+                            <button type="submit"
+                                    :disabled="isSubmitting"
+                                    class="w-full h-12 bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-[14px] rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer">
+                                <span x-show="isSubmitting" class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                <span x-text="isSubmitting ? 'Memverifikasi...' : 'Lanjut Pilih Terminal & Buka Sesi'"></span>
+                                <span x-show="!isSubmitting" class="material-symbols-rounded text-[20px]">login</span>
                             </button>
                         </div>
                     </form>
@@ -256,6 +341,216 @@
     <!-- Script Handling with Identical Smooth Animations -->
     <script>
         let currentActiveForm = null;
+
+        // Cashier Portal Combobox State & Methods
+        window.cashierPortalLogin = function() {
+            const defaultCashiers = [
+                { id: 'USR-01', name: 'Andi Pratama', username: 'andi_kasir', password: 'andi123', pin: '123456', nik: '202409821001', role: 'Kasir Operasional', status: 'AKTIF', initials: 'AP', avatarBg: 'bg-blue-100 text-[#0052cc]', branch: 'Pusat' },
+                { id: 'USR-02', name: 'Budi Kurniawan', username: 'budi_kasir01', password: 'budi123', pin: '123456', nik: '202409821002', role: 'Kasir Utama', status: 'AKTIF', initials: 'BK', avatarBg: 'bg-emerald-100 text-emerald-700', branch: 'Pusat' },
+                { id: 'USR-03', name: 'Citra Dewi', username: 'citra_kasir', password: 'citra123', pin: '123456', nik: '202409821003', role: 'Kasir Operasional', status: 'AKTIF', initials: 'CD', avatarBg: 'bg-purple-100 text-purple-700', branch: 'Cabang A' },
+                { id: 'USR-04', name: 'Dedi Santoso', username: 'dedi_kasir', password: 'dedi123', pin: '123456', nik: '202409821004', role: 'Kasir Operasional', status: 'AKTIF', initials: 'DS', avatarBg: 'bg-amber-100 text-amber-700', branch: 'Cabang B' }
+            ];
+
+            return {
+                identifierInput: '202409821002',
+                portalPassword: 'budi123',
+                isOpen: false,
+                focusedIndex: -1,
+                selectedStaff: null,
+                errorMsg: '',
+                isSubmitting: false,
+                allStaff: defaultCashiers,
+
+                init() {
+                    this.loadStaff();
+                    // Pre-select Budi Kurniawan (atau akun tersimpan)
+                    const savedStaffId = localStorage.getItem('pos_portal_logged_in_staff_id') || localStorage.getItem('pos_kasir_staff_id') || 'USR-02';
+                    const matched = this.allStaff.find(s => s.id === savedStaffId) || this.allStaff[1] || this.allStaff[0];
+                    if (matched) {
+                        this.selectStaff(matched);
+                    }
+                },
+
+                loadStaff() {
+                    const list = JSON.parse(JSON.stringify(defaultCashiers));
+                    try {
+                        const rawUsers = localStorage.getItem('pos_ilp_users_v1');
+                        if (rawUsers) {
+                            const parsed = JSON.parse(rawUsers);
+                            if (Array.isArray(parsed)) {
+                                parsed.forEach(u => {
+                                    if (u.role && u.role.toUpperCase() === 'KASIR' && u.status !== 'NONAKTIF') {
+                                        const existIdx = list.findIndex(s => s.id === u.id || (u.username && s.username && s.username.toLowerCase() === u.username.toLowerCase()));
+                                        const userBranch = u.branch || (u.assignedBranches && u.assignedBranches[0]?.branch) || 'Pusat';
+                                        const userPass = u.password || 'kasir123';
+                                        const userPin = u.pin || '123456';
+                                        if (existIdx === -1) {
+                                            const inits = (u.name || 'Kasir').split(' ').filter(Boolean).map(w => w[0]).join('').substring(0, 2).toUpperCase();
+                                            list.push({
+                                                id: u.id || ('USR-' + Math.floor(10 + Math.random() * 90)),
+                                                name: u.name,
+                                                username: u.username || 'cashier_' + u.name.toLowerCase().replace(/\s+/g, '_'),
+                                                password: userPass,
+                                                pin: userPin,
+                                                nik: u.nik || '-',
+                                                role: 'Kasir Operasional',
+                                                status: u.status || 'AKTIF',
+                                                initials: inits || 'KS',
+                                                avatarBg: 'bg-indigo-100 text-indigo-700',
+                                                branch: userBranch
+                                            });
+                                        } else {
+                                            list[existIdx].password = userPass;
+                                            list[existIdx].pin = userPin;
+                                            list[existIdx].branch = userBranch;
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Error loading staff:', e);
+                    }
+                    this.allStaff = list;
+                    this.syncHiddenSelect();
+                },
+
+                syncHiddenSelect() {
+                    const selectEl = document.getElementById('kasir-staff-select');
+                    if (!selectEl) return;
+                    selectEl.innerHTML = '';
+                    this.allStaff.forEach(s => {
+                        const opt = document.createElement('option');
+                        opt.value = s.id;
+                        opt.dataset.username = s.username;
+                        opt.dataset.password = s.password || 'budi123';
+                        opt.dataset.pin = s.pin || '123456';
+                        opt.dataset.nik = s.nik || '-';
+                        opt.dataset.branch = s.branch || 'Pusat';
+                        opt.textContent = `${s.name} (NIK: ${s.nik || '-'}) - ${s.branch}`;
+                        selectEl.appendChild(opt);
+                    });
+                },
+
+                get filteredSuggestions() {
+                    const q = (this.identifierInput || '').trim().toLowerCase();
+                    if (!q) return this.allStaff.filter(s => (s.status || 'AKTIF').toUpperCase() === 'AKTIF');
+                    return this.allStaff.filter(s => {
+                        if ((s.status || 'AKTIF').toUpperCase() !== 'AKTIF') return false;
+                        const name = (s.name || '').toLowerCase();
+                        const u = (s.username || '').toLowerCase();
+                        const nik = (s.nik || '').toLowerCase();
+                        return name.includes(q) || u.includes(q) || nik.includes(q);
+                    });
+                },
+
+                onInput(val) {
+                    this.isOpen = true;
+                    this.focusedIndex = -1;
+                    const q = (val || '').trim().toLowerCase();
+                    const matched = this.allStaff.find(s => {
+                        return (s.username && s.username.toLowerCase() === q) || (s.nik && s.nik.toLowerCase() === q) || (s.name && s.name.toLowerCase() === q);
+                    });
+                    if (matched) {
+                        this.selectedStaff = matched;
+                        this.portalPassword = matched.password || 'budi123';
+                        this.syncSelectedToStorage(matched);
+                    }
+                },
+
+                clearIdentifier() {
+                    this.identifierInput = '';
+                    this.portalPassword = '';
+                    this.selectedStaff = null;
+                    this.isOpen = true;
+                    this.focusedIndex = -1;
+                    const inp = document.getElementById('kasir-identifier');
+                    if (inp) inp.focus();
+                },
+
+                selectStaff(staff) {
+                    this.selectedStaff = staff;
+                    this.identifierInput = staff.nik && staff.nik !== '-' ? staff.nik : staff.username;
+                    this.portalPassword = staff.password || 'budi123';
+                    this.isOpen = false;
+                    this.focusedIndex = -1;
+                    this.errorMsg = '';
+                    this.syncSelectedToStorage(staff);
+                },
+
+                syncSelectedToStorage(staff) {
+                    const selectEl = document.getElementById('kasir-staff-select');
+                    if (selectEl) selectEl.value = staff.id;
+                    const uInput = document.getElementById('kasir-username');
+                    if (uInput) uInput.value = staff.username || '';
+                    const passInput = document.getElementById('kasir-password');
+                    if (passInput) passInput.value = this.portalPassword;
+
+                    localStorage.setItem('pos_portal_logged_in_staff_id', staff.id);
+                    localStorage.setItem('pos_kasir_staff_id', staff.id);
+                    localStorage.setItem('pos_portal_logged_in_staff_name', staff.name);
+                    if (staff.nik && staff.nik !== '-') {
+                        localStorage.setItem('pos_portal_logged_in_nik', staff.nik);
+                    }
+                    if (staff.branch && staff.branch !== 'Pusat & Cabang A') {
+                        localStorage.setItem('pos_kasir_branch', staff.branch);
+                        localStorage.setItem('pos_kasir_location', staff.branch);
+                    }
+                },
+
+                onKeydown(e) {
+                    const list = this.filteredSuggestions;
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        if (!this.isOpen) this.isOpen = true;
+                        if (list.length > 0) {
+                            this.focusedIndex = (this.focusedIndex + 1) % list.length;
+                        }
+                    } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        if (!this.isOpen) this.isOpen = true;
+                        if (list.length > 0) {
+                            this.focusedIndex = (this.focusedIndex - 1 + list.length) % list.length;
+                        }
+                    } else if (e.key === 'Enter') {
+                        if (this.isOpen && this.focusedIndex >= 0 && this.focusedIndex < list.length) {
+                            e.preventDefault();
+                            this.selectStaff(list[this.focusedIndex]);
+                        }
+                    } else if (e.key === 'Escape') {
+                        this.isOpen = false;
+                        this.focusedIndex = -1;
+                    }
+                },
+
+                handleSubmit(e) {
+                    const q = (this.identifierInput || '').trim().toLowerCase();
+                    let staff = this.selectedStaff;
+                    if (!staff) {
+                        staff = this.allStaff.find(s => {
+                            return (s.username && s.username.toLowerCase() === q) || (s.nik && s.nik.toLowerCase() === q) || (s.name && s.name.toLowerCase() === q) || (s.id && s.id.toLowerCase() === q);
+                        });
+                    }
+                    if (!staff) {
+                        if (e && e.preventDefault) e.preventDefault();
+                        this.errorMsg = 'Akun kasir tidak ditemukan. Periksa NIK atau Username.';
+                        return false;
+                    }
+
+                    const expectedPass = staff.password || 'budi123';
+                    if (this.portalPassword !== expectedPass) {
+                        if (e && e.preventDefault) e.preventDefault();
+                        this.errorMsg = `Password portal salah untuk akun ${staff.name}.`;
+                        return false;
+                    }
+
+                    this.selectStaff(staff);
+                    this.isSubmitting = true;
+                    this.errorMsg = '';
+                    return true;
+                }
+            };
+        };
 
         const roleForms = {
             'Kasir': document.getElementById('form-kasir'),
@@ -397,15 +692,139 @@
             }
         });
 
+        function handleIdentifierInput(val) {
+            const clean = (val || '').trim().toLowerCase();
+            const selectEl = document.getElementById('kasir-staff-select');
+            if (!selectEl) return;
+            const match = Array.from(selectEl.options).find(opt => {
+                const text = (opt.text || '').toLowerCase();
+                const u = (opt.dataset.username || '').toLowerCase();
+                const nik = (opt.dataset.nik || '').toLowerCase();
+                return text.includes(clean) || u === clean || nik === clean || opt.value.toLowerCase() === clean;
+            });
+            if (match) {
+                selectEl.value = match.value;
+                document.getElementById('kasir-username').value = match.dataset.username || '';
+                const passInput = document.getElementById('kasir-password');
+                if (passInput && match.dataset.password) {
+                    passInput.value = match.dataset.password;
+                }
+            }
+        }
+
+        // Helper Portal Kasir Staff Selection
+        function handlePortalStaffSelectChange(selectEl) {
+            const opt = selectEl.options[selectEl.selectedIndex];
+            if (opt) {
+                const idInput = document.getElementById('kasir-identifier');
+                if (idInput) {
+                    idInput.value = opt.dataset.nik || opt.dataset.username || opt.value;
+                }
+                document.getElementById('kasir-username').value = opt.dataset.username || '';
+                const passInput = document.getElementById('kasir-password');
+                if (passInput && opt.dataset.password) {
+                    passInput.value = opt.dataset.password;
+                }
+            }
+        }
+
+        function validateAndSavePortalCashierSelection(e) {
+            const selectEl = document.getElementById('kasir-staff-select');
+            const idInput = document.getElementById('kasir-identifier');
+            const passInput = document.getElementById('kasir-password');
+            const identifierVal = idInput ? idInput.value.trim().toLowerCase() : '';
+            const passwordVal = passInput ? passInput.value.trim() : '';
+
+            let matchedOpt = null;
+            if (selectEl) {
+                matchedOpt = Array.from(selectEl.options).find(opt => {
+                    const nik = (opt.dataset.nik || '').toLowerCase();
+                    const u = (opt.dataset.username || '').toLowerCase();
+                    const val = opt.value.toLowerCase();
+                    const text = opt.text.toLowerCase();
+                    return nik === identifierVal || u === identifierVal || val === identifierVal || text.includes(identifierVal);
+                }) || selectEl.options[selectEl.selectedIndex];
+
+                const expectedPass = matchedOpt ? (matchedOpt.dataset.password || 'budi123') : 'budi123';
+                if (passwordVal !== expectedPass) {
+                    if (e && e.preventDefault) e.preventDefault();
+                    alert('Password yang dimasukkan tidak sesuai dengan akun ' + (matchedOpt ? matchedOpt.text.split('(')[0].trim() : '') + '!\nSilakan masukkan Password akun kasir yang benar.');
+                    return false;
+                }
+            }
+            savePortalCashierSelection(matchedOpt);
+            return true;
+        }
+
+        function savePortalCashierSelection(optOverride = null) {
+            const selectEl = document.getElementById('kasir-staff-select');
+            const opt = optOverride || (selectEl ? selectEl.options[selectEl.selectedIndex] : null);
+            if (opt) {
+                const staffId = opt.value;
+                const optText = opt.text || '';
+                const staffName = optText.split('(')[0].trim();
+                const staffNik = opt.dataset.nik || '';
+                localStorage.setItem('pos_portal_logged_in_staff_id', staffId);
+                localStorage.setItem('pos_kasir_staff_id', staffId);
+                localStorage.setItem('pos_portal_logged_in_staff_name', staffName);
+                if (staffNik) {
+                    localStorage.setItem('pos_portal_logged_in_nik', staffNik);
+                }
+            }
+        }
+
+        // Sinkronisasi Akun Kasir dari Kelola Akun (pos_ilp_users_v1)
+        function syncPortalCashierAccounts() {
+            try {
+                const selectEl = document.getElementById('kasir-staff-select');
+                if (!selectEl) return;
+                const rawUsers = localStorage.getItem('pos_ilp_users_v1');
+                if (rawUsers) {
+                    const users = JSON.parse(rawUsers);
+                    if (Array.isArray(users)) {
+                        users.forEach(u => {
+                            if (u.role && u.role.toUpperCase() === 'KASIR' && u.status !== 'NONAKTIF') {
+                                const existingOpt = Array.from(selectEl.options).find(o => o.value === u.id || (u.nik && o.text.includes(u.nik)));
+                                const userPass = u.password || (u.username ? u.username.replace('cashier_', '') + '123' : 'kasir123');
+                                const userPin = u.pin || '123456';
+                                if (!existingOpt) {
+                                    const opt = document.createElement('option');
+                                    opt.value = u.id;
+                                    opt.dataset.username = u.username;
+                                    opt.dataset.password = userPass;
+                                    opt.dataset.pin = userPin;
+                                    opt.dataset.branch = u.branch || (u.assignedBranches && u.assignedBranches[0]?.branch) || 'Pusat';
+                                    opt.textContent = `${u.name} (NIK: ${u.nik || '-'}) - ${opt.dataset.branch}`;
+                                    selectEl.appendChild(opt);
+                                } else {
+                                    // Sinkronisasi Password & PIN terbaru jika diperbarui di Kelola Akun
+                                    existingOpt.dataset.password = userPass;
+                                    existingOpt.dataset.pin = userPin;
+                                }
+                            }
+                        });
+                    }
+                }
+                const savedStaffId = localStorage.getItem('pos_portal_logged_in_staff_id') || localStorage.getItem('pos_kasir_staff_id');
+                if (savedStaffId && Array.from(selectEl.options).some(o => o.value === savedStaffId)) {
+                    selectEl.value = savedStaffId;
+                }
+                handlePortalStaffSelectChange(selectEl);
+            } catch (e) {
+                console.warn('Error syncing portal cashiers:', e);
+            }
+        }
+
         // Initialize role if passed in query param or server variable
         @php
             $selectedRole = $initialRole ?? request('role', '');
         @endphp
-        @if(!empty($selectedRole))
-            window.addEventListener('DOMContentLoaded', function() {
+        window.addEventListener('DOMContentLoaded', function() {
+            syncPortalCashierAccounts();
+            @if(!empty($selectedRole))
                 selectRole('{{ $selectedRole }}', true);
-            });
-        @endif
+            @endif
+        });
     </script>
 </body>
 </html>

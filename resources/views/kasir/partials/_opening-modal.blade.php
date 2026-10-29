@@ -25,7 +25,7 @@
             <div>
                 <h2 class="text-base font-black text-gray-900" x-text="selectedTerminalObj && selectedTerminalObj.status === 'HANDOVER_PENDING' ? 'Terima Laci & Buka Sesi' : 'Buka Sesi Kasir'"></h2>
                 <div class="flex items-center gap-2 mt-1 text-xs text-gray-600">
-                    <span class="font-bold text-[#0052cc]" x-text="formatShiftLabel(selectedShift)">Kasir 01</span>
+                    <span class="font-bold text-[#0052cc]" x-text="(selectedBranch || 'Pusat') + ' • ' + formatShiftLabel(selectedShift)">Kasir 01</span>
                     <span>•</span>
                     <span class="font-bold text-gray-800" x-text="selectedStaffObj.name"></span>
                 </div>
@@ -97,20 +97,28 @@
             <!-- Verifikasi Akun & PIN -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-xl bg-slate-50 border border-gray-200">
                 <div>
-                    <label class="block text-xs font-bold text-gray-700 mb-1">Petugas</label>
-                    <select x-model="selectedStaffId" class="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white text-xs font-bold text-gray-900 outline-none focus:border-[#0052cc]">
-                        <template x-for="st in staffList" :key="st.id">
-                            <option :value="st.id" x-text="st.name"></option>
-                        </template>
-                    </select>
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="block text-xs font-bold text-gray-700">Petugas Terautentikasi</label>
+                        <span class="inline-flex items-center gap-0.5 text-[10px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                            <span class="material-symbols-rounded text-[12px]">lock</span> Terkunci
+                        </span>
+                    </div>
+                    <div class="w-full px-3 py-2 rounded-lg border border-gray-300 bg-gray-100/90 text-xs font-bold text-gray-900 flex items-center justify-between">
+                        <span x-text="selectedStaffObj.name"></span>
+                        <span class="text-[10px] font-mono font-medium text-gray-500" x-text="selectedStaffObj.nik ? 'NIK: ' + selectedStaffObj.nik : selectedStaffObj.id"></span>
+                    </div>
+                    <p class="text-[10px] text-gray-500 mt-1">Identitas terkunci otomatis dari akun login portal.</p>
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-gray-700 mb-1">PIN Pribadi</label>
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="block text-xs font-bold text-gray-700">PIN Pribadi Petugas</label>
+                        <span class="text-[10px] text-gray-400 font-mono" x-text="'Akun: ' + (selectedStaffObj.username || selectedStaffObj.name)"></span>
+                    </div>
                     <input type="password"
                            x-model="staffPinInput"
-                           placeholder="123456"
+                           placeholder="Masukkan 6-digit PIN..."
                            class="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white font-mono text-xs font-bold text-gray-900 outline-none focus:border-[#0052cc]">
-                    <p class="text-[10px] text-amber-700 font-medium mt-1">Simulasi Auth: Demo PIN <span class="font-mono font-bold">123456</span></p>
+                    <p class="text-[10px] text-amber-700 font-medium mt-1">Demo PIN Petugas Ini: <span class="font-mono font-bold" x-text="selectedStaffObj.pin || '123456'">123456</span></p>
                 </div>
             </div>
 

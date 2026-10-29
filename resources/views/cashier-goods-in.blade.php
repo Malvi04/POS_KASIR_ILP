@@ -352,23 +352,23 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <span class="text-xs text-gray-500 font-medium" x-text="'Menampilkan ' + filteredDocuments.length + ' dokumen'"></span>
                     </div>
 
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left border-collapse">
+                    <div class="overflow-x-auto min-w-0 w-full">
+                        <table class="w-full text-left border-collapse min-w-[900px]">
                             <thead>
-                                <tr class="bg-slate-50/80 border-b border-gray-200">
-                                    <th class="px-6 py-3.5 text-[10px] font-bold text-gray-500 tracking-wider uppercase">NO. SURAT JALAN</th>
-                                    <th class="px-4 py-3.5 text-[10px] font-bold text-gray-500 tracking-wider uppercase">GUDANG ASAL</th>
-                                    <th class="px-4 py-3.5 text-[10px] font-bold text-gray-500 tracking-wider uppercase">ARMADA / DRIVER</th>
-                                    <th class="px-4 py-3.5 text-[10px] font-bold text-gray-500 tracking-wider uppercase text-center">TOTAL KOLI</th>
-                                    <th class="px-4 py-3.5 text-[10px] font-bold text-gray-500 tracking-wider uppercase text-center">STATUS</th>
-                                    <th class="px-6 py-3.5 text-[10px] font-bold text-gray-500 tracking-wider uppercase text-right">AKSI VERIFIKASI</th>
+                                <tr class="bg-gray-50/80 border-b border-gray-200 text-gray-600 font-bold tracking-wider uppercase text-[11px] whitespace-nowrap">
+                                    <th class="px-6 py-3.5 text-left w-[200px]">NO. SURAT JALAN</th>
+                                    <th class="px-4 py-3.5 text-left w-[180px]">GUDANG ASAL</th>
+                                    <th class="px-4 py-3.5 text-left w-[160px]">ARMADA / DRIVER</th>
+                                    <th class="px-4 py-3.5 text-center w-[120px]">TOTAL KOLI</th>
+                                    <th class="px-4 py-3.5 text-center w-[160px]">STATUS</th>
+                                    <th class="px-6 py-3.5 text-right w-[150px]">AKSI VERIFIKASI</th>
                                 </tr>
                             </thead>
                             <tbody class="text-sm divide-y divide-gray-100">
                                 <template x-for="doc in filteredDocuments" :key="doc.id">
-                                    <tr class="hover:bg-slate-50/60 transition-colors">
+                                    <tr class="hover:bg-blue-50/30 transition-colors">
                                         <!-- No Dokumen -->
-                                        <td class="px-6 py-4">
+                                        <td class="px-6 py-3.5 whitespace-nowrap">
                                             <div class="flex flex-col">
                                                 <span class="font-mono font-bold text-gray-900 text-[13px]" x-text="doc.docNo">#SJ-DC-20261024-001</span>
                                                 <span class="text-[11px] text-gray-500 mt-0.5" x-text="doc.date">24 Okt 2026 • 09:30</span>
@@ -376,7 +376,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         </td>
 
                                         <!-- Gudang Asal -->
-                                        <td class="px-4 py-4">
+                                        <td class="px-4 py-3.5">
                                             <div class="flex flex-col">
                                                 <span class="font-bold text-gray-800 text-[13px]" x-text="doc.warehouseOrigin">DC Cikarang</span>
                                                 <span class="text-[11px] text-gray-500 flex items-center gap-1 mt-0.5">
@@ -387,7 +387,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         </td>
 
                                         <!-- Driver -->
-                                        <td class="px-4 py-4">
+                                        <td class="px-4 py-3.5 whitespace-nowrap">
                                             <div class="flex flex-col">
                                                 <span class="font-bold text-gray-800 text-[12.5px]" x-text="doc.driverName">Rahmat Hidayat</span>
                                                 <span class="font-mono text-[11px] text-gray-500 font-medium" x-text="doc.plateNumber">B 9102 UQ</span>
@@ -395,7 +395,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         </td>
 
                                         <!-- Total Item -->
-                                        <td class="px-4 py-4 text-center">
+                                        <td class="px-4 py-3.5 text-center whitespace-nowrap">
                                             <div class="inline-flex flex-col items-center">
                                                 <span class="font-bold text-gray-900 text-[13px]" x-text="doc.items.length + ' SKU'">4 SKU</span>
                                                 <span class="text-[11px] text-gray-500 font-medium" x-text="doc.items.reduce((a, b) => a + Number(b.qtySent), 0) + ' Unit'">300 Unit</span>
@@ -403,7 +403,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         </td>
 
                                         <!-- Status Badge -->
-                                        <td class="px-4 py-4 text-center">
+                                        <td class="px-4 py-3.5 text-center whitespace-nowrap">
                                             <template x-if="doc.status === 'MENUNGGU_VERIFIKASI'">
                                                 <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
                                                     <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
@@ -425,11 +425,11 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         </td>
 
                                         <!-- Aksi -->
-                                        <td class="px-6 py-4 text-right">
+                                        <td class="px-6 py-3.5 text-right whitespace-nowrap">
                                             <template x-if="doc.status === 'MENUNGGU_VERIFIKASI'">
                                                 <button type="button"
                                                         @click="openVerification(doc)"
-                                                        class="px-4 py-2 bg-[#0052cc] hover:bg-[#0043a8] text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 ml-auto cursor-pointer">
+                                                        class="px-4 py-2 bg-[#0052cc] hover:bg-[#0043a8] text-white rounded-xl text-xs font-bold transition-all shadow-xs inline-flex items-center gap-1.5 ml-auto cursor-pointer">
                                                     <span class="material-symbols-rounded text-[16px]">fact_check</span>
                                                     <span>Periksa Dokumen</span>
                                                 </button>
@@ -437,7 +437,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                             <template x-if="doc.status !== 'MENUNGGU_VERIFIKASI'">
                                                 <button type="button"
                                                         @click="openBastView(doc)"
-                                                        class="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-gray-700 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 ml-auto cursor-pointer">
+                                                        class="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-gray-700 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1.5 ml-auto cursor-pointer">
                                                     <span class="material-symbols-rounded text-[16px]">receipt_long</span>
                                                     <span>Lihat BAST</span>
                                                 </button>
@@ -505,18 +505,19 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
 
                     <!-- Items Verification Table -->
-                    <div class="border border-gray-200 rounded-xl overflow-hidden shadow-xs">
-                        <table class="w-full text-left border-collapse text-xs">
-                            <thead class="bg-gray-100 text-gray-600 font-bold border-b border-gray-200">
-                                <tr>
-                                    <th class="px-4 py-3">PRODUK / SKU</th>
-                                    <th class="px-3 py-3 text-center">QTY SURAT JALAN</th>
-                                    <th class="px-3 py-3 text-center">QTY AKTUAL DITERIMA</th>
-                                    <th class="px-3 py-3 text-center">SELISIH</th>
-                                    <th class="px-3 py-3">KONDISI FISIK</th>
-                                    <th class="px-4 py-3">CATATAN KHUSUS</th>
-                                </tr>
-                            </thead>
+                    <div class="border border-gray-200 rounded-xl overflow-hidden shadow-xs bg-white">
+                        <div class="overflow-x-auto min-w-0 w-full">
+                            <table class="w-full text-left border-collapse text-xs min-w-[750px]">
+                                <thead class="bg-gray-50/80 border-b border-gray-200 text-gray-600 font-bold uppercase tracking-wider text-[11px] whitespace-nowrap">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left w-[240px]">PRODUK / SKU</th>
+                                        <th class="px-3 py-3 text-center w-[120px]">QTY SURAT JALAN</th>
+                                        <th class="px-3 py-3 text-center w-[140px]">QTY AKTUAL DITERIMA</th>
+                                        <th class="px-3 py-3 text-center w-[100px]">SELISIH</th>
+                                        <th class="px-3 py-3 text-left w-[180px]">KONDISI FISIK</th>
+                                        <th class="px-4 py-3 text-left w-[180px]">CATATAN KHUSUS</th>
+                                    </tr>
+                                </thead>
                             <tbody class="divide-y divide-gray-100">
                                 <template x-for="(item, idx) in selectedDoc?.items" :key="idx">
                                     <tr class="hover:bg-slate-50/50">
@@ -655,17 +656,18 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         </div>
                     </div>
 
-                    <div class="border border-gray-200 rounded-xl overflow-hidden">
-                        <table class="w-full text-left border-collapse">
-                            <thead class="bg-gray-100 font-bold text-gray-600">
-                                <tr>
-                                    <th class="px-4 py-2.5">PRODUK</th>
-                                    <th class="px-3 py-2.5 text-center">QTY SURAT JALAN</th>
-                                    <th class="px-3 py-2.5 text-center">QTY DITERIMA</th>
-                                    <th class="px-3 py-2.5 text-center">SELISIH</th>
-                                    <th class="px-4 py-2.5">KONDISI</th>
-                                </tr>
-                            </thead>
+                    <div class="border border-gray-200 rounded-xl overflow-hidden bg-white">
+                        <div class="overflow-x-auto min-w-0 w-full">
+                            <table class="w-full text-left border-collapse text-xs min-w-[650px]">
+                                <thead class="bg-gray-50/80 border-b border-gray-200 font-bold text-gray-600 uppercase tracking-wider text-[11px] whitespace-nowrap">
+                                    <tr>
+                                        <th class="px-4 py-2.5 text-left w-[240px]">PRODUK</th>
+                                        <th class="px-3 py-2.5 text-center w-[120px]">QTY SURAT JALAN</th>
+                                        <th class="px-3 py-2.5 text-center w-[120px]">QTY DITERIMA</th>
+                                        <th class="px-3 py-2.5 text-center w-[100px]">SELISIH</th>
+                                        <th class="px-4 py-2.5 text-left w-[180px]">KONDISI</th>
+                                    </tr>
+                                </thead>
                             <tbody class="divide-y divide-gray-100">
                                 <template x-for="(it, idx) in selectedDoc?.items" :key="idx">
                                     <tr>

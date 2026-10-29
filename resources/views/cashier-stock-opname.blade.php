@@ -317,29 +317,29 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
 
                     <!-- Data Table -->
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left text-xs whitespace-nowrap">
-                            <thead class="bg-[#f8f9fa] border-b border-gray-200 text-gray-500 text-[10px] font-black tracking-wider uppercase">
+                    <div class="overflow-x-auto min-w-0 w-full">
+                        <table class="w-full text-left text-xs min-w-[850px] border-collapse">
+                            <thead class="bg-gray-50/80 border-b border-gray-200 text-gray-600 text-[11px] font-bold tracking-wider uppercase whitespace-nowrap">
                                 <tr>
-                                    <th class="px-6 py-3.5 w-[38%]">PRODUK</th>
-                                    <th class="px-6 py-3.5 text-center">STOK SISTEM</th>
-                                    <th class="px-6 py-3.5 text-center">STOK FISIK</th>
-                                    <th class="px-6 py-3.5 text-center">SELISIH</th>
-                                    <th class="px-6 py-3.5 text-left w-[16%]">KETERANGAN</th>
-                                    <th class="px-6 py-3.5 text-center">AKSI</th>
+                                    <th class="px-6 py-3.5 text-left w-[260px]">PRODUK</th>
+                                    <th class="px-6 py-3.5 text-center w-[110px]">STOK SISTEM</th>
+                                    <th class="px-6 py-3.5 text-center w-[120px]">STOK FISIK</th>
+                                    <th class="px-6 py-3.5 text-center w-[100px]">SELISIH</th>
+                                    <th class="px-6 py-3.5 text-left w-[160px]">KETERANGAN</th>
+                                    <th class="px-6 py-3.5 text-center w-[120px]">AKSI</th>
                                 </tr>
                             </thead>
                             <tbody class="text-gray-700 divide-y divide-gray-100">
                                 <template x-for="item in filteredItems" :key="item.sku">
-                                    <tr class="hover:bg-gray-50/80 transition-colors">
-                                        <td class="px-6 py-4">
+                                    <tr class="hover:bg-blue-50/30 transition-colors">
+                                        <td class="px-6 py-3.5">
                                             <div class="flex flex-col">
                                                 <span class="font-bold text-gray-900 text-xs" x-text="item.nama"></span>
                                                 <span class="text-[11px] text-gray-400 font-mono mt-0.5" x-text="item.sku"></span>
                                             </div>
                                         </td>
-                                        <td class="px-6 py-4 text-center font-bold text-gray-800 font-mono text-sm" x-text="item.stokSistem"></td>
-                                        <td class="px-6 py-4">
+                                        <td class="px-6 py-3.5 text-center font-bold text-gray-800 font-mono text-sm whitespace-nowrap" x-text="item.stokSistem"></td>
+                                        <td class="px-6 py-3.5 whitespace-nowrap">
                                             <div class="flex justify-center">
                                                 <input type="number"
                                                        x-model="item.stokFisik"
@@ -348,12 +348,12 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                        :class="item.isAudited ? (item.selisih === 0 ? 'border-green-500 bg-green-50/30' : 'border-red-400 bg-red-50/30') : 'border-gray-300'">
                                             </div>
                                         </td>
-                                        <td class="px-6 py-4 text-center">
+                                        <td class="px-6 py-3.5 text-center whitespace-nowrap">
                                             <span class="font-bold font-mono text-xs"
                                                   :class="item.selisih === 0 ? 'text-green-600' : 'text-red-500'"
-                                                  x-text="(item.selisih > 0 ? '+' : '') + item.selisih"></span>
+                                              x-text="(item.selisih > 0 ? '+' : '') + item.selisih"></span>
                                         </td>
-                                        <td class="px-6 py-4">
+                                        <td class="px-6 py-3.5 whitespace-nowrap">
                                             <select x-model="item.keterangan"
                                                     @change="saveDraft()"
                                                     class="bg-white border border-gray-200 rounded-md px-2.5 py-1 text-xs font-medium text-gray-700 focus:outline-none focus:border-[#0052cc]">
@@ -365,7 +365,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                 <option value="Lebih / Bonus">Lebih / Bonus</option>
                                             </select>
                                         </td>
-                                        <td class="px-6 py-4 text-center">
+                                        <td class="px-6 py-3.5 text-center whitespace-nowrap">
                                             <template x-if="!item.isAudited">
                                                 <button type="button"
                                                         @click="confirmRow(item)"
@@ -373,6 +373,15 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                     Verifikasi
                                                 </button>
                                             </template>
+                                            <template x-if="item.isAudited">
+                                                <div class="inline-flex items-center gap-1 bg-green-100 text-green-700 px-2.5 py-1 rounded-md font-bold text-[11px]">
+                                                    <span class="material-symbols-rounded text-[14px]">check</span>
+                                                    <span>Verified</span>
+                                                </div>
+                                            </template>
+                                        </td>
+                                    </tr>
+                                </template>
                                             <template x-if="item.isAudited">
                                                 <div class="inline-flex items-center gap-1 bg-green-100 text-green-700 px-2.5 py-1 rounded-md font-bold text-[11px]">
                                                     <span class="material-symbols-rounded text-[14px]">check</span>

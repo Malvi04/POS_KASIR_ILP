@@ -217,56 +217,58 @@ class="flex flex-col h-screen w-full font-sans">
 
                 <!-- Table of Members -->
                 <div class="bg-white rounded-b-xl border border-gray-200 shadow-xs overflow-hidden">
-                    <table class="w-full text-left border-collapse text-xs">
-                        <thead>
-                            <tr class="bg-gray-50 border-b border-gray-200 text-gray-500 text-[10px] font-black uppercase tracking-widest">
-                                <th class="px-5 py-3.5">Nama Anggota</th>
-                                <th class="px-5 py-3.5">NIK / ID</th>
-                                <th class="px-5 py-3.5">Departemen</th>
-                                <th class="px-5 py-3.5 text-right">Plafon Kredit</th>
-                                <th class="px-5 py-3.5 text-right">Total Piutang</th>
-                                <th class="px-5 py-3.5 text-right">Sisa Plafon</th>
-                                <th class="px-5 py-3.5 text-center">Status</th>
-                                <th class="px-5 py-3.5 text-center">Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-100">
-                            <template x-for="m in filteredMembers" :key="m.id">
-                                <tr class="hover:bg-blue-50/20 transition-colors" :class="m.status === 'DIBLOKIR' ? 'bg-rose-50/30' : ''">
-                                    <td class="px-5 py-3.5 font-bold text-gray-900" x-text="m.name"></td>
-                                    <td class="px-5 py-3.5 font-mono text-gray-600" x-text="m.nik"></td>
-                                    <td class="px-5 py-3.5 text-gray-600" x-text="m.dept"></td>
-                                    <td class="px-5 py-3.5 text-right font-mono font-bold text-gray-800" x-text="formatRupiah(m.creditLimit)"></td>
-                                    <td class="px-5 py-3.5 text-right font-mono font-bold"
-                                        :class="m.currentDebt > 0 ? (m.status === 'DIBLOKIR' ? 'text-rose-600' : 'text-orange-600') : 'text-gray-400'"
-                                        x-text="formatRupiah(m.currentDebt)"></td>
-                                    <td class="px-5 py-3.5 text-right font-mono font-black"
-                                        :class="(m.creditLimit - m.currentDebt) > 0 ? 'text-emerald-700' : 'text-gray-400'"
-                                        x-text="formatRupiah(m.creditLimit - m.currentDebt)"></td>
-                                    <td class="px-5 py-3.5 text-center">
-                                        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider"
-                                              :class="m.status === 'AKTIF' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-100 text-rose-700 border border-rose-300'"
-                                              x-text="m.status"></span>
-                                    </td>
-                                    <td class="px-5 py-3.5 text-center">
-                                        <button type="button"
-                                                @click="openDetail(m)"
-                                                class="px-3 py-1 bg-blue-50 hover:bg-blue-100 text-[#0052cc] rounded-lg font-bold text-[11px] transition-colors cursor-pointer inline-flex items-center gap-1">
-                                            <span class="material-symbols-rounded text-[14px]">visibility</span>
-                                            <span>Detail Piutang</span>
-                                        </button>
+                    <div class="overflow-x-auto min-w-0 w-full">
+                        <table class="w-full text-left border-collapse text-xs min-w-[1000px]">
+                            <thead>
+                                <tr class="bg-gray-50/80 border-b border-gray-200 text-gray-600 text-[11px] font-bold tracking-wider uppercase whitespace-nowrap">
+                                    <th class="px-5 py-3.5 text-left w-[220px]">Nama Anggota</th>
+                                    <th class="px-5 py-3.5 text-left w-[140px]">NIK / ID</th>
+                                    <th class="px-5 py-3.5 text-left w-[150px]">Departemen</th>
+                                    <th class="px-5 py-3.5 text-right w-[140px]">Plafon Kredit</th>
+                                    <th class="px-5 py-3.5 text-right w-[140px]">Total Piutang</th>
+                                    <th class="px-5 py-3.5 text-right w-[140px]">Sisa Plafon</th>
+                                    <th class="px-5 py-3.5 text-center w-[100px]">Status</th>
+                                    <th class="px-5 py-3.5 text-center w-[120px]">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                <template x-for="m in filteredMembers" :key="m.id">
+                                    <tr class="hover:bg-blue-50/30 transition-colors" :class="m.status === 'DIBLOKIR' ? 'bg-rose-50/30' : ''">
+                                        <td class="px-5 py-3.5 font-bold text-gray-900" x-text="m.name"></td>
+                                        <td class="px-5 py-3.5 font-mono text-gray-600 whitespace-nowrap" x-text="m.nik"></td>
+                                        <td class="px-5 py-3.5 text-gray-600 whitespace-nowrap" x-text="m.dept"></td>
+                                        <td class="px-5 py-3.5 text-right font-mono font-bold text-gray-800 whitespace-nowrap" x-text="formatRupiah(m.creditLimit)"></td>
+                                        <td class="px-5 py-3.5 text-right font-mono font-bold whitespace-nowrap"
+                                            :class="m.currentDebt > 0 ? (m.status === 'DIBLOKIR' ? 'text-rose-600' : 'text-orange-600') : 'text-gray-400'"
+                                            x-text="formatRupiah(m.currentDebt)"></td>
+                                        <td class="px-5 py-3.5 text-right font-mono font-black whitespace-nowrap"
+                                            :class="(m.creditLimit - m.currentDebt) > 0 ? 'text-emerald-700' : 'text-gray-400'"
+                                            x-text="formatRupiah(m.creditLimit - m.currentDebt)"></td>
+                                        <td class="px-5 py-3.5 text-center whitespace-nowrap">
+                                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider"
+                                                  :class="m.status === 'AKTIF' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-100 text-rose-700 border border-rose-300'"
+                                                  x-text="m.status"></span>
+                                        </td>
+                                        <td class="px-5 py-3.5 text-center whitespace-nowrap">
+                                            <button type="button"
+                                                    @click="openDetail(m)"
+                                                    class="px-3 py-1 bg-blue-50 hover:bg-blue-100 text-[#0052cc] rounded-lg font-bold text-[11px] transition-colors cursor-pointer inline-flex items-center gap-1">
+                                                <span class="material-symbols-rounded text-[14px]">visibility</span>
+                                                <span>Detail Piutang</span>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </template>
+                                <tr x-show="filteredMembers.length === 0">
+                                    <td colspan="8" class="text-center py-12 text-gray-400">
+                                        <span class="material-symbols-rounded text-4xl mb-2 text-gray-300">person_search</span>
+                                        <p class="font-bold text-gray-600">Tidak ada anggota yang cocok</p>
+                                        <p class="text-xs text-gray-400 mt-0.5">Silakan periksa kata kunci pencarian Anda.</p>
                                     </td>
                                 </tr>
-                            </template>
-                            <tr x-show="filteredMembers.length === 0">
-                                <td colspan="8" class="text-center py-12 text-gray-400">
-                                    <span class="material-symbols-rounded text-4xl mb-2 text-gray-300">person_search</span>
-                                    <p class="font-bold text-gray-600">Tidak ada anggota yang cocok</p>
-                                    <p class="text-xs text-gray-400 mt-0.5">Silakan periksa kata kunci pencarian Anda.</p>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
             </main>
@@ -352,32 +354,34 @@ class="flex flex-col h-screen w-full font-sans">
                     <!-- History of Credit Purchases -->
                     <div>
                         <h4 class="text-[11px] font-bold text-gray-800 uppercase tracking-wider mb-2">Riwayat Transaksi Kredit Terakhir:</h4>
-                        <div class="border border-gray-200 rounded-xl overflow-hidden">
-                            <table class="w-full text-left">
-                                <thead class="bg-gray-50 text-gray-500 text-[10px] font-bold uppercase">
-                                    <tr>
-                                        <th class="px-3 py-2">Faktur</th>
-                                        <th class="px-3 py-2">Waktu</th>
-                                        <th class="px-3 py-2">Kasir</th>
-                                        <th class="px-3 py-2 text-right">Nominal</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-gray-100">
-                                    <template x-for="(h, idx) in selectedMember?.history" :key="idx">
+                        <div class="border border-gray-200 rounded-xl overflow-hidden bg-white">
+                            <div class="overflow-x-auto min-w-0 w-full">
+                                <table class="w-full text-left text-xs min-w-[500px] border-collapse">
+                                    <thead class="bg-gray-50/80 border-b border-gray-200 text-gray-600 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">
                                         <tr>
-                                            <td class="px-3 py-2 font-mono font-bold text-[#0052cc]" x-text="h.id"></td>
-                                            <td class="px-3 py-2 text-gray-600 font-mono text-[11px]" x-text="h.date"></td>
-                                            <td class="px-3 py-2 text-gray-800" x-text="h.cashier"></td>
-                                            <td class="px-3 py-2 text-right font-mono font-bold text-gray-900" x-text="formatRupiah(h.total)"></td>
+                                            <th class="px-3.5 py-2.5 text-left w-[140px]">Faktur</th>
+                                            <th class="px-3.5 py-2.5 text-left w-[140px]">Waktu</th>
+                                            <th class="px-3.5 py-2.5 text-left w-[120px]">Kasir</th>
+                                            <th class="px-3.5 py-2.5 text-right w-[120px]">Nominal</th>
                                         </tr>
-                                    </template>
-                                    <tr x-show="!selectedMember?.history || selectedMember?.history.length === 0">
-                                        <td colspan="4" class="px-3 py-4 text-center text-gray-400 italic">
-                                            Belum ada riwayat transaksi kredit bulan ini.
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-100">
+                                        <template x-for="(h, idx) in selectedMember?.history" :key="idx">
+                                            <tr class="hover:bg-blue-50/30 transition-colors">
+                                                <td class="px-3.5 py-2.5 font-mono font-bold text-[#0052cc] whitespace-nowrap" x-text="h.id"></td>
+                                                <td class="px-3.5 py-2.5 text-gray-600 font-mono text-[11px] whitespace-nowrap" x-text="h.date"></td>
+                                                <td class="px-3.5 py-2.5 text-gray-800 whitespace-nowrap" x-text="h.cashier"></td>
+                                                <td class="px-3.5 py-2.5 text-right font-mono font-bold text-gray-900 whitespace-nowrap" x-text="formatRupiah(h.total)"></td>
+                                            </tr>
+                                        </template>
+                                        <tr x-show="!selectedMember?.history || selectedMember?.history.length === 0">
+                                            <td colspan="4" class="px-3.5 py-5 text-center text-gray-400 italic">
+                                                Belum ada riwayat transaksi kredit bulan ini.
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
 

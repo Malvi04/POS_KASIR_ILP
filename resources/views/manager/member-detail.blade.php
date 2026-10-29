@@ -82,7 +82,7 @@ x-init="initOpening(); initDetail();"
 class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden relative">
     
     <!-- Sidebar -->
-    <x-manager-sidebar active="members" />
+    <x-manager-sidebar active="member_detail" />
 
     <!-- Main Content -->
     <main class="flex-1 flex flex-col h-screen overflow-hidden relative">

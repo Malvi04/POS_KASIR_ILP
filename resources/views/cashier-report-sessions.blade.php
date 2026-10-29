@@ -207,58 +207,60 @@ class="flex flex-col h-screen w-full font-sans">
                         <span class="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1 rounded-lg" x-text="pastSessions.length + ' Sesi Tersimpan'"></span>
                     </div>
 
-                    <table class="w-full text-left border-collapse text-xs">
-                        <thead>
-                            <tr class="bg-gray-50 border-b border-gray-200 text-gray-500 text-[10px] font-black uppercase tracking-widest">
-                                <th class="px-5 py-3.5">ID Sesi</th>
-                                <th class="px-5 py-3.5">Tanggal & Shift</th>
-                                <th class="px-5 py-3.5 text-right">Modal Awal</th>
-                                <th class="px-5 py-3.5 text-right">Penjualan Tunai</th>
-                                <th class="px-5 py-3.5 text-right">Uang Fisik Kasir</th>
-                                <th class="px-5 py-3.5 text-center">Selisih Kas</th>
-                                <th class="px-5 py-3.5 text-center">Status</th>
-                                <th class="px-5 py-3.5 text-center">Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-100">
-                            <template x-for="sesi in pastSessions" :key="sesi.id">
-                                <tr class="hover:bg-blue-50/20 transition-colors">
-                                    <td class="px-5 py-3.5 font-mono font-bold text-[#0052cc]" x-text="sesi.id"></td>
-                                    <td class="px-5 py-3.5">
-                                        <div class="font-bold text-gray-900" x-text="sesi.date"></div>
-                                        <div class="text-[11px] text-gray-500 font-mono" x-text="sesi.shift"></div>
-                                    </td>
-                                    <td class="px-5 py-3.5 text-right font-mono text-gray-700" x-text="formatRupiah(sesi.openingFloat)"></td>
-                                    <td class="px-5 py-3.5 text-right font-mono font-bold text-gray-900" x-text="formatRupiah(sesi.cashSales)"></td>
-                                    <td class="px-5 py-3.5 text-right font-mono font-bold text-emerald-700" x-text="formatRupiah(sesi.actualCash)"></td>
-                                    <td class="px-5 py-3.5 text-center">
-                                        <template x-if="sesi.variance === 0">
-                                            <span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                                SESUAI (Rp 0)
-                                            </span>
-                                        </template>
-                                        <template x-if="sesi.variance < 0">
-                                            <span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-200" x-text="'KURANG ' + formatRupiah(Math.abs(sesi.variance))">
-                                            </span>
-                                        </template>
-                                    </td>
-                                    <td class="px-5 py-3.5 text-center">
-                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold"
-                                              :class="sesi.status === 'CLOSED' ? 'bg-gray-100 text-gray-700' : 'bg-blue-50 text-[#0052cc]'"
-                                              x-text="sesi.status === 'CLOSED' ? 'Selesai Tutup' : 'Serah Terima'"></span>
-                                    </td>
-                                    <td class="px-5 py-3.5 text-center">
-                                        <button type="button"
-                                                @click="viewSession(sesi)"
-                                                class="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-[#0052cc] rounded-lg font-bold text-[11px] transition-colors cursor-pointer inline-flex items-center gap-1">
-                                            <span class="material-symbols-rounded text-[14px]">receipt_long</span>
-                                            <span>Detail Z-Report</span>
-                                        </button>
-                                    </td>
+                    <div class="overflow-x-auto min-w-0 w-full">
+                        <table class="w-full text-left border-collapse text-xs min-w-[1050px]">
+                            <thead>
+                                <tr class="bg-gray-50/80 border-b border-gray-200 text-gray-600 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                    <th class="px-5 py-3.5 text-left w-[130px]">ID Sesi</th>
+                                    <th class="px-5 py-3.5 text-left w-[180px]">Tanggal & Shift</th>
+                                    <th class="px-5 py-3.5 text-right w-[130px]">Modal Awal</th>
+                                    <th class="px-5 py-3.5 text-right w-[140px]">Penjualan Tunai</th>
+                                    <th class="px-5 py-3.5 text-right w-[140px]">Uang Fisik Kasir</th>
+                                    <th class="px-5 py-3.5 text-center w-[140px]">Selisih Kas</th>
+                                    <th class="px-5 py-3.5 text-center w-[110px]">Status</th>
+                                    <th class="px-5 py-3.5 text-center w-[140px]">Aksi</th>
                                 </tr>
-                            </template>
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                <template x-for="sesi in pastSessions" :key="sesi.id">
+                                    <tr class="hover:bg-blue-50/30 transition-colors">
+                                        <td class="px-5 py-3.5 font-mono font-bold text-[#0052cc] whitespace-nowrap" x-text="sesi.id"></td>
+                                        <td class="px-5 py-3.5">
+                                            <div class="font-bold text-gray-900" x-text="sesi.date"></div>
+                                            <div class="text-[11px] text-gray-500 font-mono" x-text="sesi.shift"></div>
+                                        </td>
+                                        <td class="px-5 py-3.5 text-right font-mono text-gray-700 whitespace-nowrap" x-text="formatRupiah(sesi.openingFloat)"></td>
+                                        <td class="px-5 py-3.5 text-right font-mono font-bold text-gray-900 whitespace-nowrap" x-text="formatRupiah(sesi.cashSales)"></td>
+                                        <td class="px-5 py-3.5 text-right font-mono font-bold text-emerald-700 whitespace-nowrap" x-text="formatRupiah(sesi.actualCash)"></td>
+                                        <td class="px-5 py-3.5 text-center whitespace-nowrap">
+                                            <template x-if="sesi.variance === 0">
+                                                <span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                                    SESUAI (Rp 0)
+                                                </span>
+                                            </template>
+                                            <template x-if="sesi.variance < 0">
+                                                <span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-200" x-text="'KURANG ' + formatRupiah(Math.abs(sesi.variance))">
+                                                </span>
+                                            </template>
+                                        </td>
+                                        <td class="px-5 py-3.5 text-center whitespace-nowrap">
+                                            <span class="px-2 py-0.5 rounded text-[10px] font-bold"
+                                                  :class="sesi.status === 'CLOSED' ? 'bg-gray-100 text-gray-700' : 'bg-blue-50 text-[#0052cc]'"
+                                                  x-text="sesi.status === 'CLOSED' ? 'Selesai Tutup' : 'Serah Terima'"></span>
+                                        </td>
+                                        <td class="px-5 py-3.5 text-center whitespace-nowrap">
+                                            <button type="button"
+                                                    @click="viewSession(sesi)"
+                                                    class="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-[#0052cc] rounded-lg font-bold text-[11px] transition-colors cursor-pointer inline-flex items-center gap-1">
+                                                <span class="material-symbols-rounded text-[14px]">receipt_long</span>
+                                                <span>Detail Z-Report</span>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
             </main>
