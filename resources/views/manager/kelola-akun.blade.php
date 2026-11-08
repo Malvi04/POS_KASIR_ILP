@@ -58,83 +58,86 @@
         { id: 'MBR-005', nik: '327501009930011', name: 'Raka Hendra', dept: 'Logistik & Gudang', status: 'AKTIF' }
     ],
 
-    initUsers() {
+    userSummary: {
+        total: 0,
+        active: 0,
+        kasir: 0,
+        supervisor: 0,
+        manager: 0,
+        owner: 0
+    },
+    isLoading: false,
+
+    async initUsers() {
         window.accountsManagerScope = this;
-        // 1. Inisialisasi Data Members untuk pencarian karyawan
-        this.loadMembers();
+        await Promise.all([
+            this.loadUsersFromApi(),
+            this.loadMembersFromApi()
+        ]);
 
-        // 2. Inisialisasi Data Users
-        const stored = localStorage.getItem('pos_ilp_users_v1');
-        if (stored) {
-            try {
-                this.users = JSON.parse(stored);
-            } catch(e) {
-                this.users = this.getDefaultUsers();
-            }
-        } else {
-            this.users = this.getDefaultUsers();
-            this.saveUsers();
-        }
-
-        // 3. Normalisasi Struktur Penugasan Cabang (Migrasi Idempotent Backwards-Compatible)
-        let needsSave = false;
-        this.users.forEach(u => {
-            if (!Array.isArray(u.assignedBranches) || u.assignedBranches.length === 0) {
-                const legacyBranch = u.branch || 'Cabang A';
-                u.assignedBranches = [
-                    { branch: legacyBranch, status: u.status || 'AKTIF', assignedAt: '19 Okt 2026' }
-                ];
-                needsSave = true;
-            }
-            if (!u.nik) {
-                const foundMember = this.membersList.find(m => m.name && m.name.toLowerCase() === (u.name || '').toLowerCase());
-                if (foundMember) {
-                    u.memberId = foundMember.id;
-                    u.nik = foundMember.nik;
-                    u.dept = foundMember.dept;
-                    needsSave = true;
-                } else if (u.role === 'KASIR') {
-                    u.nik = '3275' + Math.floor(100000000000 + Math.random() * 900000000000);
-                    needsSave = true;
-                }
-            }
-            if (!u.pin || u.pin === '1234') {
-                u.pin = '123456';
-                needsSave = true;
-            }
-            if (!u.password) {
-                u.password = (u.username ? u.username.replace('cashier_', '') : 'kasir') + '123';
-                needsSave = true;
-            }
-        });
-        if (needsSave) {
-            this.saveUsers();
-        }
-
-        // 4. Inisialisasi Security Audit Logs
+        // Security Audit Logs
         const storedLogs = localStorage.getItem('pos_ilp_security_logs_v1');
         if (storedLogs) {
             try { this.securityLogs = JSON.parse(storedLogs); } catch(e){}
         } else {
             this.securityLogs = [
-                { time: '14:20:05', text: 'User [Ahmad Fauzi] berhasil didaftarkan oleh Manager [Diana Putri]' },
-                { time: '09:12:33', text: 'Perubahan Level Akses [Diana Putri] oleh Owner' }
+                { time: '14:20:05', text: 'Sistem Hak Akses Pengguna Modul D diaktifkan.' },
+                { time: '09:12:33', text: 'Otorisasi Void kasir dibatasi ke Supervisor/Manager' }
             ];
             this.saveLogs();
         }
     },
 
-    loadMembers() {
+    async loadUsersFromApi() {
+        this.isLoading = true;
         try {
-            const raw = localStorage.getItem('pos_ilp_members_v1');
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    this.membersList = parsed;
+            const res = await fetch('/api/users', {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success) {
+                    this.users = json.data.map(u => ({
+                        ...u,
+                        status: u.is_active ? 'AKTIF' : 'NONAKTIF',
+                        assignedBranches: [
+                            { branch: u.branch || 'Pusat', status: u.is_active ? 'AKTIF' : 'NONAKTIF', assignedAt: 'Hari ini' }
+                        ]
+                    }));
+                    if (json.summary) {
+                        this.userSummary = json.summary;
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Failed to load users from API:', e);
+            this.triggerToast('Gagal memuat data pengguna dari server.');
+        } finally {
+            this.isLoading = false;
+        }
+    },
+
+    async loadMembersFromApi() {
+        try {
+            const res = await fetch('/api/members?per_page=100', {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.data && Array.isArray(json.data)) {
+                    this.membersList = json.data.map(m => ({
+                        id: m.member_code || ('MBR-' + m.id),
+                        nik: m.nik,
+                        name: m.name,
+                        dept: m.department || 'Operasional',
+                        status: m.status || 'AKTIF'
+                    }));
                     return;
                 }
             }
-        } catch(e){}
+        } catch (e) {
+            console.error('Failed to load members from API:', e);
+        }
         this.membersList = JSON.parse(JSON.stringify(this.defaultMembers));
     },
 
@@ -356,8 +359,8 @@
         this.showFormKasirPin = true;
     },
 
-    // Tambah / Daftarkan Penugasan Kasir
-    addKasir() {
+    // Tambah / Daftarkan Penugasan Kasir via API
+    async addKasir() {
         if (!this.selectedMember) {
             alert('Silakan cari dan pilih karyawan dari data Members terlebih dahulu!');
             return;
@@ -374,134 +377,87 @@
         }
 
         const targetBranch = this.formKasir.branch;
-        let existingUser = this.findUserByMember(this.selectedMember);
-
-        // Kasus 1: Karyawan sudah memiliki akun Kasir
-        if (existingUser) {
-            const existingAssignment = existingUser.assignedBranches.find(ab => ab.branch.toLowerCase() === targetBranch.toLowerCase());
-            if (existingAssignment) {
-                if (existingAssignment.status === 'AKTIF') {
-                    alert('Karyawan [' + this.selectedMember.name + '] sudah aktif bertugas di ' + targetBranch + '!\nTidak dapat membuat penugasan duplikat pada cabang yang sama.');
-                    return;
-                } else {
-                    // Reaktivasi penugasan yang sebelumnya nonaktif
-                    existingAssignment.status = 'AKTIF';
-                    this.saveUsers();
-                    const timeStr = new Date().toLocaleTimeString('id-ID');
-                    this.securityLogs.unshift({
-                        time: timeStr,
-                        text: `Penugasan Kasir [${this.selectedMember.name}] di ${targetBranch} diaktifkan kembali oleh Manager`
-                    });
-                    this.saveLogs();
-                    this.triggerToast(`Penugasan Kasir ${this.selectedMember.name} di ${targetBranch} berhasil diaktifkan kembali!`);
-                    this.clearSelectedMember();
-                    return;
-                }
-            }
-
-            // Tambah penugasan cabang baru ke akun yang sama (tanpa menduplikasi akun atau mengubah PIN)
-            const dateStr = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
-            existingUser.assignedBranches.push({
-                branch: targetBranch,
-                status: 'AKTIF',
-                assignedAt: dateStr
-            });
-            existingUser.branch = existingUser.assignedBranches.map(b => b.branch).join(', ');
-            this.saveUsers();
-
-            const timeStr = new Date().toLocaleTimeString('id-ID');
-            this.securityLogs.unshift({
-                time: timeStr,
-                text: `Penugasan Kasir [${this.selectedMember.name}] (${existingUser.username}) ditambahkan ke ${targetBranch}`
-            });
-            this.saveLogs();
-
-            this.triggerToast(`Penugasan ${targetBranch} berhasil ditambahkan ke akun Kasir ${this.selectedMember.name}!`);
-            this.clearSelectedMember();
-            return;
-        }
-
-        // Kasus 2: Karyawan belum memiliki akun Kasir (buat akun baru yang terhubung ke member)
-        if (!this.formKasir.username || !this.formKasir.username.trim()) {
-            alert('Silakan tentukan username login untuk kasir baru!');
-            return;
-        }
-
         const cleanUsername = this.formKasir.username.toLowerCase().replace(/\s+/g, '_').trim();
-        if (this.users.some(u => u.username === cleanUsername)) {
-            alert(`Username '@${cleanUsername}' sudah terdaftar pada sistem! Silakan gunakan username lain.`);
-            return;
-        }
-
-        const dateStr = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
         const cleanPassword = this.formKasir.password && this.formKasir.password.trim() ? this.formKasir.password.trim() : (cleanUsername.replace('cashier_', '') + '123');
-        const newUser = {
-            id: 'usr_' + Date.now(),
-            memberId: this.selectedMember.id,
-            nik: this.selectedMember.nik,
-            name: this.selectedMember.name,
-            dept: this.selectedMember.dept,
-            username: cleanUsername,
-            email: cleanUsername + '@pos.com',
-            role: 'KASIR',
-            status: 'AKTIF',
-            password: cleanPassword,
-            pin: this.formKasir.pin || '123456',
-            branch: targetBranch,
-            assignedBranches: [
-                { branch: targetBranch, status: 'AKTIF', assignedAt: dateStr }
-            ]
-        };
 
-        this.users.unshift(newUser);
-        this.saveUsers();
+        try {
+            const res = await fetch('/api/users', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    name: this.selectedMember.name,
+                    username: cleanUsername,
+                    email: cleanUsername + '@minimarket.ilp',
+                    nik: this.selectedMember.nik,
+                    role: 'Kasir',
+                    branch: targetBranch,
+                    password: cleanPassword,
+                    pin: this.formKasir.pin || '123456',
+                    is_active: true
+                })
+            });
 
-        const timeStr = new Date().toLocaleTimeString('id-ID');
-        this.securityLogs.unshift({
-            time: timeStr,
-            text: `Kasir [${newUser.name}] (${newUser.username}) didaftarkan dari Anggota ke ${targetBranch}`
-        });
-        this.saveLogs();
-
-        this.triggerToast(`Kasir ${newUser.name} berhasil didaftarkan di ${targetBranch}!`);
-        this.clearSelectedMember();
+            const json = await res.json();
+            if (res.ok && json.success) {
+                this.triggerToast(`Kasir [${this.selectedMember.name}] berhasil didaftarkan di ${targetBranch}!`);
+                this.clearSelectedMember();
+                await this.loadUsersFromApi();
+            } else {
+                alert('Gagal mendaftarkan kasir: ' + (json.message || JSON.stringify(json.errors || 'Unknown error')));
+            }
+        } catch (e) {
+            console.error('Error creating cashier:', e);
+            alert('Terjadi kesalahan koneksi server.');
+        }
     },
 
-    // Registrasi Manager Cabang (Akses Owner)
-    addManager() {
+    // Registrasi Pengguna SPV / Manager / Owner via API
+    async addManager() {
         if (!this.formManager.name || !this.formManager.email) {
-            alert('Silakan isi nama lengkap dan email manager!');
+            alert('Silakan isi nama lengkap dan email!');
             return;
         }
 
-        const newUser = {
-            id: 'usr_' + Date.now(),
-            name: this.formManager.name,
-            username: this.formManager.name.toLowerCase().replace(/\s+/g, '_'),
-            email: this.formManager.email,
-            role: 'MANAGER',
-            accessLevel: this.formManager.accessLevel,
-            branch: this.formManager.branch,
-            status: 'AKTIF',
-            pin: this.formManager.pin || '123456',
-            assignedBranches: [
-                { branch: this.formManager.branch, status: 'AKTIF', assignedAt: '28 Okt 2026' }
-            ]
-        };
+        const roleTarget = this.formManager.role || 'Supervisor';
+        const cleanUsername = (this.formManager.username && this.formManager.username.trim()) ? this.formManager.username.trim() : this.formManager.name.toLowerCase().replace(/\s+/g, '_');
 
-        this.users.unshift(newUser);
-        this.saveUsers();
+        try {
+            const res = await fetch('/api/users', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    name: this.formManager.name,
+                    username: cleanUsername,
+                    email: this.formManager.email,
+                    role: roleTarget,
+                    branch: this.formManager.branch || 'Pusat',
+                    password: this.formManager.password || 'password123',
+                    pin: this.formManager.pin || '123456',
+                    is_active: true
+                })
+            });
 
-        const timeStr = new Date().toLocaleTimeString('id-ID');
-        this.securityLogs.unshift({
-            time: timeStr,
-            text: `Manager [${newUser.name}] (${newUser.accessLevel.toUpperCase()}) didaftarkan oleh Owner`
-        });
-        this.saveLogs();
-
-        this.triggerToast(`Manager ${newUser.name} berhasil didaftarkan!`);
-        this.formManager.name = '';
-        this.formManager.email = '';
+            const json = await res.json();
+            if (res.ok && json.success) {
+                this.triggerToast(`${roleTarget} [${this.formManager.name}] berhasil didaftarkan!`);
+                this.formManager.name = '';
+                this.formManager.email = '';
+                await this.loadUsersFromApi();
+            } else {
+                alert('Gagal mendaftarkan akun: ' + (json.message || JSON.stringify(json.errors || 'Unknown error')));
+            }
+        } catch (e) {
+            console.error('Error creating user:', e);
+            alert('Terjadi kesalahan saat mendaftarkan akun ke server.');
+        }
     },
 
     // Filter Daftar Akun Kasir
@@ -632,38 +588,65 @@
         this.showEditModal = true;
     },
 
-    saveEdit() {
+    async saveEdit() {
         if (!this.editingUser) return;
-        const idx = this.users.findIndex(u => u.id === this.editingUser.id);
-        if (idx !== -1) {
-            this.users[idx] = this.editingUser;
-            this.saveUsers();
-
-            const timeStr = new Date().toLocaleTimeString('id-ID');
-            this.securityLogs.unshift({
-                time: timeStr,
-                text: `Data user [${this.editingUser.name}] diperbarui`
+        try {
+            const res = await fetch(`/api/users/${this.editingUser.id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    name: this.editingUser.name,
+                    username: this.editingUser.username,
+                    email: this.editingUser.email,
+                    nik: this.editingUser.nik,
+                    role: this.editingUser.role,
+                    branch: this.editingUser.branch,
+                    pin: this.editingUser.pin,
+                    password: this.editingUser.newPassword || undefined,
+                    is_active: this.editingUser.status === 'AKTIF'
+                })
             });
-            this.saveLogs();
 
-            this.triggerToast(`Data user ${this.editingUser.name} berhasil diperbarui!`);
+            const json = await res.json();
+            if (res.ok && json.success) {
+                this.triggerToast(`Data pengguna [${this.editingUser.name}] berhasil diperbarui.`);
+                this.showEditModal = false;
+                this.editingUser = null;
+                await this.loadUsersFromApi();
+            } else {
+                alert('Gagal memperbarui pengguna: ' + (json.message || JSON.stringify(json.errors || 'Error')));
+            }
+        } catch (e) {
+            console.error('Error saving user edit:', e);
+            alert('Terjadi kesalahan koneksi server.');
         }
-        this.showEditModal = false;
-        this.editingUser = null;
     },
 
-    toggleStatus(u) {
-        u.status = (u.status === 'AKTIF') ? 'NONAKTIF' : 'AKTIF';
-        this.saveUsers();
-
-        const timeStr = new Date().toLocaleTimeString('id-ID');
-        this.securityLogs.unshift({
-            time: timeStr,
-            text: `Status user [${u.name}] diubah menjadi ${u.status}`
-        });
-        this.saveLogs();
-
-        this.triggerToast(`Status ${u.name} sekarang: ${u.status}`);
+    async toggleStatus(u) {
+        try {
+            const res = await fetch(`/api/users/${u.id}/toggle-status`, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                }
+            });
+            const json = await res.json();
+            if (res.ok && json.success) {
+                u.is_active = json.is_active;
+                u.status = json.is_active ? 'AKTIF' : 'NONAKTIF';
+                this.triggerToast(json.message);
+                await this.loadUsersFromApi();
+            } else {
+                alert(json.message || 'Gagal mengubah status akun.');
+            }
+        } catch (e) {
+            console.error('Error toggling status:', e);
+        }
     },
 
     openDelete(u) {
@@ -672,28 +655,35 @@
         this.showDeleteModal = true;
     },
 
-    confirmDelete() {
+    async confirmDelete() {
         if (!this.selectedUser) return;
         if (this.deleteInputText.trim().toLowerCase() !== 'hapus') {
             alert('Ketik \'hapus\' untuk konfirmasi penghapusan user!');
             return;
         }
 
-        const name = this.selectedUser.name;
-        this.users = this.users.filter(u => u.id !== this.selectedUser.id);
-        this.saveUsers();
-
-        const timeStr = new Date().toLocaleTimeString('id-ID');
-        this.securityLogs.unshift({
-            time: timeStr,
-            text: `Akun user [${name}] dihapus dari sistem`
-        });
-        this.saveLogs();
-
-        this.showDeleteModal = false;
-        this.selectedUser = null;
-        this.deleteInputText = '';
-        this.triggerToast(`Akun ${name} telah berhasil dihapus!`);
+        try {
+            const res = await fetch(`/api/users/${this.selectedUser.id}`, {
+                method: 'DELETE',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                }
+            });
+            const json = await res.json();
+            if (res.ok && json.success) {
+                this.triggerToast(json.message);
+                this.showDeleteModal = false;
+                this.selectedUser = null;
+                this.deleteInputText = '';
+                await this.loadUsersFromApi();
+            } else {
+                alert(json.message || 'Gagal menghapus user.');
+            }
+        } catch (e) {
+            console.error('Error deleting user:', e);
+            alert('Terjadi kesalahan koneksi server.');
+        }
     },
 
     triggerToast(msg) {
@@ -736,6 +726,120 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
         <!-- Scrollable Content Workspace -->
         <div class="flex-1 overflow-y-auto p-6 lg:p-8 space-y-7">
             <div class="max-w-[1400px] mx-auto space-y-7">
+
+                <!-- MATRIKS HAK AKSES PENGGUNA (MODUL D - USER ACCESS SECURITY) -->
+                <div class="bg-white border border-gray-200/90 rounded-2xl p-6 shadow-xs">
+                    <div class="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
+                        <div class="flex items-center gap-2.5">
+                            <span class="material-symbols-rounded text-[#0052cc] text-[22px]">security</span>
+                            <h2 class="text-sm font-bold text-gray-900 tracking-tight">Matriks Batas Hak Akses Sistem (Modul D Privileges)</h2>
+                        </div>
+                        <span class="px-3 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200">
+                            Role-Based Access Control (RBAC)
+                        </span>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                        <!-- Role 1: Kasir -->
+                        <div class="p-4 rounded-xl border border-sky-200 bg-sky-50/40 space-y-2">
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold text-sky-800 text-[13px] flex items-center gap-1.5">
+                                    <span class="material-symbols-rounded text-sky-600 text-[18px]">point_of_sale</span>
+                                    Kasir
+                                </span>
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-sky-100 text-sky-800" x-text="userSummary.kasir + ' Akun'"></span>
+                            </div>
+                            <ul class="space-y-1.5 text-gray-600 text-[11.5px] leading-relaxed">
+                                <li class="flex items-start gap-1.5">
+                                    <span class="material-symbols-rounded text-emerald-600 text-[15px] shrink-0 mt-0.5">check_circle</span>
+                                    <span>Input modal awal shift (Opening Cash)</span>
+                                </li>
+                                <li class="flex items-start gap-1.5">
+                                    <span class="material-symbols-rounded text-emerald-600 text-[15px] shrink-0 mt-0.5">check_circle</span>
+                                    <span>Transaksi penjualan tunai, QRIS &amp; kasbon</span>
+                                </li>
+                                <li class="flex items-start gap-1.5">
+                                    <span class="material-symbols-rounded text-emerald-600 text-[15px] shrink-0 mt-0.5">check_circle</span>
+                                    <span>Hold / Recall Bill &amp; Cetak ulang struk</span>
+                                </li>
+                                <li class="flex items-start gap-1.5">
+                                    <span class="material-symbols-rounded text-emerald-600 text-[15px] shrink-0 mt-0.5">check_circle</span>
+                                    <span>Laporan penutupan kasir harian (Audit shift)</span>
+                                </li>
+                                <li class="flex items-start gap-1.5 text-red-700 font-semibold bg-red-50/70 p-1 rounded">
+                                    <span class="material-symbols-rounded text-red-600 text-[15px] shrink-0 mt-0.5">block</span>
+                                    <span>Tidak bisa Void tanpa persetujuan Supervisor</span>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <!-- Role 2: Supervisor / Manager -->
+                        <div class="p-4 rounded-xl border border-amber-200 bg-amber-50/40 space-y-2">
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold text-amber-900 text-[13px] flex items-center gap-1.5">
+                                    <span class="material-symbols-rounded text-amber-600 text-[18px]">shield_person</span>
+                                    Supervisor / Manager
+                                </span>
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800" x-text="(userSummary.supervisor + userSummary.manager) + ' Akun'"></span>
+                            </div>
+                            <ul class="space-y-1.5 text-gray-600 text-[11.5px] leading-relaxed">
+                                <li class="flex items-start gap-1.5">
+                                    <span class="material-symbols-rounded text-emerald-600 text-[15px] shrink-0 mt-0.5">check_circle</span>
+                                    <span>Seluruh fungsi operasional kasir</span>
+                                </li>
+                                <li class="flex items-start gap-1.5 text-amber-900 font-semibold">
+                                    <span class="material-symbols-rounded text-amber-600 text-[15px] shrink-0 mt-0.5">vpn_key</span>
+                                    <span>Otorisasi Void / Pembatalan transaksi (PIN)</span>
+                                </li>
+                                <li class="flex items-start gap-1.5 text-amber-900 font-semibold">
+                                    <span class="material-symbols-rounded text-amber-600 text-[15px] shrink-0 mt-0.5">percent</span>
+                                    <span>Input Diskon Manual kasir</span>
+                                </li>
+                                <li class="flex items-start gap-1.5 text-amber-900 font-semibold">
+                                    <span class="material-symbols-rounded text-amber-600 text-[15px] shrink-0 mt-0.5">sync_problem</span>
+                                    <span>Koreksi Stok Harian Cabang (Rusak/Expired)</span>
+                                </li>
+                                <li class="flex items-start gap-1.5">
+                                    <span class="material-symbols-rounded text-emerald-600 text-[15px] shrink-0 mt-0.5">check_circle</span>
+                                    <span>Manajemen Stock Opname &amp; Rekonsiliasi Cabang</span>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <!-- Role 3: Owner / Superadmin -->
+                        <div class="p-4 rounded-xl border border-purple-200 bg-purple-50/40 space-y-2">
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold text-purple-900 text-[13px] flex items-center gap-1.5">
+                                    <span class="material-symbols-rounded text-purple-600 text-[18px]">admin_panel_settings</span>
+                                    Owner / Superadmin
+                                </span>
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800" x-text="userSummary.owner + ' Akun'"></span>
+                            </div>
+                            <ul class="space-y-1.5 text-gray-600 text-[11.5px] leading-relaxed">
+                                <li class="flex items-start gap-1.5 text-purple-900 font-bold">
+                                    <span class="material-symbols-rounded text-purple-600 text-[15px] shrink-0 mt-0.5">star</span>
+                                    <span>Hak Akses Penuh (Full Control Sistem)</span>
+                                </li>
+                                <li class="flex items-start gap-1.5">
+                                    <span class="material-symbols-rounded text-purple-600 text-[15px] shrink-0 mt-0.5">inventory</span>
+                                    <span>Master Data Barang &amp; Pengaturan Harga / Markup</span>
+                                </li>
+                                <li class="flex items-start gap-1.5">
+                                    <span class="material-symbols-rounded text-purple-600 text-[15px] shrink-0 mt-0.5">credit_score</span>
+                                    <span>Manajemen Plafon Anggota &amp; Cutoff Payroll</span>
+                                </li>
+                                <li class="flex items-start gap-1.5">
+                                    <span class="material-symbols-rounded text-purple-600 text-[15px] shrink-0 mt-0.5">query_stats</span>
+                                    <span>Konsolidasi 3 Cabang &amp; Laporan Laba/Rugi Real-Time</span>
+                                </li>
+                                <li class="flex items-start gap-1.5">
+                                    <span class="material-symbols-rounded text-purple-600 text-[15px] shrink-0 mt-0.5">manage_accounts</span>
+                                    <span>Pengaturan Pajak (PPN) &amp; User Management</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- 1. FORM PENUGASAN KASIR BARU DARI MEMBERS (AKSES MANAGER) -->
                 <section class="bg-white border border-gray-200/90 rounded-2xl p-6 lg:p-7 shadow-xs">

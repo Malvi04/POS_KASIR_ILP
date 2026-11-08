@@ -1,0 +1,104 @@
+flowchart TB
+    %% Activity Diagram: Mode Offline-First Kasir & Sinkronisasi Data
+    %% Sistem POS Minimarket Koperasi PT Indo Lampung Perkasa
+
+    subgraph LANE_CUSTOMER["PELANGGAN"]
+        C_Start((Mulai)) --> C_Items["Menyerahkan barang belanjaan ke kasir"]
+        C_Pay["Melakukan pembayaran (Tunai / Voucher)"]
+        C_Receipt["Menerima struk belanja cetak thermal (Format Struk Standar)"]
+        C_End(((Selesai)))
+        C_Pay --> C_Receipt --> C_End
+    end
+
+    subgraph LANE_CASHIER["KASIR TERMINAL"]
+        K_DetectNet["Sistem mendeteksi status koneksi internet"]
+        K_OfflineBadge["Indikator status header: 'Offline (Pending Sync)'"]
+        K_Scan["Scan barcode produk & masukkan ke keranjang belanja"]
+        K_Cart["Periksa keranjang & hitung total belanja"]
+        K_Checkout["Klik Bayar & selesaikan transaksi"]
+        K_PrintThermal["Cetak struk belanja langsung via printer thermal lokal"]
+    end
+
+    subgraph LANE_LOCAL_STORAGE["STORAGE LOKAL POS (INDEXEDDB / LOCALSTORAGE)"]
+        L_CheckConn{"Koneksi internet tersedia?"}
+        L_SaveOffline["Simpan data transaksi lengkap ke antrean lokal (Status: PENDING)"]
+        L_DeductLocalStock["Kurangi stok lokal sementara & generate nomor transaksi lokal"]
+        L_QueueStore[("Antrean Transaksi Lokal (Pending Sync Queue)")]
+        
+        L_TriggerSync["Pemicu sinkronisasi: Koneksi online terdeteksi / Tombol 'Sinkronkan Sekarang'"]
+        L_FetchFIFO["Ambil data transaksi berstatus PENDING secara berurutan (FIFO)"]
+        L_SendAPI["Kirim payload transaksi ke REST API Server Pusat (/api/pos/checkout)"]
+        
+        L_EvalResponse{"Respons dari Server Pusat?"}
+        L_UpdateSynced["Ubah status transaksi menjadi SYNCED & bersihkan dari antrean pending"]
+        L_RetainPending["Pertahankan status PENDING, catat error log, & jadwalkan percobaan ulang (Retry)"]
+    end
+
+    subgraph LANE_INTERNET["JARINGAN / INTERNET"]
+        NET_Online["Koneksi Internet Pulih (Online Event)"]
+        NET_Transfer["Transmisi payload JSON transaksi via HTTPS"]
+        NET_Return["Pengiriman respons status HTTP ke terminal kasir"]
+    end
+
+    subgraph LANE_CENTRAL_SERVER["SERVER PUSAT & DATABASE POSTGRESQL"]
+        S_Receive["Terima payload transaksi dari terminal cabang"]
+        S_Idempotency{"Validasi Idempotensi: Apakah UUID / No. Transaksi sudah pernah diproses?"}
+        S_HandleDuplicate["Kembalikan respons sukses transaksi yang sudah ada (Cegah Duplikasi)"]
+        
+        S_DBTransaction["Buka Database Transaction"]
+        S_SaveDB["Simpan Transaksi, Detail Item, & Rincian Pembayaran ke PostgreSQL"]
+        S_UpdateStock["Catat mutasi persediaan barang di kartu stok (Stock Ledger)"]
+        S_UpdateShiftSales["Akumulasikan total omzet penjualan ke sesi shift kasir terkait"]
+        S_Commit["Commit Database Transaction"]
+        
+        S_ResponseSuccess["Kirim HTTP 201 Created (Status: Berhasil Disinkronkan)"]
+        S_ResponseError["Kirim HTTP 4xx/5xx Error (Alasan kegagalan validasi / database)"]
+    end
+
+    %% Flow Connections
+    C_Items --> K_Scan
+    K_Scan --> K_Cart --> K_Checkout --> K_DetectNet
+    K_DetectNet --> L_CheckConn
+
+    L_CheckConn -- "Tidak (Offline)" --> K_OfflineBadge
+    K_OfflineBadge --> L_SaveOffline
+    L_SaveOffline --> L_DeductLocalStock --> L_QueueStore
+    L_DeductLocalStock --> K_PrintThermal
+    K_PrintThermal --> C_Receipt
+
+    L_CheckConn -- "Ya (Online)" --> NET_Transfer
+    NET_Transfer --> S_Receive
+
+    %% Sync Loop
+    L_QueueStore -.-> NET_Online
+    NET_Online --> L_TriggerSync --> L_FetchFIFO --> L_SendAPI
+    L_SendAPI --> NET_Transfer
+
+    S_Receive --> S_Idempotency
+    S_Idempotency -- "Sudah Ada (Duplikat)" --> S_HandleDuplicate --> NET_Return
+    S_Idempotency -- "Baru & Valid" --> S_DBTransaction
+    S_DBTransaction --> S_SaveDB --> S_UpdateStock --> S_UpdateShiftSales --> S_Commit --> S_ResponseSuccess
+    S_Idempotency -- "Payload Rusak / Invalid" --> S_ResponseError --> NET_Return
+
+    S_ResponseSuccess --> NET_Return
+    NET_Return --> L_EvalResponse
+
+    L_EvalResponse -- "Berhasil (HTTP 200/201)" --> L_UpdateSynced
+    L_EvalResponse -- "Gagal / Timeout" --> L_RetainPending
+    L_RetainPending -. "Otomatis coba lagi saat koneksi stabil" .-> L_TriggerSync
+
+    classDef customer fill:#f3e8ff,stroke:#9333ea,color:#3b0764,stroke-width:1.2px;
+    classDef cashier fill:#eff6ff,stroke:#2563eb,color:#1e3a8a,stroke-width:1.2px;
+    classDef storage fill:#fffbeb,stroke:#d97706,color:#78350f,stroke-width:1.2px;
+    classDef network fill:#e0e7ff,stroke:#4f46e5,color:#312e81,stroke-width:1.2px;
+    classDef server fill:#f0fdf4,stroke:#16a34a,color:#14532d,stroke-width:1.2px;
+    classDef decision fill:#fff7ed,stroke:#ea580c,color:#7c2d12,stroke-width:1.2px;
+    classDef startend fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:1.5px;
+
+    class C_Start,C_End startend;
+    class L_CheckConn,L_EvalResponse,S_Idempotency decision;
+    class C_Items,C_Pay,C_Receipt customer;
+    class K_DetectNet,K_OfflineBadge,K_Scan,K_Cart,K_Checkout,K_PrintThermal cashier;
+    class L_SaveOffline,L_DeductLocalStock,L_QueueStore,L_TriggerSync,L_FetchFIFO,L_SendAPI,L_UpdateSynced,L_RetainPending storage;
+    class NET_Online,NET_Transfer,NET_Return network;
+    class S_Receive,S_HandleDuplicate,S_DBTransaction,S_SaveDB,S_UpdateStock,S_UpdateShiftSales,S_Commit,S_ResponseSuccess,S_ResponseError server;

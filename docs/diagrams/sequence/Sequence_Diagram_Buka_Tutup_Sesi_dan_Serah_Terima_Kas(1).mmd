@@ -1,0 +1,118 @@
+sequenceDiagram
+    autonumber
+
+    actor Kasir as Kasir Bertugas
+    actor KasirNext as Kasir Pengganti
+    participant UI as Antarmuka POS (Alpine.js)
+    participant API as Backend API (ShiftController)
+    participant DB as Database PostgreSQL
+    actor SPV as Supervisor / Manager
+
+    %% ==========================================
+    %% 1. BUKA SESI KASIR (SHIFT OPENING)
+    %% ==========================================
+    rect rgb(238, 246, 255)
+        Note over Kasir,SPV: FASE 1: Buka Sesi Kasir & Pemilihan Terminal (Shift Opening)
+
+        Kasir->>UI: Login dengan NIK & PIN kasir
+        UI->>API: GET /api/shift/current?terminal_code=POS-01
+        API->>DB: Query CashierShift (status = OPEN)
+        DB-->>API: Data sesi aktif (jika ada) / null
+
+        alt Terminal Masih Digunakan Kasir Lain
+            API-->>UI: Response 422: Terminal sedang digunakan sesi lain
+            UI-->>Kasir: Notifikasi: Wajib tutup sesi sebelumnya terlebih dahulu
+        else Terminal Tersedia (AVAILABLE) atau Serah Terima (HANDOVER_PENDING)
+            alt Terdapat Operan dari Shift Sebelumnya
+                API-->>UI: Tampilkan rincian operan kas fisik sebelumnya
+                Kasir->>UI: Hitung uang fisik laci via Kalkulator Denominasi
+                Kasir->>UI: Konfirmasi nominal kas awal yang diterima
+            else Sesi Baru Murni
+                Kasir->>UI: Input nominal modal awal via Kalkulator Denominasi (lembar & koin)
+            end
+
+            Kasir->>UI: Submit Buka Sesi (Terminal, NIK, Modal Awal, PIN)
+            UI->>API: POST /api/shift/open { terminal_code, cashier_nik, opening_cash, pin }
+            API->>DB: Validasi kredensial kasir & PIN
+            API->>DB: INSERT INTO cashier_shifts (shift_code, terminal_code, opening_cash, status='OPEN')
+            DB-->>API: Shift berhasil dibuat (ID: CS-YYYYMMDD-POS01-001)
+            API-->>UI: HTTP 201 Created: Sesi aktif dibuka
+            UI-->>Kasir: Tampilkan terminal POS, laci siap untuk transaksi
+        end
+    end
+
+    %% ==========================================
+    %% 2. OPERASIONAL BERJALAN & ARUS KAS LACI
+    %% ==========================================
+    rect rgb(240, 253, 244)
+        Note over Kasir,SPV: FASE 2: Operasional Sesi & Pencatatan Arus Kas Laci (Cash Movement)
+
+        opt Terdapat Pengeluaran / Kas Masuk Operasional / Cash Drop
+            Kasir->>UI: Buka menu 'Catat Kas Laci' (/kasir/sesi)
+            Kasir->>UI: Pilih jenis: CASH_IN / OPERATIONAL_CASH_OUT / CASH_DROP & input nominal
+            UI->>API: POST /api/shift/cash-movement { shift_id, type, amount, reason }
+            API->>DB: Update saldo kas laci (cash_in / cash_out) & simpan log pergerakan
+            DB-->>API: Saldo kas terbarui
+            API-->>UI: HTTP 200 OK: Arus kas laci tersimpan
+            UI-->>Kasir: Saldo laci kas terkini diperbarui
+        end
+
+        opt Kasir Perlu Istirahat / Sholat Sementara
+            Kasir->>UI: Kunci Layar Terminal Sementara (Terminal Lock)
+            UI-->>Kasir: Layar terkunci (Sesi finansial tetap OPEN di background)
+            Kasir->>UI: Masukkan PIN Kasir untuk membuka kembali kunci layar
+            UI-->>Kasir: Layar terbuka kembali ke transaksi aktif
+        end
+    end
+
+    %% ==========================================
+    %% 3. WIZARD TUTUP SESI & SERAH TERIMA KAS
+    %% ==========================================
+    rect rgb(255, 251, 235)
+        Note over Kasir,SPV: FASE 3: Wizard Tutup Sesi & Serah Terima Kas (3-Step Handover Wizard)
+
+        Kasir->>UI: Klik tombol 'Tutup Sesi Kasir' di /kasir/sesi
+        UI->>API: GET /api/shift/current
+        API->>DB: Hitung total penjualan tunai, non-tunai, kas masuk, kas keluar
+        DB-->>API: Summary finansial sesi berjalan
+        API-->>UI: Expected Cash = Modal Awal + Penjualan Tunai + Kas In - Kas Out
+
+        Note over Kasir,UI: Langkah 1: Perhitungan Fisik Laci (Blind Count)
+        Kasir->>UI: Hitung uang fisik laci lembar & koin via Kalkulator Denominasi
+        Kasir->>UI: Selesaikan status transaksi ditahan (Hold Bill: inherit / cancel)
+        Kasir->>UI: Klik 'Lanjut ke Analisis Selisih'
+
+        Note over Kasir,UI: Langkah 2: Rekonsiliasi & Analisis Selisih Kas
+        UI->>UI: Hitung Varians: Actual Cash - Expected Cash
+        alt Selisih Rp 0 (Sesuai)
+            UI-->>Kasir: Tampilkan status 'SESUAI' (Audit Kas Seimbang)
+        else Terdapat Selisih (Kurang / Lebih)
+            UI-->>Kasir: Tampilkan status 'SELISIH KURANG' / 'SELISIH LEBIH' & nominal
+            Kasir->>UI: Input kategori alasan selisih & catatan penjelasan
+            opt Memerlukan Otorisasi SPV
+                Kasir->>SPV: Laporkan deviasi selisih kas fisik
+                SPV->>UI: Input PIN Otorisasi Supervisor & catatan audit
+            end
+        end
+        Kasir->>UI: Klik 'Lanjut ke Alokasi Serah Terima'
+
+        Note over Kasir,UI: Langkah 3: Alokasi Modal & Serah Terima
+        alt Serah Terima ke Kasir Pengganti
+            Kasir->>KasirNext: Serahkan uang fisik laci dan dokumen serah terima
+            KasirNext->>KasirNext: Hitung verifikasi uang fisik bersama
+            Kasir->>UI: Pilih kasir penerima & input NIK/PIN Kasir Pengganti
+            Kasir->>UI: Submit Penutupan & Handover
+        else Tutup Toko / Setor Brankas
+            Kasir->>SPV: Serahkan seluruh uang fisik laci untuk disetor ke brankas toko
+            Kasir->>UI: Pilih opsi 'Tutup Toko / Drop ke Brankas' & Submit
+        end
+
+        UI->>API: POST /api/shift/close { shift_id, actual_cash, closing_notes }
+        API->>DB: UPDATE cashier_shifts SET status='CLOSED', actual_cash=?, variance=?, closed_at=NOW()
+        API->>DB: INSERT INTO cash_handover_headers (bukti serah terima kas)
+        DB-->>API: Sesi shift resmi ditutup
+        API-->>UI: HTTP 200 OK: Sesi closed & audit tersimpan
+
+        UI->>UI: Cetak Struk Penutupan Shift & Berita Acara Serah Terima Thermal
+        UI-->>Kasir: Tampilkan status penutupan sukses, arahkan kembali ke portal
+    end

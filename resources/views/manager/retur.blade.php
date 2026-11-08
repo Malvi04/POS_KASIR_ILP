@@ -33,7 +33,22 @@
     },
     items: [],
 
-    initReturns() {
+    async initReturns() {
+        try {
+            const res = await fetch('/api/returns', {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && json.data) {
+                    this.items = json.data;
+                    return;
+                }
+            }
+        } catch(e) {
+            console.error('Failed to load returns from API', e);
+        }
+
         const stored = localStorage.getItem('pos_ilp_manager_returns_v1');
         if (stored) {
             try {
@@ -182,34 +197,73 @@
             return true;
         });
     },
-    approveItem(item) {
+    async approveItem(item) {
         item.statusKey = 'disetujui';
         item.statusLabel = 'DISETUJUI MANAGER';
         item.statusSub = 'Siap Muat ke Gudang DC';
         item.needsApproval = false;
+
+        try {
+            if (item.id && typeof item.id === 'number' && item.id < 1000000000000) {
+                await fetch(`/api/returns/${item.id}/status`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ status: 'disetujui' })
+                });
+            }
+        } catch(e) {
+            console.error('Failed to sync return approval to API', e);
+        }
+
         this.saveReturns();
         this.triggerToast('Pengajuan ' + item.docNo + ' berhasil di-Approve oleh Manager.');
     },
-    rejectItem(item) {
+    async rejectItem(item) {
         item.statusKey = 'ditolak';
         item.statusLabel = 'DITOLAK MANAGER';
         item.statusSub = 'Dikembalikan ke Staf Toko';
         item.needsApproval = false;
+
+        try {
+            if (item.id && typeof item.id === 'number' && item.id < 1000000000000) {
+                await fetch(`/api/returns/${item.id}/status`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ status: 'ditolak' })
+                });
+            }
+        } catch(e) {
+            console.error('Failed to sync return rejection to API', e);
+        }
+
         this.saveReturns();
         this.triggerToast('Pengajuan ' + item.docNo + ' telah ditolak.');
     },
-    confirmReceive(item) {
+    async confirmReceive(item) {
         item.statusKey = 'selesai';
         item.statusLabel = 'SELESAI (BAST)';
         item.statusSub = 'Diterima Manager Toko';
+
+        try {
+            if (item.id && typeof item.id === 'number' && item.id < 1000000000000) {
+                await fetch(`/api/returns/${item.id}/status`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ status: 'selesai' })
+                });
+            }
+        } catch(e) {
+            console.error('Failed to sync return receive to API', e);
+        }
+
         this.saveReturns();
         this.triggerToast('Pengiriman Gudang ' + item.docNo + ' dikonfirmasi masuk stok toko.');
     },
-    submitQuickDraft() {
+    async submitQuickDraft() {
         if (!this.draftSku.trim() || !this.draftQty) return;
         const isTokoToGudang = this.draftDirection === 'toko_ke_gudang';
         const codeNum = Math.floor(893 + Math.random() * 90);
-        const docId = isTokoToGudang ? '#RTR-TK-2024-0' + codeNum : '#REP-GD-2024-0' + codeNum;
+        let docId = isTokoToGudang ? '#RTR-TK-2026-0' + codeNum : '#REP-GD-2026-0' + codeNum;
         const prodName = this.draftSku.includes('-') ? this.draftSku.split('-')[1].trim() : this.draftSku.trim();
 
         let condType = 'rusak';
@@ -229,11 +283,43 @@
             prodColor = 'text-[#16a34a]';
         }
 
+        let newDbId = Date.now();
+
+        try {
+            const res = await fetch('/api/returns', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({
+                    direction: this.draftDirection,
+                    condition_type: condType,
+                    sku: this.draftSku,
+                    qty: Number(this.draftQty) || 1,
+                    unit: this.draftUnit,
+                    reason: isTokoToGudang ? 'Input cepat draft retur terverifikasi' : 'Pengiriman barang pengganti dari Gudang DC',
+                    driver_name: isTokoToGudang ? 'Andi Pratama' : 'Dedi Kurnia',
+                    vehicle_plate: isTokoToGudang ? 'B 9481 UQ' : 'B 9844 XZ',
+                    use_fleet: !this.draftUseFleet
+                })
+            });
+
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && json.data) {
+                    newDbId = json.data.id;
+                    if (json.data.return_number) {
+                        docId = json.data.return_number;
+                    }
+                }
+            }
+        } catch(e) {
+            console.error('API create return error', e);
+        }
+
         this.items.unshift({
-            id: Date.now(),
+            id: newDbId,
             docNo: docId,
             date: 'Baru saja • Hari Ini',
-            ref: isTokoToGudang ? 'Ref: DRAFT-MGR-01' : 'Klaim: #RTR-TK-2024-0892',
+            ref: isTokoToGudang ? 'Ref: DRAFT-MGR-01' : 'Klaim: #RTR-TK-2026-0892',
             direction: this.draftDirection,
             directionLabel: isTokoToGudang ? 'TOKO → GUDANG' : 'GUDANG → TOKO',
             conditionType: condType,
@@ -258,7 +344,7 @@
         });
         this.saveReturns();
 
-        this.triggerToast('Draft ' + docId + ' (' + (isTokoToGudang ? 'Toko → Gudang' : 'Gudang → Toko') + ') berhasil ditambahkan!');
+        this.triggerToast('Draft ' + docId + ' (' + (isTokoToGudang ? 'Toko → Gudang' : 'Gudang → Toko') + ') berhasil disimpan ke database!');
     }
 }"
 x-init="initReturns()"

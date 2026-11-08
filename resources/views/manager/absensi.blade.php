@@ -35,7 +35,42 @@
     leaveRequests: [],
     shifts: [],
 
-    initAttendance() {
+    async initAttendance() {
+        try {
+            const res = await fetch(`/api/attendance?date=${this.selectedDate}`, {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && json.data) {
+                    this.attendanceList = json.data;
+                }
+            }
+
+            const leaveRes = await fetch('/api/attendance/leaves', {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (leaveRes.ok) {
+                const leaveJson = await leaveRes.json();
+                if (leaveJson.success && leaveJson.data) {
+                    this.leaveRequests = leaveJson.data;
+                }
+            }
+
+            const shiftRes = await fetch('/api/attendance/shifts', {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (shiftRes.ok) {
+                const shiftJson = await shiftRes.json();
+                if (shiftJson.success && shiftJson.data) {
+                    this.shifts = shiftJson.data;
+                }
+            }
+            return;
+        } catch(e) {
+            console.error('Failed to load attendance from API, using fallback', e);
+        }
+
         const stored = localStorage.getItem('pos_ilp_attendance_v1');
         if (stored) {
             try { this.attendanceList = JSON.parse(stored); } catch(e) { this.attendanceList = this.getDefaultAttendance(); }
@@ -112,7 +147,7 @@
         return this.leaveRequests.filter(l => l.status === 'DISETUJUI').length;
     },
 
-    recordAttendance() {
+    async recordAttendance() {
         if (!this.formAbsen.staffName.trim()) {
             alert('Silakan masukkan nama staf!');
             return;
@@ -121,6 +156,48 @@
         const now = new Date();
         const timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
         const isLate = now.getHours() > 7 || (now.getHours() === 7 && now.getMinutes() > 10);
+
+        try {
+            const res = await fetch('/api/attendance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({
+                    staffName: this.formAbsen.staffName.trim(),
+                    terminal: this.formAbsen.terminal,
+                    branch: this.formAbsen.branch,
+                    type: this.formAbsen.type,
+                    notes: this.formAbsen.notes || null,
+                    date: this.selectedDate
+                })
+            });
+
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && json.data) {
+                    if (this.formAbsen.type === 'MASUK') {
+                        this.attendanceList.unshift(json.data);
+                    } else {
+                        const existing = this.attendanceList.find(a => a.staffName.toLowerCase() === this.formAbsen.staffName.trim().toLowerCase());
+                        if (existing) {
+                            existing.checkOut = json.data.checkOut;
+                        }
+                    }
+                    this.saveAttendance();
+                    this.triggerToast(`${this.formAbsen.type === 'MASUK' ? 'Check-In' : 'Check-Out'} berhasil dicatat ke Database untuk ${this.formAbsen.staffName}!`);
+                    this.showCheckInModal = false;
+                    this.formAbsen.staffName = '';
+                    return;
+                }
+            } else {
+                const err = await res.json();
+                if (err.message) {
+                    alert(err.message);
+                    return;
+                }
+            }
+        } catch(e) {
+            console.error('Failed to record attendance to API', e);
+        }
 
         if (this.formAbsen.type === 'MASUK') {
             const existing = this.attendanceList.find(a => a.staffName.toLowerCase() === this.formAbsen.staffName.trim().toLowerCase());
@@ -155,10 +232,38 @@
         this.formAbsen.staffName = '';
     },
 
-    submitIzin() {
+    async submitIzin() {
         if (!this.formIzin.staffName.trim() || !this.formIzin.reason.trim()) {
             alert('Mohon lengkapi nama dan alasan izin!');
             return;
+        }
+
+        try {
+            const res = await fetch('/api/attendance/leaves', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({
+                    staffName: this.formIzin.staffName.trim(),
+                    type: this.formIzin.type,
+                    date: this.formIzin.date,
+                    reason: this.formIzin.reason.trim()
+                })
+            });
+
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && json.data) {
+                    this.leaveRequests.unshift(json.data);
+                    this.saveLeaves();
+                    this.showIzinModal = false;
+                    this.triggerToast(`Pengajuan ${this.formIzin.type} untuk ${this.formIzin.staffName} berhasil disimpan ke Database!`);
+                    this.formIzin.staffName = '';
+                    this.formIzin.reason = '';
+                    return;
+                }
+            }
+        } catch(e) {
+            console.error('Failed to submit leave to API', e);
         }
 
         this.leaveRequests.unshift({
@@ -176,14 +281,36 @@
         this.formIzin.reason = '';
     },
 
-    approveLeave(req) {
+    async approveLeave(req) {
         req.status = 'DISETUJUI';
+        try {
+            if (req.id && typeof req.id === 'number' && req.id < 1000000000000) {
+                await fetch(`/api/attendance/leaves/${req.id}/status`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ status: 'DISETUJUI', approved_by: 'Manager Operasional' })
+                });
+            }
+        } catch(e) {
+            console.error(e);
+        }
         this.saveLeaves();
-        this.triggerToast(`Izin ${req.staffName} telah disetujui.`);
+        this.triggerToast(`Izin ${req.staffName} telah disetujui di Database.`);
     },
 
-    rejectLeave(req) {
+    async rejectLeave(req) {
         req.status = 'DITOLAK';
+        try {
+            if (req.id && typeof req.id === 'number' && req.id < 1000000000000) {
+                await fetch(`/api/attendance/leaves/${req.id}/status`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ status: 'DITOLAK', approved_by: 'Manager Operasional' })
+                });
+            }
+        } catch(e) {
+            console.error(e);
+        }
         this.saveLeaves();
         this.triggerToast(`Izin ${req.staffName} telah ditolak.`);
     },

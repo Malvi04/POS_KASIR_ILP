@@ -1,0 +1,101 @@
+sequenceDiagram
+    autonumber
+
+    actor Customer as Pelanggan
+    actor Kasir as Kasir / Petugas Toko
+    participant UI_Kasir as Antarmuka Kasir (/kasir/refund & /retur)
+    participant UI_Manager as Antarmuka Manager (/retur)
+    participant API as Backend REST API (Refund & Return)
+    participant DB as Database PostgreSQL
+    actor SPV as Supervisor / Manager
+    actor DC as Gudang Pusat (DC) / Supplier
+
+    %% ==========================================
+    %% 1. REFUND BELANJA PELANGGAN DI KASIR
+    %% ==========================================
+    rect rgb(238, 246, 255)
+        Note over Customer,SPV: FASE 1: Refund Belanja Pelanggan di Kasir (Customer Sales Return)
+
+        Customer->>Kasir: Membawa barang rusak/bocor/kadaluarsa beserta struk belanja
+        Kasir->>UI_Kasir: Buka menu Refund Kasir (/kasir/transaksi/refund)
+        Kasir->>UI_Kasir: Input Nomor Faktur Struk Transaksi (TRX-...)
+        UI_Kasir->>API: GET /api/pos/transactions/{idOrInvoice}
+        API->>DB: Query data transaksi, daftar item, & metode pembayaran
+        DB-->>API: Detail transaksi asli ditemukan
+        API-->>UI_Kasir: Tampilkan rincian belanja & metode bayar asal
+
+        Kasir->>UI_Kasir: Pilih barang yang diretur, jumlah, & alasan retur (Rusak/ED/Cacat)
+        Kasir->>UI_Kasir: Klik tombol 'Proses Refund / Pembatalan'
+        
+        UI_Kasir-->>Kasir: Munculkan modal PIN Pad Otorisasi Supervisor
+        Kasir->>SPV: Minta persetujuan pengembalian dana belanja
+        SPV->>UI_Kasir: Input PIN 6-digit Supervisor
+        
+        UI_Kasir->>API: POST /api/pos/void/transaction { invoice_no, pin, reason, items }
+        API->>DB: Validasi kredensial PIN Supervisor
+        
+        alt PIN Supervisor Tidak Valid
+            DB-->>API: Otorisasi ditolak
+            API-->>UI_Kasir: HTTP 403 Forbidden: PIN Supervisor salah
+            UI_Kasir-->>Kasir: Transaksi refund dibatalkan
+        else PIN Supervisor Valid
+            API->>DB: Buka DB Transaction
+            API->>DB: UPDATE transactions SET status = 'REFUNDED' / 'VOID'
+            API->>DB: INSERT INTO void_logs (catat supervisor, kasir, alasan, waktu)
+            
+            alt Pembayaran Awal Menggunakan TUNAI
+                API->>DB: UPDATE cashier_shifts: Catat arus kas keluar (RETUR_TUNAI)
+                API-->>UI_Kasir: Buka laci kas untuk pengembalian uang tunai
+                Kasir-->>Customer: Serahkan uang tunai pengembalian dana
+            else Pembayaran Awal Menggunakan KREDIT KASBON ANGGOTA
+                API->>DB: Kurangi saldo piutang anggota & pulihkan sisa limit plafon di tabel members
+                API-->>UI_Kasir: Saldo kasbon anggota otomatis dipulihkan
+            else Pembayaran Awal Menggunakan QRIS / NON-TUNAI
+                API-->>UI_Kasir: Instruksikan pengembalian via voucher / transfer manual
+            end
+
+            API->>DB: Pulihkan stok barang layak ke inventori / pisahkan barang rusak
+            API->>DB: Commit DB Transaction
+            DB-->>API: Refund transaksi berhasil diproses
+            
+            API-->>UI_Kasir: HTTP 200 OK: Data refund & struk retur
+            UI_Kasir->>UI_Kasir: Cetak Nota Retur Penjualan Thermal
+            Kasir-->>Customer: Serahkan nota retur belanja & barang pengganti/uang
+        end
+    end
+
+    %% ==========================================
+    %% 2. RETUR BARANG TOKO KE GUDANG DC / SUPPLIER
+    %% ==========================================
+    rect rgb(255, 251, 235)
+        Note over Kasir,DC: FASE 2: Retur Barang Toko ke Gudang DC Pusat / Supplier (Store Return)
+
+        Kasir->>UI_Kasir: Kumpulkan barang retur rusak dari rak & buka menu Retur (/kasir/retur)
+        Kasir->>UI_Kasir: Buat draf retur: Pilih arah (Toko ke DC / Toko ke Supplier)
+        Kasir->>UI_Kasir: Pilih kondisi (Rusak, ED, Cacat), input daftar barang, nama supir, & plat nomor
+        
+        UI_Kasir->>API: POST /api/returns { direction, condition_type, items, driver, vehicle_plate }
+        API->>DB: INSERT INTO store_return_headers & store_return_items (Status: 'cek_fisik')
+        DB-->>API: Dokumen retur tersimpan
+        API-->>UI_Kasir: Dokumen draf retur dibuat (No. Retur: RET-YYYYMMDD-XXXX)
+
+        DC->>SPV: Sopir ekspedisi tiba di toko & memeriksa fisik barang bersama Supervisor
+        SPV->>UI_Manager: Buka menu Retur Manajerial (/retur) & pilih dokumen retur
+        UI_Manager->>API: GET /api/returns
+        API-->>UI_Manager: Tampilkan detail muatan retur & status 'cek_fisik'
+
+        SPV->>UI_Manager: Klik 'Setujui Dokumen Retur' (Approval)
+        UI_Manager->>API: PUT /api/returns/{id}/status { status: 'disetujui' }
+        
+        API->>DB: Buka DB Transaction
+        API->>DB: Kurangi stok barang rusak dari inventori cabang
+        API->>DB: INSERT INTO stock_ledger (mutasi pengeluaran retur toko)
+        API->>DB: UPDATE store_return_headers SET status = 'disetujui'
+        API->>DB: Catat klaim piutang ganti rugi / nota kredit kepada DC atau Supplier
+        API->>DB: Commit DB Transaction
+        DB-->>API: Persetujuan retur selesai
+        
+        API-->>UI_Manager: HTTP 200 OK: Dokumen retur berstatus DISETUJUI / SELESAI
+        UI_Manager->>UI_Manager: Cetak Surat Jalan Retur Barang Toko
+        SPV-->>DC: Serahkan muatan barang rusak beserta Surat Jalan kepada sopir ekspedisi
+    end

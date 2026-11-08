@@ -1,0 +1,71 @@
+
+erDiagram
+    USERS {
+        bigint id PK
+        string name
+    }
+    LOCATIONS {
+        bigint id PK
+        string name
+        string type
+    }
+    STORE_OPERATIONS {
+        bigint id PK
+        bigint location_id FK
+        boolean is_enabled
+        string reason
+        bigint updated_by FK
+        datetime updated_at
+    }
+    STORE_OPERATION_LOGS {
+        bigint id PK
+        bigint location_id FK
+        bigint changed_by FK
+        boolean old_status
+        boolean new_status
+        string reason
+        datetime changed_at
+    }
+    SCHEDULE_TAGS {
+        bigint id PK
+        string name
+        date start_date
+        date end_date
+        string description
+    }
+    SCHEDULE_TAG_LOCATIONS {
+        bigint schedule_tag_id FK
+        bigint location_id FK
+    }
+    LOCATION_OPERATING_HOURS {
+        bigint id PK
+        bigint location_id FK
+        int day_of_week
+        time open_time
+        time close_time
+    }
+    AUDIT_LOGS {
+        bigint id PK
+        bigint user_id FK
+        string action
+        string entity_type
+        string entity_id
+        datetime created_at
+    }
+    DOCUMENT_SEQUENCES {
+        bigint id PK
+        bigint location_id FK
+        string document_type
+        string period_key
+        bigint last_number
+    }
+
+    LOCATIONS ||--o| STORE_OPERATIONS : current_status
+    USERS ||--o{ STORE_OPERATIONS : updates
+    LOCATIONS ||--o{ STORE_OPERATION_LOGS : history
+    USERS ||--o{ STORE_OPERATION_LOGS : changes
+    SCHEDULE_TAGS ||--o{ SCHEDULE_TAG_LOCATIONS : assigned
+    LOCATIONS ||--o{ SCHEDULE_TAG_LOCATIONS : calendar
+    LOCATIONS ||--o{ LOCATION_OPERATING_HOURS : schedule
+    USERS o|--o{ AUDIT_LOGS : performs
+    LOCATIONS ||--o{ DOCUMENT_SEQUENCES : numbering

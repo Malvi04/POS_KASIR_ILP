@@ -170,11 +170,11 @@
                             </div>
                         </div>
 
-                        <!-- FIELD 2: PASSWORD AKUN PORTAL -->
+                        <!-- FIELD 2: PASSWORD AKUN PORTAL ATAU PIN -->
                         <div>
                             <div class="flex items-center justify-between mb-1.5">
-                                <label for="kasir-password" class="text-[12.5px] font-bold text-gray-700">Password Akun Portal</label>
-                                <button type="button" onclick="alert('Silakan hubungi supervisor / manager untuk bantuan reset password portal atau PIN petugas.')" class="text-[12px] text-[#0052cc] hover:underline font-semibold cursor-pointer">Lupa Password?</button>
+                                <label for="kasir-password" class="text-[12.5px] font-bold text-gray-700">Password Akun atau PIN Kasir</label>
+                                <button type="button" onclick="alert('Kredensial Default Kasir:\n• Password Akun: citra123 (atau [username]123)\n• PIN Kasir: 123456\nAnda dapat menggunakan salah satu di antaranya.')" class="text-[12px] text-[#0052cc] hover:underline font-semibold cursor-pointer">Bantuan Login?</button>
                             </div>
                             <div class="relative flex items-center">
                                 <span class="material-symbols-rounded absolute left-3.5 text-gray-400 text-[20px]">key</span>
@@ -182,7 +182,7 @@
                                        id="kasir-password"
                                        name="password"
                                        x-model="portalPassword"
-                                       placeholder="Masukkan password akun..."
+                                       placeholder="Masukkan password (citra123) atau PIN (123456)..."
                                        required
                                        class="w-full pl-10 pr-11 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-[14px] font-mono text-gray-800 focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 outline-none transition-all font-bold">
                                 <button type="button" onclick="togglePassword('kasir-password', 'kasir-eye')" class="absolute right-3 text-gray-400 hover:text-gray-600 cursor-pointer p-1">
@@ -191,7 +191,7 @@
                             </div>
                             <p class="text-[11px] text-gray-500 mt-1.5 flex items-center gap-1.5">
                                 <span class="material-symbols-rounded text-[15px] text-[#0052cc]">info</span>
-                                <span>Gunakan Password Akun untuk login portal. PIN 6-digit kasir digunakan saat membuka terminal POS.</span>
+                                <span>Bisa gunakan <strong>Password Akun</strong> (contoh: <code class="font-mono text-gray-700 font-bold">citra123</code>) atau <strong>PIN Kasir</strong> (<code class="font-mono text-gray-700 font-bold">123456</code>).</span>
                             </p>
                         </div>
 
@@ -223,7 +223,8 @@
             </div>
 
             <!-- FORM 2: LOGIN MANAGER -->
-            <div id="form-manager" class="hidden opacity-0 translate-y-4 transition-all duration-300 ease-out transform w-full max-w-md">
+            <div id="form-manager" class="hidden opacity-0 translate-y-4 transition-all duration-300 ease-out transform w-full max-w-md"
+                 x-data="managerPortalLogin()">
                 <div class="bg-white border border-gray-200/90 rounded-2xl p-8 shadow-sm">
                     <div class="text-center mb-6">
                         <div class="w-14 h-14 bg-blue-50 text-[#0052cc] rounded-full flex items-center justify-center mx-auto mb-3">
@@ -233,35 +234,47 @@
                         <p class="text-[13px] text-gray-500 mt-1">Portal Khusus Manajer Operasional</p>
                     </div>
 
-                    <form action="{{ url('/dashboard') }}" method="GET" class="space-y-4">
+                    <form @submit.prevent="handleSubmit()" class="space-y-4">
+                        <input type="hidden" name="role" value="manager">
                         <div>
-                            <label class="block text-[12.5px] font-bold text-gray-700 mb-1.5">Nama Manager</label>
+                            <label class="block text-[12.5px] font-bold text-gray-700 mb-1.5">Nama / Username Manager</label>
                             <div class="relative flex items-center">
                                 <span class="material-symbols-rounded absolute left-3 text-gray-400 text-[20px]">person</span>
-                                <input type="text" id="manager-username" name="username" value="andi_manager" placeholder="Masukkan nama manager" required
+                                <input type="text" id="manager-username" name="username" x-model="managerUsername" placeholder="Masukkan username atau email manager..." required
                                        class="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-[14px] text-gray-800 focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 outline-none transition-all font-medium">
                             </div>
                         </div>
 
                         <div>
                             <div class="flex items-center justify-between mb-1.5">
-                                <label class="text-[12.5px] font-bold text-gray-700">Kata Sandi</label>
-                                <button type="button" onclick="alert('Silakan hubungi administrator koperasi untuk reset sandi manager.')" class="text-[12px] text-[#0052cc] hover:underline font-semibold cursor-pointer">Lupa Sandi?</button>
+                                <label class="text-[12.5px] font-bold text-gray-700">Kata Sandi / PIN</label>
+                                <button type="button" onclick="alert('Kredensial Default Manager:\n• Username: andi_manager\n• Kata Sandi: password\n• PIN: 123456')" class="text-[12px] text-[#0052cc] hover:underline font-semibold cursor-pointer">Bantuan?</button>
                             </div>
                             <div class="relative flex items-center">
                                 <span class="material-symbols-rounded absolute left-3 text-gray-400 text-[20px]">lock</span>
-                                <input type="password" id="manager-password" name="password" value="password" placeholder="••••••••" required
-                                       class="w-full pl-10 pr-11 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-[14px] text-gray-800 focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 outline-none transition-all font-medium">
+                                <input type="password" id="manager-password" name="password" x-model="managerPassword" placeholder="Masukkan kata sandi (password) atau PIN (123456)..." required
+                                       class="w-full pl-10 pr-11 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-[14px] font-mono text-gray-800 focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 outline-none transition-all font-bold">
                                 <button type="button" onclick="togglePassword('manager-password', 'manager-eye')" class="absolute right-3 text-gray-400 hover:text-gray-600 cursor-pointer p-1">
                                     <span id="manager-eye" class="material-symbols-rounded text-[20px]">visibility</span>
                                 </button>
                             </div>
+                            <p class="text-[11px] text-gray-500 mt-1.5 flex items-center gap-1.5">
+                                <span class="material-symbols-rounded text-[15px] text-[#0052cc]">info</span>
+                                <span>Default: Kata Sandi <code class="font-mono text-gray-700 font-bold">password</code> atau PIN <code class="font-mono text-gray-700 font-bold">123456</code>.</span>
+                            </p>
+                        </div>
+
+                        <!-- Error Message Alert -->
+                        <div x-show="errorMsg" class="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-bold flex items-center gap-2">
+                            <span class="material-symbols-rounded text-[18px] text-red-500">error</span>
+                            <span x-text="errorMsg"></span>
                         </div>
 
                         <div class="pt-2">
-                            <button type="submit" class="w-full h-12 bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-[14px] rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer">
-                                <span>Masuk Sebagai Manager</span>
-                                <span class="material-symbols-rounded text-[20px]">login</span>
+                            <button type="submit" :disabled="isSubmitting" class="w-full h-12 bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-[14px] rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer">
+                                <span x-show="isSubmitting" class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                <span x-text="isSubmitting ? 'Memverifikasi...' : 'Masuk Sebagai Manager'"></span>
+                                <span x-show="!isSubmitting" class="material-symbols-rounded text-[20px]">login</span>
                             </button>
                         </div>
                     </form>
@@ -345,15 +358,15 @@
         // Cashier Portal Combobox State & Methods
         window.cashierPortalLogin = function() {
             const defaultCashiers = [
-                { id: 'USR-01', name: 'Andi Pratama', username: 'andi_kasir', password: 'andi123', pin: '123456', nik: '202409821001', role: 'Kasir Operasional', status: 'AKTIF', initials: 'AP', avatarBg: 'bg-blue-100 text-[#0052cc]', branch: 'Pusat' },
-                { id: 'USR-02', name: 'Budi Kurniawan', username: 'budi_kasir01', password: 'budi123', pin: '123456', nik: '202409821002', role: 'Kasir Utama', status: 'AKTIF', initials: 'BK', avatarBg: 'bg-emerald-100 text-emerald-700', branch: 'Pusat' },
-                { id: 'USR-03', name: 'Citra Dewi', username: 'citra_kasir', password: 'citra123', pin: '123456', nik: '202409821003', role: 'Kasir Operasional', status: 'AKTIF', initials: 'CD', avatarBg: 'bg-purple-100 text-purple-700', branch: 'Cabang A' },
-                { id: 'USR-04', name: 'Dedi Santoso', username: 'dedi_kasir', password: 'dedi123', pin: '123456', nik: '202409821004', role: 'Kasir Operasional', status: 'AKTIF', initials: 'DS', avatarBg: 'bg-amber-100 text-amber-700', branch: 'Cabang B' }
+                { id: 'USR-01', name: 'Andi Pratama', username: 'andi_kasir', pin: '123456', nik: '202409821001', role: 'Kasir Operasional', status: 'AKTIF', initials: 'AP', avatarBg: 'bg-blue-100 text-[#0052cc]', branch: 'Pusat' },
+                { id: 'USR-02', name: 'Budi Kurniawan', username: 'budi_kasir01', pin: '123456', nik: '202409821002', role: 'Kasir Utama', status: 'AKTIF', initials: 'BK', avatarBg: 'bg-emerald-100 text-emerald-700', branch: 'Pusat' },
+                { id: 'USR-03', name: 'Citra Dewi', username: 'citra_kasir', pin: '123456', nik: '202409821003', role: 'Kasir Operasional', status: 'AKTIF', initials: 'CD', avatarBg: 'bg-purple-100 text-purple-700', branch: 'Cabang A' },
+                { id: 'USR-04', name: 'Dedi Santoso', username: 'dedi_kasir', pin: '123456', nik: '202409821004', role: 'Kasir Operasional', status: 'AKTIF', initials: 'DS', avatarBg: 'bg-amber-100 text-amber-700', branch: 'Cabang B' }
             ];
 
             return {
-                identifierInput: '202409821002',
-                portalPassword: 'budi123',
+                identifierInput: '',
+                portalPassword: '',
                 isOpen: false,
                 focusedIndex: -1,
                 selectedStaff: null,
@@ -363,55 +376,43 @@
 
                 init() {
                     this.loadStaff();
-                    // Pre-select Budi Kurniawan (atau akun tersimpan)
-                    const savedStaffId = localStorage.getItem('pos_portal_logged_in_staff_id') || localStorage.getItem('pos_kasir_staff_id') || 'USR-02';
-                    const matched = this.allStaff.find(s => s.id === savedStaffId) || this.allStaff[1] || this.allStaff[0];
-                    if (matched) {
-                        this.selectStaff(matched);
-                    }
+                    // Pastikan input selalu kosong saat pertama kali dibuka (tidak auto-fill demo)
+                    this.identifierInput = '';
+                    this.portalPassword = '';
+                    this.selectedStaff = null;
                 },
 
-                loadStaff() {
-                    const list = JSON.parse(JSON.stringify(defaultCashiers));
+                async loadStaff() {
                     try {
-                        const rawUsers = localStorage.getItem('pos_ilp_users_v1');
-                        if (rawUsers) {
-                            const parsed = JSON.parse(rawUsers);
-                            if (Array.isArray(parsed)) {
-                                parsed.forEach(u => {
-                                    if (u.role && u.role.toUpperCase() === 'KASIR' && u.status !== 'NONAKTIF') {
-                                        const existIdx = list.findIndex(s => s.id === u.id || (u.username && s.username && s.username.toLowerCase() === u.username.toLowerCase()));
-                                        const userBranch = u.branch || (u.assignedBranches && u.assignedBranches[0]?.branch) || 'Pusat';
-                                        const userPass = u.password || 'kasir123';
-                                        const userPin = u.pin || '123456';
-                                        if (existIdx === -1) {
-                                            const inits = (u.name || 'Kasir').split(' ').filter(Boolean).map(w => w[0]).join('').substring(0, 2).toUpperCase();
-                                            list.push({
-                                                id: u.id || ('USR-' + Math.floor(10 + Math.random() * 90)),
-                                                name: u.name,
-                                                username: u.username || 'cashier_' + u.name.toLowerCase().replace(/\s+/g, '_'),
-                                                password: userPass,
-                                                pin: userPin,
-                                                nik: u.nik || '-',
-                                                role: 'Kasir Operasional',
-                                                status: u.status || 'AKTIF',
-                                                initials: inits || 'KS',
-                                                avatarBg: 'bg-indigo-100 text-indigo-700',
-                                                branch: userBranch
-                                            });
-                                        } else {
-                                            list[existIdx].password = userPass;
-                                            list[existIdx].pin = userPin;
-                                            list[existIdx].branch = userBranch;
-                                        }
-                                    }
+                        const res = await fetch('/api/users?role=kasir', {
+                            headers: { 'Accept': 'application/json' }
+                        });
+                        if (res.ok) {
+                            const json = await res.json();
+                            const users = json.data || (Array.isArray(json) ? json : []);
+                            if (Array.isArray(users) && users.length > 0) {
+                                this.allStaff = users.map(u => {
+                                    const inits = (u.name || 'Kasir').split(' ').filter(Boolean).map(w => w[0]).join('').substring(0, 2).toUpperCase();
+                                    return {
+                                        id: u.id,
+                                        name: u.name,
+                                        username: u.username,
+                                        nik: u.nik || '-',
+                                        role: u.role || 'Kasir Operasional',
+                                        status: u.is_active ? 'AKTIF' : 'NONAKTIF',
+                                        initials: inits || 'KS',
+                                        avatarBg: 'bg-blue-100 text-[#0052cc]',
+                                        branch: u.branch || 'Pusat'
+                                    };
                                 });
+                                this.syncHiddenSelect();
+                                return;
                             }
                         }
                     } catch (e) {
-                        console.warn('Error loading staff:', e);
+                        console.warn('Gagal memuat staf dari database, menggunakan fallback:', e);
                     }
-                    this.allStaff = list;
+                    this.allStaff = defaultCashiers;
                     this.syncHiddenSelect();
                 },
 
@@ -423,7 +424,6 @@
                         const opt = document.createElement('option');
                         opt.value = s.id;
                         opt.dataset.username = s.username;
-                        opt.dataset.password = s.password || 'budi123';
                         opt.dataset.pin = s.pin || '123456';
                         opt.dataset.nik = s.nik || '-';
                         opt.dataset.branch = s.branch || 'Pusat';
@@ -453,9 +453,8 @@
                     });
                     if (matched) {
                         this.selectedStaff = matched;
-                        this.portalPassword = matched.password || 'budi123';
-                        this.syncSelectedToStorage(matched);
                     }
+                    // Password tidak pernah diisi otomatis
                 },
 
                 clearIdentifier() {
@@ -464,6 +463,7 @@
                     this.selectedStaff = null;
                     this.isOpen = true;
                     this.focusedIndex = -1;
+                    this.errorMsg = '';
                     const inp = document.getElementById('kasir-identifier');
                     if (inp) inp.focus();
                 },
@@ -471,11 +471,18 @@
                 selectStaff(staff) {
                     this.selectedStaff = staff;
                     this.identifierInput = staff.nik && staff.nik !== '-' ? staff.nik : staff.username;
-                    this.portalPassword = staff.password || 'budi123';
+                    // Password dikosongkan agar kasir input password MANUAL!
+                    this.portalPassword = '';
                     this.isOpen = false;
                     this.focusedIndex = -1;
                     this.errorMsg = '';
                     this.syncSelectedToStorage(staff);
+
+                    // Arahkan fokus langsung ke input password
+                    setTimeout(() => {
+                        const passInput = document.getElementById('kasir-password');
+                        if (passInput) passInput.focus();
+                    }, 100);
                 },
 
                 syncSelectedToStorage(staff) {
@@ -483,8 +490,6 @@
                     if (selectEl) selectEl.value = staff.id;
                     const uInput = document.getElementById('kasir-username');
                     if (uInput) uInput.value = staff.username || '';
-                    const passInput = document.getElementById('kasir-password');
-                    if (passInput) passInput.value = this.portalPassword;
 
                     localStorage.setItem('pos_portal_logged_in_staff_id', staff.id);
                     localStorage.setItem('pos_kasir_staff_id', staff.id);
@@ -523,31 +528,133 @@
                     }
                 },
 
-                handleSubmit(e) {
-                    const q = (this.identifierInput || '').trim().toLowerCase();
-                    let staff = this.selectedStaff;
-                    if (!staff) {
-                        staff = this.allStaff.find(s => {
-                            return (s.username && s.username.toLowerCase() === q) || (s.nik && s.nik.toLowerCase() === q) || (s.name && s.name.toLowerCase() === q) || (s.id && s.id.toLowerCase() === q);
-                        });
-                    }
-                    if (!staff) {
-                        if (e && e.preventDefault) e.preventDefault();
-                        this.errorMsg = 'Akun kasir tidak ditemukan. Periksa NIK atau Username.';
+                async handleSubmit(e) {
+                    if (e && e.preventDefault) e.preventDefault();
+                    const identifier = (this.identifierInput || '').trim();
+                    const password = (this.portalPassword || '').trim();
+
+                    if (!identifier) {
+                        this.errorMsg = 'Silakan masukkan NIK atau Username kasir.';
+                        const idEl = document.getElementById('kasir-identifier');
+                        if (idEl) idEl.focus();
                         return false;
                     }
 
-                    const expectedPass = staff.password || 'budi123';
-                    if (this.portalPassword !== expectedPass) {
-                        if (e && e.preventDefault) e.preventDefault();
-                        this.errorMsg = `Password portal salah untuk akun ${staff.name}.`;
+                    if (!password) {
+                        this.errorMsg = 'Silakan masukkan password akun portal Anda secara manual.';
+                        const passEl = document.getElementById('kasir-password');
+                        if (passEl) passEl.focus();
                         return false;
                     }
 
-                    this.selectStaff(staff);
                     this.isSubmitting = true;
                     this.errorMsg = '';
-                    return true;
+
+                    try {
+                        const res = await fetch('/api/auth/login', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                            },
+                            body: JSON.stringify({
+                                role: 'kasir',
+                                identifier: identifier,
+                                password: password
+                            })
+                        });
+
+                        const json = await res.json();
+
+                        if (res.ok && json.success) {
+                            const u = json.user;
+                            localStorage.setItem('pos_portal_logged_in_staff_id', u.id);
+                            localStorage.setItem('pos_kasir_staff_id', u.id);
+                            localStorage.setItem('pos_portal_logged_in_staff_name', u.name);
+                            localStorage.setItem('pos_user_name', u.name);
+                            localStorage.setItem('pos_user_role', 'Kasir');
+                            if (u.nik) localStorage.setItem('pos_portal_logged_in_nik', u.nik);
+                            if (u.branch) {
+                                localStorage.setItem('pos_kasir_branch', u.branch);
+                                localStorage.setItem('pos_kasir_location', u.branch);
+                            }
+
+                            window.location.href = json.redirect_url || "{{ url('/select-shift') }}";
+                            return true;
+                        } else {
+                            this.errorMsg = json.message || 'Login gagal. NIK/Username atau kata sandi tidak cocok.';
+                            this.portalPassword = '';
+                            const passEl = document.getElementById('kasir-password');
+                            if (passEl) passEl.focus();
+                            return false;
+                        }
+                    } catch (err) {
+                        this.errorMsg = 'Koneksi ke backend gagal: ' + err.message;
+                        return false;
+                    } finally {
+                        this.isSubmitting = false;
+                    }
+                }
+            };
+        };
+
+        // Manager Portal Auth State & Methods
+        window.managerPortalLogin = function() {
+            return {
+                managerUsername: '',
+                managerPassword: '',
+                errorMsg: '',
+                isSubmitting: false,
+
+                async handleSubmit() {
+                    const uName = (this.managerUsername || '').trim();
+                    const uPass = (this.managerPassword || '').trim();
+
+                    if (!uName || !uPass) {
+                        this.errorMsg = 'Silakan masukkan username dan kata sandi Manager.';
+                        return;
+                    }
+
+                    this.isSubmitting = true;
+                    this.errorMsg = '';
+
+                    try {
+                        const res = await fetch('/api/auth/login', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                            },
+                            body: JSON.stringify({
+                                role: 'manager',
+                                identifier: uName,
+                                password: uPass
+                            })
+                        });
+
+                        const json = await res.json();
+
+                        if (res.ok && json.success) {
+                            const u = json.user;
+                            localStorage.setItem('pos_user_role', 'Manager');
+                            localStorage.setItem('pos_user_name', u.name);
+                            localStorage.setItem('pos_user_title', 'Manager Gerai');
+                            localStorage.setItem('pos_user_branch', u.branch || 'Minimarket Pusat');
+
+                            window.location.href = json.redirect_url || "{{ url('/dashboard') }}";
+                        } else {
+                            this.errorMsg = json.message || 'Username atau kata sandi Manager salah!';
+                            this.managerPassword = '';
+                            const pEl = document.getElementById('manager-password');
+                            if (pEl) pEl.focus();
+                        }
+                    } catch (err) {
+                        this.errorMsg = 'Gagal menghubungi server autentikasi: ' + err.message;
+                    } finally {
+                        this.isSubmitting = false;
+                    }
                 }
             };
         };
@@ -672,13 +779,38 @@
             }
         }
 
-        function submitOwnerPin() {
+        async function submitOwnerPin() {
             const pinInputs = document.querySelectorAll('.pin-dot');
             let pin = '';
             pinInputs.forEach(input => pin += input.value);
 
             if (pin.length === 6) {
-                window.location.href = "{{ url('/dashboard') }}";
+                try {
+                    const res = await fetch('/api/auth/login', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        },
+                        body: JSON.stringify({ pin: pin, role: 'owner' })
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                        localStorage.setItem('pos_user_role', data.user.role || 'Owner');
+                        localStorage.setItem('pos_user_name', data.user.name || 'Ir. Hartono Wibowo');
+                        localStorage.setItem('pos_user_title', 'Pemilik / Superadmin');
+                        localStorage.setItem('pos_user_branch', data.user.branch || 'Konsolidasi 3 Cabang');
+                        window.location.href = data.redirect_url || "{{ url('/dashboard?role=owner') }}";
+                        return;
+                    } else {
+                        alert(data.message || 'PIN Otorisasi Owner tidak valid! Silakan masukkan PIN 6 digit yang benar.');
+                        pinInputs.forEach(input => input.value = '');
+                        if (pinInputs[0]) pinInputs[0].focus();
+                    }
+                } catch(e) {
+                    alert('Gagal menghubungi server autentikasi: ' + e.message);
+                }
             }
         }
 

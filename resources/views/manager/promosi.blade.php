@@ -39,24 +39,49 @@
         { text: 'Promo Ramadan Kareem telah berakhir.', time: 'Kemarin, 23:59', icon: 'close', color: 'red' }
     ],
 
-    initPromotions() {
-        const stored = localStorage.getItem('pos_ilp_promotions_v1');
-        if (stored) {
-            try {
-                this.promotions = JSON.parse(stored);
-            } catch(e) {
+    async initPromotions() {
+        try {
+            const res = await fetch('/api/promotions', {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && json.data) {
+                    this.promotions = json.data.map(p => ({
+                        id: p.id,
+                        code: p.code,
+                        name: p.name,
+                        condition: p.condition || '-',
+                        type: p.type,
+                        typeLabel: p.type === 'PERCENTAGE' ? `Persentase (${p.value}%)` : (p.type === 'FIXED' ? `Diskon Rp ${Number(p.value).toLocaleString('id-ID')}` : 'Bundle / BOGO'),
+                        value: Number(p.value) || 0,
+                        badgeClass: p.badge_class || 'bg-[#dbeafe] text-[#1e40af]',
+                        period: (p.period_start || '') + ' s/d ' + (p.period_end || ''),
+                        periodStart: p.period_start,
+                        periodEnd: p.period_end,
+                        status: p.status,
+                        statusColor: p.status_color || (p.status === 'AKTIF' ? 'green' : (p.status === 'MENDATANG' ? 'blue' : 'gray'))
+                    }));
+                }
+            }
+
+            const setRes = await fetch('/api/promotions/settings', {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (setRes.ok) {
+                const setJson = await setRes.json();
+                if (setJson.success && setJson.data) {
+                    this.expirySettings = setJson.data;
+                }
+            }
+        } catch(e) {
+            console.error('Failed to load promotions API, using fallback', e);
+            const stored = localStorage.getItem('pos_ilp_promotions_v1');
+            if (stored) {
+                try { this.promotions = JSON.parse(stored); } catch(err) { this.promotions = this.getDefaultPromotions(); }
+            } else {
                 this.promotions = this.getDefaultPromotions();
             }
-        } else {
-            this.promotions = this.getDefaultPromotions();
-            this.savePromotions();
-        }
-
-        const storedSettings = localStorage.getItem('pos_ilp_promo_settings_v1');
-        if (storedSettings) {
-            try {
-                this.expirySettings = JSON.parse(storedSettings);
-            } catch(e){}
         }
     },
 
@@ -64,7 +89,16 @@
         localStorage.setItem('pos_ilp_promotions_v1', JSON.stringify(this.promotions));
     },
 
-    saveSettings() {
+    async saveSettings() {
+        try {
+            await fetch('/api/promotions/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify(this.expirySettings)
+            });
+        } catch(e) {
+            console.error(e);
+        }
         localStorage.setItem('pos_ilp_promo_settings_v1', JSON.stringify(this.expirySettings));
     },
 
@@ -135,47 +169,62 @@
         return this.promotions.filter(p => p.status === 'BERAKHIR').length;
     },
 
-    saveNewPromo() {
+    async saveNewPromo() {
         if (!this.formPromo.name) {
             alert('Silakan masukkan nama promo!');
             return;
         }
 
-        let typeLabel = 'Persentase (' + this.formPromo.value + '%)';
-        let badgeClass = 'bg-[#dbeafe] text-[#1e40af]';
-        if (this.formPromo.type === 'FIXED') {
-            typeLabel = 'Diskon Rp ' + Number(this.formPromo.value).toLocaleString('id-ID');
-            badgeClass = 'bg-gray-200 text-gray-700';
-        } else if (this.formPromo.type === 'BOGO') {
-            typeLabel = 'Bundle / BOGO';
-            badgeClass = 'bg-[#ffedd5] text-[#9a3412]';
+        try {
+            const res = await fetch('/api/promotions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({
+                    name: this.formPromo.name,
+                    condition: this.formPromo.condition || 'Tanpa syarat',
+                    type: this.formPromo.type,
+                    value: this.formPromo.value || 0,
+                    period_start: this.formPromo.periodStart,
+                    period_end: this.formPromo.periodEnd,
+                    status: this.formPromo.status || 'AKTIF'
+                })
+            });
+
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && json.data) {
+                    const p = json.data;
+                    this.promotions.unshift({
+                        id: p.id,
+                        code: p.code,
+                        name: p.name,
+                        condition: p.condition || '-',
+                        type: p.type,
+                        typeLabel: p.type === 'PERCENTAGE' ? `Persentase (${p.value}%)` : (p.type === 'FIXED' ? `Diskon Rp ${Number(p.value).toLocaleString('id-ID')}` : 'Bundle / BOGO'),
+                        value: Number(p.value) || 0,
+                        badgeClass: p.badge_class || 'bg-[#dbeafe] text-[#1e40af]',
+                        period: (p.period_start || '') + ' s/d ' + (p.period_end || ''),
+                        periodStart: p.period_start,
+                        periodEnd: p.period_end,
+                        status: p.status,
+                        statusColor: p.status_color || 'green'
+                    });
+                }
+            }
+        } catch(e) {
+            console.error('API create promo error', e);
         }
 
-        const newPromo = {
-            id: 'PRM-' + String(this.promotions.length + 1).padStart(3, '0'),
-            name: this.formPromo.name,
-            condition: this.formPromo.condition || '-',
-            type: this.formPromo.type,
-            typeLabel: typeLabel,
-            badgeClass: badgeClass,
-            period: this.formPromo.periodStart + ' s/d ' + this.formPromo.periodEnd,
-            periodStart: this.formPromo.periodStart,
-            periodEnd: this.formPromo.periodEnd,
-            status: this.formPromo.status,
-            statusColor: this.formPromo.status === 'AKTIF' ? 'green' : (this.formPromo.status === 'MENDATANG' ? 'blue' : 'gray')
-        };
-
-        this.promotions.unshift(newPromo);
         this.savePromotions();
         this.activities.unshift({
-            text: 'Promo ' + newPromo.name + ' ditambahkan oleh Manager.',
+            text: 'Promo ' + this.formPromo.name + ' ditambahkan oleh Manager.',
             time: 'Baru saja',
             icon: 'check',
             color: 'green'
         });
 
         this.showAddModal = false;
-        this.triggerToast('Promo baru berhasil ditambahkan!');
+        this.triggerToast('Promo baru berhasil disimpan ke Database!');
 
         // Reset
         this.formPromo.name = '';
@@ -188,15 +237,34 @@
         this.showEditModal = true;
     },
 
-    saveEditPromo() {
+    async saveEditPromo() {
         if (!this.editingPromo) return;
+
+        try {
+            await fetch(`/api/promotions/${this.editingPromo.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({
+                    name: this.editingPromo.name,
+                    condition: this.editingPromo.condition,
+                    type: this.editingPromo.type,
+                    value: this.editingPromo.value,
+                    period_start: this.editingPromo.periodStart,
+                    period_end: this.editingPromo.periodEnd,
+                    status: this.editingPromo.status
+                })
+            });
+        } catch(e) {
+            console.error(e);
+        }
+
         const idx = this.promotions.findIndex(p => p.id === this.editingPromo.id);
         if (idx !== -1) {
             this.editingPromo.statusColor = this.editingPromo.status === 'AKTIF' ? 'green' : (this.editingPromo.status === 'MENDATANG' ? 'blue' : 'gray');
             this.promotions[idx] = this.editingPromo;
             this.savePromotions();
             this.activities.unshift({
-                text: 'Promo ' + this.editingPromo.name + ' diperbarui.',
+                text: 'Promo ' + this.editingPromo.name + ' diperbarui di sistem.',
                 time: 'Baru saja',
                 icon: 'history',
                 color: 'amber'
@@ -213,17 +281,27 @@
         this.showDeleteModal = true;
     },
 
-    confirmDeletePromo() {
+    async confirmDeletePromo() {
         if (!this.selectedPromo) return;
         if (this.deleteInputText.trim().toLowerCase() !== 'hapus') {
             alert('Ketik \'hapus\' untuk konfirmasi penghapusan!');
             return;
         }
+
+        try {
+            await fetch(`/api/promotions/${this.selectedPromo.id}`, {
+                method: 'DELETE',
+                headers: { 'Accept': 'application/json' }
+            });
+        } catch(e) {
+            console.error(e);
+        }
+
         const name = this.selectedPromo.name;
         this.promotions = this.promotions.filter(p => p.id !== this.selectedPromo.id);
         this.savePromotions();
         this.activities.unshift({
-            text: 'Promo ' + name + ' telah dihapus permanen.',
+            text: 'Promo ' + name + ' telah dihapus permanen dari Database.',
             time: 'Baru saja',
             icon: 'close',
             color: 'red'
@@ -234,14 +312,21 @@
         this.triggerToast('Promo berhasil dihapus!');
     },
 
-    toggleStatus(p) {
-        if (p.status === 'AKTIF') {
-            p.status = 'BERAKHIR';
-            p.statusColor = 'gray';
-        } else {
-            p.status = 'AKTIF';
-            p.statusColor = 'green';
+    async toggleStatus(p) {
+        const newStatus = p.status === 'AKTIF' ? 'NONAKTIF' : 'AKTIF';
+        p.status = newStatus;
+        p.statusColor = newStatus === 'AKTIF' ? 'green' : 'gray';
+
+        try {
+            await fetch(`/api/promotions/${p.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({ status: newStatus })
+            });
+        } catch(e) {
+            console.error(e);
         }
+
         this.savePromotions();
         this.triggerToast('Status promo diubah menjadi ' + p.status);
     },

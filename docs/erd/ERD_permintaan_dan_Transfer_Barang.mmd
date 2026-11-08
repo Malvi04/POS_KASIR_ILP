@@ -1,0 +1,79 @@
+
+erDiagram
+    USERS {
+        bigint id PK
+        string name
+    }
+    LOCATIONS {
+        bigint id PK
+        string name
+    }
+    STOCK_REQUESTS {
+        bigint id PK
+        string request_number UK
+        bigint from_location_id FK
+        bigint to_location_id FK
+        bigint requested_by FK
+        datetime requested_at
+        string status
+    }
+    STOCK_REQUEST_ITEMS {
+        bigint id PK
+        bigint request_id FK
+        bigint product_id FK
+        decimal qty_requested
+        decimal qty_approved
+    }
+    STOCK_TRANSFERS {
+        bigint id PK
+        string transfer_number UK
+        bigint from_location_id FK
+        bigint to_location_id FK
+        bigint request_id FK
+        bigint created_by FK
+        datetime shipped_at
+        datetime received_at
+        string status
+    }
+    STOCK_TRANSFER_ITEMS {
+        bigint id PK
+        bigint transfer_id FK
+        bigint product_id FK
+        decimal qty_sent
+        decimal qty_received
+    }
+    STOCK_TRANSFER_ALLOCATIONS {
+        bigint id PK
+        bigint transfer_item_id FK
+        bigint layer_id FK
+        decimal qty
+    }
+    TRANSFER_DISCREPANCIES {
+        bigint id PK
+        bigint transfer_item_id FK
+        decimal qty_difference
+        string reason
+        bigint recorded_by FK
+    }
+    PRODUCTS {
+        bigint id PK
+        string name
+    }
+    INVENTORY_LAYERS {
+        bigint id PK
+        bigint product_id FK
+    }
+
+    USERS ||--o{ STOCK_REQUESTS : requests
+    LOCATIONS ||--o{ STOCK_REQUESTS : source
+    LOCATIONS ||--o{ STOCK_REQUESTS : destination
+    STOCK_REQUESTS ||--|{ STOCK_REQUEST_ITEMS : contains
+    PRODUCTS ||--o{ STOCK_REQUEST_ITEMS : requested
+    STOCK_REQUESTS o|--o{ STOCK_TRANSFERS : fulfilled_by
+    USERS ||--o{ STOCK_TRANSFERS : creates
+    STOCK_TRANSFERS ||--|{ STOCK_TRANSFER_ITEMS : contains
+    PRODUCTS ||--o{ STOCK_TRANSFER_ITEMS : transfers
+    STOCK_TRANSFER_ITEMS ||--o{ STOCK_TRANSFER_ALLOCATIONS : allocates
+    INVENTORY_LAYERS ||--o{ STOCK_TRANSFER_ALLOCATIONS : uses
+    STOCK_TRANSFER_ITEMS ||--o{ TRANSFER_DISCREPANCIES : discrepancies
+    USERS ||--o{ TRANSFER_DISCREPANCIES : records

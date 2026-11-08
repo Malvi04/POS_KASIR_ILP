@@ -1,0 +1,31 @@
+
+erDiagram
+    PRODUCTS {
+        bigint id PK
+        string name
+    }
+    SALE_ITEMS {
+        bigint id PK
+        bigint sale_id FK
+        bigint product_id FK
+        decimal qty
+    }
+    COUPON_UNITS {
+        bigint id PK
+        bigint product_id FK
+        string serial_number UK
+        string status
+        bigint receipt_item_id FK
+    }
+    COUPON_REDEMPTIONS {
+        bigint id PK
+        bigint coupon_unit_id FK
+        bigint sale_item_id FK
+        datetime redeemed_at
+        bigint redeemed_by FK
+        string status
+    }
+
+    PRODUCTS ||--o{ COUPON_UNITS : issues
+    SALE_ITEMS ||--o{ COUPON_REDEMPTIONS : references
+    COUPON_UNITS ||--o| COUPON_REDEMPTIONS : redeemed

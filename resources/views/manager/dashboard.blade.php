@@ -4,17 +4,46 @@
 
 @section('content')
 <div x-data="{
+    currentRole: (new URLSearchParams(window.location.search).get('role') || localStorage.getItem('pos_user_role') || 'Manager'),
+    userName: (localStorage.getItem('pos_user_name') || 'Admin Manager'),
+    isOwner() {
+        return (this.currentRole || '').toLowerCase() === 'owner' || (this.currentRole || '').toLowerCase() === 'superadmin';
+    },
     salesToday: 0,
     trxCountToday: 0,
     lowStockCount: 0,
     lowStockItems: [],
     cashierList: [],
+    weeklySales: [],
+    isLoading: true,
     showQuickActionModal: false,
     toastMessage: '',
     showToast: false,
 
-    initDashboard() {
-        // 1. Compute transactions today
+    async initDashboard() {
+        this.isLoading = true;
+        try {
+            const res = await fetch('/api/manager/dashboard-summary', {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && json.data) {
+                    this.salesToday = json.data.sales_today || 0;
+                    this.trxCountToday = json.data.trx_count_today || 0;
+                    this.lowStockCount = json.data.low_stock_count || 0;
+                    this.lowStockItems = json.data.low_stock_items || [];
+                    this.cashierList = json.data.cashier_list || [];
+                    this.weeklySales = json.data.weekly_sales || [];
+                    this.isLoading = false;
+                    return;
+                }
+            }
+        } catch(e) {
+            console.error('Failed to fetch dashboard summary from API', e);
+        }
+
+        // Fallback if network or offline
         const rawTrx = localStorage.getItem('pos_ilp_transactions_v1');
         if (rawTrx) {
             try {
@@ -27,7 +56,6 @@
             this.trxCountToday = 184;
         }
 
-        // 2. Compute low stock items from pos_ilp_inventory_products_v1
         const rawProds = localStorage.getItem('pos_ilp_inventory_products_v1');
         if (rawProds) {
             try {
@@ -36,32 +64,9 @@
                 this.lowStockCount = critical.length;
                 this.lowStockItems = critical.slice(0, 3);
             } catch(e){}
-        } else {
-            this.lowStockCount = 12;
-            this.lowStockItems = [
-                { nama: 'Susu UHT Full Cream 1L', stok: 3, statusText: 'STOK KRITIS', desc: 'Tersisa 3 unit di rak utama.' },
-                { nama: 'Roti Gandum Spesial', stok: 6, statusText: 'KEDALUWARSA SEGERA', desc: '6 item berakhir dalam 24 jam.' },
-                { nama: 'Minyak Goreng 2L', stok: 0, statusText: 'STOK KOSONG', desc: 'Segera lakukan re-order vendor.' }
-            ];
         }
 
-        // 3. Active Cashiers
-        const rawSession = localStorage.getItem('pos_ilp_active_cashier_session_v1');
-        let activeName = 'Budi Nugraha';
-        let terminalNo = 'Kasir 1';
-        if (rawSession) {
-            try {
-                const sess = JSON.parse(rawSession);
-                if (sess.cashierName) activeName = sess.cashierName;
-                if (sess.terminalLabel) terminalNo = sess.terminalLabel;
-            } catch(e){}
-        }
-
-        this.cashierList = [
-            { name: activeName, initial: activeName.substring(0, 2).toUpperCase(), terminal: terminalNo, total: 'Rp ' + this.salesToday.toLocaleString('id-ID'), status: 'Aktif', color: 'bg-green-500' },
-            { name: 'Ani Safitri', initial: 'AS', terminal: 'Kasir 2', total: 'Rp 2.150.000', status: 'Aktif', color: 'bg-green-500' },
-            { name: 'Dedi Permana', initial: 'DP', terminal: 'Kasir 3', total: 'Rp 0', status: 'Break', color: 'bg-gray-400' }
-        ];
+        this.isLoading = false;
     },
 
     triggerToast(msg) {
@@ -82,8 +87,13 @@ class="flex h-screen w-full bg-[#f4f7fb] font-sans text-gray-800 overflow-hidden
         <header class="h-20 bg-[#f4f7fb] flex items-center justify-between px-8 shrink-0 sticky top-0 z-10">
             <!-- Title & Info -->
             <div class="flex items-center gap-3">
-                <h1 class="text-xl font-black text-gray-900 tracking-tight">Dashboard Ringkasan Operasional</h1>
-                <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200">
+                <h1 class="text-xl font-black text-gray-900 tracking-tight"
+                    x-text="isOwner() ? 'Dashboard Eksekutif & Konsolidasi Pemilik' : 'Dashboard Ringkasan Operasional'">
+                    Dashboard Ringkasan Operasional
+                </h1>
+                <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold"
+                      :class="isOwner() ? 'bg-purple-100 text-purple-900 border border-purple-300' : 'bg-blue-50 text-[#0052cc] border border-blue-200'"
+                      x-text="isOwner() ? 'Akses Owner • Konsolidasi 3 Cabang' : 'Gerai Utama'">
                     Gerai Utama
                 </span>
             </div>
@@ -95,8 +105,10 @@ class="flex h-screen w-full bg-[#f4f7fb] font-sans text-gray-800 overflow-hidden
                 </button>
                 <div class="h-6 w-px bg-gray-300"></div>
                 <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-full pl-3.5 pr-1.5 py-1 shadow-2xs">
-                    <span class="text-xs font-bold text-gray-800">Manager Gerai</span>
-                    <div class="w-6 h-6 rounded-full bg-[#0052cc] text-white flex items-center justify-center text-xs font-bold">
+                    <span class="text-xs font-bold text-gray-800" x-text="isOwner() ? 'Ir. Hartono Wibowo (Owner)' : 'Manager Gerai'">Manager Gerai</span>
+                    <div class="w-6 h-6 rounded-full text-white flex items-center justify-center text-xs font-bold shadow-2xs"
+                         :class="isOwner() ? 'bg-purple-900 ring-2 ring-purple-300' : 'bg-[#0052cc]'"
+                         x-text="isOwner() ? 'HW' : 'M'">
                         M
                     </div>
                 </div>
@@ -104,6 +116,34 @@ class="flex h-screen w-full bg-[#f4f7fb] font-sans text-gray-800 overflow-hidden
         </header>
 
         <div class="px-8 pb-8 flex flex-col gap-6">
+
+            <!-- Executive Owner Quick Banner -->
+            <div x-show="isOwner()" class="bg-gradient-to-r from-[#2e1065] via-[#3b0764] to-[#1e1b4b] rounded-2xl p-6 text-white shadow-md border border-purple-800/40 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div class="flex items-center gap-4">
+                    <div class="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 shrink-0">
+                        <span class="material-symbols-rounded text-yellow-300 text-[32px]">shield_person</span>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2.5">
+                            <h2 class="text-lg font-black tracking-tight">Portal Eksekutif Pemilik Koperasi (Owner)</h2>
+                            <span class="px-2.5 py-0.5 rounded-full bg-yellow-400 text-purple-950 text-[10px] font-black uppercase tracking-wider">Superadmin</span>
+                        </div>
+                        <p class="text-xs text-purple-200 mt-1 max-w-2xl leading-relaxed">
+                            Selamat datang, <strong class="text-white">Ir. Hartono Wibowo</strong>. Anda memiliki otorisasi penuh atas data keuangan multi-cabang (Pusat, Utara, Selatan), audit P&amp;L konsolidasi, plafon kasbon anggota, dan tarif pajak PPN.
+                        </p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2.5 shrink-0 w-full md:w-auto">
+                    <a href="{{ url('/reports?tab=consolidated_3branches') }}" class="flex-1 md:flex-initial px-4 py-2.5 bg-yellow-400 hover:bg-yellow-300 text-purple-950 rounded-xl font-bold text-xs shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer">
+                        <span class="material-symbols-rounded text-[18px]">account_balance</span>
+                        <span>Konsolidasi 3 Cabang &amp; P&amp;L</span>
+                    </a>
+                    <a href="{{ url('/settings') }}" class="px-3.5 py-2.5 bg-white/15 hover:bg-white/25 border border-white/20 text-white rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                        <span class="material-symbols-rounded text-[18px]">tune</span>
+                        <span>Pengaturan Pajak</span>
+                    </a>
+                </div>
+            </div>
             
             <!-- 4 Metric Cards -->
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -188,36 +228,26 @@ class="flex h-screen w-full bg-[#f4f7fb] font-sans text-gray-800 overflow-hidden
                         </a>
                     </div>
                     
-                    <!-- Simulated Bar Chart -->
+                    <!-- Dynamic Weekly Bar Chart -->
                     <div class="flex-1 flex items-end justify-between px-2 gap-4 h-[180px] mt-auto">
-                        <div class="w-full flex flex-col items-center gap-3">
-                            <div class="w-full bg-[#dbeafe] rounded-t-md h-[80px]"></div>
-                            <span class="text-[10px] font-bold text-gray-500">SEN</span>
-                        </div>
-                        <div class="w-full flex flex-col items-center gap-3">
-                            <div class="w-full bg-[#dbeafe] rounded-t-md h-[60px]"></div>
-                            <span class="text-[10px] font-bold text-gray-500">SEL</span>
-                        </div>
-                        <div class="w-full flex flex-col items-center gap-3">
-                            <div class="w-full bg-[#dbeafe] rounded-t-md h-[100px]"></div>
-                            <span class="text-[10px] font-bold text-gray-500">RAB</span>
-                        </div>
-                        <div class="w-full flex flex-col items-center gap-3">
-                            <div class="w-full bg-[#dbeafe] rounded-t-md h-[150px]"></div>
-                            <span class="text-[10px] font-bold text-gray-500">KAM</span>
-                        </div>
-                        <div class="w-full flex flex-col items-center gap-3">
-                            <div class="w-full bg-[#dbeafe] rounded-t-md h-[120px]"></div>
-                            <span class="text-[10px] font-bold text-gray-500">JUM</span>
-                        </div>
-                        <div class="w-full flex flex-col items-center gap-3">
-                            <div class="w-full bg-[#dbeafe] rounded-t-md h-[90px]"></div>
-                            <span class="text-[10px] font-bold text-gray-500">SAB</span>
-                        </div>
-                        <div class="w-full flex flex-col items-center gap-3">
-                            <div class="w-full bg-[#0052cc] rounded-t-md h-[170px] shadow-sm"></div>
-                            <span class="text-[10px] font-bold text-[#0052cc]">MIN</span>
-                        </div>
+                        <template x-if="weeklySales && weeklySales.length > 0">
+                            <template x-for="(bar, bidx) in weeklySales" :key="bidx">
+                                <div class="w-full flex flex-col items-center gap-3">
+                                    <div class="w-full rounded-t-md transition-all duration-300"
+                                         :style="'height: ' + (bar.height_percent * 1.5) + 'px; max-height: 150px;'"
+                                         :class="bidx === weeklySales.length - 1 ? 'bg-[#0052cc] shadow-sm' : 'bg-[#dbeafe]'"
+                                         :title="bar.day + ': Rp ' + Number(bar.sales).toLocaleString('id-ID')"></div>
+                                    <span class="text-[10px] font-bold"
+                                          :class="bidx === weeklySales.length - 1 ? 'text-[#0052cc]' : 'text-gray-500'"
+                                          x-text="bar.day"></span>
+                                </div>
+                            </template>
+                        </template>
+                        <template x-if="!weeklySales || weeklySales.length === 0">
+                            <div class="w-full flex items-center justify-center text-xs text-gray-400 py-8">
+                                Memuat statistik mingguan...
+                            </div>
+                        </template>
                     </div>
                 </div>
 

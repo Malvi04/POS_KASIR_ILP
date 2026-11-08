@@ -236,27 +236,26 @@ Untuk mempermudah pengujian dan demonstrasi sistem, gunakan kredensial bawaan be
 
 ```text
 POS_KASIR_ILP/
-├── app/                        # Kode inti aplikasi Laravel (Controllers, Models, Providers)
+├── app/                        # Kode inti aplikasi (Api Controllers, Models, Providers)
+│   ├── Http/Controllers/Api/  # REST API Controllers (POS, Transaksi, Sesi, Laporan, dll)
+│   └── Models/                 # Eloquent ORM Models
 ├── database/                   # Migrasi, factory, dan seeder database
-│   └── migrations/             # Skema tabel database
+│   └── migrations/             # Skema tabel database PostgreSQL / SQLite
+├── docs/                       # Dokumentasi resmi modul, aktivasi fitur & ERD sistem
+│   └── erd/                    # Diagram ERD Mermaid
 ├── public/                     # Aset publik terkompilasi (CSS, JS, Fonts, Images)
 ├── resources/
 │   ├── css/                    # Stylesheet aplikasi (Tailwind CSS)
 │   ├── js/                     # Skrip JavaScript & Vite bundle
 │   └── views/                  # Template Blade & Antarmuka Aplikasi
 │       ├── components/         # Komponen reusable (cashier-sidebar, manager-sidebar, cashier-header)
-│       ├── kasir/
-│       │   └── partials/       # Modal penutupan sesi kasir (_closing-handover-modal, _opening-modal, dsb)
+│       ├── kasir/              # Seluruh antarmuka modul Kasir & partial modal
 │       ├── layouts/            # Layout utama aplikasi (app.blade.php) & state Alpine.js
-│       ├── pos.blade.php       # Antarmuka kasir utama
-│       ├── select-shift.blade.php # Seleksi terminal kasir & modal awal
-│       ├── cashier-session.blade.php # Layar manajemen sesi kasir
-│       ├── dashboard.blade.php # Dashboard manajer
-│       ├── inventory.blade.php # Manajemen inventori manajer
-│       ├── umkm-partners.blade.php # Kemitraan UMKM & Konsinyasi
-│       └── welcome.blade.php   # Portal login multi-role
+│       ├── manager/            # Seluruh antarmuka modul Manajer & Supervisor
+│       └── welcome.blade.php   # Portal login multi-role terpadu
 ├── routes/
-│   └── web.php                 # Definisi seluruh rute aplikasi
+│   ├── api.php                 # Rute REST API backend
+│   └── web.php                 # Rute navigasi halaman antarmuka Blade
 ├── .env.example                # Templat konfigurasi environment
 ├── package.json                # Dependensi frontend & script Vite
 ├── composer.json               # Dependensi framework Laravel & library PHP
