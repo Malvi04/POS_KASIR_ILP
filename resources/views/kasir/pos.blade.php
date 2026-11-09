@@ -14,52 +14,91 @@
 
     // Products Catalog State
     products: [],
+
+    deduplicateProducts(items) {
+        if (!Array.isArray(items)) return { unique: [], hasDuplicates: false };
+        const unique = [];
+        const seenSku = new Set();
+        const seenBarcode = new Set();
+        let hasDuplicates = false;
+
+        items.forEach(p => {
+            if (!p) return;
+            const sku = p.sku !== undefined && p.sku !== null ? String(p.sku).trim().toUpperCase() : '';
+            const barcode = p.barcode !== undefined && p.barcode !== null ? String(p.barcode).trim() : '';
+
+            const isDupSku = Boolean(sku && seenSku.has(sku));
+            const isDupBarcode = Boolean(barcode && seenBarcode.has(barcode));
+
+            if (isDupSku || isDupBarcode) {
+                hasDuplicates = true;
+                return;
+            }
+
+            if (sku) seenSku.add(sku);
+            if (barcode) seenBarcode.add(barcode);
+            unique.push(p);
+        });
+
+        return { unique, hasDuplicates };
+    },
+
     initProducts() {
         try {
             const raw = localStorage.getItem('pos_ilp_inventory_products_v1');
             if (raw) {
                 const parsed = JSON.parse(raw);
                 if (Array.isArray(parsed) && parsed.length > 0) {
-                    this.products = parsed;
+                    const result = this.deduplicateProducts(parsed);
+                    this.products = result.unique;
+                    if (result.hasDuplicates) {
+                        localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(result.unique));
+                    }
                     return;
                 }
             }
         } catch (e) {
             console.error('Error loading inventory products in POS:', e);
         }
-        // Fallback seed
-        this.products = [
-            { sku: 'PRD-001', barcode: '8991234567890', name: 'Aqua Mineral 600ml', category: 'Minuman', stock: 450, unit: 'Botol', price: 5500, memberPrice: 5000, status: 'TERSEDIA' },
-            { sku: 'PRD-002', barcode: '8992345678901', name: 'Chitato Sapi Panggang 68g', category: 'Snack', stock: 8, unit: 'Pcs', price: 12800, memberPrice: 12000, status: 'STOK_RENDAH' },
-            { sku: 'PRD-003', barcode: '8993456789012', name: 'Ultra Milk Full Cream 1L', category: 'Minuman', stock: 32, unit: 'Tetra', price: 19200, memberPrice: 18500, status: 'NEAR_EXPIRED' },
-            { sku: 'PRD-004', barcode: '8994567890123', name: 'Beras Pandan Wangi 5kg', category: 'Kebutuhan Pokok', stock: 120, unit: 'Pack', price: 82000, memberPrice: 79000, status: 'TERSEDIA' },
-            { sku: 'PRD-005', barcode: '8995678901234', name: 'Sunlight Jeruk Nipis 755ml', category: 'Pembersih', stock: 54, unit: 'Botol', price: 15500, memberPrice: 14500, status: 'TERSEDIA' },
-            { sku: 'PRD-006', barcode: '899275321004', name: 'Indomie Goreng Spesial 85g', category: 'Makanan', stock: 320, unit: 'Pcs', price: 3500, memberPrice: 3200, status: 'TERSEDIA' }
-        ];
+        this.products = [];
     },
 
     get availableCategories() {
-        const cats = ['Semua'];
-        this.products.forEach(p => {
-            if (p.category && !cats.includes(p.category)) {
-                cats.push(p.category);
+        const catMap = new Map();
+        (this.products || []).forEach(p => {
+            if (p && p.category) {
+                const label = String(p.category).trim();
+                if (label) {
+                    const key = label.toLowerCase();
+                    if (!catMap.has(key)) {
+                        catMap.set(key, label);
+                    }
+                }
             }
         });
-        return cats;
+        return ['Semua', ...Array.from(catMap.values())];
     },
 
     get filteredProducts() {
-        return this.products.filter(p => {
-            if (this.selectedCategory !== 'Semua' && p.category !== this.selectedCategory) return false;
-            if (this.searchQuery.trim() !== '') {
-                const q = this.searchQuery.toLowerCase();
-                const matchName = (p.name || '').toLowerCase().includes(q);
-                const matchBarcode = (p.barcode || '').includes(q);
-                const matchSku = (p.sku || '').toLowerCase().includes(q);
+        const selected = (this.selectedCategory || 'Semua').trim().toLowerCase();
+        const search = (this.searchQuery || '').trim().toLowerCase();
+
+        const list = (this.products || []).filter(p => {
+            if (!p) return false;
+            if (selected !== 'semua') {
+                const pCat = (p.category || '').trim().toLowerCase();
+                if (pCat !== selected) return false;
+            }
+            if (search !== '') {
+                const matchName = (p.name || '').toLowerCase().includes(search);
+                const matchBarcode = (p.barcode || '').toLowerCase().includes(search);
+                const matchSku = (p.sku || '').toLowerCase().includes(search);
                 return matchName || matchBarcode || matchSku;
             }
             return true;
         });
+
+        return this.deduplicateProducts(list).unique;
     },
 
     // Cart State & Persistence
@@ -75,13 +114,7 @@
                 }
             }
         } catch (e) {}
-        // Default initial items
-        this.cart = [
-            { sku: 'PRD-006', barcode: '899275321004', name: 'Indomie Goreng Spesial 85g', price: 3500, memberPrice: 3200, qty: 3, unit: 'Pcs' },
-            { sku: 'PRD-009', barcode: '8998901234567', name: 'Oreo Vanilla 133g', price: 9500, memberPrice: 8200, qty: 1, unit: 'Pcs' },
-            { sku: 'PRD-008', barcode: '8997890123456', name: 'Teh Pucuk Harum 350ml', price: 4000, memberPrice: 3800, qty: 2, unit: 'Botol' }
-        ];
-        this.saveCart();
+        this.cart = [];
     },
 
     saveCart() {
@@ -90,14 +123,24 @@
 
     addToCart(p) {
         if (!p) return;
-        const existing = this.cart.find(it => it.sku === p.sku || it.barcode === p.barcode);
+        const targetSku = (p.sku || '').trim().toUpperCase();
+        const targetBarcode = (p.barcode || '').trim();
+
+        const existing = this.cart.find(it => {
+            const itSku = (it.sku || '').trim().toUpperCase();
+            const itBarcode = (it.barcode || '').trim();
+            const matchSku = targetSku && itSku && targetSku === itSku;
+            const matchBarcode = targetBarcode && itBarcode && targetBarcode === itBarcode;
+            return Boolean(matchSku || matchBarcode);
+        });
+
         if (existing) {
-            existing.qty += 1;
+            existing.qty = (Number(existing.qty) || 0) + 1;
         } else {
             this.cart.push({
-                sku: p.sku,
-                barcode: p.barcode,
-                name: p.name,
+                sku: p.sku || '',
+                barcode: p.barcode || '',
+                name: p.name || 'Produk',
                 price: Number(p.price) || 0,
                 memberPrice: Number(p.memberPrice || p.price) || 0,
                 qty: 1,
@@ -202,7 +245,7 @@
                 itemCount: 12,
                 items: [
                     { sku: 'PRD-006', barcode: '899275321004', name: 'Indomie Goreng Spesial 85g', price: 3500, memberPrice: 3200, qty: 5, unit: 'Pcs' },
-                    { sku: 'PRD-003', barcode: '8993456789012', name: 'Ultra Milk Full Cream 1L', price: 19200, memberPrice: 18500, qty: 2, unit: 'Tetra' },
+                    { sku: 'PRD-003', barcode: '8993456789012', name: 'Ultra Milk Full Cream 1L', price: 19200, memberPrice: 18500, qty: 2, unit: 'Pcs' },
                     { sku: 'PRD-004', barcode: '8994567890123', name: 'Beras Pandan Wangi 5kg', price: 82000, memberPrice: 79000, qty: 1, unit: 'Pack' },
                     { sku: 'PRD-001', barcode: '8991234567890', name: 'Aqua Mineral 600ml', price: 5500, memberPrice: 5000, qty: 4, unit: 'Botol' }
                 ]
@@ -512,10 +555,10 @@ class="flex w-full h-full relative text-gray-800">
 
                 <!-- Category Tabs -->
                 <div class="flex gap-2 overflow-x-auto pb-3 scrollbar-hide shrink-0">
-                    <template x-for="cat in availableCategories" :key="cat">
+                    <template x-for="cat in availableCategories" :key="cat.toLowerCase()">
                         <button type="button"
                                 @click="selectedCategory = cat"
-                                :class="selectedCategory === cat ? 'bg-[#0052cc] text-white shadow-xs' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'"
+                                :class="(selectedCategory || '').trim().toLowerCase() === cat.trim().toLowerCase() ? 'bg-[#0052cc] text-white shadow-xs' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'"
                                 class="px-4 py-2 font-bold rounded-full text-xs transition-colors whitespace-nowrap cursor-pointer"
                                 x-text="cat">
                         </button>
@@ -525,7 +568,7 @@ class="flex w-full h-full relative text-gray-800">
                 <!-- Product Grid (Dynamic from localStorage) -->
                 <div class="flex-1 overflow-y-auto mt-2 pb-4">
                     <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3.5">
-                        <template x-for="p in filteredProducts" :key="p.sku">
+                        <template x-for="p in filteredProducts" :key="p.sku || p.barcode || p.name">
                             <div @click="addToCart(p)"
                                  class="bg-white border border-gray-200 rounded-xl p-3.5 shadow-2xs hover:shadow-md hover:border-[#0052cc] cursor-pointer transition-all flex flex-col justify-between group active:scale-[0.98]">
                                 <div>
@@ -563,7 +606,7 @@ class="flex w-full h-full relative text-gray-800">
                         <template x-if="filteredProducts.length === 0">
                             <div class="col-span-full py-12 text-center text-gray-400">
                                 <span class="material-symbols-rounded text-4xl mb-1 text-gray-300">inventory_2</span>
-                                <p class="text-xs font-bold text-gray-600">Tidak ada produk yang cocok dengan pencarian.</p>
+                                <p class="text-xs font-bold text-gray-600">Belum ada produk di etalase kasir.</p>
                                 <button type="button" @click="searchQuery = ''; selectedCategory = 'Semua'" class="text-xs text-[#0052cc] font-bold mt-2 hover:underline">Reset Filter</button>
                             </div>
                         </template>

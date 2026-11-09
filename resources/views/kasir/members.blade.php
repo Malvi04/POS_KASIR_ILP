@@ -10,83 +10,7 @@
     showDetailModal: false,
     selectedMember: null,
 
-    members: [
-        {
-            id: 'MBR-001',
-            nik: '327501002230004',
-            name: 'Bambang Pamungkas',
-            dept: 'Logistik & Gudang',
-            joinDate: '12 Januari 2021',
-            phone: '0812-9841-2201',
-            creditLimit: 5000000,
-            currentDebt: 500000,
-            status: 'AKTIF',
-            notes: 'Anggota aktif koperasi, pembayaran payroll tertib.',
-            history: [
-                { id: '#TRX-20261024-0019', date: '24 Okt 2026 • 07:15', total: 195000, cashier: 'Budi Kurniawan' },
-                { id: '#TRX-20261018-0044', date: '18 Okt 2026 • 16:30', total: 305000, cashier: 'Citra Dewi' }
-            ]
-        },
-        {
-            id: 'MBR-002',
-            nik: '327501440230012',
-            name: 'Siti Lestari',
-            dept: 'Administrasi & Keuangan',
-            joinDate: '05 Mei 2022',
-            phone: '0813-8821-4412',
-            creditLimit: 5000000,
-            currentDebt: 3800000,
-            status: 'AKTIF',
-            notes: 'Mendekati ambang 80% plafon belanja.',
-            history: [
-                { id: '#TRX-20261020-0081', date: '20 Okt 2026 • 12:45', total: 650000, cashier: 'Andi Pratama' },
-                { id: '#TRX-20261014-0012', date: '14 Okt 2026 • 10:20', total: 1200000, cashier: 'Budi Kurniawan' }
-            ]
-        },
-        {
-            id: 'MBR-003',
-            nik: '327501002230099',
-            name: 'Andri Setiawan',
-            dept: 'Produksi A',
-            joinDate: '10 Agustus 2020',
-            phone: '0857-1120-9981',
-            creditLimit: 5000000,
-            currentDebt: 5000000,
-            status: 'DIBLOKIR',
-            notes: 'Plafon telah habis (100%). Transaksi kredit otomatis ditolak oleh sistem kasir sampai pemotongan gaji/pelunasan.',
-            history: [
-                { id: '#TRX-20261005-0102', date: '05 Okt 2026 • 17:10', total: 1500000, cashier: 'Dedi Santoso' }
-            ]
-        },
-        {
-            id: 'MBR-004',
-            nik: '327501550230056',
-            name: 'Dewi Indah',
-            dept: 'Maintenance & Utility',
-            joinDate: '19 November 2023',
-            phone: '0819-2234-8871',
-            creditLimit: 5000000,
-            currentDebt: 0,
-            status: 'AKTIF',
-            notes: 'Tidak memiliki riwayat tunggakan, plafon utuh 100%.',
-            history: []
-        },
-        {
-            id: 'MBR-005',
-            nik: '327501009930011',
-            name: 'Raka Hendra',
-            dept: 'Logistik & Gudang',
-            joinDate: '02 Februari 2022',
-            phone: '0812-4411-9902',
-            creditLimit: 5000000,
-            currentDebt: 2850000,
-            status: 'AKTIF',
-            notes: 'Sisa plafon Rp 2.150.000, eligible transaksi kredit.',
-            history: [
-                { id: '#TRX-20261017-0033', date: '17 Okt 2026 • 14:15', total: 420000, cashier: 'Citra Dewi' }
-            ]
-        }
-    ],
+    members: [],
 
     get filteredMembers() {
         return this.members.filter(m => {
@@ -114,9 +38,11 @@
                 const parsed = JSON.parse(raw);
                 if (Array.isArray(parsed) && parsed.length > 0) {
                     this.members = parsed;
+                    return;
                 }
             }
         } catch (e) {}
+        this.members = [];
     }
 }"
 x-init="initOpening(); initMembers();"
@@ -138,12 +64,7 @@ class="flex flex-col h-screen w-full font-sans">
                 <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
                     <div>
                         <div class="flex items-center gap-2">
-                            <h1 class="text-xl font-bold text-gray-900 tracking-tight">Data Pelanggan & Anggota Koperasi</h1>
-                            <span class="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-blue-100 text-[#0052cc]">
-                                Validasi Plafon Kasir
-                            </span>
-                        </div>
-                        <p class="text-xs text-gray-500 mt-0.5">Profil anggota, kelayakan kredit belanja, dan sisa plafon piutang.</p>
+                            <h1 class="text-xl font-bold text-gray-900 tracking-tight">Members</h1></div>
                     </div>
                 </div>
 
@@ -262,8 +183,7 @@ class="flex flex-col h-screen w-full font-sans">
                                 <tr x-show="filteredMembers.length === 0">
                                     <td colspan="8" class="text-center py-12 text-gray-400">
                                         <span class="material-symbols-rounded text-4xl mb-2 text-gray-300">person_search</span>
-                                        <p class="font-bold text-gray-600">Tidak ada anggota yang cocok</p>
-                                        <p class="text-xs text-gray-400 mt-0.5">Silakan periksa kata kunci pencarian Anda.</p>
+                                        <p class="font-bold text-gray-600">Belum ada data member.</p>
                                     </td>
                                 </tr>
                             </tbody>

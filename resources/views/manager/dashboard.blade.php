@@ -16,52 +16,56 @@
     initDashboard() {
         // 1. Compute transactions today
         const rawTrx = localStorage.getItem('pos_ilp_transactions_v1');
+        this.salesToday = 0;
+        this.trxCountToday = 0;
         if (rawTrx) {
             try {
                 const trxs = JSON.parse(rawTrx);
-                this.trxCountToday = trxs.length;
-                this.salesToday = trxs.reduce((sum, t) => sum + (Number(t.total) || 0), 0);
+                if (Array.isArray(trxs)) {
+                    this.trxCountToday = trxs.length;
+                    this.salesToday = trxs.reduce((sum, t) => sum + (Number(t.total) || Number(t.finalTotal) || 0), 0);
+                }
             } catch(e){}
-        } else {
-            this.salesToday = 12450000;
-            this.trxCountToday = 184;
         }
 
         // 2. Compute low stock items from pos_ilp_inventory_products_v1
         const rawProds = localStorage.getItem('pos_ilp_inventory_products_v1');
+        this.lowStockCount = 0;
+        this.lowStockItems = [];
         if (rawProds) {
             try {
                 const prods = JSON.parse(rawProds);
-                const critical = prods.filter(p => Number(p.stok) <= 10);
-                this.lowStockCount = critical.length;
-                this.lowStockItems = critical.slice(0, 3);
+                if (Array.isArray(prods)) {
+                    const critical = prods.filter(p => Number(p.stock !== undefined ? p.stock : p.stok) <= Number(p.minStock || 10));
+                    this.lowStockCount = critical.length;
+                    this.lowStockItems = critical.slice(0, 5).map(p => ({
+                        nama: p.name || p.nama,
+                        stok: Number(p.stock !== undefined ? p.stock : p.stok) || 0,
+                        kategori: p.category || p.kategori || 'Umum',
+                        desc: 'Stok tersisa: ' + (p.stock !== undefined ? p.stock : p.stok)
+                    }));
+                }
             } catch(e){}
-        } else {
-            this.lowStockCount = 12;
-            this.lowStockItems = [
-                { nama: 'Susu UHT Full Cream 1L', stok: 3, statusText: 'STOK KRITIS', desc: 'Tersisa 3 unit di rak utama.' },
-                { nama: 'Roti Gandum Spesial', stok: 6, statusText: 'KEDALUWARSA SEGERA', desc: '6 item berakhir dalam 24 jam.' },
-                { nama: 'Minyak Goreng 2L', stok: 0, statusText: 'STOK KOSONG', desc: 'Segera lakukan re-order vendor.' }
-            ];
         }
 
-        // 3. Active Cashiers
+        // 3. Active Cashiers from session storage
+        this.cashierList = [];
         const rawSession = localStorage.getItem('pos_ilp_active_cashier_session_v1');
-        let activeName = 'Budi Nugraha';
-        let terminalNo = 'Kasir 1';
         if (rawSession) {
             try {
                 const sess = JSON.parse(rawSession);
-                if (sess.cashierName) activeName = sess.cashierName;
-                if (sess.terminalLabel) terminalNo = sess.terminalLabel;
+                if (sess && sess.status === 'OPEN' && sess.cashierName) {
+                    this.cashierList.push({
+                        name: sess.cashierName,
+                        initial: sess.cashierName.substring(0, 2).toUpperCase(),
+                        terminal: sess.terminalLabel || 'Terminal 01',
+                        total: 'Rp ' + this.salesToday.toLocaleString('id-ID'),
+                        status: 'Aktif',
+                        color: 'bg-green-500'
+                    });
+                }
             } catch(e){}
         }
-
-        this.cashierList = [
-            { name: activeName, initial: activeName.substring(0, 2).toUpperCase(), terminal: terminalNo, total: 'Rp ' + this.salesToday.toLocaleString('id-ID'), status: 'Aktif', color: 'bg-green-500' },
-            { name: 'Ani Safitri', initial: 'AS', terminal: 'Kasir 2', total: 'Rp 2.150.000', status: 'Aktif', color: 'bg-green-500' },
-            { name: 'Dedi Permana', initial: 'DP', terminal: 'Kasir 3', total: 'Rp 0', status: 'Break', color: 'bg-gray-400' }
-        ];
     },
 
     triggerToast(msg) {
@@ -147,13 +151,15 @@ class="flex h-screen w-full bg-[#f4f7fb] font-sans text-gray-800 overflow-hidden
                         <div class="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center">
                             <span class="material-symbols-rounded text-green-600 text-[20px]">how_to_reg</span>
                         </div>
-                        <span class="text-[10px] font-extrabold text-green-700 uppercase tracking-wider bg-green-50 px-2 py-0.5 rounded">ONLINE</span>
+                        <span class="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded"
+                              :class="cashierList.filter(c => c.status === 'Aktif').length > 0 ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'"
+                              x-text="cashierList.filter(c => c.status === 'Aktif').length > 0 ? 'ONLINE' : 'OFFLINE'"></span>
                     </div>
                     <div>
                         <p class="text-xs text-gray-500 font-medium mb-1">Kasir Bertugas</p>
                         <div class="flex items-baseline gap-2">
-                            <h3 class="text-xl font-mono font-bold text-gray-900">2 Kasir</h3>
-                            <span class="text-xs font-mono font-bold text-gray-400">/ 3 Terminal</span>
+                            <h3 class="text-xl font-mono font-bold text-gray-900" x-text="cashierList.filter(c => c.status === 'Aktif').length + ' Kasir'"></h3>
+                            <span class="text-xs font-mono font-bold text-gray-400">Aktif</span>
                         </div>
                     </div>
                 </div>
@@ -229,6 +235,12 @@ class="flex h-screen w-full bg-[#f4f7fb] font-sans text-gray-800 overflow-hidden
                     </div>
 
                     <div class="flex flex-col gap-3 flex-1">
+                        <template x-if="lowStockItems.length === 0">
+                            <div class="p-6 text-center text-xs text-gray-400">
+                                <span class="material-symbols-rounded text-2xl text-emerald-500 block mb-1">check_circle</span>
+                                Semua stok produk dalam batas aman.
+                            </div>
+                        </template>
                         <template x-for="(item, idx) in lowStockItems" :key="idx">
                             <div class="border-l-[3px] p-3 rounded-r-xl rounded-l-xs"
                                  :class="Number(item.stok) === 0 ? 'border-red-500 bg-[#fff5f5]' : 'border-amber-400 bg-[#fffbeb]'">
@@ -254,11 +266,7 @@ class="flex h-screen w-full bg-[#f4f7fb] font-sans text-gray-800 overflow-hidden
                     <div class="flex gap-2">
                         <div class="flex items-center gap-1.5 bg-gray-50 border border-gray-200 px-3 py-1 rounded-full text-xs">
                             <div class="w-2 h-2 rounded-full bg-green-500"></div>
-                            <span class="font-bold text-gray-600">Online: 2</span>
-                        </div>
-                        <div class="flex items-center gap-1.5 bg-gray-50 border border-gray-200 px-3 py-1 rounded-full text-xs">
-                            <div class="w-2 h-2 rounded-full bg-gray-300"></div>
-                            <span class="font-bold text-gray-600">Break: 1</span>
+                            <span class="font-bold text-gray-600" x-text="'Online: ' + cashierList.filter(c => c.status === 'Aktif').length"></span>
                         </div>
                     </div>
                 </div>
@@ -296,6 +304,14 @@ class="flex h-screen w-full bg-[#f4f7fb] font-sans text-gray-800 overflow-hidden
                                             Lihat Sesi
                                             <span class="material-symbols-rounded text-sm">arrow_forward</span>
                                         </a>
+                                    </td>
+                                </tr>
+                            </template>
+                            <template x-if="cashierList.length === 0">
+                                <tr>
+                                    <td colspan="5" class="py-8 text-center text-slate-400 text-xs">
+                                        <span class="material-symbols-rounded text-2xl text-slate-300 block mb-1">person_off</span>
+                                        Belum ada sesi kasir aktif hari ini.
                                     </td>
                                 </tr>
                             </template>

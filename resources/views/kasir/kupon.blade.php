@@ -38,12 +38,10 @@
             try {
                 this.coupons = JSON.parse(stored);
             } catch (e) {
-                console.error('Error parsing coupons', e);
-                this.coupons = this.getDefaultCoupons();
+                this.coupons = [];
             }
         } else {
-            this.coupons = this.getDefaultCoupons();
-            this.saveCoupons();
+            this.coupons = [];
         }
     },
 
@@ -52,134 +50,7 @@
     },
 
     getDefaultCoupons() {
-        return [
-            {
-                id: '#KPN-BBM-8841',
-                category: 'bbm',
-                categoryLabel: 'BBM & Armada',
-                badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
-                dotClass: 'bg-blue-500',
-                itemDetail: 'BBM Pertalite (Armada Toko)',
-                recipientName: 'Andi Pratama',
-                recipientRole: 'Driver Logistik #03',
-                recipientNik: '327501002230004',
-                vehicleNo: 'B 9481 UQ',
-                qty: '20 Liter',
-                nominal: 200000,
-                date: '24 Okt 2026 • 08:30 WIB',
-                cashier: 'Budi Kurniawan',
-                status: 'TERVALIDASI',
-                statusLabel: 'Tervalidasi (Siap Pakai)'
-            },
-            {
-                id: '#KPN-BRS-1092',
-                category: 'beras',
-                categoryLabel: 'Beras Subsidi',
-                badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-                dotClass: 'bg-emerald-500',
-                itemDetail: 'Beras Premium Subsidi 5kg',
-                recipientName: 'Dedi Mulyadi',
-                recipientRole: 'Divisi Gudang ILP',
-                recipientNik: '327501004421009',
-                vehicleNo: '-',
-                qty: '1 Sak (5 kg)',
-                nominal: 65000,
-                date: '24 Okt 2026 • 09:12 WIB',
-                cashier: 'Budi Kurniawan',
-                status: 'SIAP_AMBIL',
-                statusLabel: 'Siap Ambil di Kasir'
-            },
-            {
-                id: '#KPN-GLN-0043',
-                category: 'galon',
-                categoryLabel: 'Galon Air Mineral',
-                badgeClass: 'bg-cyan-50 text-cyan-700 border-cyan-200',
-                dotClass: 'bg-cyan-500',
-                itemDetail: 'Tukar Galon Aqua 19L',
-                recipientName: 'Kantin ILP Central',
-                recipientRole: 'Mitra Usaha Koperasi',
-                recipientNik: 'MITRA-KOP-001',
-                vehicleNo: '-',
-                qty: '6 Unit Galon',
-                nominal: 120000,
-                date: '24 Okt 2026 • 09:45 WIB',
-                cashier: 'Budi Kurniawan',
-                status: 'SELESAI',
-                statusLabel: 'Selesai Ditukar'
-            },
-            {
-                id: '#KPN-PLS-9218',
-                category: 'pulsa',
-                categoryLabel: 'Kuota & Pulsa',
-                badgeClass: 'bg-orange-50 text-orange-700 border-orange-200',
-                dotClass: 'bg-orange-500',
-                itemDetail: 'Token Listrik Prabayar 100k',
-                recipientName: 'Operasional Freezer Toko',
-                recipientRole: 'Sarana & Prasarana',
-                recipientNik: 'MTR-32019981',
-                vehicleNo: '-',
-                qty: 'Token PLN 100k',
-                nominal: 102500,
-                date: '24 Okt 2026 • 10:15 WIB',
-                cashier: 'Budi Kurniawan',
-                status: 'SELESAI',
-                statusLabel: 'Selesai Ditukar'
-            },
-            {
-                id: '#KPN-BBM-8842',
-                category: 'bbm',
-                categoryLabel: 'BBM & Armada',
-                badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
-                dotClass: 'bg-blue-500',
-                itemDetail: 'BBM Bio Solar (Genset Toko)',
-                recipientName: 'Tim Maintenance Listrik',
-                recipientRole: 'Pemeliharaan Gedung',
-                recipientNik: '327501009930011',
-                vehicleNo: 'GENSET-01',
-                qty: '35 Liter',
-                nominal: 238000,
-                date: '24 Okt 2026 • 10:40 WIB',
-                cashier: 'Budi Kurniawan',
-                status: 'TERVALIDASI',
-                statusLabel: 'Tervalidasi (Siap Pakai)'
-            },
-            {
-                id: '#KPN-PLS-9225',
-                category: 'pulsa',
-                categoryLabel: 'Kuota & Pulsa',
-                badgeClass: 'bg-orange-50 text-orange-700 border-orange-200',
-                dotClass: 'bg-orange-500',
-                itemDetail: 'Voucher Kuota Data Telkomsel 25GB',
-                recipientName: 'Citra Dewi',
-                recipientRole: 'Staff Layanan Pelanggan',
-                recipientNik: '327501440230012',
-                vehicleNo: '-',
-                qty: '1 Voucher 25GB',
-                nominal: 85000,
-                date: '24 Okt 2026 • 11:05 WIB',
-                cashier: 'Budi Kurniawan',
-                status: 'TERVALIDASI',
-                statusLabel: 'Tervalidasi (Siap Pakai)'
-            },
-            {
-                id: '#KPN-GLN-0044',
-                category: 'galon',
-                categoryLabel: 'Galon Air Mineral',
-                badgeClass: 'bg-cyan-50 text-cyan-700 border-cyan-200',
-                dotClass: 'bg-cyan-500',
-                itemDetail: 'Tukar Galon Aqua 19L',
-                recipientName: 'Ruang Rapat Pengurus Koperasi',
-                recipientRole: 'Internal Koperasi',
-                recipientNik: 'INT-KOP-002',
-                vehicleNo: '-',
-                qty: '2 Unit Galon',
-                nominal: 40000,
-                date: '24 Okt 2026 • 11:30 WIB',
-                cashier: 'Budi Kurniawan',
-                status: 'SIAP_AMBIL',
-                statusLabel: 'Siap Ambil di Kasir'
-            }
-        ];
+        return [];
     },
 
     get filteredCoupons() {
@@ -341,12 +212,7 @@ class="flex flex-col h-screen w-full font-sans">
                 <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
                     <div>
                         <div class="flex items-center gap-2">
-                            <h1 class="text-xl font-bold text-gray-900 tracking-tight">Kupon & Komoditas Khusus</h1>
-                            <span class="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-blue-100 text-[#0052cc]">
-                                Terpadu 4 Kategori
-                            </span>
-                        </div>
-                        <p class="text-xs text-gray-500 mt-0.5">Verifikasi kupon BBM Armada, Tukar Galon, Kuota Pulsa, dan Beras Subsidi.</p>
+                            <h1 class="text-xl font-bold text-gray-900 tracking-tight">Kupon Komoditas</h1></div>
                     </div>
                     <div class="flex items-center gap-2">
                         <button type="button"
@@ -583,11 +449,15 @@ class="flex flex-col h-screen w-full font-sans">
                                     </td>
                                 </tr>
                             </template>
-                            <tr x-show="filteredCoupons.length === 0">
-                                <td colspan="7" class="text-center py-12 text-gray-400">
-                                    <span class="material-symbols-rounded text-4xl mb-2 text-gray-300">confirmation_number</span>
-                                    <p class="font-bold text-gray-600">Tidak ada kupon yang cocok</p>
-                                    <p class="text-xs text-gray-400 mt-0.5">Silakan pilih kategori lain atau periksa kata kunci pencarian.</p>
+                            <tr x-show="!filteredCoupons || filteredCoupons.length === 0">
+                                <td colspan="7" class="text-center py-12 text-gray-400 font-medium">
+                                    <p class="text-sm">Belum ada data kupon komoditas.</p>
+                                    <div class="mt-3">
+                                        <button type="button" @click="showNewKuponModal = true" class="px-4 py-2 bg-[#0052cc] text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 shadow-sm hover:bg-[#0043a8] transition-colors cursor-pointer">
+                                            <span class="material-symbols-rounded text-[16px]">add_box</span>
+                                            <span>Catat Kupon Baru</span>
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         </tbody>

@@ -20,19 +20,12 @@
     isProcessingDelete: false,
 
     // Form State
-    barcodeInput: '8992388102315',
-    selectedProduct: {
-        sku: 'MYK-0021',
-        barcode: '8992388102315',
-        name: 'Minyak Goreng Sawit 2 Liter Pouch',
-        category: 'Kebutuhan Pokok',
-        buyPrice: 34500,
-        unit: 'Pouch'
-    },
-    inputQty: 2,
-    selectedUnit: 'Pouch',
+    barcodeInput: '',
+    selectedProduct: null,
+    inputQty: 1,
+    selectedUnit: 'Pcs',
     selectedReason: 'RUSAK_BOCOR',
-    kasirNotes: 'Kardus minyak rembes di bagian dasar, kemasan bocor halus saat penataan di rak display.',
+    kasirNotes: '',
 
     // Active Draft Batch Items (State persisten di localStorage)
     draftItems: [],
@@ -47,14 +40,7 @@
             if (savedDraft !== null) {
                 this.draftItems = JSON.parse(savedDraft);
             } else {
-                // Initial prototype dummy items (hanya di-load pada kunjungan pertama)
-                this.draftItems = [
-                    { id: 'RTR-ITM-1', sku: 'SKU-SUSU-0914', name: 'Susu UHT Full Cream 1000ml', reason: 'RUSAK_BOCOR', reasonLabel: 'RUSAK / BOCOR', note: 'Tutup jebol di display rak', qty: 4, unit: 'Karton', claimPrice: 135000, subtotal: 540000 },
-                    { id: 'RTR-ITM-2', sku: 'SKU-ROTI-0102', name: 'Roti Tawar Gandum Spesial', reason: 'KEDALUWARSA', reasonLabel: 'KEDALUWARSA / ED', note: 'Batas ED lewat batas retur (H-1)', qty: 5, unit: 'Pack', claimPrice: 17000, subtotal: 85000 },
-                    { id: 'RTR-ITM-3', sku: 'SKU-BSK-4420', name: 'Biskuit Butter Cookies Kaleng', reason: 'OVERSTOCK', reasonLabel: 'MUTASI OVERSTOCK', note: 'Sisa stok musiman tidak bergerak', qty: 3, unit: 'Kaleng', claimPrice: 65000, subtotal: 195000 },
-                    { id: 'RTR-ITM-4', sku: 'MYK-0021', name: 'Minyak Goreng Sawit 2L', reason: 'RUSAK_BOCOR', reasonLabel: 'RUSAK / BOCOR', note: 'Rembes lipatan kemasan pouch', qty: 6, unit: 'Pouch', claimPrice: 34500, subtotal: 207000 }
-                ];
-                this.persistReturState();
+                this.draftItems = [];
             }
 
             const savedHistory = localStorage.getItem('pos_ilp_retur_history_docs_v1');
@@ -80,7 +66,7 @@
                             { sku: 'SKU-SUSU-0914', name: 'Susu UHT Full Cream 1000ml', qty: '4 Karton', reason: 'Rusak / Bocor kemasan' },
                             { sku: 'SKU-ROTI-0102', name: 'Roti Tawar Gandum Spesial', qty: '5 Pack', reason: 'Kedaluwarsa ED' },
                             { sku: 'SKU-BSK-4420', name: 'Biskuit Butter Cookies Kaleng', qty: '3 Kaleng', reason: 'Mutasi Overstock' },
-                            { sku: 'MYK-0021', name: 'Minyak Goreng Sawit 2L', qty: '6 Pouch', reason: 'Rembes kemasan' }
+                            { sku: 'MYK-0021', name: 'Minyak Goreng Sawit 2L', qty: '6 Pcs', reason: 'Rembes kemasan' }
                         ]
                     },
                     {
@@ -98,7 +84,7 @@
                         spvApprover: 'Hendra Wijaya (Supervisor Toko)',
                         dispatchedAt: null,
                         items: [
-                            { sku: '8993456789012', name: 'Ultra Milk Cokelat 1L', qty: '8 Tetra', reason: 'Kemasan penyok' },
+                            { sku: '8993456789012', name: 'Ultra Milk Cokelat 1L', qty: '8 Pcs', reason: 'Kemasan penyok' },
                             { sku: '8992345678901', name: 'Chitato Sapi Panggang 68g', qty: '4 Karton', reason: 'Kedaluwarsa batch' }
                         ]
                     },
@@ -118,7 +104,7 @@
                         dispatchedAt: '22 Okt 2026 13:45 WIB • Driver: Joko (B 9211 UQ)',
                         items: [
                             { sku: '8995678901234', name: 'Sunlight Jeruk Nipis 755ml', qty: '12 Botol', reason: 'Tutup pecah' },
-                            { sku: '8996789012345', name: 'Minyak Goreng Sania 2L', qty: '8 Pouch', reason: 'Bocor kemasan' },
+                            { sku: '8996789012345', name: 'Minyak Goreng Sania 2L', qty: '8 Pcs', reason: 'Bocor kemasan' },
                             { sku: '8994567890123', name: 'Beras Pandan Wangi 5kg', qty: '4 Pack', reason: 'Kutu beras' }
                         ]
                     },
@@ -459,7 +445,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <!-- Product Display Card -->
                         <div class="bg-blue-50/50 border border-blue-200 rounded-xl p-4 flex flex-col gap-1.5">
                             <span class="text-[10px] font-bold text-[#0052cc] uppercase tracking-wider" x-text="selectedProduct.category">KEBUTUHAN POKOK</span>
-                            <h4 class="font-bold text-gray-900 text-sm leading-tight" x-text="selectedProduct.name">Minyak Goreng Sawit 2 Liter Pouch</h4>
+                            <h4 class="font-bold text-gray-900 text-sm leading-tight" x-text="selectedProduct.name">Minyak Goreng Sawit 2 Liter</h4>
                             <div class="flex items-center gap-4 mt-1 text-xs text-gray-600 font-medium">
                                 <span>SKU: <strong class="font-mono text-gray-900" x-text="selectedProduct.sku">MYK-0021</strong></span>
                                 <span>•</span>
@@ -486,7 +472,6 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <label class="text-[11px] font-bold text-gray-700 tracking-wider block mb-1.5">SATUAN</label>
                                 <select x-model="selectedUnit"
                                         class="w-full px-3 py-2.5 bg-slate-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:outline-none focus:border-[#0052cc]">
-                                    <option value="Pouch">Pouch / Bks</option>
                                     <option value="Pcs">Pcs / Ecer</option>
                                     <option value="Karton">Karton / Dus</option>
                                     <option value="Botol">Botol</option>
@@ -581,42 +566,49 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             </div>
 
                             <div class="overflow-x-auto min-w-0 w-full">
-                                <table class="w-full text-left text-xs border-collapse min-w-[650px]">
+                                <table class="w-full text-left text-xs border-collapse min-w-[750px]">
                                     <thead class="bg-gray-50/80 border-b border-gray-200 text-gray-600 font-bold tracking-wider uppercase text-[11px] whitespace-nowrap">
                                         <tr>
-                                            <th class="px-5 py-3 text-left w-[240px]">PRODUK & SKU</th>
-                                            <th class="px-4 py-3 text-left w-[180px]">KONDISI / ALASAN</th>
-                                            <th class="px-3 py-3 text-center w-[90px]">QTY</th>
-                                            <th class="px-4 py-3 text-right w-[120px]">ESTIMASI KLAIM</th>
-                                            <th class="px-4 py-3 text-center w-[60px]">HAPUS</th>
+                                            <th class="px-4 py-3 text-left">SKU</th>
+                                            <th class="px-4 py-3 text-left">Nama Produk</th>
+                                            <th class="px-4 py-3 text-left">Kondisi / Alasan</th>
+                                            <th class="px-4 py-3 text-left">Catatan</th>
+                                            <th class="px-3 py-3 text-center">Qty</th>
+                                            <th class="px-4 py-3 text-right">Estimasi Klaim</th>
+                                            <th class="px-4 py-3 text-center">Hapus</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-gray-100">
                                         <template x-for="item in draftItems" :key="item.id">
                                             <tr class="hover:bg-blue-50/30 transition-colors">
-                                                <td class="px-5 py-3.5">
-                                                    <div class="flex flex-col">
-                                                        <span class="font-bold text-gray-900" x-text="item.name"></span>
-                                                        <span class="font-mono text-[11px] text-gray-400 mt-0.5" x-text="item.sku"></span>
-                                                    </div>
-                                                </td>
+                                                <!-- SKU -->
+                                                <td class="px-4 py-3 whitespace-nowrap font-mono text-xs font-bold text-gray-700" x-text="item.sku"></td>
 
-                                                <td class="px-4 py-3.5">
+                                                <!-- Nama Produk -->
+                                                <td class="px-4 py-3 whitespace-nowrap font-bold text-gray-900 text-xs max-w-[200px] truncate" :title="item.name" x-text="item.name"></td>
+
+                                                <!-- Kondisi / Alasan -->
+                                                <td class="px-4 py-3 whitespace-nowrap">
                                                     <span class="px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap inline-block"
                                                           :class="item.reason === 'RUSAK_BOCOR' ? 'bg-rose-50 text-rose-700 border border-rose-200' : (item.reason === 'KEDALUWARSA' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-blue-50 text-blue-700 border border-blue-200')"
                                                           x-text="item.reasonLabel"></span>
-                                                    <p class="text-[10.5px] text-gray-500 mt-1 line-clamp-1" x-text="item.note"></p>
                                                 </td>
 
-                                                <td class="px-3 py-3.5 text-center font-bold text-gray-900 whitespace-nowrap">
+                                                <!-- Catatan -->
+                                                <td class="px-4 py-3 whitespace-nowrap text-xs text-gray-500 max-w-[150px] truncate" :title="item.note || '-'" x-text="item.note || '-'"></td>
+
+                                                <!-- Qty -->
+                                                <td class="px-3 py-3 text-center font-bold text-gray-900 whitespace-nowrap">
                                                     <span x-text="item.qty + ' ' + item.unit"></span>
                                                 </td>
 
-                                                <td class="px-4 py-3.5 text-right font-mono font-bold text-gray-900 whitespace-nowrap">
+                                                <!-- Estimasi Klaim -->
+                                                <td class="px-4 py-3 text-right font-mono font-bold text-gray-900 whitespace-nowrap">
                                                     <span x-text="formatRupiah(item.subtotal)"></span>
                                                 </td>
 
-                                                <td class="px-4 py-3.5 text-center whitespace-nowrap">
+                                                <!-- Hapus -->
+                                                <td class="px-4 py-3 text-center whitespace-nowrap">
                                                     <button type="button"
                                                             @click="removeDraftItem(item.id)"
                                                             :disabled="isProcessingDelete"
@@ -630,7 +622,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
                                         <template x-if="draftItems.length === 0">
                                             <tr>
-                                                <td colspan="5" class="py-12 px-6 text-center">
+                                                <td colspan="7" class="py-12 px-6 text-center">
                                                     <div class="flex flex-col items-center justify-center max-w-sm mx-auto">
                                                         <div class="w-14 h-14 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
                                                             <span class="material-symbols-rounded text-[32px]">remove_shopping_cart</span>
@@ -713,96 +705,123 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <!-- History Table -->
                     <div class="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden flex flex-col">
                         <div class="overflow-x-auto min-w-0 w-full">
-                            <table class="w-full text-left border-collapse text-xs min-w-[900px]">
+                            <table class="w-full text-left border-collapse text-xs min-w-[950px]">
                                 <thead>
                                     <tr class="bg-gray-50/80 border-b border-gray-200 text-gray-600 font-bold uppercase text-[11px] tracking-wider whitespace-nowrap">
-                                        <th class="px-6 py-3.5 text-left w-[200px]">NO. DOKUMEN RETUR</th>
-                                        <th class="px-4 py-3.5 text-left w-[180px]">GUDANG TUJUAN</th>
-                                        <th class="px-4 py-3.5 text-center w-[120px]">MUATAN</th>
-                                        <th class="px-4 py-3.5 text-right w-[140px]">TOTAL NILAI</th>
-                                        <th class="px-4 py-3.5 text-center w-[160px]">STATUS SOP SIKLUS</th>
-                                        <th class="px-6 py-3.5 text-right w-[180px]">RINCIAN</th>
+                                        <th class="px-4 py-3.5 text-left">No. Dokumen Retur</th>
+                                        <th class="px-4 py-3.5 text-left">Tanggal</th>
+                                        <th class="px-4 py-3.5 text-left">Gudang Tujuan</th>
+                                        <th class="px-4 py-3.5 text-left">Lokasi Toko</th>
+                                        <th class="px-4 py-3.5 text-left">SKU</th>
+                                        <th class="px-4 py-3.5 text-left">Nama Produk</th>
+                                        <th class="px-4 py-3.5 text-center">Qty</th>
+                                        <th class="px-4 py-3.5 text-left">Alasan Retur</th>
+                                        <th class="px-4 py-3.5 text-right">Total Nilai</th>
+                                        <th class="px-4 py-3.5 text-center">Status SOP</th>
+                                        <th class="px-4 py-3.5 text-center">Aksi Dokumen</th>
                                     </tr>
                                 </thead>
-                                <tbody class="divide-y divide-gray-100 text-sm">
+                                <tbody class="text-slate-700">
                                     <template x-for="doc in filteredHistory" :key="doc.docNo">
-                                        <tr class="hover:bg-slate-50/50 transition-colors">
-                                            <!-- Doc No -->
-                                            <td class="px-6 py-4">
-                                                <div class="flex flex-col">
-                                                    <span class="font-mono font-bold text-gray-900 text-[13px]" x-text="doc.docNo"></span>
-                                                    <span class="text-[11px] text-gray-500 mt-0.5" x-text="doc.date"></span>
-                                                </div>
-                                            </td>
-
-                                            <!-- Warehouse -->
-                                            <td class="px-4 py-4">
-                                                <div class="flex flex-col">
-                                                    <span class="font-bold text-gray-800 text-[12.5px]" x-text="doc.targetWarehouse"></span>
-                                                    <span class="text-[11px] text-gray-400" x-text="'Dari: ' + doc.storeLocation"></span>
-                                                </div>
-                                            </td>
-
-                                            <!-- Muatan -->
-                                            <td class="px-4 py-4 text-center">
-                                                <span class="font-bold text-gray-900" x-text="doc.totalSku + ' SKU'"></span>
-                                                <span class="text-[11px] text-gray-500 block" x-text="'(' + doc.totalKoli + ' Koli/Unit)'"></span>
-                                            </td>
-
-                                            <!-- Nilai -->
-                                            <td class="px-4 py-4 text-right">
-                                                <span class="font-mono font-bold text-gray-900" x-text="formatRupiah(doc.totalClaimValue)"></span>
-                                            </td>
-
-                                            <!-- Status -->
-                                            <td class="px-4 py-4 text-center">
-                                                <template x-if="doc.sopStatus === 'DIAJUKAN_TOKO'">
-                                                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                                                        <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                                                        <span>Menunggu Review SPV</span>
-                                                    </span>
+                                        <template x-for="(it, iIdx) in ((doc.items && doc.items.length > 0) ? doc.items : [{ sku: '-', name: '-', qty: '-', reason: '-' }])" :key="iIdx">
+                                            <tr class="hover:bg-slate-50/50 transition-colors" :class="iIdx === 0 ? 'border-t border-gray-200' : 'border-t border-gray-100'">
+                                                <!-- Parent Col 1: Doc No -->
+                                                <template x-if="iIdx === 0">
+                                                    <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-4 py-3.5 align-middle whitespace-nowrap bg-white font-mono font-bold text-gray-900 text-[13px]">
+                                                        <span x-text="doc.docNo"></span>
+                                                    </td>
                                                 </template>
-                                                <template x-if="doc.sopStatus === 'DISETUJUI_SPV'">
-                                                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200">
-                                                        <span class="material-symbols-rounded text-[14px]">check</span>
-                                                        <span>Disetujui SPV</span>
-                                                    </span>
-                                                </template>
-                                                <template x-if="doc.sopStatus === 'PENYERAHAN_FISIK'">
-                                                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
-                                                        <span class="material-symbols-rounded text-[14px]">local_shipping</span>
-                                                        <span>Penyerahan Fisik (Goods Issued)</span>
-                                                    </span>
-                                                </template>
-                                                <template x-if="doc.sopStatus === 'DITERIMA_GUDANG'">
-                                                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                                        <span class="material-symbols-rounded text-[14px]">verified</span>
-                                                        <span>Diterima Selesai di DC</span>
-                                                    </span>
-                                                </template>
-                                            </td>
 
-                                            <!-- Action -->
-                                            <td class="px-6 py-4 text-right">
-                                                <div class="flex items-center justify-end gap-2">
-                                                    <template x-if="doc.sopStatus === 'DIAJUKAN_TOKO'">
-                                                        <button type="button"
-                                                                @click="openCancelHistoryDocModal(doc)"
-                                                                class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1 cursor-pointer"
-                                                                title="Batalkan pengajuan draf ini">
-                                                            <span class="material-symbols-rounded text-[15px]">delete</span>
-                                                            <span>Batalkan</span>
-                                                        </button>
-                                                    </template>
-                                                    <button type="button"
-                                                            @click="openDetailModal(doc)"
-                                                            class="px-3.5 py-1.5 bg-slate-100 hover:bg-[#0052cc] hover:text-white text-gray-700 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer group">
-                                                        <span class="material-symbols-rounded text-[16px] text-gray-400 group-hover:text-white transition-colors">visibility</span>
-                                                        <span>Lihat Rincian</span>
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
+                                                <!-- Parent Col 2: Tanggal -->
+                                                <template x-if="iIdx === 0">
+                                                    <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-4 py-3.5 align-middle whitespace-nowrap bg-white text-[11px] text-gray-500 font-medium" x-text="doc.date">
+                                                    </td>
+                                                </template>
+
+                                                <!-- Parent Col 3: Gudang Tujuan -->
+                                                <template x-if="iIdx === 0">
+                                                    <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-4 py-3.5 align-middle whitespace-nowrap bg-white font-bold text-gray-800 text-xs" x-text="doc.targetWarehouse">
+                                                    </td>
+                                                </template>
+
+                                                <!-- Parent Col 4: Lokasi Toko -->
+                                                <template x-if="iIdx === 0">
+                                                    <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-4 py-3.5 align-middle whitespace-nowrap bg-white text-xs text-gray-600" x-text="doc.storeLocation">
+                                                    </td>
+                                                </template>
+
+                                                <!-- Child Col 5: SKU -->
+                                                <td class="px-4 py-3.5 align-middle whitespace-nowrap font-mono font-bold text-gray-700 text-xs" x-text="it.sku || '-'"></td>
+
+                                                <!-- Child Col 6: Nama Produk -->
+                                                <td class="px-4 py-3.5 align-middle whitespace-nowrap font-bold text-gray-900 text-xs max-w-[200px] truncate" :title="it.name" x-text="it.name"></td>
+
+                                                <!-- Child Col 7: Qty -->
+                                                <td class="px-4 py-3.5 align-middle whitespace-nowrap text-center font-mono font-bold text-xs" x-text="it.qty"></td>
+
+                                                <!-- Child Col 8: Alasan Retur -->
+                                                <td class="px-4 py-3.5 align-middle whitespace-nowrap text-xs text-slate-600 font-medium max-w-[150px] truncate" :title="it.reason" x-text="it.reason"></td>
+
+                                                <!-- Parent Col 9: Total Nilai -->
+                                                <template x-if="iIdx === 0">
+                                                    <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-4 py-3.5 align-middle whitespace-nowrap text-right bg-white font-mono font-bold text-gray-900 text-xs" x-text="formatRupiah(doc.totalClaimValue)">
+                                                    </td>
+                                                </template>
+
+                                                <!-- Parent Col 10: Status -->
+                                                <template x-if="iIdx === 0">
+                                                    <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-4 py-3.5 align-middle whitespace-nowrap text-center bg-white">
+                                                        <template x-if="doc.sopStatus === 'DIAJUKAN_TOKO'">
+                                                            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap">
+                                                                <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                                                <span>Menunggu Review SPV</span>
+                                                            </span>
+                                                        </template>
+                                                        <template x-if="doc.sopStatus === 'DISETUJUI_SPV'">
+                                                            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200 whitespace-nowrap">
+                                                                <span class="material-symbols-rounded text-[14px]">check</span>
+                                                                <span>Disetujui SPV</span>
+                                                            </span>
+                                                        </template>
+                                                        <template x-if="doc.sopStatus === 'PENYERAHAN_FISIK'">
+                                                            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200 whitespace-nowrap">
+                                                                <span class="material-symbols-rounded text-[14px]">local_shipping</span>
+                                                                <span>Penyerahan Fisik</span>
+                                                            </span>
+                                                        </template>
+                                                        <template x-if="doc.sopStatus === 'DITERIMA_GUDANG'">
+                                                            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+                                                                <span class="material-symbols-rounded text-[14px]">verified</span>
+                                                                <span>Diterima Selesai DC</span>
+                                                            </span>
+                                                        </template>
+                                                    </td>
+                                                </template>
+
+                                                <!-- Parent Col 11: Action -->
+                                                <template x-if="iIdx === 0">
+                                                    <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-4 py-3.5 align-middle whitespace-nowrap text-center bg-white">
+                                                        <div class="inline-flex items-center justify-center gap-1.5">
+                                                            <template x-if="doc.sopStatus === 'DIAJUKAN_TOKO'">
+                                                                <button type="button"
+                                                                        @click="openCancelHistoryDocModal(doc)"
+                                                                        class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all shadow-2xs inline-flex items-center gap-1 cursor-pointer"
+                                                                        title="Batalkan pengajuan draf ini">
+                                                                    <span class="material-symbols-rounded text-[15px]">delete</span>
+                                                                    <span>Batalkan</span>
+                                                                </button>
+                                                            </template>
+                                                            <button type="button"
+                                                                    @click="openDetailModal(doc)"
+                                                                    class="px-3.5 py-1.5 bg-slate-100 hover:bg-[#0052cc] hover:text-white text-gray-700 rounded-xl text-xs font-bold transition-all shadow-2xs inline-flex items-center gap-1.5 cursor-pointer group">
+                                                                <span class="material-symbols-rounded text-[16px] text-gray-400 group-hover:text-white transition-colors">visibility</span>
+                                                                <span>Lihat Rincian</span>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </template>
+                                            </tr>
+                                        </template>
                                     </template>
                                 </tbody>
                             </table>

@@ -33,11 +33,7 @@
         autoPrint: true
     },
 
-    activities: [
-        { text: 'Promo Sembako Murah diaktifkan oleh Admin.', time: '10 menit yang lalu', icon: 'check', color: 'green' },
-        { text: 'Aturan H-7 Expired diubah menjadi 40%.', time: '2 jam yang lalu', icon: 'history', color: 'amber' },
-        { text: 'Promo Ramadan Kareem telah berakhir.', time: 'Kemarin, 23:59', icon: 'close', color: 'red' }
-    ],
+    activities: [],
 
     initPromotions() {
         const stored = localStorage.getItem('pos_ilp_promotions_v1');
@@ -45,11 +41,10 @@
             try {
                 this.promotions = JSON.parse(stored);
             } catch(e) {
-                this.promotions = this.getDefaultPromotions();
+                this.promotions = [];
             }
         } else {
-            this.promotions = this.getDefaultPromotions();
-            this.savePromotions();
+            this.promotions = [];
         }
 
         const storedSettings = localStorage.getItem('pos_ilp_promo_settings_v1');
@@ -69,47 +64,7 @@
     },
 
     getDefaultPromotions() {
-        return [
-            {
-                id: 'PRM-001',
-                name: 'Promo Gajian Mantap',
-                condition: 'Min. belanja Rp 250k',
-                type: 'PERCENTAGE',
-                typeLabel: 'Persentase (10%)',
-                badgeClass: 'bg-[#dbeafe] text-[#1e40af]',
-                period: '25 Okt - 02 Nov',
-                periodStart: '2026-10-25',
-                periodEnd: '2026-11-02',
-                status: 'AKTIF',
-                statusColor: 'green'
-            },
-            {
-                id: 'PRM-002',
-                name: 'BOGO: Susu Cair Ultra',
-                condition: 'Beli 2 Gratis 1',
-                type: 'BOGO',
-                typeLabel: 'Bundle / BOGO',
-                badgeClass: 'bg-[#ffedd5] text-[#9a3412]',
-                period: '01 Nov - 15 Nov',
-                periodStart: '2026-11-01',
-                periodEnd: '2026-11-15',
-                status: 'MENDATANG',
-                statusColor: 'blue'
-            },
-            {
-                id: 'PRM-003',
-                name: 'Potongan Flat Deterjen',
-                condition: 'Diskon Rp 5.000',
-                type: 'FIXED',
-                typeLabel: 'Fixed Amount',
-                badgeClass: 'bg-gray-200 text-gray-700',
-                period: '01 Okt - 15 Okt',
-                periodStart: '2026-10-01',
-                periodEnd: '2026-10-15',
-                status: 'BERAKHIR',
-                statusColor: 'gray'
-            }
-        ];
+        return [];
     },
 
     get filteredPromotions() {
@@ -303,8 +258,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                 <!-- Page Title -->
                 <div class="mb-6 flex items-center justify-between">
                     <div>
-                        <h1 class="text-[26px] font-black text-gray-900 tracking-tight leading-tight">Manajemen Promo & Diskon</h1>
-                        <p class="text-[14px] text-gray-500 mt-1">Optimalkan penjualan toko koperasi dengan penawaran dan diskon cerdas.</p>
+                        <h1 class="text-[26px] font-black text-gray-900 tracking-tight leading-tight">Promosi & Diskon</h1>
                     </div>
                     <!-- Quick status filter badges -->
                     <div class="flex items-center gap-2">
@@ -455,11 +409,15 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                             </td>
                                         </tr>
                                     </template>
-                                    <tr x-show="filteredPromotions.length === 0">
-                                        <td colspan="5" class="text-center py-12 text-gray-400">
-                                            <span class="material-symbols-rounded text-4xl mb-2 text-gray-300">local_offer</span>
-                                            <p class="font-bold text-gray-600">Tidak ada promo yang ditemukan</p>
-                                            <p class="text-xs text-gray-400 mt-0.5">Coba ubah status filter atau kata kunci pencarian.</p>
+                                    <tr x-show="!filteredPromotions || filteredPromotions.length === 0">
+                                        <td colspan="5" class="text-center py-12 text-gray-400 font-medium">
+                                            <p class="text-sm">Belum ada promosi aktif.</p>
+                                            <div class="mt-3">
+                                                <button type="button" @click="showAddModal = true" class="px-4 py-2 bg-[#0052cc] text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 shadow-sm hover:bg-[#0043a8] transition-colors cursor-pointer">
+                                                    <span class="material-symbols-rounded text-[16px]">add</span>
+                                                    <span>Tambah Promosi</span>
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 </tbody>

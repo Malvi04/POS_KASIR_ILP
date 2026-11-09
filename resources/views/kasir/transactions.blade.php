@@ -16,158 +16,7 @@
 
     transactions: [],
 
-    defaultTransactions: [
-        {
-            id: '#TRX-20261024-0028',
-            rawId: 'TRX-0028',
-            time: '11:42 WIB',
-            date: '24 Oktober 2026',
-            terminal: 'Kasir 01',
-            cashier: 'Budi Kurniawan',
-            method: 'CAMPURAN',
-            methodLabel: 'Tunai + QRIS',
-            cashPortion: 100000,
-            nonCashPortion: 45000,
-            subtotal: 132000,
-            discount: 1500,
-            tax: 14500,
-            total: 145000,
-            cashGiven: 100000,
-            change: 0,
-            status: 'SELESAI',
-            syncStatus: 'SYNCED',
-            items: [
-                { name: 'Beras Pandan Wangi 5kg', qty: 1, unit: 'Pack', price: 82000, total: 82000 },
-                { name: 'Minyak Goreng Sania 2L', qty: 1, unit: 'Pouch', price: 36000, total: 36000 },
-                { name: 'Ultra Milk Full Cream 1L', qty: 1, unit: 'Tetra', price: 19200, total: 19200 },
-                { name: 'Teh Pucuk Harum 350ml', qty: 2, unit: 'Botol', price: 4000, total: 8000 }
-            ]
-        },
-        {
-            id: '#TRX-20261024-0027',
-            rawId: 'TRX-0027',
-            time: '11:20 WIB',
-            date: '24 Oktober 2026',
-            terminal: 'Kasir 01',
-            cashier: 'Budi Kurniawan',
-            method: 'TUNAI',
-            methodLabel: 'Uang Tunai',
-            cashPortion: 84000,
-            nonCashPortion: 0,
-            subtotal: 77000,
-            discount: 1300,
-            tax: 8300,
-            total: 84000,
-            cashGiven: 100000,
-            change: 16000,
-            status: 'SELESAI',
-            syncStatus: 'SYNCED',
-            items: [
-                { name: 'Chitato Sapi Panggang 68g', qty: 2, unit: 'Pcs', price: 12800, total: 25600 },
-                { name: 'Sunlight Jeruk Nipis 755ml', qty: 1, unit: 'Botol', price: 15500, total: 15500 },
-                { name: 'Indomie Goreng Spesial 85g', qty: 10, unit: 'Pcs', price: 3500, total: 35000 },
-                { name: 'Aqua Mineral 600ml', qty: 2, unit: 'Botol', price: 5500, total: 11000 }
-            ]
-        },
-        {
-            id: '#TRX-20261024-0026',
-            rawId: 'TRX-0026',
-            time: '10:35 WIB',
-            date: '24 Oktober 2026',
-            terminal: 'Kasir 01',
-            cashier: 'Budi Kurniawan',
-            method: 'QRIS',
-            methodLabel: 'QRIS Dinamis',
-            cashPortion: 0,
-            nonCashPortion: 245500,
-            subtotal: 225000,
-            discount: 4000,
-            tax: 24500,
-            total: 245500,
-            cashGiven: 0,
-            change: 0,
-            status: 'SELESAI',
-            syncStatus: 'SYNCED',
-            items: [
-                { name: 'Beras Pandan Wangi 5kg', qty: 2, unit: 'Pack', price: 82000, total: 164000 },
-                { name: 'Minyak Goreng Sania 2L', qty: 2, unit: 'Pouch', price: 36000, total: 72000 },
-                { name: 'Oreo Vanilla 133g', qty: 2, unit: 'Pcs', price: 9500, total: 19000 }
-            ]
-        },
-        {
-            id: '#TRX-20261024-0025',
-            rawId: 'TRX-0025',
-            time: '09:48 WIB',
-            date: '24 Oktober 2026',
-            terminal: 'Kasir 01',
-            cashier: 'Budi Kurniawan',
-            method: 'KREDIT ANGGOTA',
-            methodLabel: 'Tempo Belanja Anggota',
-            cashPortion: 0,
-            nonCashPortion: 120000,
-            subtotal: 110000,
-            discount: 2000,
-            tax: 12000,
-            total: 120000,
-            cashGiven: 0,
-            change: 0,
-            status: 'SELESAI',
-            syncStatus: 'SYNCED',
-            items: [
-                { name: 'Gula Pasir Gulaku 1kg', qty: 4, unit: 'Pack', price: 18000, total: 72000 },
-                { name: 'Ultra Milk Full Cream 1L', qty: 2, unit: 'Tetra', price: 19200, total: 38400 },
-                { name: 'Aqua Mineral 600ml', qty: 2, unit: 'Botol', price: 5500, total: 11000 }
-            ]
-        },
-        {
-            id: '#TRX-20261024-0024',
-            rawId: 'TRX-0024',
-            time: '09:15 WIB',
-            date: '24 Oktober 2026',
-            terminal: 'Kasir 01',
-            cashier: 'Budi Kurniawan',
-            method: 'TUNAI',
-            methodLabel: 'Uang Tunai',
-            cashPortion: 28638,
-            nonCashPortion: 0,
-            subtotal: 27100,
-            discount: 1300,
-            tax: 2838,
-            total: 28638,
-            cashGiven: 50000,
-            change: 21362,
-            status: 'SELESAI',
-            syncStatus: 'SYNCED',
-            items: [
-                { name: 'Aqua Mineral 600ml', qty: 3, unit: 'Botol', price: 4300, total: 12900 },
-                { name: 'Oreo Vanilla 133g', qty: 1, unit: 'Pcs', price: 8200, total: 8200 },
-                { name: 'Teh Pucuk 350ml', qty: 2, unit: 'Botol', price: 4000, total: 8000 }
-            ]
-        },
-        {
-            id: '#TRX-20261024-0023',
-            rawId: 'TRX-0023',
-            time: '08:40 WIB',
-            date: '24 Oktober 2026',
-            terminal: 'Kasir 01',
-            cashier: 'Budi Kurniawan',
-            method: 'QRIS',
-            methodLabel: 'QRIS Dinamis',
-            cashPortion: 0,
-            nonCashPortion: 450000,
-            subtotal: 410000,
-            discount: 5000,
-            tax: 45000,
-            total: 450000,
-            cashGiven: 0,
-            change: 0,
-            status: 'DIBATALKAN',
-            syncStatus: 'SYNCED',
-            items: [
-                { name: 'Beras Pandan Wangi 5kg', qty: 5, unit: 'Pack', price: 82000, total: 410000 }
-            ]
-        }
-    ],
+    defaultTransactions: [],
 
     initTransactions() {
         try {
@@ -180,8 +29,7 @@
                 }
             }
         } catch (e) {}
-        this.transactions = JSON.parse(JSON.stringify(this.defaultTransactions));
-        localStorage.setItem('pos_ilp_transactions_v1', JSON.stringify(this.transactions));
+        this.transactions = [];
     },
 
     get filteredTransactions() {
@@ -259,8 +107,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             <span class="material-symbols-rounded text-[14px]">chevron_right</span>
                             <span class="text-[#0052cc]">RIWAYAT & DOKUMEN FAKTUR</span>
                         </div>
-                        <h1 class="text-2xl font-black text-gray-900 tracking-tight">Riwayat Transaksi Penjualan Kasir</h1>
-                        <p class="text-xs text-gray-500 mt-1 font-medium">Daftar faktur transaksi kasir, detail rincian belanja, dan cetak ulang struk.</p>
+                        <h1 class="text-2xl font-black text-gray-900 tracking-tight">Riwayat Transaksi</h1>
                     </div>
 
                     <div class="flex items-center gap-2">
@@ -369,97 +216,139 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
 
                     <div class="overflow-x-auto min-w-0 w-full">
-                        <table class="w-full text-left border-collapse text-xs min-w-[900px]">
+                        <table class="w-full text-left border-collapse text-xs min-w-[1100px]">
                             <thead>
                                 <tr class="bg-gray-50/80 border-b border-gray-200 text-gray-600 font-bold uppercase text-[11px] tracking-wider whitespace-nowrap">
-                                    <th class="px-6 py-3.5 text-left w-[180px]">FAKTUR / WAKTU</th>
-                                    <th class="px-4 py-3.5 text-left w-[150px]">KASIR & TERMINAL</th>
-                                    <th class="px-4 py-3.5 text-left w-[150px]">METODE PEMBAYARAN</th>
-                                    <th class="px-4 py-3.5 text-right w-[140px]">TOTAL BELANJA</th>
-                                    <th class="px-4 py-3.5 text-center w-[120px]">STATUS SYNC</th>
-                                    <th class="px-6 py-3.5 text-right w-[180px]">AKSI NOTA</th>
+                                    <th class="px-4 py-3.5 text-left">No. Faktur</th>
+                                    <th class="px-4 py-3.5 text-left">Tanggal</th>
+                                    <th class="px-4 py-3.5 text-left">Waktu</th>
+                                    <th class="px-4 py-3.5 text-left">Kasir</th>
+                                    <th class="px-4 py-3.5 text-left">Terminal</th>
+                                    <th class="px-4 py-3.5 text-left">Nama Produk</th>
+                                    <th class="px-4 py-3.5 text-center">Qty</th>
+                                    <th class="px-4 py-3.5 text-right">Harga Satuan</th>
+                                    <th class="px-4 py-3.5 text-right">Subtotal</th>
+                                    <th class="px-4 py-3.5 text-left">Metode Bayar</th>
+                                    <th class="px-4 py-3.5 text-right">Total Belanja</th>
+                                    <th class="px-4 py-3.5 text-center">Status Sync</th>
+                                    <th class="px-4 py-3.5 text-center">Aksi Nota</th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-gray-100 text-sm">
+                            <tbody class="text-slate-700">
                                 <template x-for="t in filteredTransactions" :key="t.id">
-                                    <tr class="hover:bg-blue-50/30 transition-colors">
-                                        <!-- No Faktur & Waktu -->
-                                        <td class="px-6 py-3.5 whitespace-nowrap">
-                                            <div class="flex flex-col">
-                                                <span class="font-mono font-bold text-gray-900 text-[13px]" x-text="t.id"></span>
-                                                <span class="text-[11px] text-gray-500 mt-0.5" x-text="t.time + ' • ' + t.date"></span>
-                                            </div>
-                                        </td>
-
-                                        <!-- Kasir & Terminal -->
-                                        <td class="px-4 py-3.5 whitespace-nowrap">
-                                            <div class="flex flex-col">
-                                                <span class="font-bold text-gray-800 text-xs" x-text="t.cashier"></span>
-                                                <span class="text-[11px] text-gray-400" x-text="t.terminal"></span>
-                                            </div>
-                                        </td>
-
-                                        <!-- Metode Pembayaran -->
-                                        <td class="px-4 py-3.5 whitespace-nowrap">
-                                            <span class="px-2.5 py-1 rounded-full text-[11px] font-bold"
-                                                  :class="t.method === 'TUNAI' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : (t.method === 'QRIS' ? 'bg-blue-50 text-[#0052cc] border border-blue-200' : (t.method === 'KREDIT ANGGOTA' ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-amber-50 text-amber-700 border border-amber-200'))"
-                                                  x-text="t.methodLabel"></span>
-                                        </td>
-
-                                        <!-- Total -->
-                                        <td class="px-4 py-3.5 text-right whitespace-nowrap">
-                                            <span class="font-mono font-bold text-gray-900 text-sm" x-text="formatRupiah(t.total)"></span>
-                                            <span class="text-[10px] text-gray-400 block" x-text="t.items.length + ' Macam Produk'"></span>
-                                        </td>
-
-                                        <!-- Status Sync -->
-                                        <td class="px-4 py-3.5 text-center whitespace-nowrap">
-                                            <template x-if="t.status === 'SELESAI'">
-                                                <span class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
-                                                    <span class="material-symbols-rounded text-[13px]">cloud_done</span>
-                                                    <span>Tersinkron</span>
-                                                </span>
+                                    <template x-for="(it, iIdx) in ((t.items && t.items.length > 0) ? t.items : [{ name: '-', qty: 0, price: 0 }])" :key="iIdx">
+                                        <tr class="hover:bg-blue-50/30 transition-colors" :class="iIdx === 0 ? 'border-t border-gray-200' : 'border-t border-gray-100'">
+                                            <!-- Parent Col 1: No Faktur -->
+                                            <template x-if="iIdx === 0">
+                                                <td :rowspan="t.items && t.items.length > 0 ? t.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap bg-white font-mono font-bold text-gray-900 text-[13px]">
+                                                    <span x-text="t.id"></span>
+                                                </td>
                                             </template>
-                                            <template x-if="t.status === 'DIBATALKAN'">
-                                                <span class="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-0.5 rounded-full">
-                                                    <span class="material-symbols-rounded text-[13px]">cancel</span>
-                                                    <span>Dibatalkan</span>
-                                                </span>
-                                            </template>
-                                        </td>
 
-                                        <!-- Aksi -->
-                                        <td class="px-6 py-3.5 text-right whitespace-nowrap">
-                                            <div class="inline-flex items-center justify-end gap-1.5">
-                                                <button type="button"
-                                                        @click="openDetail(t)"
-                                                        class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-gray-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer">
-                                                    <span class="material-symbols-rounded text-[16px]">visibility</span>
-                                                    <span>Detail</span>
-                                                </button>
-                                                <button type="button"
-                                                        @click="printStruk(t)"
-                                                        class="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#0052cc] rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer">
-                                                    <span class="material-symbols-rounded text-[16px]">print</span>
-                                                    <span>Struk</span>
-                                                </button>
-                                                <button type="button"
-                                                        @click="goToRefund(t)"
-                                                        title="Ajukan Refund untuk Faktur ini"
-                                                        class="px-2 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer">
-                                                    <span class="material-symbols-rounded text-[16px]">currency_exchange</span>
-                                                    <span>Refund</span>
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
+                                            <!-- Parent Col 2: Tanggal -->
+                                            <template x-if="iIdx === 0">
+                                                <td :rowspan="t.items && t.items.length > 0 ? t.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap bg-white text-xs text-gray-500 font-medium" x-text="t.date">
+                                                </td>
+                                            </template>
+
+                                            <!-- Parent Col 3: Waktu -->
+                                            <template x-if="iIdx === 0">
+                                                <td :rowspan="t.items && t.items.length > 0 ? t.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap bg-white text-xs text-gray-500 font-mono" x-text="t.time">
+                                                </td>
+                                            </template>
+
+                                            <!-- Parent Col 4: Kasir -->
+                                            <template x-if="iIdx === 0">
+                                                <td :rowspan="t.items && t.items.length > 0 ? t.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap bg-white text-xs font-bold text-gray-800" x-text="t.cashier">
+                                                </td>
+                                            </template>
+
+                                            <!-- Parent Col 5: Terminal -->
+                                            <template x-if="iIdx === 0">
+                                                <td :rowspan="t.items && t.items.length > 0 ? t.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap bg-white text-xs text-gray-500 font-mono" x-text="t.terminal">
+                                                </td>
+                                            </template>
+
+                                            <!-- Child Col 6: Nama Produk -->
+                                            <td class="px-4 py-3 align-middle whitespace-nowrap font-bold text-gray-900 text-xs max-w-[200px] truncate" :title="it.name" x-text="it.name"></td>
+
+                                            <!-- Child Col 7: Qty -->
+                                            <td class="px-4 py-3 align-middle whitespace-nowrap text-center font-mono font-bold text-xs" x-text="it.qty"></td>
+
+                                            <!-- Child Col 8: Harga Satuan -->
+                                            <td class="px-4 py-3 align-middle whitespace-nowrap text-right font-mono text-xs text-gray-600" x-text="formatRupiah(it.price)"></td>
+
+                                            <!-- Child Col 9: Subtotal -->
+                                            <td class="px-4 py-3 align-middle whitespace-nowrap text-right font-mono font-bold text-xs text-gray-900" x-text="formatRupiah(it.subtotal || (it.qty * it.price))"></td>
+
+                                            <!-- Parent Col 10: Metode Pembayaran -->
+                                            <template x-if="iIdx === 0">
+                                                <td :rowspan="t.items && t.items.length > 0 ? t.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap bg-white">
+                                                    <span class="px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap"
+                                                          :class="t.method === 'TUNAI' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : (t.method === 'QRIS' ? 'bg-blue-50 text-[#0052cc] border border-blue-200' : (t.method === 'KREDIT ANGGOTA' ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-amber-50 text-amber-700 border border-amber-200'))"
+                                                          x-text="t.methodLabel"></span>
+                                                </td>
+                                            </template>
+
+                                            <!-- Parent Col 11: Total Belanja -->
+                                            <template x-if="iIdx === 0">
+                                                <td :rowspan="t.items && t.items.length > 0 ? t.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap text-right bg-white font-mono font-black text-gray-900 text-sm" x-text="formatRupiah(t.total)">
+                                                </td>
+                                            </template>
+
+                                            <!-- Parent Col 12: Status Sync -->
+                                            <template x-if="iIdx === 0">
+                                                <td :rowspan="t.items && t.items.length > 0 ? t.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap text-center bg-white">
+                                                    <template x-if="t.status === 'SELESAI'">
+                                                        <span class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full whitespace-nowrap">
+                                                            <span class="material-symbols-rounded text-[13px]">cloud_done</span>
+                                                            <span>Tersinkron</span>
+                                                        </span>
+                                                    </template>
+                                                    <template x-if="t.status === 'DIBATALKAN'">
+                                                        <span class="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-0.5 rounded-full whitespace-nowrap">
+                                                            <span class="material-symbols-rounded text-[13px]">cancel</span>
+                                                            <span>Dibatalkan</span>
+                                                        </span>
+                                                    </template>
+                                                </td>
+                                            </template>
+
+                                            <!-- Parent Col 13: Aksi Nota -->
+                                            <template x-if="iIdx === 0">
+                                                <td :rowspan="t.items && t.items.length > 0 ? t.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap text-center bg-white">
+                                                    <div class="inline-flex items-center justify-center gap-1.5">
+                                                        <button type="button"
+                                                                @click="openDetail(t)"
+                                                                class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-gray-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer">
+                                                            <span class="material-symbols-rounded text-[16px]">visibility</span>
+                                                            <span>Detail</span>
+                                                        </button>
+                                                        <button type="button"
+                                                                @click="printStruk(t)"
+                                                                class="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#0052cc] rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer">
+                                                            <span class="material-symbols-rounded text-[16px]">print</span>
+                                                            <span>Struk</span>
+                                                        </button>
+                                                        <button type="button"
+                                                                @click="goToRefund(t)"
+                                                                title="Ajukan Refund untuk Faktur ini"
+                                                                class="px-2 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer">
+                                                            <span class="material-symbols-rounded text-[16px]">currency_exchange</span>
+                                                            <span>Refund</span>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </template>
+                                        </tr>
+                                    </template>
                                 </template>
-                                                    <span>Refund</span>
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                </template>
+                                <tr x-show="filteredTransactions.length === 0">
+                                    <td colspan="13" class="py-10 text-center text-slate-400">
+                                        <span class="material-symbols-rounded text-3xl block text-slate-300 mb-1">receipt</span>
+                                        <span class="font-bold text-xs text-slate-600">Belum ada transaksi.</span>
+                                    </td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>

@@ -17,68 +17,7 @@
     showToast: false,
 
     members: [],
-    defaultMembers: [
-        {
-            id: 'MBR-001',
-            nik: '327501002230004',
-            name: 'Bambang Pamungkas',
-            dept: 'Logistik & Gudang',
-            joinDate: '12 Januari 2021',
-            phone: '0812-9841-2201',
-            creditLimit: 5000000,
-            currentDebt: 500000,
-            status: 'AKTIF',
-            notes: 'Anggota aktif koperasi, pembayaran payroll tertib.'
-        },
-        {
-            id: 'MBR-002',
-            nik: '327501440230012',
-            name: 'Siti Lestari',
-            dept: 'Administrasi',
-            joinDate: '05 Mei 2022',
-            phone: '0813-8821-4412',
-            creditLimit: 5000000,
-            currentDebt: 3800000,
-            status: 'AKTIF',
-            notes: 'Mendekati ambang 80% plafon belanja.'
-        },
-        {
-            id: 'MBR-003',
-            nik: '327501082230899',
-            name: 'Andri Setiawan',
-            dept: 'Produksi A',
-            joinDate: '10 Agustus 2020',
-            phone: '0857-1120-9981',
-            creditLimit: 5000000,
-            currentDebt: 5000000,
-            status: 'DIBLOKIR',
-            notes: 'Plafon telah habis (100%). Transaksi kredit ditolak sementara.'
-        },
-        {
-            id: 'MBR-004',
-            nik: '327501550230056',
-            name: 'Dewi Indah',
-            dept: 'Maintenance & Utility',
-            joinDate: '19 November 2023',
-            phone: '0819-2234-8871',
-            creditLimit: 5000000,
-            currentDebt: 0,
-            status: 'AKTIF',
-            notes: 'Plafon utuh 100%.'
-        },
-        {
-            id: 'MBR-005',
-            nik: '327501009930011',
-            name: 'Raka Hendra',
-            dept: 'Logistik & Gudang',
-            joinDate: '02 Februari 2022',
-            phone: '0812-4411-9902',
-            creditLimit: 5000000,
-            currentDebt: 2850000,
-            status: 'AKTIF',
-            notes: 'Eligible transaksi kredit tempo.'
-        }
-    ],
+    defaultMembers: [],
 
     initMembers() {
         try {
@@ -91,8 +30,7 @@
                 }
             }
         } catch (e) {}
-        this.members = JSON.parse(JSON.stringify(this.defaultMembers));
-        this.saveMembers();
+        this.members = [];
     },
 
     saveMembers() {
@@ -224,8 +162,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
         <!-- Top Header -->
         <header class="h-[72px] bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
             <div class="flex items-center gap-3">
-                <h1 class="text-[18px] font-black text-gray-900 tracking-tight">Manajemen Anggota Kopkar</h1>
-                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200">Koperasi ILP</span>
+                <h1 class="text-[18px] font-black text-gray-900 tracking-tight">Anggota</h1>
+                
             </div>
 
             <div class="flex items-center gap-6 text-gray-500">
@@ -372,11 +310,23 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 </tr>
                             </template>
 
-                            <template x-if="filteredMembers.length === 0">
+                            <template x-if="members.length === 0">
                                 <tr>
-                                    <td colspan="7" class="px-6 py-12 text-center text-gray-400 text-xs">
-                                        <span class="material-symbols-rounded text-3xl mb-1 text-gray-300">group_off</span>
-                                        <p class="font-bold text-gray-600">Tidak ada anggota yang cocok dengan filter pencarian.</p>
+                                    <td colspan="7" class="px-6 py-12 text-center text-slate-400">
+                                        <span class="material-symbols-rounded text-3xl mb-1 text-slate-300 block">group_off</span>
+                                        <p class="font-bold text-sm text-slate-700">Belum ada data member.</p>
+                                        <button type="button" @click="openCreateModal()" class="mt-3 px-4 py-2 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer">
+                                            <span class="material-symbols-rounded text-[16px]">person_add</span>
+                                            <span>Tambah Anggota</span>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </template>
+                            <template x-if="members.length > 0 && filteredMembers.length === 0">
+                                <tr>
+                                    <td colspan="7" class="px-6 py-12 text-center text-slate-400">
+                                        <span class="material-symbols-rounded text-3xl mb-1 text-slate-300 block">search_off</span>
+                                        <p class="font-bold text-sm text-slate-700">Tidak ada anggota yang cocok dengan filter pencarian.</p>
                                     </td>
                                 </tr>
                             </template>

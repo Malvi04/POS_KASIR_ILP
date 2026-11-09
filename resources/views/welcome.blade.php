@@ -174,7 +174,11 @@
                         <div>
                             <div class="flex items-center justify-between mb-1.5">
                                 <label for="kasir-password" class="text-[12.5px] font-bold text-gray-700">Password Akun Portal</label>
-                                <button type="button" onclick="alert('Silakan hubungi supervisor / manager untuk bantuan reset password portal atau PIN petugas.')" class="text-[12px] text-[#0052cc] hover:underline font-semibold cursor-pointer">Lupa Password?</button>
+                                <div class="flex items-center gap-1.5 text-xs">
+                                    <button type="button" @click="openRecovery('password')" class="text-[11.5px] text-[#0052cc] hover:underline font-bold cursor-pointer">Lupa Password?</button>
+                                    <span class="text-gray-300">&bull;</span>
+                                    <button type="button" @click="openRecovery('pin')" class="text-[11.5px] text-amber-600 hover:underline font-bold cursor-pointer">Lupa PIN?</button>
+                                </div>
                             </div>
                             <div class="relative flex items-center">
                                 <span class="material-symbols-rounded absolute left-3.5 text-gray-400 text-[20px]">key</span>
@@ -220,6 +224,118 @@
                         <span>Kembali Pilih Peran</span>
                     </button>
                 </div>
+
+                <!-- MODAL BANTUAN PEMULIHAN AKUN KASIR (PASSWORD / PIN) -->
+                <template x-teleport="body">
+                    <div x-show="showRecoveryModal"
+                         x-transition.opacity
+                         style="display: none;"
+                         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+                        <div @click.away="showRecoveryModal = false"
+                             class="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden animate-scale-up text-left">
+                            
+                            <!-- Modal Header -->
+                            <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+                                <div class="flex items-center gap-2.5">
+                                    <div class="w-9 h-9 rounded-xl flex items-center justify-center"
+                                         :class="recoveryType === 'password' ? 'bg-blue-100 text-[#0052cc]' : 'bg-amber-100 text-amber-700'">
+                                        <span class="material-symbols-rounded text-[22px]" x-text="recoveryType === 'password' ? 'lock_reset' : 'pin'"></span>
+                                    </div>
+                                    <div>
+                                        <h3 class="font-bold text-slate-900 text-base" x-text="recoveryType === 'password' ? 'Bantuan Lupa Password Portal' : 'Bantuan Lupa PIN Kasir (POS)'"></h3>
+                                        <p class="text-[11.5px] text-slate-500 font-medium">Prosedur pemulihan kredensial resmi POS Kopkar ILP</p>
+                                    </div>
+                                </div>
+                                <button type="button" @click="showRecoveryModal = false" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 cursor-pointer">
+                                    <span class="material-symbols-rounded text-[20px]">close</span>
+                                </button>
+                            </div>
+
+                            <!-- Modal Body -->
+                            <div class="p-6 space-y-4 text-xs font-sans">
+                                <!-- Toggle Tab Kendala -->
+                                <div class="flex bg-slate-100 p-1 rounded-xl text-xs font-bold">
+                                    <button type="button" 
+                                            @click="recoveryType = 'password'"
+                                            :class="recoveryType === 'password' ? 'bg-white text-[#0052cc] shadow-xs' : 'text-slate-600 hover:text-slate-900'"
+                                            class="flex-1 py-2 rounded-lg text-center transition-all cursor-pointer">
+                                        Kendala Password Portal
+                                    </button>
+                                    <button type="button" 
+                                            @click="recoveryType = 'pin'"
+                                            :class="recoveryType === 'pin' ? 'bg-white text-amber-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'"
+                                            class="flex-1 py-2 rounded-lg text-center transition-all cursor-pointer">
+                                        Kendala PIN Terminal POS
+                                    </button>
+                                </div>
+
+                                <!-- Explanation Box -->
+                                <div class="p-3.5 rounded-2xl border text-xs space-y-1.5"
+                                     :class="recoveryType === 'password' ? 'bg-blue-50/60 border-blue-200 text-blue-950' : 'bg-amber-50/60 border-amber-200 text-amber-950'">
+                                    <div class="font-bold flex items-center gap-1.5">
+                                        <span class="material-symbols-rounded text-[17px]" :class="recoveryType === 'password' ? 'text-[#0052cc]' : 'text-amber-700'">info</span>
+                                        <span x-text="recoveryType === 'password' ? 'Password Portal (Login Web Kasir)' : 'PIN Kasir (6 Digit Pembukaan Terminal POS)'"></span>
+                                    </div>
+                                    <p class="leading-relaxed text-[12px] text-slate-700"
+                                       x-text="recoveryType === 'password' 
+                                            ? 'Password portal digunakan saat awal masuk aplikasi di web. Karena akun kasir terintegrasi dengan identitas anggota koperasi pabrik, reset password tidak dilakukan via tautan email publik melainkan melalui verifikasi tatap muka oleh Manager Cabang.' 
+                                            : 'PIN 6-digit digunakan saat verifikasi serah terima kas atau pembukaan sesi kasir di terminal POS. Jika lupa PIN, Manager Cabang yang bertugas dapat menerbitkan PIN sementara baru setelah memverifikasi identitas Anda.'">
+                                    </p>
+                                </div>
+
+                                <!-- SOP Steps -->
+                                <div class="space-y-2">
+                                    <span class="font-bold text-slate-800 uppercase tracking-wider text-[11px] block">Langkah Bantuan Reset Sesuai SOP Koperasi:</span>
+                                    
+                                    <div class="space-y-2.5">
+                                        <div class="flex items-start gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
+                                            <span class="w-6 h-6 rounded-full bg-[#0052cc] text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">1</span>
+                                            <div>
+                                                <span class="font-bold text-slate-900 block text-xs">Temui Manager Cabang yang Bertugas</span>
+                                                <p class="text-[11.5px] text-slate-600 mt-0.5">Kunjungi kantor operasional gerai minimarket tempat Anda ditugaskan (Pusat, Cabang A, atau Cabang B).</p>
+                                            </div>
+                                        </div>
+
+                                        <div class="flex items-start gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
+                                            <span class="w-6 h-6 rounded-full bg-[#0052cc] text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">2</span>
+                                            <div>
+                                                <span class="font-bold text-slate-900 block text-xs">Bawa Bukti Identitas Anggota</span>
+                                                <p class="text-[11.5px] text-slate-600 mt-0.5">Siapkan Kartu Tanda Anggota (KTA) Koperasi atau ID Karyawan Pabrik dengan NIK terdaftar untuk verifikasi fisik.</p>
+                                            </div>
+                                        </div>
+
+                                        <div class="flex items-start gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
+                                            <span class="w-6 h-6 rounded-full bg-[#0052cc] text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">3</span>
+                                            <div>
+                                                <span class="font-bold text-slate-900 block text-xs">Penerbitan Kredensial Sementara</span>
+                                                <p class="text-[11.5px] text-slate-600 mt-0.5">Manager akan membuka panel <em>Kelola Akun &amp; Pemulihan</em> untuk menerbitkan kredensial sementara yang wajib Anda ganti saat login berikutnya.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Security Assurance -->
+                                <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-500 space-y-1">
+                                    <div class="font-bold text-slate-700 flex items-center gap-1">
+                                        <span class="material-symbols-rounded text-[14px] text-emerald-600">security</span>
+                                        <span>Kebijakan Keamanan Koperasi</span>
+                                    </div>
+                                    <p>Sistem tidak pernah menanyakan password/PIN lama Anda. Petugas koperasi dilarang meminta atau membagikan kredensial melalui pesan singkat atau panggilan telepon tanpa tatap muka.</p>
+                                </div>
+
+                                <!-- Footer Action Buttons -->
+                                <div class="flex justify-end pt-2 border-t border-slate-100">
+                                    <button type="button" 
+                                            @click="showRecoveryModal = false"
+                                            class="px-5 py-2.5 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-xs shadow-xs transition-colors cursor-pointer">
+                                        Kembali ke Login Kasir
+                                    </button>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </template>
             </div>
 
             <!-- FORM 2: LOGIN MANAGER -->
@@ -233,7 +349,7 @@
                         <p class="text-[13px] text-gray-500 mt-1">Portal Khusus Manajer Operasional</p>
                     </div>
 
-                    <form action="{{ url('/dashboard') }}" method="GET" class="space-y-4">
+                    <form action="{{ url('/dashboard') }}" method="GET" onsubmit="return submitManagerLogin(event);" class="space-y-4">
                         <div>
                             <label class="block text-[12.5px] font-bold text-gray-700 mb-1.5">Nama Manager</label>
                             <div class="relative flex items-center">
@@ -275,46 +391,110 @@
                 </div>
             </div>
 
-            <!-- FORM 3: LOGIN OWNER -->
-            <div id="form-owner" class="hidden opacity-0 translate-y-4 transition-all duration-300 ease-out transform w-full max-w-md">
-                <div class="bg-white border border-gray-200/90 rounded-2xl p-8 shadow-sm">
-                    <div class="text-center mb-6">
-                        <div class="w-14 h-14 bg-blue-50 text-[#0052cc] rounded-full flex items-center justify-center mx-auto mb-3">
-                            <span class="material-symbols-rounded text-[28px]">analytics</span>
-                        </div>
-                        <h2 class="text-[20px] font-bold text-gray-900">Login Owner</h2>
-                        <p class="text-[13px] text-gray-500 mt-1">Masukkan 6 digit PIN otorisasi strategis Anda</p>
-                    </div>
+            <!-- FORM 3: LOGIN OWNER (Faithful to Screenshot) -->
+            <div id="form-owner" class="hidden opacity-0 translate-y-4 transition-all duration-300 ease-out transform w-full max-w-[940px]">
+                <div class="bg-white border border-gray-200/90 rounded-[24px] sm:rounded-[28px] shadow-xl overflow-hidden grid grid-cols-1 md:grid-cols-2">
+                    
+                    <!-- LEFT COLUMN: Exclusive Branding & Analytics Preview -->
+                    <div class="bg-[#edf2fe] p-6 sm:p-9 flex flex-col justify-between border-b md:border-b-0 md:border-r border-blue-100/60">
+                        <div>
+                            <!-- Brand & Icon -->
+                            <div class="flex items-center gap-2.5">
+                                <div class="w-8 h-8 rounded-lg bg-[#0052cc] text-white flex items-center justify-center shadow-xs">
+                                    <span class="material-symbols-rounded text-[18px]">signal_cellular_alt</span>
+                                </div>
+                                <span class="text-[17px] font-black text-[#0052cc] tracking-tight">Minimarket ILP</span>
+                            </div>
 
-                    <form onsubmit="event.preventDefault(); submitOwnerPin();" class="space-y-6">
-                        <div class="flex justify-center gap-2.5">
-                            <input maxlength="1" oninput="moveToNext(this, 'pin2')" id="pin1" class="pin-dot w-11 h-14 text-center font-mono text-xl font-bold border-2 border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 outline-none transition-all text-gray-900" type="password" inputmode="numeric" placeholder="•" autocomplete="off">
-                            <input maxlength="1" oninput="moveToNext(this, 'pin3')" id="pin2" class="pin-dot w-11 h-14 text-center font-mono text-xl font-bold border-2 border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 outline-none transition-all text-gray-900" type="password" inputmode="numeric" placeholder="•" autocomplete="off">
-                            <input maxlength="1" oninput="moveToNext(this, 'pin4')" id="pin3" class="pin-dot w-11 h-14 text-center font-mono text-xl font-bold border-2 border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 outline-none transition-all text-gray-900" type="password" inputmode="numeric" placeholder="•" autocomplete="off">
-                            <input maxlength="1" oninput="moveToNext(this, 'pin5')" id="pin4" class="pin-dot w-11 h-14 text-center font-mono text-xl font-bold border-2 border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 outline-none transition-all text-gray-900" type="password" inputmode="numeric" placeholder="•" autocomplete="off">
-                            <input maxlength="1" oninput="moveToNext(this, 'pin6')" id="pin5" class="pin-dot w-11 h-14 text-center font-mono text-xl font-bold border-2 border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 outline-none transition-all text-gray-900" type="password" inputmode="numeric" placeholder="•" autocomplete="off">
-                            <input maxlength="1" oninput="submitOwnerPin()" id="pin6" class="pin-dot w-11 h-14 text-center font-mono text-xl font-bold border-2 border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 outline-none transition-all text-gray-900" type="password" inputmode="numeric" placeholder="•" autocomplete="off">
-                        </div>
-
-                        <div class="space-y-3 pt-2">
-                            <button type="submit" class="w-full h-12 bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-[14px] rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer">
-                                <span>Masuk Ke Sistem</span>
-                                <span class="material-symbols-rounded text-[20px]">login</span>
-                            </button>
-                            <div class="text-center">
-                                <button type="button" onclick="alert('Silakan hubungi administrator IT koperasi untuk verifikasi reset PIN Owner.')" class="text-[13px] text-[#0052cc] hover:underline font-semibold cursor-pointer">
-                                    Lupa PIN Owner?
-                                </button>
+                            <!-- Headline -->
+                            <div class="mt-4">
+                                <h2 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-tight">
+                                    Owner Console
+                                </h2>
+                                <p class="text-xs text-slate-500 font-medium mt-1">
+                                    Akses monitoring operasional dan laporan keuangan.
+                                </p>
                             </div>
                         </div>
-                    </form>
-                </div>
+                    </div>
 
-                <div class="mt-4 text-center">
-                    <button type="button" onclick="resetSelection()" class="inline-flex items-center gap-1.5 text-gray-500 hover:text-[#0052cc] font-bold text-[13px] transition-colors cursor-pointer py-1 px-3 rounded-lg hover:bg-gray-100">
-                        <span class="material-symbols-rounded text-[18px]">arrow_back</span>
-                        <span>Kembali Pilih Peran</span>
-                    </button>
+                    <!-- RIGHT COLUMN: Akses Pemilik Form -->
+                    <div class="bg-white p-6 sm:p-9 md:p-10 flex flex-col justify-between">
+                        <div>
+                            <!-- Header -->
+                            <div>
+                                <h3 class="text-2xl font-bold text-gray-900 tracking-tight">Akses Pemilik</h3>
+                                <p class="text-[13px] text-gray-500 mt-1 font-medium">Silakan masuk untuk mengelola sistem Anda secara aman.</p>
+                            </div>
+
+                            <!-- Form -->
+                            <form action="{{ url('/owner') }}" method="GET" onsubmit="submitOwnerLogin(event);" class="space-y-4 mt-6">
+                                <!-- Input 1: Nama Owner -->
+                                <div>
+                                    <label class="block text-[12.5px] font-bold text-gray-700 mb-1.5">Nama Owner</label>
+                                    <div class="relative flex items-center">
+                                        <span class="material-symbols-rounded absolute left-3.5 text-gray-400 text-[20px] pointer-events-none">person</span>
+                                        <input type="text"
+                                               id="owner-username"
+                                               name="username"
+                                               value="dewi_owner"
+                                               placeholder="Masukkan username"
+                                               required
+                                               class="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-[14px] text-gray-800 focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 outline-none transition-all font-medium">
+                                    </div>
+                                </div>
+
+                                <!-- Input 2: Kata Sandi -->
+                                <div>
+                                    <div class="flex items-center justify-between mb-1.5">
+                                        <label class="text-[12.5px] font-bold text-gray-700">Kata Sandi</label>
+                                        <button type="button" onclick="alert('Silakan hubungi administrator koperasi untuk reset sandi Owner.')" class="text-[12px] text-[#0052cc] hover:underline font-bold cursor-pointer">Lupa Sandi?</button>
+                                    </div>
+                                    <div class="relative flex items-center">
+                                        <span class="material-symbols-rounded absolute left-3.5 text-gray-400 text-[20px] pointer-events-none">lock</span>
+                                        <input type="password"
+                                               id="owner-password"
+                                               name="password"
+                                               value="owner123"
+                                               placeholder="••••••••"
+                                               required
+                                               class="w-full pl-10 pr-11 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-[14px] text-gray-800 focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 outline-none transition-all font-medium">
+                                        <button type="button" onclick="togglePassword('owner-password', 'owner-eye')" class="absolute right-3 text-gray-400 hover:text-gray-600 cursor-pointer p-1">
+                                            <span id="owner-eye" class="material-symbols-rounded text-[20px]">visibility</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Checkbox: Ingat saya -->
+                                <div class="flex items-center gap-2 pt-0.5">
+                                    <input type="checkbox" id="owner-remember" checked class="w-4 h-4 text-[#0052cc] border-gray-300 rounded focus:ring-[#0052cc]/20 cursor-pointer">
+                                    <label for="owner-remember" class="text-[12.5px] text-gray-600 font-medium cursor-pointer select-none">Ingat saya pada perangkat ini</label>
+                                </div>
+
+                                <!-- Submit Button -->
+                                <div class="pt-2">
+                                    <button type="submit" class="w-full h-12 bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-[14px] rounded-xl shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer">
+                                        <span>Masuk</span>
+                                        <span class="material-symbols-rounded text-[20px]">login</span>
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- Bottom: Atau & Kembali -->
+                        <div class="mt-6 pt-2">
+                            <div class="relative flex py-2 items-center">
+                                <div class="flex-grow border-t border-gray-200"></div>
+                                <span class="flex-shrink mx-4 text-xs font-semibold text-gray-400">Atau</span>
+                                <div class="flex-grow border-t border-gray-200"></div>
+                            </div>
+                            <button type="button" onclick="resetSelection()" class="w-full mt-1.5 inline-flex items-center justify-center gap-1.5 text-gray-500 hover:text-[#0052cc] font-bold text-[13px] transition-colors cursor-pointer py-2 px-3 rounded-lg hover:bg-gray-50">
+                                <span class="material-symbols-rounded text-[18px]">arrow_back</span>
+                                <span>Kembali ke Pilihan Akses</span>
+                            </button>
+                        </div>
+                    </div>
+
                 </div>
             </div>
 
@@ -359,7 +539,14 @@
                 selectedStaff: null,
                 errorMsg: '',
                 isSubmitting: false,
+                showRecoveryModal: false,
+                recoveryType: 'password', // 'password' or 'pin'
                 allStaff: defaultCashiers,
+
+                openRecovery(type) {
+                    this.recoveryType = type || 'password';
+                    this.showRecoveryModal = true;
+                },
 
                 init() {
                     this.loadStaff();
@@ -379,7 +566,7 @@
                             const parsed = JSON.parse(rawUsers);
                             if (Array.isArray(parsed)) {
                                 parsed.forEach(u => {
-                                    if (u.role && u.role.toUpperCase() === 'KASIR' && u.status !== 'NONAKTIF') {
+                                    if (u.role && u.role.toUpperCase().includes('KASIR') && u.status !== 'NONAKTIF') {
                                         const existIdx = list.findIndex(s => s.id === u.id || (u.username && s.username && s.username.toLowerCase() === u.username.toLowerCase()));
                                         const userBranch = u.branch || (u.assignedBranches && u.assignedBranches[0]?.branch) || 'Pusat';
                                         const userPass = u.password || 'kasir123';
@@ -568,12 +755,28 @@
             const roleSelector = document.getElementById('role-selector');
             const targetForm = roleForms[role];
             const subtitle = document.getElementById('portal-subtitle');
+            const header = document.getElementById('portal-header');
+            const mainEl = document.querySelector('main');
             if (!targetForm) return;
 
             currentActiveForm = targetForm;
 
             if (subtitle && roleSubtitles[role]) {
                 subtitle.innerText = roleSubtitles[role];
+            }
+
+            if (role === 'Owner') {
+                if (header) header.classList.add('hidden');
+                if (mainEl) {
+                    mainEl.classList.remove('max-w-4xl');
+                    mainEl.classList.add('max-w-5xl');
+                }
+            } else {
+                if (header) header.classList.remove('hidden');
+                if (mainEl) {
+                    mainEl.classList.remove('max-w-5xl');
+                    mainEl.classList.add('max-w-4xl');
+                }
             }
 
             if (instant) {
@@ -613,10 +816,18 @@
         function resetSelection() {
             const roleSelector = document.getElementById('role-selector');
             const subtitle = document.getElementById('portal-subtitle');
+            const header = document.getElementById('portal-header');
+            const mainEl = document.querySelector('main');
             if (!currentActiveForm) return;
 
             if (subtitle) {
                 subtitle.innerText = 'Silakan pilih peran Anda untuk memulai sesi';
+            }
+
+            if (header) header.classList.remove('hidden');
+            if (mainEl) {
+                mainEl.classList.remove('max-w-5xl');
+                mainEl.classList.add('max-w-4xl');
             }
 
             // 1. Smoothly fade out & slide down active form (Identical to Owner transition)
@@ -633,20 +844,17 @@
                     roleSelector.classList.remove('opacity-0', 'pointer-events-none', '-translate-y-4');
                 }, 50);
             }, 250);
-
-            // Bersihkan input PIN jika ada
-            document.querySelectorAll('.pin-dot').forEach(el => el.value = '');
         }
 
         function focusFirstInput(role) {
             if (role === 'Kasir') {
-                const el = document.getElementById('kasir-username');
+                const el = document.getElementById('kasir-identifier') || document.getElementById('kasir-username');
                 if (el) el.focus();
             } else if (role === 'Manager') {
                 const el = document.getElementById('manager-username');
                 if (el) el.focus();
             } else if (role === 'Owner') {
-                const el = document.getElementById('pin1');
+                const el = document.getElementById('owner-username');
                 if (el) el.focus();
             }
         }
@@ -665,21 +873,39 @@
             }
         }
 
-        function moveToNext(current, nextFieldId) {
-            if (current.value.length >= 1) {
-                const next = document.getElementById(nextFieldId);
-                if (next) next.focus();
-            }
+        function submitManagerLogin(e) {
+            if (e && e.preventDefault) e.preventDefault();
+            const usernameInput = document.getElementById('manager-username');
+            const username = usernameInput ? usernameInput.value : 'andi_manager';
+            
+            try {
+                localStorage.setItem('pos_current_role', 'manager');
+                localStorage.setItem('pos_portal_logged_in_staff_id', 'USR-MGR-01');
+                localStorage.setItem('pos_portal_logged_in_username', username);
+            } catch (err) {}
+
+            window.location.href = "{{ url('/dashboard') }}";
+            return false;
+        }
+
+        function submitOwnerLogin(e) {
+            if (e && e.preventDefault) e.preventDefault();
+            const usernameInput = document.getElementById('owner-username');
+            const username = usernameInput ? usernameInput.value : 'dewi_owner';
+            
+            // Set current role in localStorage
+            try {
+                localStorage.setItem('pos_current_role', 'owner');
+                localStorage.setItem('pos_portal_logged_in_staff_id', 'USR-OWNER-01');
+                localStorage.setItem('pos_portal_logged_in_username', username);
+            } catch (err) {}
+
+            window.location.href = "{{ url('/owner') }}";
+            return false;
         }
 
         function submitOwnerPin() {
-            const pinInputs = document.querySelectorAll('.pin-dot');
-            let pin = '';
-            pinInputs.forEach(input => pin += input.value);
-
-            if (pin.length === 6) {
-                window.location.href = "{{ url('/dashboard') }}";
-            }
+            window.location.href = "{{ url('/owner') }}";
         }
 
         // Handle keyboard backspace across PIN inputs
@@ -764,6 +990,7 @@
                 const optText = opt.text || '';
                 const staffName = optText.split('(')[0].trim();
                 const staffNik = opt.dataset.nik || '';
+                localStorage.setItem('pos_current_role', 'kasir');
                 localStorage.setItem('pos_portal_logged_in_staff_id', staffId);
                 localStorage.setItem('pos_kasir_staff_id', staffId);
                 localStorage.setItem('pos_portal_logged_in_staff_name', staffName);
@@ -783,7 +1010,7 @@
                     const users = JSON.parse(rawUsers);
                     if (Array.isArray(users)) {
                         users.forEach(u => {
-                            if (u.role && u.role.toUpperCase() === 'KASIR' && u.status !== 'NONAKTIF') {
+                            if (u.role && u.role.toUpperCase().includes('KASIR') && u.status !== 'NONAKTIF') {
                                 const existingOpt = Array.from(selectEl.options).find(o => o.value === u.id || (u.nik && o.text.includes(u.nik)));
                                 const userPass = u.password || (u.username ? u.username.replace('cashier_', '') + '123' : 'kasir123');
                                 const userPin = u.pin || '123456';

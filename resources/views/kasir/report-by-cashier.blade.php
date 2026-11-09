@@ -46,26 +46,12 @@
                 }
             } catch(e) {}
         }
-        this.myTransactions = [
-            { id: '#TRX-20261024-0028', time: '11:42 WIB', method: 'CAMPURAN', total: 145000, discount: 1500, itemCount: 5, status: 'SELESAI' },
-            { id: '#TRX-20261024-0027', time: '11:20 WIB', method: 'TUNAI', total: 84000, discount: 0, itemCount: 4, status: 'SELESAI' },
-            { id: '#TRX-20261024-0026', time: '10:55 WIB', method: 'QRIS', total: 245500, discount: 5000, itemCount: 8, status: 'SELESAI' },
-            { id: '#TRX-20261024-0022', time: '07:30 WIB', method: 'TUNAI', total: 310000, discount: 0, itemCount: 10, status: 'SELESAI' },
-            { id: '#TRX-20261024-0019', time: '07:15 WIB', method: 'KREDIT ANGGOTA', total: 195000, discount: 2500, itemCount: 6, status: 'SELESAI' }
-        ];
+        this.myTransactions = [];
     },
 
-    productCategoryShare: [
-        { category: 'Sembako & Kebutuhan Pokok', sales: 485000, percentage: 49.5, color: 'bg-blue-600' },
-        { category: 'Minuman Kemasan', sales: 215000, percentage: 22.0, color: 'bg-emerald-500' },
-        { category: 'Makanan Ringan & Biskuit', sales: 164500, percentage: 16.8, color: 'bg-amber-500' },
-        { category: 'Perawatan & Toiletries', sales: 85000, percentage: 8.7, color: 'bg-purple-500' },
-        { category: 'Kupon Layanan', sales: 30000, percentage: 3.0, color: 'bg-rose-500' }
-    ],
+    productCategoryShare: [],
 
-    refundActivities: [
-        { refundNo: 'REF-20261024-001', trxId: '#TRX-20261024-0012', amount: 35000, reason: 'Produk Cacat Segel', time: '08:50 WIB', status: 'DISETUJUI_SPV' }
-    ],
+    refundActivities: [],
 
     get totalMySales() {
         return this.myTransactions.filter(t => t.status === 'SELESAI').reduce((sum, t) => sum + t.total, 0);
@@ -106,13 +92,7 @@ class="flex flex-col h-screen w-full font-sans">
                 <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
                     <div>
                         <div class="flex items-center gap-2">
-                            <h1 class="text-xl font-bold text-gray-900 tracking-tight">Kinerja Penjualan Pribadi Kasir</h1>
-                            <span class="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-100 text-emerald-800 flex items-center gap-1">
-                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
-                                Kasir Login
-                            </span>
-                        </div>
-                        <p class="text-xs text-gray-500 mt-0.5">Ringkasan performa penjualan khusus kasir yang sedang bertugas.</p>
+                            <h1 class="text-xl font-bold text-gray-900 tracking-tight">Laporan Kasir</h1></div>
                     </div>
                     <div class="flex items-center gap-2">
                         <button type="button"

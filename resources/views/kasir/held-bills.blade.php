@@ -14,63 +14,7 @@
     showToast: false,
 
     heldBills: [],
-    defaultHeldBills: [
-        {
-            id: '#HOLD-001',
-            customerName: 'Budi Santoso',
-            customerType: 'Anggota Koperasi',
-            holdTime: '10:45 WIB',
-            elapsedMinutes: 18,
-            sessionLabel: 'Kasir 01',
-            isHandover: true,
-            handoverFrom: 'Andi Pratama',
-            note: 'Pelanggan keluar sejenak mengambil dompet di kendaraan.',
-            totalAmount: 145000,
-            itemCount: 12,
-            items: [
-                { sku: 'PRD-006', barcode: '899275321004', name: 'Indomie Goreng Spesial 85g', qty: 5, price: 3500, memberPrice: 3200, total: 17500 },
-                { sku: 'PRD-003', barcode: '8993456789012', name: 'Ultra Milk Full Cream 1L', qty: 2, price: 19200, memberPrice: 18500, total: 38400 },
-                { sku: 'PRD-004', barcode: '8994567890123', name: 'Beras Pandan Wangi 5kg', qty: 1, price: 82000, memberPrice: 79000, total: 82000 },
-                { sku: 'PRD-001', barcode: '8991234567890', name: 'Aqua Mineral 600ml', qty: 4, price: 5500, memberPrice: 5000, total: 22000 }
-            ]
-        },
-        {
-            id: '#HOLD-002',
-            customerName: 'Ibu Rina (Pelanggan Umum)',
-            customerType: 'Pelanggan Umum',
-            holdTime: '11:10 WIB',
-            elapsedMinutes: 8,
-            sessionLabel: 'Kasir 01',
-            isHandover: false,
-            handoverFrom: null,
-            note: 'Pelanggan menambah pembelian minyak goreng dan biskuit di rak lorong B.',
-            totalAmount: 57000,
-            itemCount: 3,
-            items: [
-                { sku: 'PRD-002', barcode: '8992345678901', name: 'Chitato Sapi Panggang 68g', qty: 2, price: 12800, memberPrice: 12000, total: 25600 },
-                { sku: 'PRD-005', barcode: '8995678901234', name: 'Sunlight Jeruk Nipis 755ml', qty: 1, price: 15500, memberPrice: 14500, total: 15500 },
-                { sku: 'PRD-008', barcode: '8997890123456', name: 'Teh Pucuk Harum 350ml', qty: 2, price: 4000, memberPrice: 3800, total: 8000 }
-            ]
-        },
-        {
-            id: '#HOLD-003',
-            customerName: 'Pak Agus (Member Koperasi)',
-            customerType: 'Anggota Koperasi',
-            holdTime: '11:25 WIB',
-            elapsedMinutes: 3,
-            sessionLabel: 'Kasir 01',
-            isHandover: false,
-            handoverFrom: null,
-            note: 'Pelanggan melakukan verifikasi NIK dan pengecekan sisa plafon kredit di layanan anggota.',
-            totalAmount: 82000,
-            itemCount: 4,
-            items: [
-                { sku: 'PRD-010', barcode: '8999012345678', name: 'Gula Pasir Gulaku 1kg', qty: 2, price: 18000, memberPrice: 17500, total: 36000 },
-                { sku: 'PRD-009', barcode: '8998901234567', name: 'Oreo Vanilla 133g', qty: 2, price: 9500, memberPrice: 9000, total: 19000 },
-                { sku: 'PRD-001', barcode: '8991234567890', name: 'Aqua Mineral 600ml', qty: 2, price: 5500, memberPrice: 5000, total: 11000 }
-            ]
-        }
-    ],
+    defaultHeldBills: [],
 
     initHeldBills() {
         try {
@@ -84,8 +28,7 @@
                 }
             }
         } catch (e) {}
-        this.heldBills = JSON.parse(JSON.stringify(this.defaultHeldBills));
-        this.saveHeldBillsToStorage();
+        this.heldBills = [];
     },
 
     saveHeldBillsToStorage() {
@@ -192,8 +135,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             <span class="material-symbols-rounded text-[14px]">chevron_right</span>
                             <span class="text-[#0052cc]">TRANSAKSI DITAHAN (HELD BILLS)</span>
                         </div>
-                        <h1 class="text-2xl font-black text-gray-900 tracking-tight">Antrean Transaksi Tertahan</h1>
-                        <p class="text-xs text-gray-500 mt-1 font-medium">Daftar transaksi tertahan dan recall keranjang belanja ke layar POS.</p>
+                        <h1 class="text-2xl font-black text-gray-900 tracking-tight">Transaksi Tertahan</h1>
                     </div>
 
                     <div class="flex items-center gap-2">
@@ -341,7 +283,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <template x-if="filteredBills.length === 0">
                         <div class="col-span-full bg-white rounded-2xl border border-gray-200 p-12 text-center text-gray-400">
                             <span class="material-symbols-rounded text-[40px] text-gray-300 mb-2">pause_circle</span>
-                            <p class="font-bold text-gray-600 text-sm">Tidak ada transaksi tertahan saat ini.</p>
+                            <p class="font-bold text-gray-600 text-sm">Tidak ada transaksi tertahan.</p>
                             <p class="text-xs text-gray-400 mt-1">Gunakan tombol F3 (Tahan Bill) di layar POS saat pelanggan ingin mengambil barang tambahan.</p>
                         </div>
                     </template>

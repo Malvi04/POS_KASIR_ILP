@@ -27,6 +27,22 @@
     showPasswordList: {},
     showPinList: {},
 
+    // State Pemulihan Akun / Reset Password & PIN Kasir
+    activeTab: 'penugasan', // 'penugasan' | 'pemulihan'
+    currentManager: { id: 'usr_04', name: 'Diana Putri', username: 'manager_diana', role: 'MANAGER', branch: 'Cabang A' },
+    currentManagerBranch: 'Cabang A',
+    resetSearchQuery: '',
+    resetBranchFilter: 'all', // 'all' | 'my_branch' | 'other'
+    resetCredentialStatusFilter: 'all', // 'all' | 'must_change' | 'normal'
+    resetHistory: [],
+    showResetConfirmModal: false,
+    showResetSuccessModal: false,
+    targetResetUser: null,
+    targetResetType: 'password', // 'password' | 'pin'
+    resetChecklist: { inPerson: false, idCard: false, branchVerified: false },
+    generatedTempCredential: '',
+    copiedCredentialToast: false,
+
     // Form Tambah / Penugasan Kasir dari Members
     formKasir: {
         branch: 'Pusat',
@@ -50,13 +66,7 @@
     // Form Tambah Cabang pada Modal Kelola Penugasan
     modalNewBranch: 'Cabang A',
 
-    defaultMembers: [
-        { id: 'MBR-001', nik: '327501002230004', name: 'Bambang Pamungkas', dept: 'Logistik & Gudang', status: 'AKTIF' },
-        { id: 'MBR-002', nik: '327501440230012', name: 'Siti Lestari', dept: 'Administrasi', status: 'AKTIF' },
-        { id: 'MBR-003', nik: '327501082230899', name: 'Andri Setiawan', dept: 'Produksi A', status: 'DIBLOKIR' },
-        { id: 'MBR-004', nik: '327501550230056', name: 'Dewi Indah', dept: 'Maintenance & Utility', status: 'AKTIF' },
-        { id: 'MBR-005', nik: '327501009930011', name: 'Raka Hendra', dept: 'Logistik & Gudang', status: 'AKTIF' }
-    ],
+    defaultMembers: [],
 
     initUsers() {
         window.accountsManagerScope = this;
@@ -69,11 +79,10 @@
             try {
                 this.users = JSON.parse(stored);
             } catch(e) {
-                this.users = this.getDefaultUsers();
+                this.users = [];
             }
         } else {
-            this.users = this.getDefaultUsers();
-            this.saveUsers();
+            this.users = [];
         }
 
         // 3. Normalisasi Struktur Penugasan Cabang (Migrasi Idempotent Backwards-Compatible)
@@ -116,11 +125,22 @@
         if (storedLogs) {
             try { this.securityLogs = JSON.parse(storedLogs); } catch(e){}
         } else {
-            this.securityLogs = [
-                { time: '14:20:05', text: 'User [Ahmad Fauzi] berhasil didaftarkan oleh Manager [Diana Putri]' },
-                { time: '09:12:33', text: 'Perubahan Level Akses [Diana Putri] oleh Owner' }
-            ];
-            this.saveLogs();
+            this.securityLogs = [];
+        }
+
+        // 5. Inisialisasi Riwayat Pemulihan Akun / Reset Kredensial
+        this.loadResetHistory();
+
+        // 6. Sinkronisasi Manager Aktif dari Sesi Login
+        const savedMgrUsername = localStorage.getItem('pos_portal_logged_in_username');
+        if (savedMgrUsername) {
+            const foundMgr = this.users.find(u => u.username === savedMgrUsername);
+            if (foundMgr) {
+                this.currentManager = foundMgr;
+                if (foundMgr.branch) {
+                    this.currentManagerBranch = foundMgr.branch.includes('Cabang B') ? 'Cabang B' : (foundMgr.branch.includes('Pusat') ? 'Pusat' : 'Cabang A');
+                }
+            }
         }
     },
 
@@ -135,7 +155,7 @@
                 }
             }
         } catch(e){}
-        this.membersList = JSON.parse(JSON.stringify(this.defaultMembers));
+        this.membersList = [];
     },
 
     saveUsers() {
@@ -147,84 +167,7 @@
     },
 
     getDefaultUsers() {
-        return [
-            {
-                id: 'usr_01',
-                name: 'Budi Kurniawan',
-                username: 'cashier_budi',
-                email: 'budi@pos.com',
-                role: 'KASIR',
-                branch: 'Cabang A',
-                status: 'AKTIF',
-                password: 'budi123',
-                pin: '123456',
-                nik: '327501009920001',
-                dept: 'Operasional Kasir',
-                assignedBranches: [
-                    { branch: 'Cabang A', status: 'AKTIF', assignedAt: '19 Okt 2026' }
-                ]
-            },
-            {
-                id: 'usr_02',
-                name: 'Citra Dewi',
-                username: 'cashier_citra',
-                email: 'citra@pos.com',
-                role: 'KASIR',
-                branch: 'Cabang A',
-                status: 'AKTIF',
-                password: 'citra123',
-                pin: '123456',
-                nik: '327501009920002',
-                dept: 'Operasional Kasir',
-                assignedBranches: [
-                    { branch: 'Cabang A', status: 'AKTIF', assignedAt: '19 Okt 2026' }
-                ]
-            },
-            {
-                id: 'usr_03',
-                name: 'Ahmad Fauzi',
-                username: 'cashier_fauzi',
-                email: 'fauzi@pos.com',
-                role: 'KASIR',
-                branch: 'Cabang B',
-                status: 'AKTIF',
-                password: 'fauzi123',
-                pin: '123456',
-                nik: '327501009920003',
-                dept: 'Operasional Kasir',
-                assignedBranches: [
-                    { branch: 'Cabang B', status: 'AKTIF', assignedAt: '19 Okt 2026' }
-                ]
-            },
-            {
-                id: 'usr_04',
-                name: 'Diana Putri',
-                username: 'manager_diana',
-                email: 'diana@pos.com',
-                role: 'MANAGER',
-                branch: 'Cabang A',
-                status: 'AKTIF',
-                password: 'password',
-                pin: '123456',
-                assignedBranches: [
-                    { branch: 'Cabang A', status: 'AKTIF', assignedAt: '19 Okt 2026' }
-                ]
-            },
-            {
-                id: 'usr_05',
-                name: 'Hendra Gunawan',
-                username: 'owner_hendra',
-                email: 'owner@pos.com',
-                role: 'OWNER',
-                branch: 'Cabang Pusat',
-                status: 'AKTIF',
-                password: 'owner123',
-                pin: '999999',
-                assignedBranches: [
-                    { branch: 'Cabang Pusat', status: 'AKTIF', assignedAt: '19 Okt 2026' }
-                ]
-            }
-        ];
+        return [];
     },
 
     // Masking NIK: 3275 •••• •••• 0004
@@ -696,6 +639,266 @@
         this.triggerToast(`Akun ${name} telah berhasil dihapus!`);
     },
 
+    // ==========================================
+    // METODE PEMULIHAN AKUN & RESET PASSWORD/PIN
+    // ==========================================
+    canManagerManageUser(u) {
+        if (!u) return false;
+        if (u.role !== 'KASIR') return false;
+
+        const mgrBranch = (this.currentManagerBranch || 'Cabang A').trim().toLowerCase();
+        
+        // 1. Periksa penugasan multi-cabang aktif
+        if (Array.isArray(u.assignedBranches) && u.assignedBranches.length > 0) {
+            const hasActiveBranch = u.assignedBranches.some(ab => {
+                if (ab.status !== 'AKTIF') return false;
+                const bName = (ab.branch || '').trim().toLowerCase();
+                return bName === mgrBranch || bName.includes(mgrBranch) || mgrBranch.includes(bName);
+            });
+            if (hasActiveBranch) return true;
+        }
+
+        // 2. Fallback periksa field branch utama
+        const uBranch = (u.branch || '').trim().toLowerCase();
+        return uBranch === mgrBranch || uBranch.includes(mgrBranch) || mgrBranch.includes(uBranch);
+    },
+
+    filteredResetUsers() {
+        let list = this.users.filter(u => u.role === 'KASIR');
+
+        // Pencarian Nama, NIK, Username, atau Dept
+        if (this.resetSearchQuery && this.resetSearchQuery.trim()) {
+            const q = this.resetSearchQuery.toLowerCase().trim();
+            list = list.filter(u => {
+                return (u.name && u.name.toLowerCase().includes(q)) ||
+                       (u.username && u.username.toLowerCase().includes(q)) ||
+                       (u.nik && u.nik.toLowerCase().includes(q)) ||
+                       (u.dept && u.dept.toLowerCase().includes(q));
+            });
+        }
+
+        // Filter Kewenangan Cabang
+        if (this.resetBranchFilter === 'my_branch') {
+            list = list.filter(u => this.canManagerManageUser(u));
+        } else if (this.resetBranchFilter === 'other') {
+            list = list.filter(u => !this.canManagerManageUser(u));
+        }
+
+        // Filter Status Pembaruan Kredensial
+        if (this.resetCredentialStatusFilter === 'must_change') {
+            list = list.filter(u => u.mustChangePassword || u.mustChangePin);
+        } else if (this.resetCredentialStatusFilter === 'normal') {
+            list = list.filter(u => !u.mustChangePassword && !u.mustChangePin);
+        }
+
+        return list;
+    },
+
+    openResetConfirm(user, type) {
+        if (!this.canManagerManageUser(user)) {
+            alert(`Akses Ditolak: Staf kasir [${user.name}] berada di luar kewenangan operasional ${this.currentManagerBranch}!\n\nSesuai SOP Keamanan Koperasi, pemulihan akun kasir hanya boleh diproses oleh Manager cabang yang berwenang.`);
+            return;
+        }
+        this.targetResetUser = user;
+        this.targetResetType = type; // 'password' | 'pin'
+        this.resetChecklist = {
+            inPerson: false,
+            idCard: false,
+            branchVerified: false
+        };
+        this.showResetConfirmModal = true;
+    },
+
+    canConfirmReset() {
+        return Boolean(this.resetChecklist.inPerson && this.resetChecklist.idCard && this.resetChecklist.branchVerified);
+    },
+
+    executeResetCredential() {
+        if (!this.canConfirmReset()) {
+            alert('Seluruh butir verifikasi SOP fisik wajib diceklis sebelum kredensial dapat diterbitkan!');
+            return;
+        }
+        if (!this.targetResetUser) return;
+
+        const u = this.targetResetUser;
+        const type = this.targetResetType;
+        let tempCredential = '';
+
+        if (type === 'password') {
+            // Password acak unik dengan format ILP-KasirXXX (contoh: ILP-Kasir742)
+            const randSuffix = Math.floor(100 + Math.random() * 900);
+            tempCredential = 'ILP-Kasir' + randSuffix;
+            u.password = tempCredential;
+            u.mustChangePassword = true;
+            // CATATAN KEAMANAN: PIN petugas TIDAK disentuh / tidak diubah sama sekali!
+        } else {
+            // PIN acak unik 6 digit (contoh: 492018), bukan static 123456
+            tempCredential = String(Math.floor(100000 + Math.random() * 900000));
+            u.pin = tempCredential;
+            u.mustChangePin = true;
+            // CATATAN KEAMANAN: Password portal akun TIDAK disentuh / tidak diubah sama sekali!
+        }
+
+        // Simpan perubahan ke pos_ilp_users_v1
+        const idx = this.users.findIndex(item => item.id === u.id);
+        if (idx !== -1) {
+            this.users[idx] = u;
+            this.saveUsers();
+        }
+
+        // Catat riwayat reset (pos_ilp_reset_history_v1) TANPA menyimpan rahasia plaintext
+        const now = new Date();
+        const dateStr = now.toISOString().slice(0, 10);
+        const timeStr = now.toTimeString().slice(0, 8);
+        const timeFormatted = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ', ' + now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+
+        const historyEntry = {
+            id: 'RST-' + Date.now(),
+            timestamp: `${dateStr} ${timeStr}`,
+            timeFormatted: timeFormatted,
+            userId: u.id,
+            userName: u.name,
+            userUsername: u.username,
+            userNik: u.nik || '-',
+            userDept: u.dept || 'Operasional Kasir',
+            branch: u.branch || (u.assignedBranches && u.assignedBranches[0] ? u.assignedBranches[0].branch : this.currentManagerBranch),
+            resetType: type === 'password' ? 'Password Portal' : 'PIN Terminal (6-Digit)',
+            resetTypeKey: type,
+            processedBy: this.currentManager.name || 'Diana Putri',
+            processedByRole: 'Manager',
+            processedBranch: this.currentManagerBranch,
+            status: 'BERHASIL',
+            mustChangeNextLogin: true
+            // Penting: tempCredential TIDAK disimpan di log history demi menjaga kerahasiaan
+        };
+
+        this.resetHistory.unshift(historyEntry);
+        this.saveResetHistory();
+
+        // Hubungkan ke Audit Log (pos_ilp_audit_logs_v1) TANPA membocorkan plaintext password/PIN
+        this.appendAuditLogForReset(u, type);
+
+        // Catat ke securityLogs lokal
+        const localLog = `Reset Kredensial [${type.toUpperCase()}] Kasir [${u.name}] (@${u.username}) oleh Manager [${this.currentManager.name}] (${this.currentManagerBranch})`;
+        this.securityLogs.unshift({
+            time: timeStr,
+            text: localLog
+        });
+        this.saveLogs();
+
+        // Tampilkan modal hasil sukses kepada Manager
+        this.generatedTempCredential = tempCredential;
+        this.showResetConfirmModal = false;
+        this.showResetSuccessModal = true;
+        this.triggerToast(`Kredensial sementara untuk ${u.name} berhasil diterbitkan!`);
+    },
+
+    appendAuditLogForReset(user, type) {
+        try {
+            const stored = localStorage.getItem('pos_ilp_audit_logs_v1');
+            let logs = [];
+            if (stored) {
+                logs = JSON.parse(stored);
+            }
+            const now = new Date();
+            const dateStr = now.toISOString().slice(0, 10);
+            const timeStr = now.toTimeString().slice(0, 8);
+            const logId = 'LOG-' + dateStr.replace(/-/g, '') + '-' + Math.floor(1000 + Math.random() * 9000);
+
+            const auditEntry = {
+                id: logId,
+                timestamp: `${dateStr} ${timeStr}`,
+                userId: this.currentManager.id || 'usr_04',
+                userName: this.currentManager.name || 'Diana Putri',
+                userRole: 'Manager',
+                location: this.currentManagerBranch || 'Cabang A',
+                category: 'User & Hak Akses',
+                actionName: type === 'password' ? 'Reset Password Akun Kasir' : 'Reset PIN Terminal Kasir',
+                description: `Penerbitan kredensial sementara (${type === 'password' ? 'Password Portal' : 'PIN Terminal 6-Digit'}) untuk kasir [${user.name}] (@${user.username}) NIK ${user.nik || '-'} setelah verifikasi fisik SOP tatap muka. Akun ditandai wajib pembaruan mandiri.`,
+                reference: 'RST-' + (user.username || user.id),
+                status: 'BERHASIL',
+                source: 'Web Manager Console / Pemulihan Kredensial',
+                changes: [
+                    {
+                        field: type === 'password' ? 'Status Password Portal' : 'Status PIN Terminal POS',
+                        before: 'LUPA / TERKUNCI',
+                        after: 'KREDENSIAL SEMENTARA (Wajib Ganti)'
+                    }
+                ]
+            };
+
+            logs.unshift(auditEntry);
+            if (logs.length > 200) logs = logs.slice(0, 200);
+            localStorage.setItem('pos_ilp_audit_logs_v1', JSON.stringify(logs));
+        } catch(e) {
+            console.error('Gagal mencatat audit log pemulihan akun:', e);
+        }
+    },
+
+    loadResetHistory() {
+        try {
+            const stored = localStorage.getItem('pos_ilp_reset_history_v1');
+            if (stored) {
+                this.resetHistory = JSON.parse(stored);
+                return;
+            }
+        } catch(e) {}
+
+        // Data awal simulasi riwayat reset
+        this.resetHistory = [
+            {
+                id: 'RST-179344001',
+                timestamp: '2026-11-03 14:15:20',
+                timeFormatted: '14:15, 03 Nov 2026',
+                userId: 'usr_02',
+                userName: 'Citra Dewi',
+                userUsername: 'cashier_citra',
+                userNik: '327501009920002',
+                userDept: 'Operasional Kasir',
+                branch: 'Cabang A',
+                resetType: 'PIN Terminal (6-Digit)',
+                resetTypeKey: 'pin',
+                processedBy: 'Diana Putri',
+                processedByRole: 'Manager',
+                processedBranch: 'Cabang A',
+                status: 'BERHASIL',
+                mustChangeNextLogin: false
+            }
+        ];
+        this.saveResetHistory();
+    },
+
+    saveResetHistory() {
+        localStorage.setItem('pos_ilp_reset_history_v1', JSON.stringify(this.resetHistory));
+    },
+
+    copyTempCredential() {
+        if (!this.generatedTempCredential) return;
+        if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(this.generatedTempCredential).then(() => {
+                this.copiedCredentialToast = true;
+                setTimeout(() => { this.copiedCredentialToast = false; }, 2500);
+                this.triggerToast('Kredensial sementara disalin ke clipboard!');
+            }).catch(() => {
+                this.fallbackCopyText(this.generatedTempCredential);
+            });
+        } else {
+            this.fallbackCopyText(this.generatedTempCredential);
+        }
+    },
+
+    fallbackCopyText(text) {
+        const dummy = document.createElement('textarea');
+        dummy.value = text;
+        document.body.appendChild(dummy);
+        dummy.select();
+        document.execCommand('copy');
+        document.body.removeChild(dummy);
+        this.copiedCredentialToast = true;
+        setTimeout(() => { this.copiedCredentialToast = false; }, 2500);
+        this.triggerToast('Kredensial sementara disalin ke clipboard!');
+    },
+
     triggerToast(msg) {
         this.toastMessage = msg;
         this.showToast = true;
@@ -716,7 +919,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
             <div class="flex items-center gap-3">
                 <span class="material-symbols-rounded text-[#0052cc] text-[26px]">manage_accounts</span>
                 <div>
-                    <h1 class="text-[18px] font-bold text-gray-900 tracking-tight">Kelola Akun & Penugasan Kasir</h1>
+                    <h1 class="text-[18px] font-bold text-gray-900 tracking-tight">Kelola Akun</h1>
                     <p class="text-[12px] text-gray-500 font-medium">Otoritas Manager: Manajemen staf kasir cabang berbasis data Anggota (Members)</p>
                 </div>
             </div>
@@ -737,8 +940,56 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
         <div class="flex-1 overflow-y-auto p-6 lg:p-8 space-y-7">
             <div class="max-w-[1400px] mx-auto space-y-7">
 
-                <!-- 1. FORM PENUGASAN KASIR BARU DARI MEMBERS (AKSES MANAGER) -->
-                <section class="bg-white border border-gray-200/90 rounded-2xl p-6 lg:p-7 shadow-xs">
+                <!-- TOP TAB NAVIGATION: MANAJEMEN PENUGASAN vs PEMULIHAN AKUN / RESET -->
+                <div class="bg-white border border-gray-200/90 rounded-2xl p-2 shadow-xs flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex items-center gap-1.5 p-1 bg-gray-100 rounded-xl text-xs font-bold w-full sm:w-auto">
+                        <button type="button" 
+                                @click="activeTab = 'penugasan'"
+                                :class="activeTab === 'penugasan' ? 'bg-white text-[#0052cc] shadow-xs' : 'text-gray-600 hover:text-gray-900'"
+                                class="flex-1 sm:flex-none px-4 py-2.5 rounded-lg inline-flex items-center justify-center gap-2 transition-all cursor-pointer">
+                            <span class="material-symbols-rounded text-[18px]">badge</span>
+                            <span>Manajemen Akun &amp; Penugasan</span>
+                        </button>
+                        <button type="button" 
+                                @click="activeTab = 'pemulihan'"
+                                :class="activeTab === 'pemulihan' ? 'bg-white text-[#0052cc] shadow-xs' : 'text-gray-600 hover:text-gray-900'"
+                                class="flex-1 sm:flex-none px-4 py-2.5 rounded-lg inline-flex items-center justify-center gap-2 transition-all cursor-pointer">
+                            <span class="material-symbols-rounded text-[18px]">lock_reset</span>
+                            <span>Pemulihan Akun / Reset Password &amp; PIN</span>
+                            <span x-show="users.filter(u => u.role === 'KASIR' && (u.mustChangePassword || u.mustChangePin)).length > 0"
+                                  class="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-black"
+                                  x-text="users.filter(u => u.role === 'KASIR' && (u.mustChangePassword || u.mustChangePin)).length">
+                            </span>
+                        </button>
+                    </div>
+
+                    <!-- Manager Branch Identity Badge & Switcher for Simulation -->
+                    <div class="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-blue-50/70 border border-blue-200/60 text-xs">
+                        <div class="w-7 h-7 rounded-lg bg-[#0052cc] text-white flex items-center justify-center font-bold text-xs shrink-0">
+                            DP
+                        </div>
+                        <div class="leading-tight">
+                            <div class="font-bold text-gray-900 flex items-center gap-1.5">
+                                <span x-text="currentManager.name || 'Diana Putri'">Diana Putri</span>
+                                <span class="text-[10px] bg-blue-100 text-[#0052cc] px-1.5 py-0.2 rounded font-extrabold uppercase">Manager</span>
+                            </div>
+                            <div class="text-[11px] text-gray-500 font-medium flex items-center gap-1">
+                                <span>Kewenangan Cabang:</span>
+                                <select x-model="currentManagerBranch" class="bg-transparent font-bold text-[#0052cc] border-none outline-none cursor-pointer p-0 text-[11px]">
+                                    <option value="Cabang A">Cabang A (Utama)</option>
+                                    <option value="Cabang B">Cabang B</option>
+                                    <option value="Pusat">Pusat</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 1 CONTENT: MANAJEMEN PENUGASAN KASIR -->
+                <div x-show="activeTab === 'penugasan'" class="space-y-7">
+
+                    <!-- 1. FORM PENUGASAN KASIR BARU DARI MEMBERS (AKSES MANAGER) -->
+                    <section class="bg-white border border-gray-200/90 rounded-2xl p-6 lg:p-7 shadow-xs">
                     <div class="flex flex-wrap items-start justify-between gap-3 mb-6 pb-4 border-b border-gray-100">
                         <div>
                             <div class="flex items-center gap-2">
@@ -1028,9 +1279,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <span class="material-symbols-rounded text-[#0052cc] text-[22px]">badge</span>
                                 <h2 class="text-[17px] font-bold text-gray-900 tracking-tight">Daftar Akun Kasir &amp; Penugasan Cabang</h2>
                             </div>
-                            <p class="text-[13px] text-gray-500 mt-0.5">
-                                Karyawan dengan hak akses Kasir, penugasan per-cabang (Pusat, Cabang A, Cabang B), dan status penugasan.
-                            </p>
+                            
                         </div>
 
                         <!-- Toolbar: Filter Cabang & Search -->
@@ -1205,7 +1454,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         <td colspan="8" class="py-10 text-center text-gray-400 font-medium">
                                             <div class="flex flex-col items-center justify-center gap-2">
                                                 <span class="material-symbols-rounded text-3xl text-gray-300">person_off</span>
-                                                <span>Tidak ada data kasir yang sesuai dengan filter</span>
+                                                <span>Belum ada data akun kasir.</span>
                                             </div>
                                         </td>
                                     </tr>
@@ -1312,6 +1561,328 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
 
                 </div>
+
+                </div> <!-- END TAB 1 CONTENT (activeTab === 'penugasan') -->
+
+                <!-- TAB 2 CONTENT: PEMULIHAN AKUN / RESET PASSWORD & PIN KASIR -->
+                <div x-show="activeTab === 'pemulihan'" style="display: none;" class="space-y-7">
+                    
+                    <!-- 1. SOP BANNER & SCOPE DISCLOSURE -->
+                    <div class="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-2xl p-6 lg:p-7 text-white shadow-md relative overflow-hidden">
+                        <div class="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                            <div class="space-y-2 max-w-3xl">
+                                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-200 text-xs font-bold">
+                                    <span class="material-symbols-rounded text-[16px]">verified_user</span>
+                                    <span>SOP Pemulihan Akses Internal Koperasi Pabrik</span>
+                                </div>
+                                <h2 class="text-xl lg:text-2xl font-black tracking-tight text-white">
+                                    Pusat Pemulihan Akun &amp; Reset Kredensial Kasir
+                                </h2>
+                                <p class="text-xs lg:text-[13px] text-blue-100/90 leading-relaxed">
+                                    Aplikasi POS Kopkar ILP menerapkan kebijakan keamanan operasional tanpa tautan email publik. Pemulihan akun dilakukan secara <strong>tatap muka</strong> oleh Manager Cabang setelah verifikasi fisik KTA Koperasi atau ID Karyawan &amp; NIK.
+                                </p>
+                            </div>
+
+                            <!-- Current Scope Box -->
+                            <div class="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl p-4 shrink-0 lg:w-72 space-y-2">
+                                <div class="text-[11px] font-bold uppercase tracking-wider text-blue-200 flex items-center justify-between">
+                                    <span>Batas Otoritas Cabang</span>
+                                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                                </div>
+                                <div class="text-lg font-black text-white flex items-center gap-1.5">
+                                    <span class="material-symbols-rounded text-emerald-400 text-[20px]">store</span>
+                                    <span x-text="currentManagerBranch">Cabang A</span>
+                                </div>
+                                <p class="text-[11px] text-blue-100/80 leading-normal">
+                                    Hanya kasir yang ditugaskan di <strong class="text-white" x-text="currentManagerBranch"></strong> yang dapat Anda reset. Kasir cabang lain otomatis terkunci.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2. SEARCH & FILTER TOOLBAR -->
+                    <div class="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <!-- Search Box -->
+                        <div class="relative flex-1">
+                            <span class="material-symbols-rounded absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-[20px]">search</span>
+                            <input type="text"
+                                   x-model="resetSearchQuery"
+                                   placeholder="Cari kasir berdasarkan Nama Lengkap, NIK Karyawan, atau Username..."
+                                   class="w-full pl-10 pr-10 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-800 placeholder-gray-400 focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 outline-none transition-all">
+                            <button x-show="resetSearchQuery"
+                                    type="button"
+                                    @click="resetSearchQuery = ''"
+                                    class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1 cursor-pointer">
+                                <span class="material-symbols-rounded text-[18px]">close</span>
+                            </button>
+                        </div>
+
+                        <!-- Filter Controls -->
+                        <div class="flex flex-wrap items-center gap-2.5 text-xs">
+                            <!-- Filter Cabang -->
+                            <div class="flex items-center bg-gray-100 p-1 rounded-xl">
+                                <button type="button"
+                                        @click="resetBranchFilter = 'all'"
+                                        :class="resetBranchFilter === 'all' ? 'bg-white text-[#0052cc] font-bold shadow-xs' : 'text-gray-600 hover:text-gray-900'"
+                                        class="px-3 py-1.5 rounded-lg transition-all cursor-pointer">
+                                    Semua Cabang
+                                </button>
+                                <button type="button"
+                                        @click="resetBranchFilter = 'my_branch'"
+                                        :class="resetBranchFilter === 'my_branch' ? 'bg-white text-[#0052cc] font-bold shadow-xs' : 'text-gray-600 hover:text-gray-900'"
+                                        class="px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1">
+                                    <span>Cabang Saya</span>
+                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                </button>
+                                <button type="button"
+                                        @click="resetBranchFilter = 'other'"
+                                        :class="resetBranchFilter === 'other' ? 'bg-white text-[#0052cc] font-bold shadow-xs' : 'text-gray-600 hover:text-gray-900'"
+                                        class="px-3 py-1.5 rounded-lg transition-all cursor-pointer">
+                                    Di Luar Cabang
+                                </button>
+                            </div>
+
+                            <!-- Filter Status -->
+                            <select x-model="resetCredentialStatusFilter"
+                                    class="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:border-[#0052cc]">
+                                <option value="all">Semua Status Kredensial</option>
+                                <option value="must_change">Wajib Ganti Kredensial</option>
+                                <option value="normal">Normal / Aktif</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- 3. CASHIER ACCOUNTS TABLE -->
+                    <div class="bg-white border border-gray-200/90 rounded-2xl shadow-xs overflow-hidden">
+                        <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="material-symbols-rounded text-[#0052cc] text-[22px]">badge</span>
+                                <h3 class="font-bold text-gray-900 text-sm">Daftar Akun Kasir untuk Pemulihan</h3>
+                                <span class="px-2 py-0.5 rounded-full bg-blue-50 text-[#0052cc] font-black text-[11px]" x-text="filteredResetUsers().length"></span>
+                            </div>
+                            <span class="text-[11px] text-gray-400">Password Portal &amp; PIN Terminal Diproses Terpisah</span>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-50/75 border-b border-gray-200 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                                        <th class="py-3.5 px-6">Identitas Petugas Kasir</th>
+                                        <th class="py-3.5 px-4">Cabang Penugasan</th>
+                                        <th class="py-3.5 px-4">Status Kredensial</th>
+                                        <th class="py-3.5 px-4">Otoritas Cabang</th>
+                                        <th class="py-3.5 px-6 text-right">Tindakan Pemulihan</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100">
+                                    <template x-for="u in filteredResetUsers()" :key="u.id">
+                                        <tr class="hover:bg-gray-50/60 transition-colors">
+                                            <!-- Identitas Kasir -->
+                                            <td class="py-3.5 px-6">
+                                                <div class="flex items-center gap-3">
+                                                    <div class="w-9 h-9 rounded-full bg-blue-100 text-[#0052cc] flex items-center justify-center font-bold text-xs shrink-0"
+                                                         x-text="(u.name || 'KS').split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase()">
+                                                    </div>
+                                                    <div>
+                                                        <div class="font-bold text-gray-900 text-xs flex items-center gap-1.5">
+                                                            <span x-text="u.name"></span>
+                                                            <span class="text-[10px] font-mono font-medium text-gray-400" x-text="'@' + u.username"></span>
+                                                        </div>
+                                                        <div class="text-[11px] text-gray-500 flex items-center gap-2 mt-0.5">
+                                                            <span>NIK: <span class="font-mono font-semibold text-gray-700" x-text="u.nik || '-'"></span></span>
+                                                            <span>•</span>
+                                                            <span x-text="u.dept || 'Operasional Kasir'"></span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </td>
+
+                                            <!-- Cabang Penugasan -->
+                                            <td class="py-3.5 px-4">
+                                                <div class="flex flex-wrap gap-1">
+                                                    <template x-if="Array.isArray(u.assignedBranches) && u.assignedBranches.length > 0">
+                                                        <template x-for="ab in u.assignedBranches" :key="ab.branch">
+                                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10.5px] font-bold border"
+                                                                  :class="ab.branch === currentManagerBranch ? 'bg-blue-50 text-[#0052cc] border-blue-200' : 'bg-gray-100 text-gray-600 border-gray-200'">
+                                                                <span class="material-symbols-rounded text-[12px]">store</span>
+                                                                <span x-text="ab.branch"></span>
+                                                            </span>
+                                                        </template>
+                                                    </template>
+                                                    <template x-if="!Array.isArray(u.assignedBranches) || u.assignedBranches.length === 0">
+                                                        <span class="px-2 py-0.5 rounded bg-gray-100 text-gray-700 font-bold text-[10.5px]" x-text="u.branch || 'Pusat'"></span>
+                                                    </template>
+                                                </div>
+                                            </td>
+
+                                            <!-- Status Kredensial -->
+                                            <td class="py-3.5 px-4">
+                                                <div class="space-y-1">
+                                                    <template x-if="u.mustChangePassword">
+                                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-extrabold uppercase">
+                                                            <span class="material-symbols-rounded text-[12px]">key</span>
+                                                            Wajib Ganti Password
+                                                        </span>
+                                                    </template>
+                                                    <template x-if="u.mustChangePin">
+                                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-extrabold uppercase">
+                                                            <span class="material-symbols-rounded text-[12px]">pin</span>
+                                                            Wajib Ganti PIN
+                                                        </span>
+                                                    </template>
+                                                    <template x-if="!u.mustChangePassword && !u.mustChangePin">
+                                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold uppercase">
+                                                            <span class="material-symbols-rounded text-[12px]">check_circle</span>
+                                                            Normal / Aktif
+                                                        </span>
+                                                    </template>
+                                                </div>
+                                            </td>
+
+                                            <!-- Otoritas Cabang -->
+                                            <td class="py-3.5 px-4">
+                                                <template x-if="canManagerManageUser(u)">
+                                                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-bold">
+                                                        <span class="material-symbols-rounded text-[14px] text-emerald-600">verified</span>
+                                                        <span>Dapat Diproses</span>
+                                                    </span>
+                                                </template>
+                                                <template x-if="!canManagerManageUser(u)">
+                                                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-100 text-gray-500 border border-gray-200 text-[11px] font-medium"
+                                                          title="Akun bertugas di luar cabang Anda. Hanya Manager cabang bersangkutan yang berwenang.">
+                                                        <span class="material-symbols-rounded text-[14px] text-gray-400">lock</span>
+                                                        <span>Di Luar Cabang</span>
+                                                    </span>
+                                                </template>
+                                            </td>
+
+                                            <!-- Tindakan Pemulihan -->
+                                            <td class="py-3.5 px-6 text-right whitespace-nowrap">
+                                                <template x-if="canManagerManageUser(u)">
+                                                    <div class="inline-flex items-center gap-2">
+                                                        <!-- Tombol 1: Reset Password Portal -->
+                                                        <button type="button"
+                                                                @click="openResetConfirm(u, 'password')"
+                                                                class="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#0052cc] border border-blue-200 font-bold text-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                                                                title="Reset Password Akun Portal Web Kasir">
+                                                            <span class="material-symbols-rounded text-[15px]">key</span>
+                                                            <span>Reset Password</span>
+                                                        </button>
+
+                                                        <!-- Tombol 2: Reset PIN Terminal POS -->
+                                                        <button type="button"
+                                                                @click="openResetConfirm(u, 'pin')"
+                                                                class="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold text-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                                                                title="Reset PIN 6-Digit Pembukaan Terminal POS">
+                                                            <span class="material-symbols-rounded text-[15px]">pin</span>
+                                                            <span>Reset PIN</span>
+                                                        </button>
+                                                    </div>
+                                                </template>
+                                                <template x-if="!canManagerManageUser(u)">
+                                                    <div class="inline-flex items-center gap-1 text-[11px] text-gray-400 bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-200 cursor-not-allowed"
+                                                         title="Kewenangan terbatas: akun hanya dapat diproses oleh Manager cabang yang sesuai.">
+                                                        <span class="material-symbols-rounded text-[14px]">block</span>
+                                                        <span>Terkunci (Di luar wewenang)</span>
+                                                    </div>
+                                                </template>
+                                            </td>
+                                        </tr>
+                                    </template>
+
+                                    <template x-if="filteredResetUsers().length === 0">
+                                        <tr>
+                                            <td colspan="5" class="py-12 text-center text-gray-400 text-xs">
+                                                <div class="flex flex-col items-center justify-center gap-2">
+                                                    <span class="material-symbols-rounded text-gray-300 text-[36px]">search_off</span>
+                                                    <p class="font-bold text-gray-600">Tidak ada akun kasir yang cocok</p>
+                                                    <p class="text-[11px]">Silakan ubah kata kunci pencarian atau sesuaikan filter cabang.</p>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 4. RIWAYAT RESET KREDENSIAL KASIR (pos_ilp_reset_history_v1) -->
+                    <div class="bg-white border border-gray-200/90 rounded-2xl p-6 lg:p-7 shadow-xs space-y-4">
+                        <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-gray-100">
+                            <div class="flex items-center gap-2.5">
+                                <span class="material-symbols-rounded text-[#0052cc] text-[22px]">history_toggle_off</span>
+                                <div>
+                                    <h3 class="font-bold text-gray-900 text-sm">Riwayat Pemulihan Kredensial Kasir</h3>
+                                    <p class="text-[11.5px] text-gray-500">Mencatat aktivitas reset kredensial sementara. Rahasia plaintext password/PIN tidak pernah dicatat demi privasi pengguna.</p>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center gap-2">
+                                <button type="button"
+                                        @click="loadResetHistory(); triggerToast('Riwayat pemulihan dimuat ulang!')"
+                                        class="px-3 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer">
+                                    <span class="material-symbols-rounded text-[16px]">refresh</span>
+                                    <span>Segarkan</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-50/75 border-b border-gray-200 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                                        <th class="py-3 px-4">Waktu Reset</th>
+                                        <th class="py-3 px-4">Petugas Kasir</th>
+                                        <th class="py-3 px-4">Jenis Kredensial</th>
+                                        <th class="py-3 px-4">Manager Pemroses</th>
+                                        <th class="py-3 px-4">Cabang</th>
+                                        <th class="py-3 px-4 text-center">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100">
+                                    <template x-for="item in resetHistory" :key="item.id">
+                                        <tr class="hover:bg-gray-50/50 transition-colors">
+                                            <td class="py-3 px-4 font-mono text-[11px] text-gray-600 whitespace-nowrap" x-text="item.timeFormatted || item.timestamp"></td>
+                                            <td class="py-3 px-4">
+                                                <div class="font-bold text-gray-900 text-xs" x-text="item.userName"></div>
+                                                <div class="text-[10.5px] font-mono text-gray-400" x-text="'NIK: ' + item.userNik + ' (@' + item.userUsername + ')'"></div>
+                                            </td>
+                                            <td class="py-3 px-4 whitespace-nowrap">
+                                                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold border"
+                                                      :class="item.resetTypeKey === 'password' ? 'bg-blue-50 text-[#0052cc] border-blue-200' : 'bg-amber-50 text-amber-800 border-amber-200'">
+                                                    <span class="material-symbols-rounded text-[13px]" x-text="item.resetTypeKey === 'password' ? 'key' : 'pin'"></span>
+                                                    <span x-text="item.resetType"></span>
+                                                </span>
+                                            </td>
+                                            <td class="py-3 px-4 font-medium text-gray-800">
+                                                <div class="flex items-center gap-1.5">
+                                                    <span class="material-symbols-rounded text-[15px] text-gray-400">person</span>
+                                                    <span x-text="item.processedBy"></span>
+                                                </div>
+                                            </td>
+                                            <td class="py-3 px-4 font-semibold text-gray-700 whitespace-nowrap" x-text="item.branch || item.processedBranch"></td>
+                                            <td class="py-3 px-4 text-center whitespace-nowrap">
+                                                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-extrabold uppercase">
+                                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                                    <span>BERHASIL</span>
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    </template>
+
+                                    <template x-if="resetHistory.length === 0">
+                                        <tr>
+                                            <td colspan="6" class="py-8 text-center text-gray-400 text-xs">
+                                                Belum ada riwayat pemulihan kredensial kasir.
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div> <!-- END TAB 2 CONTENT -->
 
             </div>
         </div>
@@ -1592,6 +2163,205 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 :class="deleteInputText.trim().toLowerCase() === 'hapus' ? 'bg-red-600 hover:bg-red-700 text-white cursor-pointer' : 'bg-gray-200 text-gray-400 cursor-not-allowed'"
                                 class="px-5 py-2 rounded-xl font-bold transition-colors">
                             Hapus Pengguna
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </template>
+
+    <!-- MODAL 1: KONFIRMASI & CHECKLIST VERIFIKASI SOP PEMULIHAN AKUN KASIR -->
+    <template x-teleport="body">
+        <div x-show="showResetConfirmModal"
+             x-transition.opacity
+             style="display: none;"
+             class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+            <div @click.away="showResetConfirmModal = false"
+                 class="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden animate-scale-up text-left">
+                
+                <!-- Modal Header -->
+                <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-9 h-9 rounded-xl flex items-center justify-center"
+                             :class="targetResetType === 'password' ? 'bg-blue-100 text-[#0052cc]' : 'bg-amber-100 text-amber-700'">
+                            <span class="material-symbols-rounded text-[22px]" x-text="targetResetType === 'password' ? 'lock_reset' : 'pin'"></span>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-slate-900 text-sm">
+                                Konfirmasi &amp; Verifikasi SOP Pemulihan Akun
+                            </h3>
+                            <p class="text-[11px] text-slate-500">Penerbitan Kredensial Sementara Staf Kasir</p>
+                        </div>
+                    </div>
+                    <button type="button" @click="showResetConfirmModal = false" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 cursor-pointer">
+                        <span class="material-symbols-rounded text-[20px]">close</span>
+                    </button>
+                </div>
+
+                <!-- Modal Body -->
+                <template x-if="targetResetUser">
+                    <div class="p-6 space-y-4 text-xs font-sans">
+                        <!-- Target Cashier Identity Card -->
+                        <div class="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/90 space-y-1.5">
+                            <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Identitas Akun yang Akan Direset</span>
+                            <div class="flex items-center justify-between">
+                                <div class="font-bold text-slate-900 text-sm" x-text="targetResetUser.name"></div>
+                                <span class="px-2 py-0.5 rounded bg-blue-50 text-[#0052cc] border border-blue-200 font-bold text-[10px]" x-text="targetResetUser.branch || currentManagerBranch"></span>
+                            </div>
+                            <div class="text-[11px] text-slate-600 flex items-center gap-2 font-mono">
+                                <span>NIK: <strong class="text-slate-800" x-text="targetResetUser.nik || '-'"></strong></span>
+                                <span>•</span>
+                                <span>Username: <strong class="text-slate-800" x-text="'@' + targetResetUser.username"></strong></span>
+                            </div>
+                        </div>
+
+                        <!-- Credential Separation Alert -->
+                        <div class="p-3.5 rounded-xl border text-xs"
+                             :class="targetResetType === 'password' ? 'bg-blue-50/70 border-blue-200 text-blue-950' : 'bg-amber-50/70 border-amber-200 text-amber-950'">
+                            <div class="font-bold flex items-center gap-1.5 mb-1">
+                                <span class="material-symbols-rounded text-[17px]" :class="targetResetType === 'password' ? 'text-[#0052cc]' : 'text-amber-700'">info</span>
+                                <span x-text="targetResetType === 'password' ? 'Tindakan: Reset Password Akun Portal Web' : 'Tindakan: Reset PIN 6-Digit Terminal Kasir'"></span>
+                            </div>
+                            <p class="leading-relaxed text-[11.5px] text-slate-700"
+                               x-text="targetResetType === 'password'
+                                    ? 'Sistem akan menerbitkan Password Sementara acak baru untuk login portal web kasir. PIN 6-digit terminal fisik kasir TIDAK akan berubah dan tetap utuh.'
+                                    : 'Sistem akan menerbitkan PIN Sementara acak 6-digit baru untuk pembukaan shift di terminal POS. Password portal login web kasir TIDAK akan berubah dan tetap utuh.'">
+                            </p>
+                        </div>
+
+                        <!-- Mandatory SOP Verification Checklist -->
+                        <div class="space-y-2 pt-1">
+                            <label class="block font-bold text-slate-800 uppercase tracking-wider text-[11px]">
+                                Checklist Verifikasi Fisik Wajib (SOP Internal Koperasi): <span class="text-red-500">*</span>
+                            </label>
+
+                            <div class="space-y-2 bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200">
+                                <!-- Check 1: In Person -->
+                                <label class="flex items-start gap-2.5 cursor-pointer">
+                                    <input type="checkbox"
+                                           x-model="resetChecklist.inPerson"
+                                           class="mt-0.5 rounded border-slate-300 text-[#0052cc] focus:ring-[#0052cc]/20">
+                                    <div class="text-[11.5px] text-slate-700">
+                                        <strong class="text-slate-900 block">Verifikasi Tatap Muka:</strong>
+                                        Petugas kasir hadir secara fisik di hadapan Manager untuk meminta pemulihan kredensial.
+                                    </div>
+                                </label>
+
+                                <!-- Check 2: Physical ID -->
+                                <label class="flex items-start gap-2.5 cursor-pointer pt-2 border-t border-slate-200/60">
+                                    <input type="checkbox"
+                                           x-model="resetChecklist.idCard"
+                                           class="mt-0.5 rounded border-slate-300 text-[#0052cc] focus:ring-[#0052cc]/20">
+                                    <div class="text-[11.5px] text-slate-700">
+                                        <strong class="text-slate-900 block">Verifikasi Identitas Anggota (KTA / NIK):</strong>
+                                        KTA Koperasi atau ID Karyawan Pabrik telah diperiksa dan nomor NIK cocok dengan database.
+                                    </div>
+                                </label>
+
+                                <!-- Check 3: Branch Authority -->
+                                <label class="flex items-start gap-2.5 cursor-pointer pt-2 border-t border-slate-200/60">
+                                    <input type="checkbox"
+                                           x-model="resetChecklist.branchVerified"
+                                           class="mt-0.5 rounded border-slate-300 text-[#0052cc] focus:ring-[#0052cc]/20">
+                                    <div class="text-[11.5px] text-slate-700">
+                                        <strong class="text-slate-900 block">Verifikasi Penugasan Cabang:</strong>
+                                        Staf terkonfirmasi bertugas aktif di <span class="font-bold text-[#0052cc]" x-text="currentManagerBranch"></span> yang berada di bawah wewenang Anda.
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Integrity & Simulation Disclaimer -->
+                        <div class="p-3 bg-amber-50/80 rounded-xl border border-amber-200 text-[10.5px] text-amber-900 leading-relaxed">
+                            <strong>Klausul Integritas &amp; Kepatuhan SOP:</strong>
+                            Proses ini merupakan simulasi operasional koperasi karyawan pabrik (in-person physical verification), bukan verifikasi biometrik otomatis atau tautan email publik. Seluruh riwayat reset dicatat pada Audit Trail Koperasi.
+                        </div>
+
+                        <!-- Footer Actions -->
+                        <div class="flex items-center justify-between pt-3 border-t border-slate-100">
+                            <button type="button"
+                                    @click="showResetConfirmModal = false"
+                                    class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs cursor-pointer">
+                                Batal
+                            </button>
+
+                            <button type="button"
+                                    @click="executeResetCredential()"
+                                    :disabled="!canConfirmReset()"
+                                    :class="canConfirmReset() ? 'bg-[#0052cc] hover:bg-[#0043a8] text-white shadow-xs cursor-pointer' : 'bg-slate-200 text-slate-400 cursor-not-allowed'"
+                                    class="px-5 py-2.5 rounded-xl font-bold text-xs inline-flex items-center gap-2 transition-all">
+                                <span class="material-symbols-rounded text-[18px]">verified</span>
+                                <span>Konfirmasi &amp; Terbitkan Kredensial</span>
+                            </button>
+                        </div>
+                    </div>
+                </template>
+
+            </div>
+        </div>
+    </template>
+
+    <!-- MODAL 2: HASIL KREDENSIAL SEMENTARA (DITAMPILKAN SEKALI KEPADA MANAGER) -->
+    <template x-teleport="body">
+        <div x-show="showResetSuccessModal"
+             x-transition.opacity
+             style="display: none;"
+             class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+            <div @click.away="showResetSuccessModal = false"
+                 class="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden animate-scale-up text-left">
+                
+                <div class="p-6 text-center space-y-4">
+                    <div class="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-xs border border-emerald-100">
+                        <span class="material-symbols-rounded text-[32px]">check_circle</span>
+                    </div>
+
+                    <div>
+                        <h3 class="font-black text-slate-900 text-lg">Kredensial Sementara Diterbitkan!</h3>
+                        <p class="text-xs text-slate-500 mt-0.5">
+                            Kredensial untuk kasir <strong class="text-slate-800" x-text="targetResetUser?.name"></strong> berhasil diperbarui.
+                        </p>
+                    </div>
+
+                    <!-- Credential Display Box -->
+                    <div class="p-4 bg-slate-900 text-white rounded-2xl space-y-2 text-center border border-slate-800 shadow-inner">
+                        <span class="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 block"
+                              x-text="targetResetType === 'password' ? 'PASSWORD SEMENTARA PORTAL WEB' : 'PIN SEMENTARA TERMINAL POS (6 DIGIT)'">
+                        </span>
+                        
+                        <div class="text-2xl font-black font-mono tracking-wider text-emerald-400 py-1 select-all"
+                             x-text="generatedTempCredential">
+                        </div>
+
+                        <div class="pt-1">
+                            <button type="button"
+                                    @click="copyTempCredential()"
+                                    :class="copiedCredentialToast ? 'bg-emerald-600 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'"
+                                    class="w-full py-2 px-3 rounded-xl font-bold text-xs inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-slate-700">
+                                <span class="material-symbols-rounded text-[16px]" x-text="copiedCredentialToast ? 'done' : 'content_copy'"></span>
+                                <span x-text="copiedCredentialToast ? 'Berhasil Disalin!' : 'Salin Kredensial Sementara'"></span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Warnings & Instructions -->
+                    <div class="p-3.5 bg-amber-50 rounded-2xl border border-amber-200 text-[11px] text-amber-950 text-left space-y-1.5">
+                        <div class="font-bold flex items-center gap-1.5 text-amber-900">
+                            <span class="material-symbols-rounded text-[16px]">security</span>
+                            <span>Instruksi Penyerahan Kredensial:</span>
+                        </div>
+                        <ul class="list-disc pl-4 space-y-1 text-slate-700 text-[11px]">
+                            <li>Kredensial ini hanya ditampilkan <strong>satu kali</strong> pada layar ini dan tidak disimpan dalam riwayat audit log.</li>
+                            <li>Sampaikan langsung kepada kasir secara tatap muka (dilarang mengirim lewat chat terbuka).</li>
+                            <li>Akun telah ditandai <strong>wajib mengganti kredensial</strong> pada sesi berikutnya.</li>
+                        </ul>
+                    </div>
+
+                    <div class="pt-2">
+                        <button type="button"
+                                @click="showResetSuccessModal = false"
+                                class="w-full py-2.5 bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-xs rounded-xl transition-colors cursor-pointer shadow-xs">
+                            Selesai &amp; Tutup
                         </button>
                     </div>
                 </div>

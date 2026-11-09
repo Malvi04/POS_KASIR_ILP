@@ -39,21 +39,11 @@
                 }
             } catch(e) {}
         }
-        this.transactions = this.getDefaultTransactions();
+        this.transactions = [];
     },
 
     getDefaultTransactions() {
-        return [
-            { id: '#TRX-20261024-0028', sessionId: 'CS-20261024-K01-003', terminal: 'Kasir 01', time: '11:42 WIB', cashier: 'Budi Kurniawan', method: 'CAMPURAN', cashPortion: 100000, nonCashPortion: 45000, subtotal: 132000, tax: 14500, total: 145000, status: 'SELESAI', date: '2026-10-24' },
-            { id: '#TRX-20261024-0027', sessionId: 'CS-20261024-K01-003', terminal: 'Kasir 01', time: '11:20 WIB', cashier: 'Budi Kurniawan', method: 'TUNAI', cashPortion: 84000, nonCashPortion: 0, subtotal: 75675, tax: 8325, total: 84000, status: 'SELESAI', date: '2026-10-24' },
-            { id: '#TRX-20261024-0026', sessionId: 'CS-20261024-K01-003', terminal: 'Kasir 01', time: '10:55 WIB', cashier: 'Budi Kurniawan', method: 'QRIS', cashPortion: 0, nonCashPortion: 245500, subtotal: 221171, tax: 24329, total: 245500, status: 'SELESAI', date: '2026-10-24' },
-            { id: '#TRX-20261024-0025', sessionId: 'CS-20261024-K01-002', terminal: 'Kasir 01', time: '09:48 WIB', cashier: 'Andi Pratama', method: 'TUNAI', cashPortion: 120000, nonCashPortion: 0, subtotal: 108108, tax: 11892, total: 120000, status: 'SELESAI', date: '2026-10-24' },
-            { id: '#TRX-20261024-0024', sessionId: 'CS-20261024-K01-002', terminal: 'Kasir 01', time: '09:15 WIB', cashier: 'Andi Pratama', method: 'KREDIT ANGGOTA', cashPortion: 0, nonCashPortion: 240000, subtotal: 216216, tax: 23784, total: 240000, status: 'SELESAI', date: '2026-10-24' },
-            { id: '#TRX-20261024-0023', sessionId: 'CS-20261024-K01-002', terminal: 'Kasir 01', time: '08:40 WIB', cashier: 'Andi Pratama', method: 'QRIS', cashPortion: 0, nonCashPortion: 450000, subtotal: 405405, tax: 44595, total: 450000, status: 'DIBATALKAN', date: '2026-10-24' },
-            { id: '#TRX-20261024-0022', sessionId: 'CS-20261024-K01-001', terminal: 'Kasir 01', time: '07:30 WIB', cashier: 'Budi Kurniawan', method: 'TUNAI', cashPortion: 310000, nonCashPortion: 0, subtotal: 279279, tax: 30721, total: 310000, status: 'SELESAI', date: '2026-10-24' },
-            { id: '#TRX-20261023-0089', sessionId: 'CS-20261023-K01-002', terminal: 'Kasir 01', time: '16:20 WIB', cashier: 'Budi Kurniawan', method: 'TUNAI', cashPortion: 175000, nonCashPortion: 0, subtotal: 157657, tax: 17343, total: 175000, status: 'SELESAI', date: '2026-10-23' },
-            { id: '#TRX-20261023-0088', sessionId: 'CS-20261023-K01-002', terminal: 'Kasir 01', time: '15:10 WIB', cashier: 'Budi Kurniawan', method: 'QRIS', cashPortion: 0, nonCashPortion: 92000, subtotal: 82882, tax: 9118, total: 92000, status: 'SELESAI', date: '2026-10-23' }
-        ];
+        return [];
     },
 
     get filteredTransactions() {
@@ -317,8 +307,7 @@ class="flex flex-col h-screen w-full font-sans">
                                 <tr x-show="filteredTransactions.length === 0">
                                     <td colspan="10" class="text-center py-12 text-gray-400">
                                         <span class="material-symbols-rounded text-4xl mb-2 text-gray-300">receipt_long</span>
-                                        <p class="font-bold text-gray-600">Tidak ada transaksi yang cocok dengan filter</p>
-                                        <p class="text-xs text-gray-400 mt-0.5">Silakan sesuaikan filter sesi, metode bayar, atau periode.</p>
+                                        <p class="font-bold text-gray-600">Belum ada transaksi untuk ditampilkan.</p>
                                     </td>
                                 </tr>
                             </tbody>

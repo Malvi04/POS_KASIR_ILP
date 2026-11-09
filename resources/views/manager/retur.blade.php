@@ -4,138 +4,325 @@
 
 @section('content')
 <div x-data="{
-    activeTab: 'all',
+    // Tab Navigation: 'approval' | 'masuk' | 'riwayat'
+    mainTab: (new URLSearchParams(window.location.search).get('tab') === 'masuk' ? 'masuk' : (new URLSearchParams(window.location.search).get('tab') === 'riwayat' ? 'riwayat' : ('{{ $initialTab ?? 'approval' }}' === 'masuk' ? 'masuk' : 'approval'))),
+    
+    // Filters & Search
     searchQuery: '',
-    directionFilter: 'all',
-    conditionFilter: 'all',
-    statusFilter: 'all',
-    draftDirection: 'toko_ke_gudang',
-    draftSku: '899275321004 - Indomie Goreng Spesial 85g',
-    draftQty: 24,
-    draftUnit: 'Pcs',
-    draftCondition: 'Kemasan Rusak / Pecah',
-    draftUseFleet: true,
-    draftPhotoName: 'kemasan_robek.jpg',
+    statusFilterApproval: 'all',
+    filterPhysicalStatus: 'all', // 'all', 'pending', 'received'
+    
+    // Modal: Detail Barang Retur dari Kasir Cabang
+    showDetailDocModal: false,
+    selectedDocForDetail: null,
+
+    // Modal: Approval
+    showApproveModal: false,
+    selectedDocForApproval: null,
+
+    // Modal: Reject
+    showRejectModal: false,
+    selectedDocForReject: null,
+    rejectReason: '',
+
+    // Modal: Request Revision
+    showRevisionModal: false,
+    selectedDocForRevision: null,
+    revisionNotes: '',
+
+    // Modal: Konfirmasi / Atur Penerimaan Fisik Gudang (Anti-Stok Tertinggal)
+    showPhysicalModal: false,
+    receivingDoc: null,
+    highlightedSku: null,
+    physicalInspector: 'Hendra W. (DC Head / Gudang Pusat)',
+    physicalReceivedDate: '',
+    physicalGlobalNotes: '',
+    physicalItemsForm: [],
+
+    // Modal: Preview BAST Digital
+    showBastModal: false,
+    selectedBastDoc: null,
+
+    // Modal: Buat Pengajuan / Kirim Barang Baru
     showModal: false,
     modalMode: 'toko_ke_gudang',
+    newDocBranch: 'Cabang A',
+    newDocCashier: 'Siti Aminah (Kasir Cabang A)',
     newDocSku: '',
     newDocQty: 12,
-    newDocUnit: 'Karton',
+    newDocUnit: 'Pcs',
     newDocCondition: 'RUSAK / BOCOR',
     newDocReason: '',
     newDocDriver: 'Andi Pratama (B 9481 UQ)',
+
+    // Toast Notification
     toastMessage: '',
+    toastType: 'success',
     showToast: false,
-    triggerToast(msg) {
+    triggerToast(msg, type = 'success') {
         this.toastMessage = msg;
+        this.toastType = type;
         this.showToast = true;
-        setTimeout(() => { this.showToast = false; }, 3200);
+        setTimeout(() => { this.showToast = false; }, 3500);
     },
+
     items: [],
 
     initReturns() {
         const stored = localStorage.getItem('pos_ilp_manager_returns_v1');
         if (stored) {
             try {
-                this.items = JSON.parse(stored);
+                const parsed = JSON.parse(stored);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    this.items = parsed.map(d => this.normalizeReturnDoc(d));
+                    this.saveReturns();
+                    return;
+                }
             } catch(e) {
-                this.items = this.getDefaultReturns();
+                console.error('Failed to parse returns data:', e);
             }
-        } else {
-            this.items = this.getDefaultReturns();
-            this.saveReturns();
         }
+        this.items = this.getDefaultReturns().map(d => this.normalizeReturnDoc(d));
+        this.saveReturns();
     },
 
     saveReturns() {
-        localStorage.setItem('pos_ilp_manager_returns_v1', JSON.stringify(this.items));
+        try {
+            localStorage.setItem('pos_ilp_manager_returns_v1', JSON.stringify(this.items));
+        } catch(e) {
+            console.error('Failed to save returns:', e);
+        }
+    },
+
+    // Normalizer to ensure complete cashier info, clean units, and detailed item structures
+    normalizeReturnDoc(doc) {
+        if (!doc.branchOrigin) {
+            doc.branchOrigin = doc.docNo && doc.docNo.includes('TK') ? 'Cabang A' : 'Gudang Pusat';
+        }
+        if (!doc.cashierName) {
+            doc.cashierName = doc.direction === 'toko_ke_gudang' 
+                ? (doc.branchOrigin === 'Cabang B' ? 'Bambang S. (Kasir Cabang B)' : 'Siti Aminah (Kasir Cabang A)')
+                : 'Hendra W. (DC Head)';
+        }
+        if (!doc.terminalId) {
+            doc.terminalId = 'POS-01 (Kasir Toko)';
+        }
+        if (!doc.invoiceRef) {
+            doc.invoiceRef = doc.ref || ('INV-2024/' + (doc.branchOrigin || 'CAB-A'));
+        }
+
+        if (Array.isArray(doc.products)) {
+            doc.products.forEach((p, idx) => {
+                // Bersihkan kuantitas dan pastikan satuan Pcs murni (tanpa pouch/tetra/unit ganda)
+                let rawQty = String(p.submittedQty || p.qty || '1').trim();
+                let parsedNum = parseInt(rawQty) || 1;
+                p.submittedQty = parsedNum;
+                p.qty = parsedNum;
+                p.unit = 'Pcs';
+
+                if (!p.sku) {
+                    if (p.name.includes('Minyak')) p.sku = 'PRD-007';
+                    else if (p.name.includes('Ultra') || p.name.includes('Susu')) p.sku = 'PRD-003';
+                    else if (p.name.includes('Indomie')) p.sku = 'PRD-006';
+                    else if (p.name.includes('Kopi')) p.sku = 'PRD-001';
+                    else if (p.name.includes('Kecap')) p.sku = 'PRD-002';
+                    else if (p.name.includes('Yogurt')) p.sku = 'PRD-008';
+                    else if (p.name.includes('Roti')) p.sku = 'PRD-009';
+                    else if (p.name.includes('Deterjen')) p.sku = 'PRD-010';
+                    else if (p.name.includes('Pembersih')) p.sku = 'PRD-005';
+                    else p.sku = 'PRD-RET-0' + (idx + 1);
+                }
+                if (!p.barcode) {
+                    p.barcode = '899' + Math.floor(1000000000 + Math.random() * 9000000000);
+                }
+                if (!p.category) {
+                    if (p.name.includes('Minyak') || p.name.includes('Beras')) p.category = 'Kebutuhan Pokok';
+                    else if (p.name.includes('Susu') || p.name.includes('Yogurt') || p.name.includes('Aqua') || p.name.includes('Kopi')) p.category = 'Minuman';
+                    else if (p.name.includes('Indomie') || p.name.includes('Roti') || p.name.includes('Chitato')) p.category = 'Makanan';
+                    else if (p.name.includes('Deterjen') || p.name.includes('Pembersih') || p.name.includes('Sunlight')) p.category = 'Pembersih';
+                    else p.category = 'Barang Konsumsi';
+                }
+                if (!p.price) {
+                    if (p.name.includes('Minyak')) p.price = 34000;
+                    else if (p.name.includes('Susu')) p.price = 19200;
+                    else if (p.name.includes('Indomie')) p.price = 3500;
+                    else if (p.name.includes('Kopi')) p.price = 12500;
+                    else if (p.name.includes('Yogurt')) p.price = 9500;
+                    else if (p.name.includes('Roti')) p.price = 16000;
+                    else if (p.name.includes('Deterjen')) p.price = 22000;
+                    else if (p.name.includes('Pembersih')) p.price = 15500;
+                    else p.price = 15000;
+                }
+                p.subtotal = p.price * p.submittedQty;
+
+                // Sinkronkan data kuantitas fisik diterima dan kalkulasi stok tertinggal
+                if (p.receivedQty === undefined) {
+                    if (doc.isPhysicalReceived && doc.physicalReceiptData && Array.isArray(doc.physicalReceiptData.items)) {
+                        const recMatch = doc.physicalReceiptData.items.find(i => i.sku === p.sku || i.name === p.name);
+                        p.receivedQty = recMatch ? Number(recMatch.receivedQty) : p.submittedQty;
+                    } else if (doc.isPhysicalReceived) {
+                        p.receivedQty = p.submittedQty;
+                    } else {
+                        p.receivedQty = 0;
+                    }
+                }
+                p.receivedQty = Number(p.receivedQty) || 0;
+                p.selisih = Math.max(0, p.submittedQty - p.receivedQty);
+                p.tertinggalQty = p.selisih;
+            });
+        }
+
+        if (doc.physicalReceiptData && Array.isArray(doc.physicalReceiptData.items)) {
+            doc.physicalReceiptData.items.forEach(i => {
+                i.submittedQty = parseInt(i.submittedQty) || 1;
+                i.receivedQty = parseInt(i.receivedQty) || 0;
+                i.unit = 'Pcs';
+                i.selisih = Math.max(0, i.submittedQty - i.receivedQty);
+            });
+        }
+        return doc;
+    },
+
+    formatQtyClean(prod) {
+        if (!prod) return '-';
+        const raw = String(prod.submittedQty || prod.qty || '1');
+        const num = parseInt(raw) || 1;
+        return num + ' Pcs';
+    },
+
+    calculateDocTotalQty(doc) {
+        if (!doc || !Array.isArray(doc.products)) return '0 Unit';
+        const total = doc.products.reduce((acc, p) => acc + (Number(p.submittedQty) || parseInt(p.qty) || 0), 0);
+        return total + ' Unit';
+    },
+
+    calculateDocTotalReceivedQty(doc) {
+        if (!doc || !Array.isArray(doc.products)) return '0 Unit';
+        if (!doc.isPhysicalReceived) return '0 Unit';
+        const total = doc.products.reduce((acc, p) => acc + (Number(p.receivedQty !== undefined ? p.receivedQty : (p.submittedQty || 0))), 0);
+        return total + ' Unit';
+    },
+
+    calculateDocTotalTertinggalQty(doc) {
+        if (!doc || !Array.isArray(doc.products)) return 0;
+        if (!doc.isPhysicalReceived) {
+            return doc.products.reduce((acc, p) => acc + (Number(p.submittedQty || 0)), 0);
+        }
+        return doc.products.reduce((acc, p) => acc + (Number(p.selisih || 0)), 0);
+    },
+
+    openDetailDoc(doc) {
+        this.selectedDocForDetail = doc;
+        this.showDetailDocModal = true;
     },
 
     getDefaultReturns() {
         return [
             {
                 id: 1,
+                docNo: '#RTR-TK-2024-0895',
+                date: 'Hari ini • 08:30 WIB',
+                ref: 'Ref: NOTA-CAB-A/2405',
+                direction: 'toko_ke_gudang',
+                directionLabel: 'TOKO → GUDANG',
+                branchOrigin: 'Cabang A',
+                cashierName: 'Siti Aminah (Kasir Cabang A)',
+                terminalId: 'POS-01 (Kasir Toko Depan)',
+                conditionType: 'rusak',
+                conditionLabel: 'RUSAK / PECAH',
+                conditionDesc: 'Karton rembes tersenggol rak dorong saat bongkar stok.',
+                products: [
+                    { sku: 'PRD-006', barcode: '899275321004', name: 'Indomie Goreng Spesial 85g', category: 'Makanan', submittedQty: 48, unit: 'Pcs', price: 3500, color: 'text-[#dc2626]' },
+                    { sku: 'PRD-001', barcode: '8991234567890', name: 'Kopi Kapal Api Spesial 165g', category: 'Minuman', submittedQty: 20, unit: 'Pcs', price: 12500, color: 'text-[#dc2626]' }
+                ],
+                subtotalLabel: 'Subtotal:',
+                subtotal: 'Rp 418.000',
+                truckFee: '-Rp 250.000',
+                truckFeeFree: false,
+                netLabel: 'Net Klaim:',
+                netAmount: 'Rp 168.000',
+                plate: 'B 9481 UQ',
+                driver: 'Andi Pratama',
+                statusKey: 'menunggu_approval',
+                statusLabel: 'MENUNGGU APPROVAL',
+                statusSub: 'Menunggu telaah Manager Toko',
+                needsApproval: true,
+                isPhysicalReceived: false,
+                physicalReceiptData: null
+            },
+            {
+                id: 2,
                 docNo: '#RTR-TK-2024-0892',
                 date: '24 Mei 2024 • 09:42 WIB',
                 ref: 'Ref: INV-2024/CAB-A',
                 direction: 'toko_ke_gudang',
                 directionLabel: 'TOKO → GUDANG',
+                branchOrigin: 'Cabang A',
+                cashierName: 'Siti Aminah (Kasir Cabang A)',
+                terminalId: 'POS-01 (Kasir Toko Depan)',
                 conditionType: 'rusak',
                 conditionLabel: 'RUSAK / BOCOR',
-                conditionDesc: 'Karton rembes saat transit delivery rak',
+                conditionDesc: 'Karton rembes saat transit delivery ke rak pajang.',
                 products: [
-                    { name: 'Minyak Goreng Sawit 2L', qty: '15 Pouch', color: 'text-[#dc2626]' },
-                    { name: 'Susu UHT Cokelat 1L', qty: '24 Tetra', color: 'text-[#dc2626]' }
+                    { sku: 'PRD-007', barcode: '8996789012345', name: 'Minyak Goreng Sawit 2L', category: 'Kebutuhan Pokok', submittedQty: 15, unit: 'Pcs', price: 34000, color: 'text-[#dc2626]' },
+                    { sku: 'PRD-003', barcode: '8993456789012', name: 'Susu UHT Cokelat 1L', category: 'Minuman', submittedQty: 24, unit: 'Pcs', price: 19200, color: 'text-[#dc2626]' }
                 ],
-                extraItems: '+ 2 Item Cacat lainnya',
                 subtotalLabel: 'Subtotal:',
-                subtotal: 'Rp 3.420.000',
+                subtotal: 'Rp 970.800',
                 truckFee: '-Rp 500.000',
                 truckFeeFree: false,
                 netLabel: 'Net:',
-                netAmount: 'Rp 2.920.000',
+                netAmount: 'Rp 470.800',
                 plate: 'B 9481 UQ',
                 driver: 'Andi Pratama',
-                statusKey: 'cek_fisik',
-                statusLabel: 'CEK FISIK GUDANG',
-                statusSub: 'ETA: 13:30 WIB',
-                needsApproval: true
+                statusKey: 'ditolak',
+                statusLabel: 'DITOLAK MANAGER',
+                statusSub: 'Ditolak: Kerusakan akibat kelalaian display cabang',
+                needsApproval: false,
+                isPhysicalReceived: false,
+                physicalReceiptData: null
             },
             {
-                id: 2,
+                id: 3,
                 docNo: '#RTR-TK-2024-0891',
                 date: '23 Mei 2024 • 16:15 WIB',
                 ref: 'Ref: STK-ED-2405',
                 direction: 'toko_ke_gudang',
                 directionLabel: 'TOKO → GUDANG',
+                branchOrigin: 'Cabang A',
+                cashierName: 'Bambang S. (Kasir Shift Siang)',
+                terminalId: 'POS-02 (Kasir Belakang)',
                 conditionType: 'ed',
                 conditionLabel: 'KEDALUWARSA / H-14',
-                conditionDesc: 'ED Bulan Juni 2024 batch A12',
+                conditionDesc: 'ED Bulan Juni 2024 batch A12 diverifikasi QC toko.',
                 products: [
-                    { name: 'Yogurt Drink Strawberry 250ml', qty: '48 Btl', color: 'text-[#d97706]' },
-                    { name: 'Roti Tawar Gandum Spesial', qty: '16 Pack', color: 'text-[#d97706]' }
+                    { sku: 'PRD-008', barcode: '8998899001122', name: 'Yogurt Drink Strawberry 250ml', category: 'Minuman', submittedQty: 48, unit: 'Pcs', price: 9500, color: 'text-[#d97706]' },
+                    { sku: 'PRD-009', barcode: '8997788990011', name: 'Roti Tawar Gandum Spesial', category: 'Makanan', submittedQty: 16, unit: 'Pcs', price: 16000, color: 'text-[#d97706]' }
                 ],
-                extraItems: '',
                 subtotalLabel: 'Subtotal:',
-                subtotal: 'Rp 1.880.000',
+                subtotal: 'Rp 712.000',
                 truckFee: '-Rp 500.000',
                 truckFeeFree: false,
                 netLabel: 'Net:',
-                netAmount: 'Rp 1.380.000',
+                netAmount: 'Rp 212.000',
                 plate: 'B 9102 UQ',
                 driver: 'Rahmat Hidayat',
                 statusKey: 'selesai',
                 statusLabel: 'SELESAI (BAST)',
                 statusSub: 'Diterima: Joko (WH-Staff)',
-                needsApproval: false
-            },
-            {
-                id: 3,
-                docNo: '#REP-GD-2024-0310',
-                date: '24 Mei 2024 • 11:20 WIB',
-                ref: 'Klaim: #RTR-TK-2024-0880',
-                direction: 'gudang_ke_toko',
-                directionLabel: 'GUDANG → TOKO',
-                conditionType: 'garansi',
-                conditionLabel: 'PENGGANTIAN GARANSI',
-                conditionDesc: 'Barang Baru Kompensasi Supplier',
-                products: [
-                    { name: 'Kecap Manis Refill 550ml', qty: '30 Pouch', color: 'text-[#16a34a]' },
-                    { name: 'Biskuit Cokelat Kaleng 650g', qty: '12 Kaleng', color: 'text-[#16a34a]' }
-                ],
-                extraItems: '',
-                subtotalLabel: 'Nilai Barang:',
-                subtotal: 'Rp 2.150.000',
-                truckFee: 'GRATIS (SOP)',
-                truckFeeFree: true,
-                netLabel: 'Total:',
-                netAmount: 'Rp 2.150.000',
-                plate: 'B 9844 XZ',
-                driver: 'Dedi Kurnia',
-                statusKey: 'perjalanan',
-                statusLabel: 'DALAM PERJALANAN',
-                statusSub: 'Tol Barat KM 14',
-                needsApproval: false
+                needsApproval: false,
+                isPhysicalReceived: true,
+                physicalReceiptData: {
+                    receivedDate: '23 Mei 2024 16:45 WIB',
+                    receivedBy: 'Joko (WH-Staff)',
+                    hasDiscrepancy: false,
+                    discrepancyReason: '',
+                    bastNo: 'BAST-2024/05/TK-0888',
+                    items: [
+                        { sku: 'PRD-008', name: 'Yogurt Drink Strawberry 250ml', submittedQty: 48, receivedQty: 48, unit: 'Pcs', selisih: 0, discrepancyReason: '' },
+                        { sku: 'PRD-009', name: 'Roti Tawar Gandum Spesial', submittedQty: 16, receivedQty: 16, unit: 'Pcs', selisih: 0, discrepancyReason: '' }
+                    ]
+                }
             },
             {
                 id: 4,
@@ -144,145 +331,555 @@
                 ref: 'Ref: OVER-STOCK-09',
                 direction: 'toko_ke_gudang',
                 directionLabel: 'TOKO → GUDANG',
+                branchOrigin: 'Cabang A',
+                cashierName: 'Siti Aminah (Kasir Cabang A)',
+                terminalId: 'POS-01 (Kasir Toko Depan)',
                 conditionType: 'overstock',
                 conditionLabel: 'MUTASI OVERSTOCK',
-                conditionDesc: 'Penyesuaian buffer ruang simpan rak',
+                conditionDesc: 'Penyesuaian buffer ruang simpan rak barang cepat saji.',
                 products: [
-                    { name: 'Deterjen Bubuk Premium 800g', qty: '60 Pack', color: 'text-[#0052cc]' },
-                    { name: 'Pembersih Lantai Lavender 750ml', qty: '36 Btl', color: 'text-[#0052cc]' }
+                    { sku: 'PRD-010', barcode: '8995544332211', name: 'Deterjen Bubuk Premium 800g', category: 'Pembersih', submittedQty: 60, unit: 'Pcs', price: 22000, color: 'text-[#0052cc]' },
+                    { sku: 'PRD-005', barcode: '8995678901234', name: 'Pembersih Lantai Lavender 750ml', category: 'Pembersih', submittedQty: 36, unit: 'Pcs', price: 15500, color: 'text-[#0052cc]' }
                 ],
-                extraItems: '',
                 subtotalLabel: 'Subtotal:',
-                subtotal: 'Rp 4.120.000',
-                truckFee: '-Rp 500.000',
-                truckFeeFree: false,
+                subtotal: 'Rp 1.878.000',
+                truckFee: 'GRATIS (SOP)',
+                truckFeeFree: true,
                 netLabel: 'Net:',
-                netAmount: 'Rp 3.620.000',
+                netAmount: 'Rp 1.878.000',
                 plate: 'B 9481 UQ',
                 driver: 'Andi Pratama',
-                statusKey: 'disetujui',
-                statusLabel: 'DISETUJUI SPV',
-                statusSub: 'Jadwal Besok Pagi',
-                needsApproval: true
+                statusKey: 'ditolak',
+                statusLabel: 'DITOLAK MANAGER',
+                statusSub: 'Ditolak: Gudang Pusat sedang renovasi area deterjen',
+                needsApproval: false,
+                isPhysicalReceived: false,
+                physicalReceiptData: null
+            },
+            {
+                id: 5,
+                docNo: '#REP-GD-2024-0310',
+                date: '24 Mei 2024 • 11:20 WIB',
+                ref: 'Klaim: #RTR-TK-2024-0880',
+                direction: 'gudang_ke_toko',
+                directionLabel: 'GUDANG → TOKO',
+                branchOrigin: 'Gudang Pusat',
+                cashierName: 'Hendra W. (DC Head)',
+                terminalId: 'DC-DISPATCH-01',
+                conditionType: 'garansi',
+                conditionLabel: 'PENGGANTIAN GARANSI',
+                conditionDesc: 'Barang Baru Kompensasi Distributor Supplier',
+                products: [
+                    { sku: 'PRD-002', barcode: '8992345678901', name: 'Kecap Manis Refill 550ml', category: 'Kebutuhan Pokok', submittedQty: 30, unit: 'Pcs', price: 14000, color: 'text-[#16a34a]' }
+                ],
+                subtotalLabel: 'Nilai Barang:',
+                subtotal: 'Rp 420.000',
+                truckFee: 'GRATIS (SOP)',
+                truckFeeFree: true,
+                netLabel: 'Total:',
+                netAmount: 'Rp 420.000',
+                plate: 'B 9844 XZ',
+                driver: 'Dedi Kurnia',
+                statusKey: 'perjalanan',
+                statusLabel: 'DALAM PERJALANAN',
+                statusSub: 'Menuju Toko Cabang A (Tol KM 14)',
+                needsApproval: false,
+                isPhysicalReceived: false,
+                physicalReceiptData: null
             }
         ];
     },
-    get filteredItems() {
+
+    // KPI Dynamic Counts
+    get countPendingApproval() {
+        return this.items.filter(i => i.direction === 'toko_ke_gudang' && (i.needsApproval || i.statusKey === 'menunggu_approval')).length;
+    },
+
+    get countApprovedPendingPhysical() {
+        return this.items.filter(i => i.direction === 'toko_ke_gudang' && !i.isPhysicalReceived && (i.statusKey === 'disetujui' || i.statusKey === 'cek_fisik')).length;
+    },
+
+    get countCompletedReceipt() {
+        return this.items.filter(i => i.isPhysicalReceived).length;
+    },
+
+    get totalQuarantineUnitsInGudang() {
+        try {
+            const raw = localStorage.getItem('pos_ilp_stok_retur_gudang_v1');
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                    return parsed.reduce((sum, item) => sum + (Number(item.qtyReceived) || 0), 0);
+                }
+            }
+        } catch(e) {}
+        return 77;
+    },
+
+    // Filtered lists for each tab
+    get filteredApprovalList() {
         return this.items.filter(item => {
-            if (this.directionFilter !== 'all' && item.direction !== this.directionFilter) return false;
-            if (this.conditionFilter !== 'all' && item.conditionType !== this.conditionFilter) return false;
-            if (this.statusFilter !== 'all' && item.statusKey !== this.statusFilter) return false;
+            if (item.direction !== 'toko_ke_gudang') return false;
+            if (this.statusFilterApproval !== 'all') {
+                if (this.statusFilterApproval === 'menunggu' && item.statusKey !== 'menunggu_approval' && !item.needsApproval) return false;
+                if (this.statusFilterApproval === 'disetujui' && item.statusKey !== 'disetujui') return false;
+                if (this.statusFilterApproval === 'revisi' && item.statusKey !== 'revisi') return false;
+                if (this.statusFilterApproval === 'ditolak' && item.statusKey !== 'ditolak') return false;
+            }
             if (this.searchQuery.trim() !== '') {
                 const q = this.searchQuery.toLowerCase();
                 const matchDoc = item.docNo.toLowerCase().includes(q) || item.ref.toLowerCase().includes(q);
-                const matchDriver = item.driver.toLowerCase().includes(q) || item.plate.toLowerCase().includes(q);
-                const matchProd = item.products.some(p => p.name.toLowerCase().includes(q));
-                return matchDoc || matchDriver || matchProd;
+                const matchBranch = (item.branchOrigin || '').toLowerCase().includes(q);
+                const matchCashier = (item.cashierName || '').toLowerCase().includes(q);
+                const matchDriver = (item.driver || '').toLowerCase().includes(q);
+                const matchProduct = item.products.some(p => p.name.toLowerCase().includes(q) || (p.sku && p.sku.toLowerCase().includes(q)));
+                return matchDoc || matchBranch || matchCashier || matchDriver || matchProduct;
             }
             return true;
         });
     },
-    approveItem(item) {
-        item.statusKey = 'disetujui';
-        item.statusLabel = 'DISETUJUI MANAGER';
-        item.statusSub = 'Siap Muat ke Gudang DC';
-        item.needsApproval = false;
-        this.saveReturns();
-        this.triggerToast('Pengajuan ' + item.docNo + ' berhasil di-Approve oleh Manager.');
-    },
-    rejectItem(item) {
-        item.statusKey = 'ditolak';
-        item.statusLabel = 'DITOLAK MANAGER';
-        item.statusSub = 'Dikembalikan ke Staf Toko';
-        item.needsApproval = false;
-        this.saveReturns();
-        this.triggerToast('Pengajuan ' + item.docNo + ' telah ditolak.');
-    },
-    confirmReceive(item) {
-        item.statusKey = 'selesai';
-        item.statusLabel = 'SELESAI (BAST)';
-        item.statusSub = 'Diterima Manager Toko';
-        this.saveReturns();
-        this.triggerToast('Pengiriman Gudang ' + item.docNo + ' dikonfirmasi masuk stok toko.');
-    },
-    submitQuickDraft() {
-        if (!this.draftSku.trim() || !this.draftQty) return;
-        const isTokoToGudang = this.draftDirection === 'toko_ke_gudang';
-        const codeNum = Math.floor(893 + Math.random() * 90);
-        const docId = isTokoToGudang ? '#RTR-TK-2024-0' + codeNum : '#REP-GD-2024-0' + codeNum;
-        const prodName = this.draftSku.includes('-') ? this.draftSku.split('-')[1].trim() : this.draftSku.trim();
 
-        let condType = 'rusak';
-        let condLabel = 'RUSAK / BOCOR';
-        let prodColor = 'text-[#dc2626]';
-        if (this.draftCondition.includes('Kedaluwarsa')) {
-            condType = 'ed';
-            condLabel = 'KEDALUWARSA / H-14';
-            prodColor = 'text-[#d97706]';
-        } else if (this.draftCondition.includes('Overstock')) {
-            condType = 'overstock';
-            condLabel = 'MUTASI OVERSTOCK';
-            prodColor = 'text-[#0052cc]';
-        } else if (!isTokoToGudang || this.draftCondition.includes('Penggantian')) {
-            condType = 'garansi';
-            condLabel = 'PENGGANTIAN GARANSI';
-            prodColor = 'text-[#16a34a]';
+    get filteredMasukList() {
+        return this.items.filter(item => {
+            if (item.direction !== 'toko_ke_gudang') return false;
+            if (this.filterPhysicalStatus === 'pending') {
+                if (item.isPhysicalReceived || (item.statusKey !== 'disetujui' && item.statusKey !== 'cek_fisik' && item.statusKey !== 'menunggu_approval')) return false;
+            } else if (this.filterPhysicalStatus === 'received') {
+                if (!item.isPhysicalReceived) return false;
+            }
+            if (this.searchQuery.trim() !== '') {
+                const q = this.searchQuery.toLowerCase();
+                const matchDoc = item.docNo.toLowerCase().includes(q) || item.ref.toLowerCase().includes(q);
+                const matchBranch = (item.branchOrigin || '').toLowerCase().includes(q);
+                const matchCashier = (item.cashierName || '').toLowerCase().includes(q);
+                const matchDriver = (item.driver || '').toLowerCase().includes(q);
+                const matchProduct = item.products.some(p => p.name.toLowerCase().includes(q) || (p.sku && p.sku.toLowerCase().includes(q)));
+                return matchDoc || matchBranch || matchCashier || matchDriver || matchProduct;
+            }
+            return true;
+        });
+    },
+
+    get filteredRiwayatList() {
+        return this.items.filter(item => {
+            if (this.searchQuery.trim() !== '') {
+                const q = this.searchQuery.toLowerCase();
+                const matchDoc = item.docNo.toLowerCase().includes(q) || item.ref.toLowerCase().includes(q);
+                const matchBranch = (item.branchOrigin || '').toLowerCase().includes(q);
+                const matchCashier = (item.cashierName || '').toLowerCase().includes(q);
+                const matchDriver = (item.driver || '').toLowerCase().includes(q);
+                const matchProduct = item.products.some(p => p.name.toLowerCase().includes(q));
+                return matchDoc || matchBranch || matchCashier || matchDriver || matchProduct;
+            }
+            return true;
+        });
+    },
+
+    // ========================================================
+    // APPROVAL / REJECT / REVISION ACTIONS
+    // ========================================================
+    openApproveModal(doc) {
+        this.selectedDocForApproval = doc;
+        this.showApproveModal = true;
+    },
+
+    confirmApprove() {
+        if (!this.selectedDocForApproval) return;
+        const doc = this.selectedDocForApproval;
+        doc.statusKey = 'disetujui';
+        doc.statusLabel = 'DISETUJUI MANAGER';
+        doc.statusSub = 'Siap Kirim & Cek Fisik Gudang';
+        doc.needsApproval = false;
+        this.saveReturns();
+
+        // Audit Trail
+        this.logAudit(
+            'APPROVE_RETURN',
+            doc.docNo,
+            `Manager menyetujui pengajuan retur ${doc.docNo} dari ${doc.branchOrigin} (Kasir: ${doc.cashierName}). Barang diizinkan dikirim ke Gudang Pusat (Belum masuk Stok Retur).`
+        );
+
+        this.showApproveModal = false;
+        this.triggerToast(`Pengajuan ${doc.docNo} berhasil disetujui! Barang siap diterima fisik di Gudang Pusat.`);
+    },
+
+    openRejectModal(doc) {
+        this.selectedDocForReject = doc;
+        this.rejectReason = '';
+        this.showRejectModal = true;
+    },
+
+    confirmReject() {
+        if (!this.selectedDocForReject || !this.rejectReason.trim()) {
+            alert('Wajib mengisi alasan penolakan retur.');
+            return;
+        }
+        const doc = this.selectedDocForReject;
+        doc.statusKey = 'ditolak';
+        doc.statusLabel = 'DITOLAK MANAGER';
+        doc.statusSub = 'Ditolak: ' + this.rejectReason.trim();
+        doc.needsApproval = false;
+        this.saveReturns();
+
+        // Audit Trail
+        this.logAudit(
+            'REJECT_RETURN',
+            doc.docNo,
+            `Manager menolak pengajuan retur ${doc.docNo} dari ${doc.branchOrigin}. Alasan: ${this.rejectReason.trim()}`
+        );
+
+        this.showRejectModal = false;
+        this.triggerToast(`Pengajuan ${doc.docNo} telah ditolak.`);
+    },
+
+    openRevisionModal(doc) {
+        this.selectedDocForRevision = doc;
+        this.revisionNotes = '';
+        this.showRevisionModal = true;
+    },
+
+    confirmRevision() {
+        if (!this.selectedDocForRevision || !this.revisionNotes.trim()) {
+            alert('Wajib mengisi catatan instruksi revisi dokumen.');
+            return;
+        }
+        const doc = this.selectedDocForRevision;
+        doc.statusKey = 'revisi';
+        doc.statusLabel = 'PERLU REVISI';
+        doc.statusSub = 'Catatan: ' + this.revisionNotes.trim();
+        doc.needsApproval = false;
+        this.saveReturns();
+
+        // Audit Trail
+        this.logAudit(
+            'REVISE_RETURN',
+            doc.docNo,
+            `Manager meminta revisi dokumen retur ${doc.docNo}. Instruksi: ${this.revisionNotes.trim()}`
+        );
+
+        this.showRevisionModal = false;
+        this.triggerToast(`Permintaan revisi ${doc.docNo} berhasil dikirim ke toko.`);
+    },
+
+    // ========================================================
+    // ATUR & KONFIRMASI PENERIMAAN FISIK GUDANG (ANTI-STOK TERTINGGAL)
+    // ========================================================
+    openPhysicalReceiveModal(doc, focusSku = null) {
+        if (!doc) return;
+        this.receivingDoc = doc;
+        this.highlightedSku = focusSku;
+        const now = new Date();
+        this.physicalReceivedDate = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) + ' • ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB';
+        this.physicalInspector = doc.physicalReceiptData?.receivedBy || 'Hendra W. (DC Head / Gudang Pusat)';
+        this.physicalGlobalNotes = doc.physicalReceiptData?.discrepancyReason || '';
+
+        this.physicalItemsForm = doc.products.map(p => {
+            const subQty = Number(p.submittedQty || parseInt(p.qty) || 1);
+            let initialRec = subQty;
+            if (p.receivedQty !== undefined && doc.isPhysicalReceived) {
+                initialRec = Number(p.receivedQty);
+            } else if (doc.physicalReceiptData && Array.isArray(doc.physicalReceiptData.items)) {
+                const fItem = doc.physicalReceiptData.items.find(i => i.sku === p.sku || i.name === p.name);
+                if (fItem && fItem.receivedQty !== undefined) {
+                    initialRec = Number(fItem.receivedQty);
+                }
+            }
+            return {
+                sku: p.sku || 'PRD-007',
+                name: p.name,
+                category: p.category || 'Barang Toko',
+                submittedQty: subQty,
+                receivedQty: initialRec,
+                unit: p.unit || 'Pcs',
+                selisih: Math.max(0, subQty - initialRec),
+                discrepancyReason: p.discrepancyReason || '',
+                followUpAction: p.followUpAction || 'kirim_susulan'
+            };
+        });
+
+        this.showPhysicalModal = true;
+    },
+
+    updateItemDiscrepancy(item) {
+        const sub = Number(item.submittedQty) || 0;
+        let rec = Number(item.receivedQty);
+        if (isNaN(rec) || rec < 0) rec = 0;
+        if (rec > sub) rec = sub;
+        item.receivedQty = rec;
+        item.selisih = Math.max(0, sub - rec);
+    },
+
+    setFormItemFull(itm) {
+        itm.receivedQty = itm.submittedQty;
+        this.updateItemDiscrepancy(itm);
+    },
+
+    setFormItemZero(itm) {
+        itm.receivedQty = 0;
+        this.updateItemDiscrepancy(itm);
+    },
+
+    incrementFormItem(itm) {
+        itm.receivedQty = Math.min(itm.submittedQty, (Number(itm.receivedQty) || 0) + 1);
+        this.updateItemDiscrepancy(itm);
+    },
+
+    decrementFormItem(itm) {
+        itm.receivedQty = Math.max(0, (Number(itm.receivedQty) || 0) - 1);
+        this.updateItemDiscrepancy(itm);
+    },
+
+    setAllFormItemsFull() {
+        this.physicalItemsForm.forEach(i => {
+            i.receivedQty = i.submittedQty;
+            this.updateItemDiscrepancy(i);
+        });
+    },
+
+    calculateTotalReceivedForm() {
+        return this.physicalItemsForm.reduce((acc, i) => acc + (Number(i.receivedQty) || 0), 0);
+    },
+
+    calculateTotalSubmittedForm() {
+        return this.physicalItemsForm.reduce((acc, i) => acc + (Number(i.submittedQty) || 0), 0);
+    },
+
+    calculateTotalTertinggalForm() {
+        return Math.max(0, this.calculateTotalSubmittedForm() - this.calculateTotalReceivedForm());
+    },
+
+    confirmPhysicalReceipt() {
+        if (!this.receivingDoc) return;
+
+        // Validasi tiap item
+        for (let itm of this.physicalItemsForm) {
+            if (itm.receivedQty < 0) {
+                alert(`Kuantitas fisik untuk '${itm.name}' tidak boleh negatif.`);
+                return;
+            }
+            if (itm.selisih > 0 && !itm.discrepancyReason.trim()) {
+                itm.discrepancyReason = itm.followUpAction === 'kirim_susulan'
+                    ? `Stok tertinggal di ${this.receivingDoc.branchOrigin || 'cabang'}, dijadwalkan pengiriman susulan.`
+                    : 'Stok tertinggal / belum diterima fisik di gudang.';
+            }
         }
 
-        this.items.unshift({
+        let totalReceived = 0;
+        let totalSubmitted = 0;
+        let hasAnyDiscrepancy = false;
+
+        this.physicalItemsForm.forEach(i => {
+            const rec = Number(i.receivedQty) || 0;
+            const sub = Number(i.submittedQty) || 0;
+            totalReceived += rec;
+            totalSubmitted += sub;
+            if (i.selisih > 0) hasAnyDiscrepancy = true;
+        });
+
+        const totalTertinggal = Math.max(0, totalSubmitted - totalReceived);
+
+        // 1. Simpan HANYA kuantitas fisik yang benar-benar diterima ke pos_ilp_stok_retur_gudang_v1 (ISOLASI)
+        try {
+            const rawReturnStock = localStorage.getItem('pos_ilp_stok_retur_gudang_v1');
+            let returnStock = rawReturnStock ? JSON.parse(rawReturnStock) : [];
+
+            this.physicalItemsForm.forEach(formItem => {
+                const recQty = Number(formItem.receivedQty) || 0;
+                const existingIdx = returnStock.findIndex(r => r.docRef === this.receivingDoc.docNo && (r.sku === formItem.sku || r.name === formItem.name));
+
+                if (recQty > 0) {
+                    if (existingIdx !== -1) {
+                        returnStock[existingIdx].qtyReceived = recQty;
+                        returnStock[existingIdx].updatedAt = this.physicalReceivedDate;
+                        returnStock[existingIdx].inspectorNotes = formItem.selisih > 0
+                            ? `Diatur fisik: ${recQty}/${formItem.submittedQty} ${formItem.unit}. Tertinggal: ${formItem.selisih} ${formItem.unit} (${formItem.discrepancyReason})`
+                            : 'Penerimaan fisik lengkap 100% di Gudang Pusat.';
+                    } else {
+                        returnStock.unshift({
+                            id: 'RET-GD-' + Date.now() + '-' + Math.floor(Math.random() * 900),
+                            sku: formItem.sku,
+                            barcode: '899' + Math.floor(1000000000 + Math.random() * 9000000000),
+                            name: formItem.name,
+                            branchOrigin: this.receivingDoc.branchOrigin || 'Cabang A',
+                            cashierName: this.receivingDoc.cashierName || 'Siti Aminah (Kasir Cabang A)',
+                            docRef: this.receivingDoc.docNo,
+                            receivedDate: this.physicalReceivedDate,
+                            qtyReceived: recQty,
+                            unit: formItem.unit,
+                            initialCondition: this.receivingDoc.conditionLabel || 'Retur Toko',
+                            inspectionStatus: 'Menunggu Pemeriksaan',
+                            followUp: 'Klaim Retur Supplier / QC',
+                            inspectorNotes: formItem.selisih > 0
+                                ? `Diterima sebagian (${recQty}/${formItem.submittedQty}). Tertinggal: ${formItem.selisih} ${formItem.unit} (${formItem.discrepancyReason})`
+                                : 'Penerimaan fisik lengkap di Gudang Pusat.',
+                            inspectedBy: this.physicalInspector,
+                            updatedAt: this.physicalReceivedDate
+                        });
+                    }
+                } else if (existingIdx !== -1) {
+                    returnStock.splice(existingIdx, 1);
+                }
+            });
+
+            localStorage.setItem('pos_ilp_stok_retur_gudang_v1', JSON.stringify(returnStock));
+            window.dispatchEvent(new CustomEvent('pos-return-stock-synced', { detail: { count: returnStock.length } }));
+        } catch(e) {
+            console.error('Failed to update warehouse return stock:', e);
+        }
+
+        // 2. Sinkronkan data ke receivingDoc.products
+        if (Array.isArray(this.receivingDoc.products)) {
+            this.receivingDoc.products.forEach(p => {
+                const fItem = this.physicalItemsForm.find(i => i.sku === p.sku || i.name === p.name);
+                if (fItem) {
+                    p.receivedQty = Number(fItem.receivedQty) || 0;
+                    p.selisih = Math.max(0, (Number(p.submittedQty) || 0) - p.receivedQty);
+                    p.discrepancyReason = fItem.discrepancyReason;
+                    p.followUpAction = fItem.followUpAction;
+                }
+            });
+        }
+
+        // 3. Update status dokumen
+        const bastCode = this.receivingDoc.physicalReceiptData?.bastNo || ('BAST-' + new Date().getFullYear() + '/05/TK-' + Math.floor(1000 + Math.random() * 9000));
+        this.receivingDoc.isPhysicalReceived = totalReceived > 0;
+        this.receivingDoc.statusKey = totalTertinggal === 0 ? 'selesai' : (totalReceived > 0 ? 'selesai_parsial' : 'tertinggal');
+        this.receivingDoc.statusLabel = totalTertinggal === 0 ? 'SELESAI (BAST LENGKAP)' : (totalReceived > 0 ? 'DITERIMA PARSIAL GUDANG' : 'STOK TERTINGGAL');
+        this.receivingDoc.statusSub = totalTertinggal === 0 
+            ? `BAST: ${bastCode} • Diterima Lengkap 100% (${totalReceived} unit)`
+            : `BAST: ${bastCode} • Diterima: ${totalReceived} unit (${totalTertinggal} unit tertinggal di cabang)`;
+
+        this.receivingDoc.physicalReceiptData = {
+            receivedDate: this.physicalReceivedDate,
+            receivedBy: this.physicalInspector,
+            hasDiscrepancy: hasAnyDiscrepancy,
+            totalReceived: totalReceived,
+            totalSubmitted: totalSubmitted,
+            totalTertinggal: totalTertinggal,
+            discrepancyReason: this.physicalGlobalNotes || (hasAnyDiscrepancy ? `${totalTertinggal} unit stok tertinggal/susulan` : 'Fisik 100% cocok dengan dokumen'),
+            bastNo: bastCode,
+            items: JSON.parse(JSON.stringify(this.physicalItemsForm))
+        };
+
+        // Jika dokumen ini juga yang sedang dibuka di selectedDocForDetail, sinkronkan
+        if (this.selectedDocForDetail && this.selectedDocForDetail.docNo === this.receivingDoc.docNo) {
+            this.selectedDocForDetail = JSON.parse(JSON.stringify(this.receivingDoc));
+        }
+
+        this.saveReturns();
+
+        // 4. Catat Audit Log
+        this.logAudit(
+            'UPDATE_RECEIVED_RETURN_STOCK',
+            this.receivingDoc.docNo,
+            `Atur stok retur diterima ${this.receivingDoc.docNo}: ${totalReceived} unit diterima fisik di Gudang Pusat. ${totalTertinggal > 0 ? `PERINGATAN: ${totalTertinggal} unit stok tertinggal di cabang/armada dan tetap dipantau.` : 'Semua stok lengkap diterima, tidak ada yang tertinggal.'}`
+        );
+
+        this.showPhysicalModal = false;
+        this.triggerToast(`Pengaturan stok retur ${this.receivingDoc.docNo} tersimpan! Diterima: ${totalReceived} unit (${totalTertinggal > 0 ? `${totalTertinggal} unit tertinggal dipantau` : 'Lengkap tanpa stok tertinggal'}).`);
+    },
+
+    viewBast(doc) {
+        this.selectedBastDoc = doc;
+        this.showBastModal = true;
+    },
+
+    // Audit Logging Helper
+    logAudit(actionType, refNo, desc) {
+        try {
+            const rawLogs = localStorage.getItem('pos_ilp_audit_logs_v1');
+            const logs = rawLogs ? JSON.parse(rawLogs) : [];
+            logs.unshift({
+                id: 'AUD-' + Date.now(),
+                timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+                actor_id: 'USR-MGR-001',
+                actor_name: 'Budi Santoso',
+                actor_role: 'Manager',
+                action_category: 'LOGISTICS_RETURN',
+                action_type: actionType,
+                reference_number: refNo,
+                location: 'Gudang Pusat',
+                description: desc,
+                status: 'SUCCESS'
+            });
+            localStorage.setItem('pos_ilp_audit_logs_v1', JSON.stringify(logs.slice(0, 300)));
+        } catch(e) {
+            console.error('Audit log error:', e);
+        }
+    },
+
+    // Quick Draft Submission
+    submitQuickDraft() {
+        if (!this.newDocSku.trim() || !this.newDocQty) return;
+        const isTokoToGudang = this.modalMode === 'toko_ke_gudang';
+        const codeNum = Math.floor(896 + Math.random() * 90);
+        const docId = isTokoToGudang ? '#RTR-TK-2024-0' + codeNum : '#REP-GD-2024-0' + codeNum;
+        const prodName = this.newDocSku.includes('-') ? this.newDocSku.split('-')[1].trim() : this.newDocSku.trim();
+
+        const newDoc = {
             id: Date.now(),
             docNo: docId,
             date: 'Baru saja • Hari Ini',
-            ref: isTokoToGudang ? 'Ref: DRAFT-MGR-01' : 'Klaim: #RTR-TK-2024-0892',
-            direction: this.draftDirection,
+            ref: isTokoToGudang ? 'Ref: DRAFT-' + this.newDocBranch.toUpperCase() : 'Klaim: #RTR-TK-2024-0892',
+            direction: this.modalMode,
             directionLabel: isTokoToGudang ? 'TOKO → GUDANG' : 'GUDANG → TOKO',
-            conditionType: condType,
-            conditionLabel: condLabel,
-            conditionDesc: isTokoToGudang ? 'Input cepat draft retur terverifikasi' : 'Pengiriman barang pengganti dari Gudang DC',
+            branchOrigin: isTokoToGudang ? this.newDocBranch : 'Gudang Pusat',
+            cashierName: this.newDocCashier || 'Siti Aminah (Kasir Cabang A)',
+            terminalId: 'POS-01 (Kasir Toko)',
+            conditionType: 'rusak',
+            conditionLabel: this.newDocCondition,
+            conditionDesc: this.newDocReason || 'Pengajuan retur barang rusak/ED dari kasir toko',
             products: [
-                { name: prodName, qty: this.draftQty + ' ' + this.draftUnit, color: prodColor }
+                { sku: 'PRD-007', barcode: '8996789012345', name: prodName, category: 'Barang Konsumsi', submittedQty: Number(this.newDocQty), unit: this.newDocUnit, price: 25000, subtotal: 25000 * Number(this.newDocQty), color: 'text-[#dc2626]' }
             ],
-            extraItems: '',
-            subtotalLabel: isTokoToGudang ? 'Subtotal:' : 'Nilai Barang:',
-            subtotal: 'Rp 1.250.000',
-            truckFee: (isTokoToGudang && this.draftUseFleet) ? '-Rp 500.000' : 'GRATIS (SOP)',
-            truckFeeFree: !(isTokoToGudang && this.draftUseFleet),
-            netLabel: isTokoToGudang ? 'Net:' : 'Total:',
-            netAmount: (isTokoToGudang && this.draftUseFleet) ? 'Rp 750.000' : 'Rp 1.250.000',
-            plate: isTokoToGudang ? 'B 9481 UQ' : 'B 9844 XZ',
-            driver: isTokoToGudang ? 'Andi Pratama' : 'Dedi Kurnia',
-            statusKey: isTokoToGudang ? 'cek_fisik' : 'perjalanan',
+            subtotalLabel: 'Subtotal:',
+            subtotal: 'Rp ' + (25000 * Number(this.newDocQty)).toLocaleString('id-ID'),
+            truckFee: isTokoToGudang ? '-Rp 500.000' : 'GRATIS (SOP)',
+            truckFeeFree: !isTokoToGudang,
+            netLabel: isTokoToGudang ? 'Net Klaim:' : 'Total:',
+            netAmount: 'Rp ' + Math.max(0, (25000 * Number(this.newDocQty)) - (isTokoToGudang ? 500000 : 0)).toLocaleString('id-ID'),
+            plate: 'B 9481 UQ',
+            driver: this.newDocDriver,
+            statusKey: isTokoToGudang ? 'menunggu_approval' : 'perjalanan',
             statusLabel: isTokoToGudang ? 'MENUNGGU APPROVAL' : 'DALAM PERJALANAN',
-            statusSub: isTokoToGudang ? 'Siap Di-approve Manager' : 'Dikirim dari Gudang DC',
-            needsApproval: isTokoToGudang
-        });
-        this.saveReturns();
+            statusSub: isTokoToGudang ? 'Menunggu telaah Manager Toko' : 'Dikirim dari Gudang DC',
+            needsApproval: isTokoToGudang,
+            isPhysicalReceived: false,
+            physicalReceiptData: null
+        };
 
-        this.triggerToast('Draft ' + docId + ' (' + (isTokoToGudang ? 'Toko → Gudang' : 'Gudang → Toko') + ') berhasil ditambahkan!');
+        this.items.unshift(this.normalizeReturnDoc(newDoc));
+        this.saveReturns();
+        this.logAudit('CREATE_RETURN_DRAFT', docId, `Dibuat pengajuan retur ${docId} dari ${this.newDocBranch} oleh ${this.newDocCashier}.`);
+        this.showModal = false;
+        this.newDocSku = '';
+        this.newDocReason = '';
+        this.triggerToast(`Dokumen ${docId} berhasil dibuat.`);
     }
 }"
 x-init="initReturns()"
 class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidden">
 
     <!-- Manager Sidebar -->
-    <x-manager-sidebar active="retur" />
+    <x-manager-sidebar :active="$activeNav ?? (request()->is('*retur-masuk*') ? 'retur_masuk' : 'retur')" />
 
     <!-- Main Content Area -->
     <div class="flex-1 flex flex-col h-screen overflow-hidden min-w-0">
 
-        <!-- Top Navbar -->
+        <!-- Top Header Bar -->
         <header class="h-[64px] bg-white border-b border-slate-200/80 px-8 flex items-center justify-between shrink-0 z-10">
             <div class="relative w-full max-w-[380px]">
                 <span class="material-symbols-rounded absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">search</span>
-                <input type="text" x-model="searchQuery" placeholder="Cari dokumen retur, SKU, atau armada..." class="w-full bg-[#f1f5f9] border border-transparent focus:border-blue-500 focus:bg-white rounded-xl pl-10 pr-4 py-2 text-[13px] font-medium text-slate-700 placeholder-slate-400 focus:outline-none transition-all">
+                <input type="text" x-model="searchQuery" placeholder="Cari dokumen, kasir, SKU, produk, driver..." class="w-full bg-[#f1f5f9] border border-transparent focus:border-blue-500 focus:bg-white rounded-xl pl-10 pr-4 py-2 text-[13px] font-medium text-slate-700 placeholder-slate-400 focus:outline-none transition-all">
             </div>
             <div class="flex items-center gap-4">
-                <button class="relative w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-600 transition-colors cursor-pointer">
+                <a href="{{ url('/manager/inventory?tab=retur') }}" class="px-3 py-1.5 rounded-lg text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 flex items-center gap-1.5 transition-colors">
+                    <span class="material-symbols-rounded text-[16px]">warehouse</span>
+                    <span>Monitoring Stok Retur Gudang</span>
+                </a>
+                <button class="relative w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-600 transition-colors cursor-pointer" title="Notifikasi">
                     <span class="material-symbols-rounded text-[21px]">notifications</span>
                     <span class="absolute top-1.5 right-2 w-2 h-2 rounded-full bg-orange-500 ring-2 ring-white"></span>
-                </button>
-                <button class="w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-600 transition-colors cursor-pointer">
-                    <span class="material-symbols-rounded text-[21px]">help_outline</span>
                 </button>
             </div>
         </header>
@@ -291,210 +888,144 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
         <main class="flex-1 overflow-y-auto px-6 lg:px-8 py-6">
             <div class="max-w-[1440px] mx-auto space-y-5">
 
-                <!-- Breadcrumb & Title Header -->
+                <!-- Title Header & Breadcrumb -->
                 <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
                     <div>
                         <div class="flex flex-wrap items-center gap-1.5 text-[10px] font-extrabold text-slate-400 tracking-wider uppercase mb-1.5">
                             <span>OPERASIONAL CABANG</span>
                             <span class="material-symbols-rounded text-[13px]">chevron_right</span>
-                            <span>INVENTARIS & LOGISTIK</span>
+                            <span>INVENTARIS &amp; LOGISTIK</span>
                             <span class="material-symbols-rounded text-[13px]">chevron_right</span>
                             <span class="text-[#0052cc]">MANAJEMEN RETUR BARANG</span>
                         </div>
                         <div class="flex flex-wrap items-center gap-3">
-                            <h1 class="text-[24px] lg:text-[26px] font-black text-[#0f172a] tracking-tight leading-tight">Manajemen Retur Barang Terpadu</h1>
+                            <h1 class="text-[24px] lg:text-[26px] font-black text-[#0f172a] tracking-tight leading-tight">Manajemen Retur Barang Toko ke Gudang</h1>
                             <span class="inline-flex items-center gap-1.5 bg-[#dbeafe] text-[#1e40af] text-[12px] font-extrabold px-3 py-1 rounded-full border border-blue-200/80 shadow-2xs">
-                                <span>Toko</span>
-                                <span class="material-symbols-rounded text-[15px]">swap_horiz</span>
-                                <span>Gudang</span>
+                                <span>Pusat &amp; Cabang</span>
+                                <span class="material-symbols-rounded text-[15px]">arrow_forward</span>
+                                <span>Gudang Pusat (DC)</span>
                             </span>
                         </div>
                         <p class="text-[13px] text-slate-500 font-medium mt-1.5 max-w-2xl leading-relaxed">
-                            Alur pengembalian dan relokasi produk dua arah antara Toko Cabang dan Gudang Pusat dengan pelacakan armada logistik internal serta audit kondisi fisik barang secara komprehensif.
+                            Persetujuan manajerial pengajuan retur dari kasir cabang serta konfirmasi penerimaan fisik barang masuk di Gudang Pusat dengan isolasi penuh terhadap stok normal toko.
                         </p>
                     </div>
 
-                    <!-- ERP Sinkron Badge Card -->
-                    <div class="bg-[#f4f7fe] border border-[#dce5fc] rounded-xl px-4 py-2.5 flex items-center gap-3 shrink-0 self-start shadow-2xs">
-                        <div class="w-9 h-9 rounded-lg bg-[#e0eaff] text-[#0052cc] flex items-center justify-center shrink-0">
-                            <span class="material-symbols-rounded text-[20px]">cloud_done</span>
+                    <!-- SOP Rule Alert Badge -->
+                    <div class="bg-amber-50 border border-amber-200/90 rounded-xl px-4 py-2.5 flex items-center gap-3 shrink-0 self-start shadow-2xs">
+                        <div class="w-9 h-9 rounded-lg bg-amber-500 text-white flex items-center justify-center shrink-0">
+                            <span class="material-symbols-rounded text-[20px]">shield</span>
                         </div>
                         <div class="flex flex-col leading-tight">
-                            <span class="text-[10px] font-extrabold text-slate-600 uppercase tracking-wider">ERP SINKRON</span>
-                            <span class="text-[12px] font-extrabold text-[#16a34a] flex items-center gap-1 mt-0.5">
-                                <span class="w-1.5 h-1.5 rounded-full bg-[#16a34a]"></span>
-                                Terhubung
+                            <span class="text-[10px] font-extrabold text-amber-900 uppercase tracking-wider">SOP ISOLASI RETUR</span>
+                            <span class="text-[11.5px] font-bold text-amber-800 mt-0.5">
+                                Fisik Diterima &rarr; Stok Retur (Bukan Normal)
                             </span>
                         </div>
                     </div>
                 </div>
 
-                <!-- Blue Info Policy Banner -->
-                <div class="bg-[#ebf2ff] border border-[#c7dcff] rounded-2xl p-4 lg:p-5 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 shadow-2xs">
-                    <div class="flex items-start gap-3.5">
-                        <div class="w-11 h-11 rounded-xl bg-[#0047b3] text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5">
-                            <span class="material-symbols-rounded text-[22px]">local_shipping</span>
-                        </div>
-                        <div>
-                            <div class="flex flex-wrap items-center gap-2.5">
-                                <h2 class="text-[14.5px] font-extrabold text-[#0f172a]">Kebijakan Logistik & Biaya Angkutan Retur</h2>
-                                <span class="bg-[#0047b3] text-white text-[10px] font-extrabold px-2.5 py-0.5 rounded-md uppercase tracking-wider">SOP LOG-04</span>
-                            </div>
-                            <p class="text-[12.5px] text-slate-600 font-medium leading-relaxed mt-1 max-w-4xl">
-                                Biaya ekspedisi flat <span class="font-extrabold text-[#0047b3] underline decoration-[#93c5fd] underline-offset-2">Rp 500.000</span> berlaku untuk setiap order retur <span class="font-extrabold text-slate-800">Toko &rarr; Gudang</span> per trip armada pick-up (dipotong otomatis dari nota retur cabang). Pengiriman <span class="font-extrabold text-slate-800">Gudang &rarr; Toko</span> (penggantian produk rusak/cacat pabrik) sepenuhnya <span class="font-extrabold text-[#15803d]">Bebas Biaya Logistik</span>.
-                            </p>
-                        </div>
-                    </div>
-                    <button @click="triggerToast('Membuka dokumen Panduan SOP LOG-04...')" class="bg-white hover:bg-slate-50 text-slate-800 border border-slate-200/90 px-4 py-2.5 rounded-xl text-[12px] font-extrabold flex items-center gap-2 shrink-0 shadow-2xs transition-all cursor-pointer">
-                        <span class="material-symbols-rounded text-[17px] text-slate-600">menu_book</span>
-                        <span>Panduan SOP</span>
-                    </button>
-                </div>
-
-                <!-- 5 KPI Summary Cards (Clean, Non-Wrapping Layout) -->
+                <!-- 5 KPI Summary Cards -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
                     <!-- Card 1 -->
                     <div class="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-2xs flex flex-col justify-between">
                         <div>
-                            <div class="flex items-start justify-between gap-2">
-                                <span class="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider leading-snug">TOTAL NILAI RETUR<br>BLN INI</span>
-                                <span class="material-symbols-rounded text-[18px] text-[#0052cc] shrink-0">inventory</span>
-                            </div>
-                            <div class="text-[20px] font-black text-[#0f172a] font-mono tracking-tight mt-2.5 whitespace-nowrap">
-                                Rp 18.450.000
-                            </div>
+                            <span class="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider leading-snug">TOTAL DOKUMEN RETUR</span>
+                            <div class="text-[24px] font-black text-[#0f172a] font-mono tracking-tight mt-2" x-text="items.length">0</div>
                         </div>
-                        <div class="mt-3">
-                            <div class="flex items-center justify-between text-[11px] mb-2">
-                                <span class="text-slate-500 font-semibold">14 Dokumen Pengajuan</span>
-                                <span class="font-extrabold text-[#16a34a] inline-flex items-center gap-0.5">▲ +4%</span>
-                            </div>
-                            <div class="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
-                                <div class="w-[72%] h-full bg-[#0047b3] rounded-full"></div>
-                            </div>
-                        </div>
+                        <div class="text-[11px] text-slate-500 font-semibold mt-3">Semua riwayat pengajuan</div>
                     </div>
 
-                    <!-- Card 2 -->
-                    <div class="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-2xs flex flex-col justify-between">
+                    <!-- Card 2: Menunggu Persetujuan Manager -->
+                    <div class="bg-white border border-amber-200 rounded-2xl p-4 shadow-2xs flex flex-col justify-between border-l-4 border-l-amber-500">
                         <div>
-                            <div class="flex items-start justify-between gap-2">
-                                <span class="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider leading-snug">KONDISI RUSAK /<br>CACAT</span>
-                                <span class="w-2.5 h-2.5 rounded-full bg-[#dc2626] shrink-0 mt-1"></span>
+                            <div class="flex items-start justify-between gap-1">
+                                <span class="text-[10px] font-extrabold text-amber-700 uppercase tracking-wider leading-snug">MENUNGGU APPROVAL</span>
+                                <span class="material-symbols-rounded text-[18px] text-amber-500">pending_actions</span>
                             </div>
-                            <div class="text-[20px] font-black text-[#dc2626] font-mono tracking-tight mt-2.5 whitespace-nowrap">
-                                Rp 4.250.000
-                            </div>
+                            <div class="text-[24px] font-black text-amber-600 font-mono tracking-tight mt-2" x-text="countPendingApproval">0</div>
                         </div>
-                        <div class="mt-3">
-                            <div class="flex items-center justify-between gap-1 text-[11px] mb-2">
-                                <span class="text-slate-500 font-semibold truncate">32 SKU Teridentifikasi</span>
-                                <span class="bg-[#fee2e2] text-[#b91c1c] text-[10px] font-extrabold px-2 py-0.5 rounded-md whitespace-nowrap shrink-0">Cacat Fisik</span>
-                            </div>
-                            <div class="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
-                                <div class="w-[38%] h-full bg-[#dc2626] rounded-full"></div>
-                            </div>
-                        </div>
+                        <div class="text-[11px] text-amber-800 font-semibold mt-3">Perlu telaah Manager Toko</div>
                     </div>
 
-                    <!-- Card 3 -->
-                    <div class="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-2xs flex flex-col justify-between">
+                    <!-- Card 3: Siap Diterima Fisik Gudang -->
+                    <div class="bg-white border border-blue-200 rounded-2xl p-4 shadow-2xs flex flex-col justify-between border-l-4 border-l-[#0052cc]">
                         <div>
-                            <div class="flex items-start justify-between gap-2">
-                                <span class="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider leading-snug">KEDALUWARSA /<br>DEKAT ED</span>
-                                <span class="w-2.5 h-2.5 rounded-full bg-[#d97706] shrink-0 mt-1"></span>
+                            <div class="flex items-start justify-between gap-1">
+                                <span class="text-[10px] font-extrabold text-[#0052cc] uppercase tracking-wider leading-snug">SIAP CEK FISIK GUDANG</span>
+                                <span class="material-symbols-rounded text-[18px] text-[#0052cc]">archive</span>
                             </div>
-                            <div class="text-[20px] font-black text-[#d97706] font-mono tracking-tight mt-2.5 whitespace-nowrap">
-                                Rp 8.900.000
-                            </div>
+                            <div class="text-[24px] font-black text-[#0052cc] font-mono tracking-tight mt-2" x-text="countApprovedPendingPhysical">0</div>
                         </div>
-                        <div class="mt-3">
-                            <div class="flex items-center justify-between gap-1 text-[11px] mb-2">
-                                <span class="text-slate-500 font-semibold truncate">18 SKU Kritis</span>
-                                <span class="bg-[#ffedd5] text-[#b45309] text-[10px] font-extrabold px-2 py-0.5 rounded-md whitespace-nowrap shrink-0">&lt; 30 Hari</span>
-                            </div>
-                            <div class="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
-                                <div class="w-[58%] h-full bg-[#d97706] rounded-full"></div>
-                            </div>
-                        </div>
+                        <div class="text-[11px] text-blue-800 font-semibold mt-3">Disetujui &amp; Menuju Gudang</div>
                     </div>
 
-                    <!-- Card 4 -->
-                    <div class="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-2xs flex flex-col justify-between">
+                    <!-- Card 4: Selesai / Diterima Gudang -->
+                    <div class="bg-white border border-emerald-200 rounded-2xl p-4 shadow-2xs flex flex-col justify-between border-l-4 border-l-emerald-500">
                         <div>
-                            <div class="flex items-start justify-between gap-2">
-                                <span class="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider leading-snug">MUTASI<br>OVERSTOCK</span>
-                                <span class="w-2.5 h-2.5 rounded-full bg-[#0052cc] shrink-0 mt-1"></span>
+                            <div class="flex items-start justify-between gap-1">
+                                <span class="text-[10px] font-extrabold text-emerald-700 uppercase tracking-wider leading-snug">SELESAI TERIMA FISIK</span>
+                                <span class="material-symbols-rounded text-[18px] text-emerald-500">task_alt</span>
                             </div>
-                            <div class="text-[20px] font-black text-[#0052cc] font-mono tracking-tight mt-2.5 whitespace-nowrap">
-                                Rp 5.300.000
-                            </div>
+                            <div class="text-[24px] font-black text-emerald-600 font-mono tracking-tight mt-2" x-text="countCompletedReceipt">0</div>
                         </div>
-                        <div class="mt-3">
-                            <div class="flex items-center justify-between gap-1 text-[11px] mb-2">
-                                <span class="text-slate-500 font-semibold truncate">45 SKU Relokasi</span>
-                                <span class="bg-[#dbeafe] text-[#1d4ed8] text-[10px] font-extrabold px-2 py-0.5 rounded-md whitespace-nowrap shrink-0">Rotasi DC</span>
-                            </div>
-                            <div class="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
-                                <div class="w-[45%] h-full bg-[#0052cc] rounded-full"></div>
-                            </div>
-                        </div>
+                        <div class="text-[11px] text-emerald-800 font-semibold mt-3">Memiliki BAST resmi</div>
                     </div>
 
-                    <!-- Card 5 -->
+                    <!-- Card 5: Kuantitas di Karantina Gudang -->
                     <div class="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-2xs flex flex-col justify-between">
                         <div>
-                            <div class="flex items-start justify-between gap-2">
-                                <span class="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider leading-snug">BIAYA ARMADA<br>TERPOTONG</span>
-                                <span class="material-symbols-rounded text-[18px] text-slate-500 shrink-0">local_shipping</span>
+                            <div class="flex items-start justify-between gap-1">
+                                <span class="text-[10px] font-extrabold text-slate-600 uppercase tracking-wider leading-snug">STOK RETUR KARANTINA</span>
+                                <span class="material-symbols-rounded text-[18px] text-amber-600">warehouse</span>
                             </div>
-                            <div class="text-[20px] font-black text-[#0f172a] font-mono tracking-tight mt-2.5 whitespace-nowrap">
-                                Rp 1.500.000
-                            </div>
+                            <div class="text-[22px] font-black text-amber-700 font-mono tracking-tight mt-2" x-text="totalQuarantineUnitsInGudang + ' Unit'">0 Unit</div>
                         </div>
-                        <div class="mt-3">
-                            <div class="flex items-center justify-between gap-1 text-[11px] mb-2">
-                                <span class="text-slate-500 font-semibold truncate">3 Pengiriman Truk</span>
-                                <span class="text-slate-700 font-extrabold font-mono whitespace-nowrap shrink-0">@ Rp 500k</span>
-                            </div>
-                            <div class="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
-                                <div class="w-[64%] h-full bg-slate-600 rounded-full"></div>
-                            </div>
-                        </div>
+                        <div class="text-[11px] text-slate-500 font-semibold mt-3">Gudang Pusat (Terisolasi)</div>
                     </div>
                 </div>
 
-                <!-- Navigation Tabs & Action Buttons Bar (Fixed Truncated Tab!) -->
+                <!-- Navigation Tabs Bar (3 Main Sub-Features) -->
                 <div class="bg-white border border-slate-200/80 rounded-2xl p-2.5 flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3 shadow-2xs">
-                    <!-- Left Tabs -->
+                    <!-- Left Tab Buttons -->
                     <div class="flex flex-wrap items-center gap-2">
-                        <button @click="activeTab = 'all'; directionFilter = 'all'"
-                                :class="directionFilter === 'all' || directionFilter === 'toko_ke_gudang' ? 'bg-[#0047b3] text-white shadow-xs' : 'bg-slate-50 hover:bg-slate-100 text-slate-600'"
+                        <!-- Tab 1: Persetujuan Retur -->
+                        <button type="button"
+                                @click="mainTab = 'approval'"
+                                :class="mainTab === 'approval' ? 'bg-[#0047b3] text-white shadow-xs' : 'bg-slate-50 hover:bg-slate-100 text-slate-600'"
                                 class="px-4 py-2.5 rounded-xl text-[12.5px] font-extrabold flex items-center gap-2.5 transition-all cursor-pointer">
-                            <span class="material-symbols-rounded text-[17px]">outbox</span>
-                            <span>Toko &rarr; Gudang (Return to DC)</span>
-                            <span :class="directionFilter === 'all' || directionFilter === 'toko_ke_gudang' ? 'bg-white text-[#0047b3]' : 'bg-slate-200 text-slate-700'"
-                                  class="text-[10.5px] font-extrabold px-2.5 py-0.5 rounded-full">4 Pengajuan</span>
+                            <span class="material-symbols-rounded text-[17px]">verified</span>
+                            <span>Persetujuan Retur (Toko &rarr; Gudang)</span>
+                            <span :class="mainTab === 'approval' ? 'bg-white text-[#0047b3]' : 'bg-slate-200 text-slate-700'"
+                                  class="text-[10.5px] font-extrabold px-2 py-0.5 rounded-full"
+                                  x-text="countPendingApproval + ' Menunggu'"></span>
                         </button>
 
-                        <button @click="directionFilter = (directionFilter === 'gudang_ke_toko' ? 'all' : 'gudang_ke_toko')"
-                                :class="directionFilter === 'gudang_ke_toko' ? 'bg-[#0047b3] text-white shadow-xs' : 'bg-white hover:bg-slate-50 text-slate-600 border border-slate-200/70'"
+                        <!-- Tab 2: Barang Masuk Retur (Cabang ke Gudang) -->
+                        <a href="{{ url('/manager/retur-masuk') }}"
+                           class="px-4 py-2.5 rounded-xl text-[12.5px] font-extrabold flex items-center gap-2.5 transition-all cursor-pointer bg-slate-50 hover:bg-slate-100 text-slate-600">
+                            <span class="material-symbols-rounded text-[17px]">archive</span>
+                            <span>Barang Masuk Retur (Cabang ke Gudang)</span>
+                            <span class="bg-purple-100 text-purple-800 text-[10.5px] font-extrabold px-2 py-0.5 rounded-full">Portal Terpadu &rarr;</span>
+                        </a>
+
+                        <!-- Tab 3: Riwayat BAST & Serah Terima -->
+                        <button type="button"
+                                @click="mainTab = 'riwayat'"
+                                :class="mainTab === 'riwayat' ? 'bg-[#0047b3] text-white shadow-xs' : 'bg-slate-50 hover:bg-slate-100 text-slate-600'"
                                 class="px-4 py-2.5 rounded-xl text-[12.5px] font-extrabold flex items-center gap-2.5 transition-all cursor-pointer">
-                            <span class="material-symbols-rounded text-[17px]">move_to_inbox</span>
-                            <span>Gudang &rarr; Toko (Penggantian / Kirim Barang)</span>
-                            <span :class="directionFilter === 'gudang_ke_toko' ? 'bg-white text-[#0047b3]' : 'bg-emerald-50 text-[#15803d] border border-emerald-200'"
-                                  class="text-[10.5px] font-extrabold px-2.5 py-0.5 rounded-full">1 Pengiriman</span>
+                            <span class="material-symbols-rounded text-[17px]">assignment_turned_in</span>
+                            <span>Riwayat Dokumen &amp; BAST</span>
+                            <span :class="mainTab === 'riwayat' ? 'bg-white text-[#0047b3]' : 'bg-emerald-100 text-emerald-800'"
+                                  class="text-[10.5px] font-extrabold px-2 py-0.5 rounded-full"
+                                  x-text="countCompletedReceipt + ' Selesai'"></span>
                         </button>
                     </div>
 
-                    <!-- Right Action Buttons -->
-                    <div class="flex flex-wrap items-center gap-2.5">
-                        <button @click="modalMode = 'gudang_ke_toko'; showModal = true"
-                                class="bg-[#e2e8f0]/80 hover:bg-[#cbd5e1] text-[#0f172a] px-4 py-2.5 rounded-xl text-[12px] font-extrabold flex items-center gap-2 transition-all cursor-pointer">
-                            <span class="material-symbols-rounded text-[17px]">archive</span>
-                            <span>+ Penerimaan dari Gudang</span>
-                        </button>
-                        <button @click="modalMode = 'toko_ke_gudang'; showModal = true"
+                    <!-- Right Action Button -->
+                    <div class="flex items-center gap-2.5">
+                        <button type="button"
+                                @click="modalMode = 'toko_ke_gudang'; showModal = true;"
                                 class="bg-[#0047b3] hover:bg-[#003994] text-white px-4 py-2.5 rounded-xl text-[12px] font-extrabold flex items-center gap-2 shadow-xs transition-all cursor-pointer">
                             <span class="material-symbols-rounded text-[17px]">add_circle</span>
                             <span>+ Buat Pengajuan Retur Baru</span>
@@ -502,532 +1033,1479 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
                     </div>
                 </div>
 
-                <!-- Main Table Card -->
-                <div class="bg-white border border-slate-200/80 rounded-2xl shadow-2xs overflow-hidden">
+                <!-- ======================================================== -->
+                <!-- TAB 1: PERSETUJUAN RETUR MANAGER (TOKO -> GUDANG) -->
+                <!-- ======================================================== -->
+                <div x-show="mainTab === 'approval'" class="space-y-4">
 
-                    <!-- Filter Toolbar (Cleanly Aligned, Non-Cut Off) -->
-                    <div class="p-4 lg:px-6 border-b border-slate-100 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
-                        <!-- Search Box -->
-                        <div class="relative flex-1 max-w-md">
-                            <span class="material-symbols-rounded absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">search</span>
-                            <input type="text" x-model="searchQuery" placeholder="Cari No. Dokumen, SKU, Produk, Driver..." class="w-full bg-[#f1f5f9] border border-transparent focus:border-blue-500 focus:bg-white rounded-xl pl-10 pr-4 py-2.5 text-[12.5px] font-medium text-slate-700 placeholder-slate-400 focus:outline-none transition-all">
+                    <!-- Filter Toolbar -->
+                    <div class="bg-white border border-slate-200/80 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-3 shadow-2xs">
+                        <div class="flex items-center gap-2 w-full md:w-auto">
+                            <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Status:</span>
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <button type="button" @click="statusFilterApproval = 'all'" :class="statusFilterApproval === 'all' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer">Semua</button>
+                                <button type="button" @click="statusFilterApproval = 'menunggu'" :class="statusFilterApproval === 'menunggu' ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer">Menunggu Approval</button>
+                                <button type="button" @click="statusFilterApproval = 'disetujui'" :class="statusFilterApproval === 'disetujui' ? 'bg-[#0047b3] text-white' : 'bg-blue-50 text-blue-800 hover:bg-blue-100 border border-blue-200'" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer">Disetujui</button>
+                                <button type="button" @click="statusFilterApproval = 'revisi'" :class="statusFilterApproval === 'revisi' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-800 hover:bg-purple-100 border border-purple-200'" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer">Perlu Revisi</button>
+                                <button type="button" @click="statusFilterApproval = 'ditolak'" :class="statusFilterApproval === 'ditolak' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-200'" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer">Ditolak</button>
+                            </div>
                         </div>
 
-                        <!-- Filter Controls -->
-                        <div class="flex flex-wrap items-center gap-2">
-                            <!-- Direction Filter -->
-                            <div class="relative">
-                                <span class="material-symbols-rounded absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-[16px] pointer-events-none">swap_horiz</span>
-                                <select x-model="directionFilter" class="bg-[#f1f5f9] hover:bg-slate-200/70 text-slate-700 text-[12px] font-bold pl-9 pr-7 py-2 rounded-xl appearance-none cursor-pointer focus:outline-none border border-transparent focus:border-blue-400">
-                                    <option value="all">Toko ⇄ Gudang</option>
-                                    <option value="toko_ke_gudang">Toko → Gudang</option>
-                                    <option value="gudang_ke_toko">Gudang → Toko</option>
-                                </select>
-                                <span class="material-symbols-rounded absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-[16px] pointer-events-none">expand_more</span>
-                            </div>
-
-                            <!-- Condition Filter -->
-                            <div class="relative">
-                                <span class="material-symbols-rounded absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-[16px] pointer-events-none">category</span>
-                                <select x-model="conditionFilter" class="bg-[#f1f5f9] hover:bg-slate-200/70 text-slate-700 text-[12px] font-bold pl-9 pr-7 py-2 rounded-xl appearance-none cursor-pointer focus:outline-none border border-transparent focus:border-blue-400">
-                                    <option value="all">Semua Kondisi</option>
-                                    <option value="rusak">Rusak / Bocor</option>
-                                    <option value="ed">Kedaluwarsa / H-14</option>
-                                    <option value="garansi">Penggantian Garansi</option>
-                                    <option value="overstock">Mutasi Overstock</option>
-                                </select>
-                                <span class="material-symbols-rounded absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-[16px] pointer-events-none">expand_more</span>
-                            </div>
-
-                            <!-- Status Filter -->
-                            <div class="relative">
-                                <span class="material-symbols-rounded absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-[16px] pointer-events-none">verified</span>
-                                <select x-model="statusFilter" class="bg-[#f1f5f9] hover:bg-slate-200/70 text-slate-700 text-[12px] font-bold pl-9 pr-7 py-2 rounded-xl appearance-none cursor-pointer focus:outline-none border border-transparent focus:border-blue-400">
-                                    <option value="all">Semua Status</option>
-                                    <option value="cek_fisik">Cek Fisik / Menunggu</option>
-                                    <option value="disetujui">Disetujui SPV/Mgr</option>
-                                    <option value="perjalanan">Dalam Perjalanan</option>
-                                    <option value="selesai">Selesai (BAST)</option>
-                                </select>
-                                <span class="material-symbols-rounded absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-[16px] pointer-events-none">expand_more</span>
-                            </div>
-
-                            <!-- Date Badge -->
-                            <div class="bg-[#f1f5f9] text-slate-700 text-[12px] font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5">
-                                <span class="material-symbols-rounded text-[16px] text-slate-500">calendar_today</span>
-                                <span>Mei 2024</span>
-                            </div>
-
-                            <!-- Reset Filter -->
-                            <button @click="searchQuery = ''; directionFilter = 'all'; conditionFilter = 'all'; statusFilter = 'all'"
-                                    title="Reset Filter"
-                                    class="w-9 h-9 rounded-xl bg-[#f1f5f9] hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors cursor-pointer">
-                                <span class="material-symbols-rounded text-[18px]">filter_alt_off</span>
-                            </button>
+                        <div class="text-xs text-slate-500 font-medium">
+                            Menampilkan <span class="font-bold text-slate-800" x-text="filteredApprovalList.length">0</span> pengajuan retur cabang
                         </div>
                     </div>
 
-                    <!-- Responsive Table Container -->
-                    <div class="overflow-x-auto min-w-0 w-full">
-                        <table class="w-full text-left border-collapse min-w-[1160px]">
-                            <thead>
-                                <tr class="bg-[#f8fafc] border-b border-slate-200/80 text-[10.5px] font-extrabold text-slate-500 uppercase tracking-wider">
-                                    <th class="py-3.5 px-5 w-[165px]">NO. DOKUMEN & TANGGAL</th>
-                                    <th class="py-3.5 px-4 w-[145px]">ARAH RETUR</th>
-                                    <th class="py-3.5 px-4 w-[195px]">KONDISI / ALASAN</th>
-                                    <th class="py-3.5 px-4 w-[240px]">BARANG & KUANTITAS</th>
-                                    <th class="py-3.5 px-4 w-[185px]">KALKULASI FINANSIAL</th>
-                                    <th class="py-3.5 px-4 w-[155px]">ARMADA & DRIVER</th>
-                                    <th class="py-3.5 px-5 w-[195px]">STATUS & APPROVAL</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-slate-100 text-[12.5px]">
-                                <template x-for="item in filteredItems" :key="item.id">
-                                    <tr class="hover:bg-slate-50/70 transition-colors align-top">
-                                        <!-- 1. NO. DOKUMEN & TANGGAL -->
-                                        <td class="py-4 px-5">
-                                            <div class="font-mono font-extrabold text-[12.5px] whitespace-nowrap"
-                                                 :class="item.direction === 'gudang_ke_toko' ? 'text-[#15803d]' : 'text-[#0052cc]'"
-                                                 x-text="item.docNo"></div>
-                                            <div class="text-[11px] font-medium text-slate-500 mt-1" x-text="item.date"></div>
-                                            <div class="text-[10.5px] font-mono text-slate-400 mt-0.5" x-text="item.ref"></div>
-                                        </td>
-
-                                        <!-- 2. ARAH RETUR -->
-                                        <td class="py-4 px-4">
-                                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10.5px] font-extrabold whitespace-nowrap border"
-                                                  :class="item.direction === 'gudang_ke_toko' ? 'bg-[#dcfce7] text-[#15803d] border-emerald-200' : 'bg-[#dbeafe] text-[#1e40af] border-blue-200'">
-                                                <span class="material-symbols-rounded text-[14px]" x-text="item.direction === 'gudang_ke_toko' ? 'warehouse' : 'storefront'"></span>
-                                                <span x-text="item.directionLabel"></span>
-                                            </span>
-                                        </td>
-
-                                        <!-- 3. KONDISI / ALASAN -->
-                                        <td class="py-4 px-4">
-                                            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wide whitespace-nowrap"
-                                                  :class="{
-                                                      'bg-[#fee2e2] text-[#b91c1c]': item.conditionType === 'rusak',
-                                                      'bg-[#ffedd5] text-[#b45309]': item.conditionType === 'ed',
-                                                      'bg-[#dbeafe] text-[#1e40af]': item.conditionType === 'garansi' || item.conditionType === 'overstock'
-                                                  }">
-                                                <span class="w-1.5 h-1.5 rounded-full"
-                                                      :class="{
-                                                          'bg-[#dc2626]': item.conditionType === 'rusak',
-                                                          'bg-[#d97706]': item.conditionType === 'ed',
-                                                          'bg-[#0052cc]': item.conditionType === 'garansi' || item.conditionType === 'overstock'
-                                                      }"></span>
-                                                <span x-text="item.conditionLabel"></span>
-                                            </span>
-                                            <p class="text-[11.5px] text-slate-500 font-medium mt-1.5 leading-snug" x-text="item.conditionDesc"></p>
-                                        </td>
-
-                                        <!-- 4. BARANG & KUANTITAS -->
-                                        <td class="py-4 px-4">
-                                            <div class="space-y-1.5">
-                                                <template x-for="(prod, idx) in item.products" :key="idx">
-                                                    <div class="flex items-center justify-between gap-3">
-                                                        <span class="text-[12px] font-bold text-slate-800 leading-snug" x-text="prod.name"></span>
-                                                        <span class="text-[11.5px] font-extrabold font-mono whitespace-nowrap shrink-0" :class="prod.color" x-text="prod.qty"></span>
-                                                    </div>
-                                                </template>
-                                                <template x-if="item.extraItems">
-                                                    <div class="text-[11px] font-semibold text-slate-400 pt-0.5" x-text="item.extraItems"></div>
-                                                </template>
-                                            </div>
-                                        </td>
-
-                                        <!-- 5. KALKULASI FINANSIAL -->
-                                        <td class="py-4 px-4">
-                                            <div class="space-y-1 text-[11.5px]">
-                                                <div class="flex items-center justify-between gap-2">
-                                                    <span class="text-slate-400 font-medium" x-text="item.subtotalLabel"></span>
-                                                    <span class="font-mono font-bold text-slate-700 whitespace-nowrap" x-text="item.subtotal"></span>
-                                                </div>
-                                                <div class="flex items-center justify-between gap-2">
-                                                    <span class="font-medium" :class="item.truckFeeFree ? 'text-[#16a34a]' : 'text-red-500'">Biaya Truk:</span>
-                                                    <span class="font-mono font-bold whitespace-nowrap" :class="item.truckFeeFree ? 'text-[#16a34a]' : 'text-red-600'" x-text="item.truckFee"></span>
-                                                </div>
-                                                <div class="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
-                                                    <span class="font-extrabold text-slate-900" x-text="item.netLabel"></span>
-                                                    <span class="font-mono font-black text-[12.5px] whitespace-nowrap"
-                                                          :class="item.direction === 'gudang_ke_toko' ? 'text-[#16a34a]' : 'text-[#0052cc]'"
-                                                          x-text="item.netAmount"></span>
-                                                </div>
-                                            </div>
-                                        </td>
-
-                                        <!-- 6. ARMADA & DRIVER -->
-                                        <td class="py-4 px-4">
-                                            <div class="flex items-start gap-2.5">
-                                                <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5"
-                                                     :class="item.direction === 'gudang_ke_toko' ? 'bg-emerald-50 text-[#16a34a]' : 'bg-slate-100 text-slate-600'">
-                                                    <span class="material-symbols-rounded text-[16px]">local_shipping</span>
-                                                </div>
-                                                <div class="min-w-0">
-                                                    <div class="font-mono font-extrabold text-[12px] text-slate-900 whitespace-nowrap" x-text="item.plate"></div>
-                                                    <div class="text-[11px] font-medium text-slate-500 whitespace-nowrap mt-0.5" x-text="item.driver"></div>
-                                                </div>
-                                            </div>
-                                        </td>
-
-                                        <!-- 7. STATUS & APPROVAL -->
-                                        <td class="py-4 px-5">
-                                            <div class="flex flex-col items-start gap-1.5">
-                                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-wide whitespace-nowrap border"
-                                                      :class="{
-                                                          'bg-[#fef3c7] text-[#92400e] border-[#fde68a]': item.statusKey === 'cek_fisik',
-                                                          'bg-[#dcfce7] text-[#15803d] border-[#bbf7d0]': item.statusKey === 'selesai',
-                                                          'bg-[#dbeafe] text-[#1e40af] border-[#bfdbfe]': item.statusKey === 'perjalanan',
-                                                          'bg-[#e0e7ff] text-[#3730a3] border-[#c7d2fe]': item.statusKey === 'disetujui',
-                                                          'bg-[#fee2e2] text-[#b91c1c] border-[#fecaca]': item.statusKey === 'ditolak'
-                                                      }">
-                                                    <span class="material-symbols-rounded text-[13px]"
-                                                          x-text="{
-                                                              'cek_fisik': 'inventory',
-                                                              'selesai': 'check_circle',
-                                                              'perjalanan': 'local_shipping',
-                                                              'disetujui': 'verified_user',
-                                                              'ditolak': 'cancel'
-                                                          }[item.statusKey]"></span>
-                                                    <span x-text="item.statusLabel"></span>
-                                                </span>
-                                                <span class="text-[11px] text-slate-500 font-medium" x-text="item.statusSub"></span>
-
-                                                <!-- Manager Approve / Reject Controls for Toko -> Gudang -->
-                                                <template x-if="item.needsApproval">
-                                                    <div class="flex items-center gap-1.5 mt-1">
-                                                        <button @click="approveItem(item)"
-                                                                class="bg-[#16a34a] hover:bg-[#15803d] text-white text-[10.5px] font-extrabold px-2.5 py-1 rounded-lg inline-flex items-center gap-1 shadow-2xs transition-colors cursor-pointer">
-                                                            <span class="material-symbols-rounded text-[13px]">check</span>
-                                                            <span>Approve</span>
+                    <!-- Table Dokumen Persetujuan Retur (Standardized Grouped Rows & Single-Line Cells) -->
+                    <div class="bg-white border border-slate-200/80 rounded-2xl shadow-2xs overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs border-collapse">
+                                <thead class="bg-slate-50 border-b border-slate-200/80 text-slate-500 font-extrabold uppercase tracking-wider text-[11px] whitespace-nowrap">
+                                    <tr>
+                                        <th class="py-3 px-4">No. Dokumen</th>
+                                        <th class="py-3 px-4">Asal Toko</th>
+                                        <th class="py-3 px-4">Tanggal</th>
+                                        <th class="py-3 px-4">Alasan Retur</th>
+                                        <th class="py-3 px-4">SKU</th>
+                                        <th class="py-3 px-4">Nama Produk</th>
+                                        <th class="py-3 px-4 text-center">Qty Diajukan</th>
+                                        <th class="py-3 px-4">Pengirim</th>
+                                        <th class="py-3 px-4">Plat Nomor</th>
+                                        <th class="py-3 px-4">Status Pengajuan</th>
+                                        <th class="py-3 px-4 text-center">Tindakan Manager</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="text-slate-700">
+                                    <template x-for="item in filteredApprovalList" :key="item.id">
+                                        <template x-for="(prod, pIdx) in ((item.products && item.products.length > 0) ? item.products : [{ name: '-', sku: '-', submittedQty: '-' }])" :key="pIdx">
+                                            <tr class="hover:bg-slate-50/70 transition-colors" :class="pIdx === 0 ? 'border-t border-slate-200' : 'border-t border-slate-100'">
+                                                <!-- Parent Col 1: No Dokumen -->
+                                                <template x-if="pIdx === 0">
+                                                    <td :rowspan="item.products && item.products.length > 0 ? item.products.length : 1" class="py-3 px-4 align-middle whitespace-nowrap bg-white font-mono font-black text-slate-900 text-[13px]">
+                                                        <button type="button"
+                                                                @click="openDetailDoc(item)"
+                                                                class="hover:text-[#0052cc] hover:underline inline-flex items-center gap-1 cursor-pointer"
+                                                                :title="'Buka detail ' + item.docNo">
+                                                            <span x-text="item.docNo"></span>
+                                                            <span class="material-symbols-rounded text-[14px] text-slate-400">open_in_new</span>
                                                         </button>
-                                                        <button @click="rejectItem(item)"
-                                                                class="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-[10.5px] font-extrabold px-2.5 py-1 rounded-lg inline-flex items-center gap-1 transition-colors cursor-pointer">
-                                                            <span class="material-symbols-rounded text-[13px]">close</span>
-                                                            <span>Tolak</span>
-                                                        </button>
-                                                    </div>
+                                                    </td>
                                                 </template>
 
-                                                <!-- Manager Receive Confirmation for Gudang -> Toko -->
-                                                <template x-if="item.direction === 'gudang_ke_toko' && item.statusKey === 'perjalanan'">
-                                                    <button @click="confirmReceive(item)"
-                                                            class="mt-1 bg-emerald-50 hover:bg-emerald-100 text-[#15803d] border border-emerald-200 text-[10.5px] font-extrabold px-2.5 py-1 rounded-lg inline-flex items-center gap-1 transition-colors cursor-pointer">
-                                                        <span class="material-symbols-rounded text-[13px]">done_all</span>
-                                                        <span>Terima Barang</span>
-                                                    </button>
+                                                <!-- Parent Col 2: Asal Toko -->
+                                                <template x-if="pIdx === 0">
+                                                    <td :rowspan="item.products && item.products.length > 0 ? item.products.length : 1" class="py-3 px-4 align-middle whitespace-nowrap bg-white">
+                                                        <div class="inline-flex items-center gap-1.5 font-bold text-slate-800 text-xs">
+                                                            <span class="material-symbols-rounded text-[15px] text-[#0052cc]">store</span>
+                                                            <span x-text="item.branchOrigin || 'Cabang A'"></span>
+                                                        </div>
+                                                    </td>
                                                 </template>
-                                            </div>
+
+                                                <!-- Parent Col 3: Tanggal -->
+                                                <template x-if="pIdx === 0">
+                                                    <td :rowspan="item.products && item.products.length > 0 ? item.products.length : 1" class="py-3 px-4 align-middle whitespace-nowrap bg-white text-xs text-slate-600 font-medium" x-text="item.date">
+                                                    </td>
+                                                </template>
+
+                                                <!-- Parent Col 4: Alasan Retur -->
+                                                <template x-if="pIdx === 0">
+                                                    <td :rowspan="item.products && item.products.length > 0 ? item.products.length : 1" class="py-3 px-4 align-middle whitespace-nowrap bg-white">
+                                                        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-extrabold uppercase border"
+                                                              :class="{
+                                                                  'bg-red-50 text-red-700 border-red-200': item.conditionType === 'rusak',
+                                                                  'bg-amber-50 text-amber-700 border-amber-200': item.conditionType === 'ed',
+                                                                  'bg-blue-50 text-blue-700 border-blue-200': item.conditionType === 'overstock',
+                                                                  'bg-emerald-50 text-emerald-700 border-emerald-200': item.conditionType === 'garansi'
+                                                              }" x-text="item.conditionLabel"></span>
+                                                    </td>
+                                                </template>
+
+                                                <!-- Child Col 5: SKU -->
+                                                <td class="py-3 px-4 align-middle whitespace-nowrap font-mono text-xs text-slate-600 font-bold" x-text="prod.sku || '-'"></td>
+
+                                                <!-- Child Col 6: Nama Produk -->
+                                                <td class="py-3 px-4 align-middle whitespace-nowrap font-bold text-slate-800 text-xs max-w-[220px] truncate" :title="prod.name" x-text="prod.name"></td>
+
+                                                <!-- Child Col 7: Qty Diajukan -->
+                                                <td class="py-3 px-4 align-middle whitespace-nowrap text-center">
+                                                    <span class="font-mono font-bold text-xs bg-blue-50 text-[#0047b3] border border-blue-200 px-2 py-0.5 rounded" x-text="formatQtyClean(prod)"></span>
+                                                </td>
+
+                                                <!-- Parent Col 8: Pengirim -->
+                                                <template x-if="pIdx === 0">
+                                                    <td :rowspan="item.products && item.products.length > 0 ? item.products.length : 1" class="py-3 px-4 align-middle whitespace-nowrap bg-white text-xs font-bold text-slate-800" x-text="item.driver || '-'">
+                                                    </td>
+                                                </template>
+
+                                                <!-- Parent Col 9: Plat Nomor -->
+                                                <template x-if="pIdx === 0">
+                                                    <td :rowspan="item.products && item.products.length > 0 ? item.products.length : 1" class="py-3 px-4 align-middle whitespace-nowrap bg-white font-mono text-xs text-slate-600" x-text="item.plate || '-'">
+                                                    </td>
+                                                </template>
+
+                                                <!-- Parent Col 10: Status Pengajuan -->
+                                                <template x-if="pIdx === 0">
+                                                    <td :rowspan="item.products && item.products.length > 0 ? item.products.length : 1" class="py-3 px-4 align-middle whitespace-nowrap bg-white">
+                                                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10.5px] font-extrabold uppercase border whitespace-nowrap"
+                                                              :class="{
+                                                                  'bg-amber-50 text-amber-800 border-amber-200': item.statusKey === 'menunggu_approval' || item.statusKey === 'cek_fisik',
+                                                                  'bg-blue-50 text-blue-800 border-blue-200': item.statusKey === 'disetujui',
+                                                                  'bg-purple-50 text-purple-800 border-purple-200': item.statusKey === 'revisi',
+                                                                  'bg-rose-50 text-rose-800 border-rose-200': item.statusKey === 'ditolak',
+                                                                  'bg-emerald-50 text-emerald-800 border-emerald-200': item.statusKey === 'selesai'
+                                                              }">
+                                                            <span class="w-1.5 h-1.5 rounded-full"
+                                                                  :class="{
+                                                                      'bg-amber-500': item.statusKey === 'menunggu_approval' || item.statusKey === 'cek_fisik',
+                                                                      'bg-blue-600': item.statusKey === 'disetujui',
+                                                                      'bg-purple-600': item.statusKey === 'revisi',
+                                                                      'bg-rose-600': item.statusKey === 'ditolak',
+                                                                      'bg-emerald-600': item.statusKey === 'selesai'
+                                                                  }"></span>
+                                                            <span x-text="item.statusLabel"></span>
+                                                        </span>
+                                                    </td>
+                                                </template>
+
+                                                <!-- Parent Col 11: Tindakan Manager -->
+                                                <template x-if="pIdx === 0">
+                                                    <td :rowspan="item.products && item.products.length > 0 ? item.products.length : 1" class="py-3 px-4 align-middle whitespace-nowrap text-center bg-white">
+                                                        <template x-if="item.needsApproval || item.statusKey === 'menunggu_approval'">
+                                                            <div class="inline-flex items-center justify-center gap-1.5">
+                                                                <button type="button"
+                                                                        @click="openDetailDoc(item)"
+                                                                        class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 transition-colors cursor-pointer"
+                                                                        title="Lihat Detail Barang">
+                                                                    <span class="material-symbols-rounded text-[14px]">visibility</span>
+                                                                    <span>Detail</span>
+                                                                </button>
+                                                                <button type="button"
+                                                                        @click="openApproveModal(item)"
+                                                                        class="bg-[#16a34a] hover:bg-[#15803d] text-white text-[11px] font-bold px-3 py-1.5 rounded-lg inline-flex items-center gap-1 shadow-2xs transition-colors cursor-pointer">
+                                                                    <span class="material-symbols-rounded text-[14px]">check_circle</span>
+                                                                    <span>Approve</span>
+                                                                </button>
+                                                                <button type="button"
+                                                                        @click="openRevisionModal(item)"
+                                                                        class="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-[11px] font-bold px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 transition-colors cursor-pointer"
+                                                                        title="Minta Revisi">
+                                                                    <span class="material-symbols-rounded text-[14px]">edit_note</span>
+                                                                    <span>Revisi</span>
+                                                                </button>
+                                                                <button type="button"
+                                                                        @click="openRejectModal(item)"
+                                                                        class="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-bold px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 transition-colors cursor-pointer"
+                                                                        title="Tolak Retur">
+                                                                    <span class="material-symbols-rounded text-[14px]">cancel</span>
+                                                                    <span>Tolak</span>
+                                                                </button>
+                                                            </div>
+                                                        </template>
+
+                                                        <template x-if="!item.needsApproval && item.statusKey !== 'menunggu_approval'">
+                                                            <div class="inline-flex items-center justify-center gap-1.5">
+                                                                <button type="button"
+                                                                        @click="openDetailDoc(item)"
+                                                                        class="bg-blue-50 hover:bg-blue-100 text-[#0052cc] border border-blue-200 text-[11px] font-bold px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 shadow-2xs transition-colors cursor-pointer">
+                                                                    <span class="material-symbols-rounded text-[14px]">visibility</span>
+                                                                    <span>Detail</span>
+                                                                </button>
+                                                                <template x-if="item.direction === 'toko_ke_gudang' && item.statusKey !== 'ditolak'">
+                                                                    <button type="button"
+                                                                            @click="openPhysicalReceiveModal(item)"
+                                                                            class="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-[11px] font-extrabold px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
+                                                                            title="Atur Kuantitas Retur yang Diterima (Anti-Stok Tertinggal)">
+                                                                        <span class="material-symbols-rounded text-[14px]">tune</span>
+                                                                        <span>Atur Qty</span>
+                                                                    </button>
+                                                                </template>
+                                                            </div>
+                                                        </template>
+                                                    </td>
+                                                </template>
+                                            </tr>
+                                        </template>
+                                    </template>
+                                    <tr x-show="filteredApprovalList.length === 0">
+                                        <td colspan="11" class="py-10 text-center text-slate-400">
+                                            <span class="material-symbols-rounded text-3xl block text-slate-300 mb-1">inbox</span>
+                                            <span class="font-bold text-xs text-slate-600">Tidak ada pengajuan retur yang cocok.</span>
                                         </td>
                                     </tr>
-                                </template>
-                            </tbody>
-                        </table>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
 
-                    <!-- Table Footer Pagination -->
-                    <div class="px-6 py-4 bg-[#f8fafc] border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-[12px]">
-                        <div class="text-slate-500 font-medium">
-                            Menampilkan <span class="font-extrabold text-slate-800" x-text="filteredItems.length">4</span> dari <span class="font-extrabold text-slate-800">14</span> pengajuan retur aktif •
-                            <a href="#bast-section" class="font-extrabold text-[#0052cc] hover:underline">Semua data sinkron ke ERP DC</a>
-                        </div>
-                        <div class="flex items-center gap-1.5">
-                            <button class="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-400 font-bold text-[11.5px] cursor-not-allowed">Sebelumnya</button>
-                            <button class="w-8 h-8 rounded-lg bg-[#0047b3] text-white font-extrabold text-[12px] flex items-center justify-center shadow-2xs">1</button>
-                            <button class="w-8 h-8 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold text-[12px] flex items-center justify-center transition-colors cursor-pointer">2</button>
-                            <button class="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold text-[11.5px] transition-colors cursor-pointer">Selanjutnya</button>
+                    <!-- SOP Reminder Box -->
+                    <div class="p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-start gap-2.5">
+                        <span class="material-symbols-rounded text-[#0052cc] text-[18px] shrink-0 mt-0.5">info</span>
+                        <div>
+                            <strong>Catatan Alur SOP:</strong> Persetujuan Manager (Approve) hanya mengubah status pengajuan menjadi 'Disetujui' dan mengizinkan cabang melakukan pengiriman fisik. <strong>Stok Barang Retur belum bertambah</strong> sebelum staf Gudang Pusat mengonfirmasi penerimaan fisik di tab <em>Barang Masuk Retur</em>.
                         </div>
                     </div>
                 </div>
 
-                <!-- Bottom Section: Quick Input Draft Retur (8 Cols) & Audit BAST Terbaru (4 Cols) -->
-                <div id="bast-section" class="grid grid-cols-12 gap-5">
+                <!-- ======================================================== -->
+                <!-- TAB 2: BARANG MASUK RETUR (KONFIRMASI FISIK GUDANG) -->
+                <!-- ======================================================== -->
+                <div x-show="mainTab === 'masuk'" class="space-y-4">
 
-                    <!-- Left: Input Cepat Draft Retur (Toko <-> Gudang) -->
-                    <div class="col-span-12 xl:col-span-8 bg-white border border-slate-200/80 rounded-2xl p-6 shadow-2xs flex flex-col justify-between">
-                        <div>
-                            <!-- Card Header -->
-                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-5 border-b border-slate-100">
-                                <div class="flex items-start gap-3">
-                                    <div class="w-10 h-10 rounded-xl bg-[#e0eaff] text-[#0052cc] flex items-center justify-center shrink-0 mt-0.5">
-                                        <span class="material-symbols-rounded text-[20px]">bolt</span>
-                                    </div>
-                                    <div>
-                                        <h3 class="text-[16px] font-black text-[#0f172a] flex flex-wrap items-center gap-2">
-                                            <span>Input Cepat Draft Retur</span>
-                                            <span class="text-[#0052cc]" x-text="draftDirection === 'toko_ke_gudang' ? '(Toko → Gudang)' : '(Gudang → Toko)'">(Toko → Gudang)</span>
-                                        </h3>
-                                        <p class="text-[12px] text-slate-500 font-medium mt-0.5">
-                                            Tambahkan item cacat, expired, atau instruksi pengiriman barang gudang ke toko pada antrean armada berikutnya
-                                        </p>
-                                    </div>
-                                </div>
-                                <div class="flex items-center gap-2 self-start sm:self-center shrink-0">
-                                    <div class="bg-slate-100 p-1 rounded-xl flex items-center text-[11px] font-extrabold">
-                                        <button type="button"
-                                                @click="draftDirection = 'toko_ke_gudang'; draftUseFleet = true"
-                                                :class="draftDirection === 'toko_ke_gudang' ? 'bg-white text-[#0052cc] shadow-2xs' : 'text-slate-500 hover:text-slate-700'"
-                                                class="px-2.5 py-1 rounded-lg transition-all cursor-pointer">
-                                            Toko &rarr; Gudang
-                                        </button>
-                                        <button type="button"
-                                                @click="draftDirection = 'gudang_ke_toko'; draftCondition = 'Penggantian Garansi (Gudang → Toko)'; draftUseFleet = false"
-                                                :class="draftDirection === 'gudang_ke_toko' ? 'bg-white text-[#15803d] shadow-2xs' : 'text-slate-500 hover:text-slate-700'"
-                                                class="px-2.5 py-1 rounded-lg transition-all cursor-pointer">
-                                            Gudang &rarr; Toko
-                                        </button>
-                                    </div>
-                                    <span class="bg-[#dbeafe] text-[#1e40af] text-[10px] font-extrabold px-2.5 py-1 rounded-lg uppercase tracking-wider leading-tight text-center hidden sm:inline-block">
-                                        MODE CEPAT<br>KASIR/INV
-                                    </span>
-                                </div>
-                            </div>
-
-                            <!-- Form Inputs Row 1 (Fixed Overlapping Barcode Icon!) -->
-                            <div class="grid grid-cols-1 md:grid-cols-12 gap-4 mt-5">
-                                <!-- Pilih / Scan Barcode SKU -->
-                                <div class="md:col-span-5">
-                                    <label class="block text-[10.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-1.5">PILIH / SCAN BARCODE SKU</label>
-                                    <div class="relative">
-                                        <input type="text" x-model="draftSku"
-                                               class="w-full bg-[#f1f5f9] border border-slate-200/80 focus:border-blue-500 focus:bg-white rounded-xl pl-3.5 pr-10 py-2.5 text-[12.5px] font-bold text-slate-800 focus:outline-none transition-all truncate">
-                                        <button type="button" @click="triggerToast('Scanner Barcode Aktif: Siap memindai EAN-13')"
-                                                class="absolute right-2.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg bg-blue-50 text-[#0052cc] hover:bg-blue-100 flex items-center justify-center transition-colors cursor-pointer">
-                                            <span class="material-symbols-rounded text-[17px]">qr_code_scanner</span>
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <!-- Jumlah (Qty Retur) -->
-                                <div class="md:col-span-3">
-                                    <label class="block text-[10.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-1.5">JUMLAH (QTY RETUR)</label>
-                                    <div class="flex items-center bg-[#f1f5f9] border border-slate-200/80 focus-within:border-blue-500 focus-within:bg-white rounded-xl overflow-hidden transition-all">
-                                        <input type="number" x-model="draftQty" min="1"
-                                               class="w-full bg-transparent px-3.5 py-2.5 text-[13px] font-extrabold text-slate-800 focus:outline-none">
-                                        <span class="px-3 py-2.5 text-[11.5px] font-bold text-slate-500 bg-slate-200/60 border-l border-slate-200/80 shrink-0" x-text="draftUnit">Pcs</span>
-                                    </div>
-                                </div>
-
-                                <!-- Kondisi Fisik -->
-                                <div class="md:col-span-4">
-                                    <label class="block text-[10.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-1.5">KONDISI FISIK</label>
-                                    <div class="relative">
-                                        <span class="w-2.5 h-2.5 rounded-full absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
-                                              :class="{
-                                                  'bg-[#dc2626]': draftCondition.includes('Rusak'),
-                                                  'bg-[#d97706]': draftCondition.includes('Kedaluwarsa'),
-                                                  'bg-[#0052cc]': draftCondition.includes('Overstock'),
-                                                  'bg-[#16a34a]': draftCondition.includes('Penggantian')
-                                              }"></span>
-                                        <select x-model="draftCondition"
-                                                class="w-full bg-[#f1f5f9] border border-slate-200/80 focus:border-blue-500 focus:bg-white rounded-xl pl-8 pr-8 py-2.5 text-[12.5px] font-bold text-slate-800 appearance-none cursor-pointer focus:outline-none transition-all">
-                                            <option>Kemasan Rusak / Pecah</option>
-                                            <option>Kedaluwarsa / Dekat ED</option>
-                                            <option>Mutasi Overstock Rak</option>
-                                            <option>Penggantian Garansi (Gudang → Toko)</option>
-                                        </select>
-                                        <span class="material-symbols-rounded absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[18px] pointer-events-none">expand_more</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Form Row 2: Photo Upload & Fleet Option -->
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                                <!-- Foto Bukti Fisik Barang -->
-                                <div class="bg-[#f8fafc] border border-slate-200/80 rounded-xl p-3.5 flex items-center justify-between gap-3">
-                                    <div class="flex items-center gap-3 min-w-0">
-                                        <div class="w-9 h-9 rounded-lg bg-blue-50 text-[#0052cc] flex items-center justify-center shrink-0">
-                                            <span class="material-symbols-rounded text-[19px]">photo_camera</span>
-                                        </div>
-                                        <div class="min-w-0">
-                                            <div class="text-[12px] font-extrabold text-slate-800">Foto Bukti Fisik Barang</div>
-                                            <div class="text-[11px] text-slate-500 font-medium truncate">1 Foto terlampir (<span x-text="draftPhotoName"></span>)</div>
-                                        </div>
-                                    </div>
-                                    <label class="bg-white hover:bg-slate-50 text-[#0052cc] border border-slate-200/90 px-3.5 py-1.5 rounded-lg text-[11.5px] font-extrabold shrink-0 shadow-2xs transition-colors cursor-pointer">
-                                        <span>Unggah</span>
-                                        <input type="file" class="hidden" @change="if($event.target.files[0]) { draftPhotoName = $event.target.files[0].name; triggerToast('Foto bukti fisik berhasil diperbarui'); }">
-                                    </label>
-                                </div>
-
-                                <!-- Gunakan Armada Logistik Rutin -->
-                                <label class="bg-[#f8fafc] border border-slate-200/80 rounded-xl p-3.5 flex items-center gap-3 cursor-pointer select-none">
-                                    <input type="checkbox" x-model="draftUseFleet" class="w-4 h-4 rounded text-[#0052cc] focus:ring-[#0052cc] border-slate-300">
-                                    <div>
-                                        <div class="text-[12px] font-extrabold text-slate-800">Gunakan Armada Logistik Rutin</div>
-                                        <div class="text-[11px] font-semibold"
-                                             :class="draftDirection === 'toko_ke_gudang' ? 'text-red-500' : 'text-[#16a34a]'"
-                                             x-text="draftDirection === 'toko_ke_gudang' ? 'Termasuk potongan flat Rp 500.000 / trip' : 'Bebas biaya logistik (SOP Gudang → Toko)'">
-                                        </div>
-                                    </div>
-                                </label>
+                    <!-- Filter Toolbar -->
+                    <div class="bg-white border border-slate-200/80 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-3 shadow-2xs">
+                        <div class="flex items-center gap-2 w-full md:w-auto">
+                            <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Status Fisik:</span>
+                            <div class="flex items-center gap-1.5">
+                                <button type="button" @click="filterPhysicalStatus = 'all'" :class="filterPhysicalStatus === 'all' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer">Semua</button>
+                                <button type="button" @click="filterPhysicalStatus = 'pending'" :class="filterPhysicalStatus === 'pending' ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer">Menunggu Konfirmasi Fisik</button>
+                                <button type="button" @click="filterPhysicalStatus = 'received'" :class="filterPhysicalStatus === 'received' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer">Sudah Diterima Fisik</button>
                             </div>
                         </div>
 
-                        <!-- Card Footer -->
-                        <div class="mt-6 pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                            <div class="flex items-center gap-2 text-[12px] text-slate-600 font-medium">
-                                <span class="material-symbols-rounded text-[18px] text-[#16a34a]">check_circle</span>
-                                <span>Otorisasi Supervisor Shift Aktif: <strong class="font-extrabold text-slate-900">Budi Santoso</strong></span>
-                            </div>
-                            <div class="flex items-center gap-2.5 w-full sm:w-auto justify-end">
-                                <button type="button"
-                                        @click="draftSku = ''; draftQty = 1; triggerToast('Form input cepat telah di-reset')"
-                                        class="bg-[#f1f5f9] hover:bg-slate-200 text-slate-700 font-extrabold text-[12px] px-4 py-2.5 rounded-xl transition-colors cursor-pointer">
-                                    Reset Form
-                                </button>
-                                <button type="button"
-                                        @click="submitQuickDraft()"
-                                        class="bg-[#0047b3] hover:bg-[#003994] text-white font-extrabold text-[12px] px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-xs transition-all cursor-pointer">
-                                    <span class="material-symbols-rounded text-[17px]">send</span>
-                                    <span x-text="draftDirection === 'toko_ke_gudang' ? 'Ajukan Draft Retur' : 'Kirim Barang ke Toko'">Ajukan Draft Retur</span>
-                                </button>
-                            </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-slate-500 font-medium" x-text="'Menampilkan ' + filteredMasukList.length + ' pengiriman masuk'"></span>
                         </div>
                     </div>
 
-                    <!-- Right: Audit BAST Terbaru (4 Cols - Fixed Non-Cramped BAST Layout!) -->
-                    <div class="col-span-12 xl:col-span-4 bg-white border border-slate-200/80 rounded-2xl p-6 shadow-2xs flex flex-col justify-between gap-4">
-                        <div>
-                            <!-- Header -->
-                            <div class="flex items-center justify-between gap-2 mb-4">
-                                <div class="flex items-center gap-2">
-                                    <span class="material-symbols-rounded text-[20px] text-[#0052cc]">assignment_turned_in</span>
-                                    <h3 class="text-[15.5px] font-black text-[#0f172a]">Audit BAST Terbaru</h3>
-                                </div>
-                                <span class="bg-[#dcfce7] text-[#15803d] text-[10.5px] font-extrabold px-2.5 py-0.5 rounded-md border border-emerald-200">Resmi</span>
-                            </div>
+                    <!-- Table Barang Masuk Retur (Standardized Grouped Rows & Single-Line Cells) -->
+                    <div class="bg-white border border-slate-200/80 rounded-2xl shadow-2xs overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs border-collapse">
+                                <thead class="bg-slate-50 border-b border-slate-200/80 text-slate-500 font-extrabold uppercase tracking-wider text-[11px] whitespace-nowrap">
+                                    <tr>
+                                        <th class="py-3 px-4">No. Dokumen</th>
+                                        <th class="py-3 px-4">Asal Toko</th>
+                                        <th class="py-3 px-4">Tanggal</th>
+                                        <th class="py-3 px-4">Pengirim</th>
+                                        <th class="py-3 px-4">Plat Nomor</th>
+                                        <th class="py-3 px-4">SKU</th>
+                                        <th class="py-3 px-4">Nama Produk</th>
+                                        <th class="py-3 px-4 text-center">Qty Diajukan</th>
+                                        <th class="py-3 px-4 text-center">Fisik Diterima</th>
+                                        <th class="py-3 px-4 text-center">Selisih</th>
+                                        <th class="py-3 px-4">Status Fisik</th>
+                                        <th class="py-3 px-4">No. BAST</th>
+                                        <th class="py-3 px-4 text-center">Aksi Konfirmasi &amp; Detail</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="text-slate-700">
+                                    <template x-for="item in filteredMasukList" :key="item.id">
+                                        <template x-for="(prod, pIdx) in ((item.products && item.products.length > 0) ? item.products : [{ name: '-', sku: '-', submittedQty: '-' }])" :key="pIdx">
+                                            <tr class="hover:bg-slate-50/70 transition-colors" :class="pIdx === 0 ? 'border-t border-slate-200' : 'border-t border-slate-100'">
+                                                <!-- Parent Col 1: No Dokumen -->
+                                                <template x-if="pIdx === 0">
+                                                    <td :rowspan="item.products && item.products.length > 0 ? item.products.length : 1" class="py-3 px-4 align-middle whitespace-nowrap bg-white font-mono font-black text-slate-900 text-[13px]">
+                                                        <button type="button"
+                                                                @click="openDetailDoc(item)"
+                                                                class="hover:text-[#0052cc] hover:underline inline-flex items-center gap-1 cursor-pointer"
+                                                                :title="'Buka detail ' + item.docNo">
+                                                            <span x-text="item.docNo"></span>
+                                                            <span class="material-symbols-rounded text-[14px] text-slate-400">open_in_new</span>
+                                                        </button>
+                                                    </td>
+                                                </template>
 
-                            <!-- BAST Detail Box -->
-                            <div class="bg-[#f8fafc] border border-slate-200/80 rounded-xl p-4 space-y-3.5">
-                                <div class="flex items-start justify-between gap-3 pb-3 border-b border-slate-200/70">
-                                    <div>
-                                        <div class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">NOMOR BERITA ACARA</div>
-                                        <div class="text-[13px] font-black text-[#0f172a] font-mono mt-0.5">BAST-2024/05/TK-0888</div>
-                                    </div>
-                                    <span class="bg-white border border-blue-200 text-[#0052cc] text-[10.5px] font-extrabold px-2.5 py-1 rounded-lg shadow-2xs whitespace-nowrap shrink-0">
-                                        Selesai Ditandatangani
-                                    </span>
-                                </div>
+                                                <!-- Parent Col 2: Asal Toko -->
+                                                <template x-if="pIdx === 0">
+                                                    <td :rowspan="item.products && item.products.length > 0 ? item.products.length : 1" class="py-3 px-4 align-middle whitespace-nowrap bg-white">
+                                                        <div class="inline-flex items-center gap-1.5 font-bold text-slate-800 text-xs">
+                                                            <span class="material-symbols-rounded text-[15px] text-[#0052cc]">store</span>
+                                                            <span x-text="item.branchOrigin || 'Cabang A'"></span>
+                                                        </div>
+                                                    </td>
+                                                </template>
 
-                                <div class="space-y-2.5 text-[12px]">
-                                    <div class="flex items-start justify-between gap-3">
-                                        <span class="text-slate-500 font-medium shrink-0">Pihak Toko (Pelepas):</span>
-                                        <span class="font-extrabold text-slate-800 text-right">Budi Santoso (Spv)</span>
-                                    </div>
-                                    <div class="flex items-start justify-between gap-3">
-                                        <span class="text-slate-500 font-medium shrink-0">Pihak Gudang (Penerima):</span>
-                                        <span class="font-extrabold text-slate-800 text-right">Hendra W. (DC Head)</span>
-                                    </div>
-                                    <div class="flex items-start justify-between gap-3">
-                                        <span class="text-slate-500 font-medium shrink-0">Waktu Serah Terima:</span>
-                                        <span class="font-extrabold text-slate-800 text-right">23 Mei, 18:20 WIB</span>
-                                    </div>
-                                    <div class="flex items-start justify-between gap-3">
-                                        <span class="text-slate-500 font-medium shrink-0">Kesesuaian Item:</span>
-                                        <span class="font-extrabold text-[#16a34a] text-right">100% Cocok (Fisik = Dokumen)</span>
-                                    </div>
-                                </div>
-                            </div>
+                                                <!-- Parent Col 3: Tanggal -->
+                                                <template x-if="pIdx === 0">
+                                                    <td :rowspan="item.products && item.products.length > 0 ? item.products.length : 1" class="py-3 px-4 align-middle whitespace-nowrap bg-white text-xs text-slate-600 font-medium" x-text="item.date">
+                                                    </td>
+                                                </template>
 
-                            <!-- Info Note -->
-                            <div class="mt-3.5 bg-[#f8fafc] border border-slate-200/80 rounded-xl p-3 flex items-start gap-2.5">
-                                <span class="material-symbols-rounded text-[16px] text-[#0052cc] mt-0.5 shrink-0">info</span>
-                                <p class="text-[11px] text-slate-500 font-medium leading-relaxed">
-                                    BAST wajib dicetak 3 rangkap: 1 Kasir Cabang, 1 Driver Armada, 1 Arsip Gudang Pusat.
-                                </p>
-                            </div>
+                                                <!-- Parent Col 4: Pengirim -->
+                                                <template x-if="pIdx === 0">
+                                                    <td :rowspan="item.products && item.products.length > 0 ? item.products.length : 1" class="py-3 px-4 align-middle whitespace-nowrap bg-white text-xs font-bold text-slate-800" x-text="item.driver || '-'">
+                                                    </td>
+                                                </template>
+
+                                                <!-- Parent Col 5: Plat Nomor -->
+                                                <template x-if="pIdx === 0">
+                                                    <td :rowspan="item.products && item.products.length > 0 ? item.products.length : 1" class="py-3 px-4 align-middle whitespace-nowrap bg-white font-mono text-xs text-slate-600" x-text="item.plate || '-'">
+                                                    </td>
+                                                </template>
+
+                                                <!-- Child Col 6: SKU -->
+                                                <td class="py-3 px-4 align-middle whitespace-nowrap font-mono text-xs text-slate-600 font-bold" x-text="prod.sku || (item.physicalReceiptData?.items?.[pIdx]?.sku || '-')"></td>
+
+                                                <!-- Child Col 7: Nama Produk -->
+                                                <td class="py-3 px-4 align-middle whitespace-nowrap font-bold text-slate-800 text-xs max-w-[200px] truncate" :title="prod.name" x-text="prod.name"></td>
+
+                                                <!-- Child Col 8: Qty Diajukan -->
+                                                <td class="py-3 px-4 align-middle whitespace-nowrap text-center">
+                                                    <span class="font-mono font-bold text-xs bg-blue-50 text-[#0047b3] border border-blue-200 px-2 py-0.5 rounded" x-text="formatQtyClean(prod)"></span>
+                                                </td>
+
+                                                <!-- Child Col 9: Fisik Diterima -->
+                                                <td class="py-3 px-4 align-middle whitespace-nowrap text-center">
+                                                    <template x-if="item.isPhysicalReceived && item.physicalReceiptData?.items?.[pIdx]">
+                                                        <span class="font-mono font-bold text-xs bg-amber-100 text-amber-900 px-2 py-0.5 rounded" x-text="item.physicalReceiptData.items[pIdx].receivedQty + ' ' + (item.physicalReceiptData.items[pIdx].unit || 'Pcs')"></span>
+                                                    </template>
+                                                    <template x-if="!item.isPhysicalReceived">
+                                                        <span class="text-slate-400 text-xs italic">Belum Cek</span>
+                                                    </template>
+                                                </td>
+
+                                                <!-- Child Col 10: Selisih -->
+                                                <td class="py-3 px-4 align-middle whitespace-nowrap text-center">
+                                                    <template x-if="item.isPhysicalReceived && (item.physicalReceiptData?.items?.[pIdx]?.selisih > 0)">
+                                                        <span class="font-mono font-bold text-xs text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded" x-text="'-' + item.physicalReceiptData.items[pIdx].selisih + ' ' + (item.physicalReceiptData.items[pIdx].unit || 'Pcs')"></span>
+                                                    </template>
+                                                    <template x-if="!item.isPhysicalReceived || !(item.physicalReceiptData?.items?.[pIdx]?.selisih > 0)">
+                                                        <span class="text-slate-400 font-mono text-xs">-</span>
+                                                    </template>
+                                                </td>
+
+                                                <!-- Parent Col 11: Status Fisik -->
+                                                <template x-if="pIdx === 0">
+                                                    <td :rowspan="item.products && item.products.length > 0 ? item.products.length : 1" class="py-3 px-4 align-middle whitespace-nowrap bg-white">
+                                                        <template x-if="item.isPhysicalReceived">
+                                                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10.5px] font-extrabold border"
+                                                                  :class="item.physicalReceiptData?.hasDiscrepancy ? 'bg-amber-50 text-amber-900 border-amber-300' : 'bg-emerald-50 text-emerald-800 border-emerald-300'">
+                                                                <span class="material-symbols-rounded text-[14px]" x-text="item.physicalReceiptData?.hasDiscrepancy ? 'warning' : 'check_circle'"></span>
+                                                                <span x-text="item.physicalReceiptData?.hasDiscrepancy ? 'DITERIMA PARSIAL GUDANG' : 'DITERIMA LENGKAP GUDANG'"></span>
+                                                            </span>
+                                                        </template>
+                                                        <template x-if="!item.isPhysicalReceived">
+                                                            <template x-if="item.statusKey === 'disetujui' || item.statusKey === 'cek_fisik'">
+                                                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10.5px] font-extrabold bg-blue-50 text-[#0052cc] border border-blue-200">
+                                                                    <span class="material-symbols-rounded text-[14px]">local_shipping</span>
+                                                                    <span>Siap Konfirmasi Fisik</span>
+                                                                </span>
+                                                            </template>
+                                                            <template x-if="item.statusKey === 'menunggu_approval'">
+                                                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10.5px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200">
+                                                                    <span class="material-symbols-rounded text-[14px]">hourglass_top</span>
+                                                                    <span>Menunggu Approval Manager</span>
+                                                                </span>
+                                                            </template>
+                                                        </template>
+                                                    </td>
+                                                </template>
+
+                                                <!-- Parent Col 12: No. BAST -->
+                                                <template x-if="pIdx === 0">
+                                                    <td :rowspan="item.products && item.products.length > 0 ? item.products.length : 1" class="py-3 px-4 align-middle whitespace-nowrap bg-white font-mono text-xs font-bold text-slate-700" x-text="item.physicalReceiptData?.bastNo || '-'">
+                                                    </td>
+                                                </template>
+
+                                                <!-- Parent Col 13: Aksi Konfirmasi & Detail -->
+                                                <template x-if="pIdx === 0">
+                                                    <td :rowspan="item.products && item.products.length > 0 ? item.products.length : 1" class="py-3 px-4 align-middle whitespace-nowrap text-center bg-white">
+                                                        <div class="inline-flex items-center justify-center gap-1.5">
+                                                            <button type="button"
+                                                                    @click="openDetailDoc(item)"
+                                                                    class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 transition-colors cursor-pointer"
+                                                                    title="Lihat Detail Barang">
+                                                                <span class="material-symbols-rounded text-[14px]">visibility</span>
+                                                                <span>Detail</span>
+                                                            </button>
+
+                                                            <template x-if="!item.isPhysicalReceived && (item.statusKey === 'disetujui' || item.statusKey === 'cek_fisik')">
+                                                                <button type="button"
+                                                                        @click="openPhysicalReceiveModal(item)"
+                                                                        class="bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-extrabold px-3 py-1.5 rounded-lg inline-flex items-center gap-1 shadow-xs transition-colors cursor-pointer">
+                                                                    <span class="material-symbols-rounded text-[15px]">done_all</span>
+                                                                    <span>Konfirmasi Fisik</span>
+                                                                </button>
+                                                            </template>
+
+                                                            <template x-if="item.isPhysicalReceived">
+                                                                <div class="inline-flex items-center gap-1">
+                                                                    <button type="button"
+                                                                            @click="openPhysicalReceiveModal(item)"
+                                                                            class="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-[11px] font-extrabold px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 transition-colors cursor-pointer"
+                                                                            title="Atur Ulang / Tambah Stok Susulan">
+                                                                        <span class="material-symbols-rounded text-[14px]">tune</span>
+                                                                        <span>Atur Qty</span>
+                                                                    </button>
+                                                                    <button type="button"
+                                                                            @click="viewBast(item)"
+                                                                            class="bg-slate-800 hover:bg-slate-900 text-white text-[11px] font-bold px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 transition-colors cursor-pointer">
+                                                                        <span class="material-symbols-rounded text-[14px]">description</span>
+                                                                        <span>BAST</span>
+                                                                    </button>
+                                                                </div>
+                                                            </template>
+                                                        </div>
+                                                    </td>
+                                                </template>
+                                            </tr>
+                                        </template>
+                                    </template>
+                                    <tr x-show="filteredMasukList.length === 0">
+                                        <td colspan="13" class="py-10 text-center text-slate-400">
+                                            <span class="material-symbols-rounded text-3xl block text-slate-300 mb-1">archive</span>
+                                            <span class="font-bold text-xs text-slate-600">Tidak ada pengiriman masuk retur.</span>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
-
-                        <!-- Download PDF Button -->
-                        <button type="button"
-                                @click="triggerToast('Mengunduh BAST-2024/05/TK-0888.pdf...')"
-                                class="w-full bg-[#e2e8f0]/70 hover:bg-[#cbd5e1]/80 text-[#0f172a] font-extrabold text-[12px] py-3 rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer">
-                            <span class="material-symbols-rounded text-[17px]">download</span>
-                            <span>Unduh Arsip BAST Digital (PDF)</span>
-                        </button>
                     </div>
 
+                    <!-- SOP Quarantine Banner -->
+                    <div class="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3 shadow-2xs">
+                        <span class="material-symbols-rounded text-amber-600 text-[22px] shrink-0 mt-0.5">warehouse</span>
+                        <div class="text-xs text-amber-900 leading-relaxed">
+                            <strong>Konsekuensi Pencatatan Fisik:</strong> Ketika staf gudang mengonfirmasi penerimaan fisik, kuantitas yang benar-benar diterima akan <strong>langsung dicatat ke database Stok Barang Retur (pos_ilp_stok_retur_gudang_v1)</strong>. Stok Normal toko tidak akan tersentuh dan barang tersebut tidak dapat dijual melalui Kasir POS.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ======================================================== -->
+                <!-- TAB 3: RIWAYAT DOKUMEN & BAST -->
+                <!-- ======================================================== -->
+                <div x-show="mainTab === 'riwayat'" class="space-y-4">
+
+                    <!-- Riwayat Table -->
+                    <div class="bg-white border border-slate-200/80 rounded-2xl shadow-2xs overflow-hidden">
+                        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                            <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider">Arsip Berita Acara Serah Terima (BAST) &amp; Status Retur</h3>
+                            <span class="text-xs text-slate-500 font-medium" x-text="filteredRiwayatList.length + ' Arsip Dokumen'"></span>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs border-collapse">
+                                <thead class="bg-slate-50 border-b border-slate-200/80 text-slate-500 font-extrabold uppercase tracking-wider text-[11px] whitespace-nowrap">
+                                    <tr>
+                                        <th class="py-3 px-4">No. BAST</th>
+                                        <th class="py-3 px-4">No. Dokumen</th>
+                                        <th class="py-3 px-4">Tanggal</th>
+                                        <th class="py-3 px-4">Arah Retur</th>
+                                        <th class="py-3 px-4">Cabang Asal</th>
+                                        <th class="py-3 px-4">SKU</th>
+                                        <th class="py-3 px-4">Nama Produk</th>
+                                        <th class="py-3 px-4 text-center">Qty Diajukan</th>
+                                        <th class="py-3 px-4 text-center">Fisik Diterima</th>
+                                        <th class="py-3 px-4">Kesesuaian &amp; Catatan</th>
+                                        <th class="py-3 px-4">Petugas Gudang</th>
+                                        <th class="py-3 px-4 text-center">Aksi Dokumen</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="text-slate-700">
+                                    <template x-for="item in filteredRiwayatList" :key="item.id">
+                                        <template x-for="(pItem, pIdx) in (((item.physicalReceiptData && item.physicalReceiptData.items && item.physicalReceiptData.items.length > 0) ? item.physicalReceiptData.items : (item.products && item.products.length > 0 ? item.products : [{ name: '-', sku: '-', submittedQty: '-' }])))" :key="pIdx">
+                                            <tr class="hover:bg-slate-50/70 transition-colors" :class="pIdx === 0 ? 'border-t border-slate-200' : 'border-t border-slate-100'">
+                                                <!-- Parent Col 1: No BAST -->
+                                                <template x-if="pIdx === 0">
+                                                    <td :rowspan="(item.physicalReceiptData?.items?.length || item.products?.length || 1)" class="py-3 px-4 align-middle whitespace-nowrap bg-white font-mono font-black text-slate-900 text-[13px]">
+                                                        <button type="button"
+                                                                @click="openDetailDoc(item)"
+                                                                class="hover:text-[#0052cc] hover:underline inline-flex items-center gap-1 cursor-pointer"
+                                                                :title="'Buka BAST ' + (item.physicalReceiptData?.bastNo || item.docNo)">
+                                                            <span x-text="item.physicalReceiptData?.bastNo || item.docNo"></span>
+                                                            <span class="material-symbols-rounded text-[14px] text-slate-400">open_in_new</span>
+                                                        </button>
+                                                    </td>
+                                                </template>
+
+                                                <!-- Parent Col 2: No Dokumen -->
+                                                <template x-if="pIdx === 0">
+                                                    <td :rowspan="(item.physicalReceiptData?.items?.length || item.products?.length || 1)" class="py-3 px-4 align-middle whitespace-nowrap bg-white font-mono text-xs font-bold text-slate-700" x-text="item.docNo">
+                                                    </td>
+                                                </template>
+
+                                                <!-- Parent Col 3: Tanggal -->
+                                                <template x-if="pIdx === 0">
+                                                    <td :rowspan="(item.physicalReceiptData?.items?.length || item.products?.length || 1)" class="py-3 px-4 align-middle whitespace-nowrap bg-white text-xs text-slate-600 font-medium" x-text="item.date">
+                                                    </td>
+                                                </template>
+
+                                                <!-- Parent Col 4: Arah Retur -->
+                                                <template x-if="pIdx === 0">
+                                                    <td :rowspan="(item.physicalReceiptData?.items?.length || item.products?.length || 1)" class="py-3 px-4 align-middle whitespace-nowrap bg-white">
+                                                        <span class="inline-block px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase"
+                                                              :class="item.direction === 'toko_ke_gudang' ? 'bg-blue-50 text-[#0052cc]' : 'bg-emerald-50 text-emerald-800'"
+                                                              x-text="item.directionLabel"></span>
+                                                    </td>
+                                                </template>
+
+                                                <!-- Parent Col 5: Cabang Asal -->
+                                                <template x-if="pIdx === 0">
+                                                    <td :rowspan="(item.physicalReceiptData?.items?.length || item.products?.length || 1)" class="py-3 px-4 align-middle whitespace-nowrap bg-white font-bold text-slate-800 text-xs" x-text="item.branchOrigin || 'Cabang A'">
+                                                    </td>
+                                                </template>
+
+                                                <!-- Child Col 6: SKU -->
+                                                <td class="py-3 px-4 align-middle whitespace-nowrap font-mono text-xs text-slate-600 font-bold" x-text="pItem.sku || '-'"></td>
+
+                                                <!-- Child Col 7: Nama Produk -->
+                                                <td class="py-3 px-4 align-middle whitespace-nowrap font-bold text-slate-800 text-xs max-w-[200px] truncate" :title="pItem.name" x-text="pItem.name"></td>
+
+                                                <!-- Child Col 8: Qty Diajukan -->
+                                                <td class="py-3 px-4 align-middle whitespace-nowrap text-center">
+                                                    <span class="font-mono font-bold text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded" x-text="pItem.submittedQty ? (pItem.submittedQty + ' ' + (pItem.unit || 'Pcs')) : formatQtyClean(pItem)"></span>
+                                                </td>
+
+                                                <!-- Child Col 9: Fisik Diterima -->
+                                                <td class="py-3 px-4 align-middle whitespace-nowrap text-center">
+                                                    <template x-if="item.isPhysicalReceived">
+                                                        <span class="font-mono font-bold text-xs bg-amber-100 text-amber-900 px-2 py-0.5 rounded" x-text="(pItem.receivedQty !== undefined ? pItem.receivedQty : pItem.qty) + ' ' + (pItem.unit || 'Pcs')"></span>
+                                                    </template>
+                                                    <template x-if="!item.isPhysicalReceived">
+                                                        <span class="text-slate-400 text-xs italic">-</span>
+                                                    </template>
+                                                </td>
+
+                                                <!-- Parent Col 10: Kesesuaian & Catatan -->
+                                                <template x-if="pIdx === 0">
+                                                    <td :rowspan="(item.physicalReceiptData?.items?.length || item.products?.length || 1)" class="py-3 px-4 align-middle whitespace-nowrap bg-white">
+                                                        <template x-if="item.isPhysicalReceived">
+                                                            <div>
+                                                                <template x-if="item.physicalReceiptData?.hasDiscrepancy">
+                                                                    <span class="text-amber-800 font-bold text-xs inline-flex items-center gap-1">
+                                                                        <span class="material-symbols-rounded text-[14px]">warning</span>
+                                                                        <span>Parsial: <span class="font-normal" x-text="item.physicalReceiptData?.discrepancyReason || 'Ada selisih'"></span></span>
+                                                                    </span>
+                                                                </template>
+                                                                <template x-if="!item.physicalReceiptData?.hasDiscrepancy">
+                                                                    <span class="text-emerald-700 font-bold text-xs inline-flex items-center gap-1">
+                                                                        <span class="material-symbols-rounded text-[14px]">check</span>
+                                                                        <span>100% Cocok (Fisik = Dokumen)</span>
+                                                                    </span>
+                                                                </template>
+                                                            </div>
+                                                        </template>
+                                                        <template x-if="!item.isPhysicalReceived">
+                                                            <span class="text-slate-400 italic text-xs" x-text="item.statusLabel"></span>
+                                                        </template>
+                                                    </td>
+                                                </template>
+
+                                                <!-- Parent Col 11: Petugas Gudang -->
+                                                <template x-if="pIdx === 0">
+                                                    <td :rowspan="(item.physicalReceiptData?.items?.length || item.products?.length || 1)" class="py-3 px-4 align-middle whitespace-nowrap bg-white text-xs text-slate-700 font-semibold" x-text="item.physicalReceiptData?.receivedBy || item.driver || '-'">
+                                                    </td>
+                                                </template>
+
+                                                <!-- Parent Col 12: Aksi Dokumen -->
+                                                <template x-if="pIdx === 0">
+                                                    <td :rowspan="(item.physicalReceiptData?.items?.length || item.products?.length || 1)" class="py-3 px-4 align-middle whitespace-nowrap text-center bg-white">
+                                                        <div class="inline-flex items-center justify-center gap-1.5">
+                                                            <button type="button"
+                                                                    @click="openDetailDoc(item)"
+                                                                    class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 transition-colors cursor-pointer"
+                                                                    title="Lihat Detail Barang">
+                                                                <span class="material-symbols-rounded text-[14px]">visibility</span>
+                                                                <span>Detail</span>
+                                                            </button>
+
+                                                            <template x-if="item.isPhysicalReceived">
+                                                                <button type="button"
+                                                                        @click="viewBast(item)"
+                                                                        class="bg-[#0047b3] hover:bg-[#003994] text-white text-[11px] font-bold px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 shadow-2xs transition-colors cursor-pointer">
+                                                                    <span class="material-symbols-rounded text-[14px]">print</span>
+                                                                    <span>BAST</span>
+                                                                </button>
+                                                            </template>
+                                                        </div>
+                                                    </td>
+                                                </template>
+                                            </tr>
+                                        </template>
+                                    </template>
+                                    <tr x-show="filteredRiwayatList.length === 0">
+                                        <td colspan="12" class="py-10 text-center text-slate-400">
+                                            <span class="material-symbols-rounded text-3xl block text-slate-300 mb-1">history</span>
+                                            <span class="font-bold text-xs text-slate-600">Tidak ada arsip BAST.</span>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
 
             </div>
         </main>
     </div>
 
-    <!-- Modal: Buat Pengajuan Retur (Toko -> Gudang) / Kirim & Penerimaan Barang (Gudang -> Toko) -->
-    <div x-show="showModal" style="display: none;"
-         class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4"
+    <!-- ======================================================== -->
+    <!-- MODAL DETAIL LENGKAP PENGAJUAN & BARANG RETUR DARI KASIR -->
+    <!-- ======================================================== -->
+    <div x-show="showDetailDocModal" style="display: none;"
+         class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4"
          x-transition.opacity>
-        <div @click.away="showModal = false"
-             class="bg-white rounded-2xl w-full max-w-lg shadow-2xl border border-slate-200 overflow-hidden">
-            <div class="px-6 py-4 bg-[#f8fafc] border-b border-slate-200 flex items-center justify-between">
-                <div class="flex items-center gap-2.5">
-                    <div class="w-9 h-9 rounded-xl flex items-center justify-center text-white"
-                         :class="modalMode === 'toko_ke_gudang' ? 'bg-[#0047b3]' : 'bg-[#16a34a]'">
-                        <span class="material-symbols-rounded text-[20px]" x-text="modalMode === 'toko_ke_gudang' ? 'outbox' : 'move_to_inbox'"></span>
+        <div @click.away="showDetailDocModal = false"
+             class="bg-white rounded-2xl w-full max-w-4xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+            
+            <!-- Modal Header -->
+            <div class="px-6 py-4.5 bg-slate-900 text-white flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-blue-600/30 text-blue-400 border border-blue-500/40 flex items-center justify-center">
+                        <span class="material-symbols-rounded text-[22px]">inventory_2</span>
                     </div>
                     <div>
-                        <h3 class="text-[15px] font-black text-slate-900"
-                            x-text="modalMode === 'toko_ke_gudang' ? 'Buat Pengajuan Retur (Toko → Gudang)' : 'Kirim / Terima Barang (Gudang → Toko)'"></h3>
-                        <p class="text-[11px] font-medium text-slate-500"
-                           x-text="modalMode === 'toko_ke_gudang' ? 'Ajukan pengembalian barang rusak/ED/overstock ke DC' : 'Catat pengiriman penggantian atau relokasi stok dari Gudang ke Toko'"></p>
+                        <div class="flex items-center gap-2">
+                            <h3 class="text-base font-black tracking-tight">Detail Pengajuan Retur Barang Cabang ke Gudang</h3>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10.5px] font-extrabold border"
+                                  :class="{
+                                      'bg-amber-500/20 text-amber-300 border-amber-500/40': selectedDocForDetail?.statusKey === 'menunggu_approval' || selectedDocForDetail?.statusKey === 'cek_fisik',
+                                      'bg-blue-500/20 text-blue-300 border-blue-500/40': selectedDocForDetail?.statusKey === 'disetujui',
+                                      'bg-purple-500/20 text-purple-300 border-purple-500/40': selectedDocForDetail?.statusKey === 'revisi',
+                                      'bg-rose-500/20 text-rose-300 border-rose-500/40': selectedDocForDetail?.statusKey === 'ditolak',
+                                      'bg-emerald-500/20 text-emerald-300 border-emerald-500/40': selectedDocForDetail?.statusKey === 'selesai'
+                                  }" x-text="selectedDocForDetail?.statusLabel"></span>
+                        </div>
+                        <p class="text-xs text-slate-400 font-mono mt-0.5">
+                            <span x-text="selectedDocForDetail?.docNo"></span> &bull; 
+                            <span x-text="'Asal: ' + (selectedDocForDetail?.branchOrigin || 'Cabang A')"></span> &bull; 
+                            <span x-text="selectedDocForDetail?.date"></span>
+                        </p>
                     </div>
                 </div>
-                <button @click="showModal = false" class="w-8 h-8 rounded-lg hover:bg-slate-200/60 flex items-center justify-center text-slate-500 cursor-pointer">
-                    <span class="material-symbols-rounded text-[18px]">close</span>
+                <button @click="showDetailDocModal = false" class="text-slate-400 hover:text-white cursor-pointer transition-colors p-1 rounded-lg hover:bg-slate-800">
+                    <span class="material-symbols-rounded text-[22px]">close</span>
                 </button>
             </div>
 
-            <div class="p-6 space-y-4">
-                <div>
-                    <label class="block text-[11px] font-extrabold text-slate-600 uppercase tracking-wider mb-1.5">NAMA PRODUK / SKU</label>
-                    <input type="text" x-model="newDocSku" placeholder="Contoh: Susu UHT Full Cream 1L"
-                           class="w-full bg-[#f1f5f9] border border-slate-200 rounded-xl px-3.5 py-2.5 text-[13px] font-bold text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-none">
+            <!-- Modal Content (Scrollable) -->
+            <div class="p-6 space-y-5 text-xs overflow-y-auto flex-1 bg-[#f8fafc]" x-if="selectedDocForDetail">
+                
+                <!-- 3 Metadata Cards Row -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                    <!-- Card 1: Info Toko & Kasir Pengirim -->
+                    <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs space-y-2">
+                        <div class="flex items-center gap-1.5 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                            <span class="material-symbols-rounded text-[15px] text-[#0052cc]">store</span>
+                            <span>KASIR &amp; TOKO PENGIRIM</span>
+                        </div>
+                        <div class="space-y-1 text-slate-700">
+                            <div class="font-bold text-[13px] text-slate-900" x-text="selectedDocForDetail?.branchOrigin || 'Cabang A'"></div>
+                            <div class="flex items-center justify-between text-slate-500">
+                                <span>Petugas Kasir:</span>
+                                <strong class="text-slate-800" x-text="selectedDocForDetail?.cashierName || 'Siti Aminah (Kasir 1)'"></strong>
+                            </div>
+                            <div class="flex items-center justify-between text-slate-500">
+                                <span>Terminal POS:</span>
+                                <span class="font-mono font-bold text-slate-700" x-text="selectedDocForDetail?.terminalId || 'POS-01'"></span>
+                            </div>
+                            <div class="flex items-center justify-between text-slate-500">
+                                <span>Ref Nota Asal:</span>
+                                <span class="font-mono text-slate-700" x-text="selectedDocForDetail?.ref || '-'"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card 2: Alasan & Kondisi Retur -->
+                    <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs space-y-2">
+                        <div class="flex items-center gap-1.5 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                            <span class="material-symbols-rounded text-[15px] text-amber-600">warning</span>
+                            <span>KONDISI &amp; ALASAN KASIR</span>
+                        </div>
+                        <div class="space-y-1.5">
+                            <span class="inline-block px-2.5 py-0.5 rounded text-[10.5px] font-extrabold uppercase border"
+                                  :class="{
+                                      'bg-red-50 text-red-700 border-red-200': selectedDocForDetail?.conditionType === 'rusak',
+                                      'bg-amber-50 text-amber-700 border-amber-200': selectedDocForDetail?.conditionType === 'ed',
+                                      'bg-blue-50 text-blue-700 border-blue-200': selectedDocForDetail?.conditionType === 'overstock',
+                                      'bg-emerald-50 text-emerald-700 border-emerald-200': selectedDocForDetail?.conditionType === 'garansi'
+                                  }" x-text="selectedDocForDetail?.conditionLabel"></span>
+                            <p class="text-[11.5px] text-slate-600 leading-snug font-medium" x-text="selectedDocForDetail?.conditionDesc || 'Pengajuan retur barang rusak dari toko cabang'"></p>
+                        </div>
+                    </div>
+
+                    <!-- Card 3: Informasi Pengiriman -->
+                    <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs space-y-2">
+                        <div class="flex items-center gap-1.5 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                            <span class="material-symbols-rounded text-[15px] text-slate-600">local_shipping</span>
+                            <span>INFORMASI PENGIRIMAN</span>
+                        </div>
+                        <div class="space-y-1.5 text-slate-700">
+                            <div class="flex items-center justify-between text-slate-500">
+                                <span>Nama Pengirim:</span>
+                                <strong class="text-slate-900" x-text="selectedDocForDetail?.driver || 'Andi Pratama'"></strong>
+                            </div>
+                            <div class="flex items-center justify-between text-slate-500">
+                                <span>Plat Nomor:</span>
+                                <span class="font-mono font-bold text-slate-900" x-text="selectedDocForDetail?.plate || 'B 9481 UQ'"></span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-[11px] font-extrabold text-slate-600 uppercase tracking-wider mb-1.5">KUANTITAS</label>
-                        <input type="number" x-model="newDocQty" min="1"
-                               class="w-full bg-[#f1f5f9] border border-slate-200 rounded-xl px-3.5 py-2.5 text-[13px] font-bold text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-none">
+
+                <!-- TABEL RINCIAN LENGKAP BARANG RETUR -->
+                <div class="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
+                    <div class="px-5 py-3.5 bg-slate-50/80 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-rounded text-[18px] text-[#0052cc]">format_list_bulleted</span>
+                            <div>
+                                <h4 class="text-xs font-black text-slate-800 uppercase tracking-wider">Rincian Barang &amp; Pengaturan Kuantitas Retur Diterima</h4>
+                                <p class="text-[11px] text-slate-500 font-medium">Atur kuantitas fisik yang benar-benar diterima per produk agar tidak ada stok tertinggal.</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button type="button"
+                                    @click="openPhysicalReceiveModal(selectedDocForDetail)"
+                                    class="px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs inline-flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                                    title="Atur Kuantitas Fisik Diterima Seluruh Produk">
+                                <span class="material-symbols-rounded text-[15px]">tune</span>
+                                <span>Atur Jumlah Diterima (Anti-Stok Tertinggal)</span>
+                            </button>
+                            <span class="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-md" x-text="(selectedDocForDetail?.products?.length || 0) + ' Jenis SKU'"></span>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs">
+                            <thead class="bg-slate-50/50 border-b border-slate-200 text-slate-500 font-extrabold uppercase tracking-wider text-[10.5px]">
+                                <tr>
+                                    <th class="py-3 px-4">No &amp; SKU</th>
+                                    <th class="py-3 px-4">Nama Produk &amp; Kategori</th>
+                                    <th class="py-3 px-4 text-center">Qty Diajukan Kasir</th>
+                                    <th class="py-3 px-4 text-center">Qty Diterima Gudang</th>
+                                    <th class="py-3 px-4 text-center">Status Rekonsiliasi Stok</th>
+                                    <th class="py-3 px-4 text-right">Subtotal Nilai</th>
+                                    <th class="py-3 px-4 text-center">Aksi Stok</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100 font-medium text-slate-700">
+                                <template x-for="(prod, idx) in selectedDocForDetail?.products" :key="idx">
+                                    <tr class="hover:bg-slate-50/50">
+                                        <td class="py-3 px-4 font-mono font-bold text-slate-900">
+                                            <span class="text-blue-700" x-text="prod.sku || ('PRD-00' + (idx + 1))"></span>
+                                            <span class="block text-[10px] text-slate-400 font-mono" x-text="prod.barcode || '899275321004'"></span>
+                                        </td>
+                                        <td class="py-3 px-4">
+                                            <div class="font-bold text-slate-900 text-[12.5px]" x-text="prod.name"></div>
+                                            <span class="inline-block bg-slate-100 text-slate-600 text-[10px] font-bold px-1.5 py-0.5 rounded mt-0.5" x-text="prod.category || 'Barang Konsumsi'"></span>
+                                        </td>
+                                        <td class="py-3 px-4 text-center">
+                                            <span class="inline-block bg-blue-50 text-[#0047b3] font-black font-mono px-3 py-1 rounded-lg text-xs border border-blue-200"
+                                                  x-text="formatQtyClean(prod)"></span>
+                                        </td>
+                                        <td class="py-3 px-4 text-center">
+                                            <template x-if="selectedDocForDetail?.isPhysicalReceived">
+                                                <span class="inline-block px-3 py-1 rounded-lg font-mono font-black text-xs border"
+                                                      :class="(prod.receivedQty >= prod.submittedQty) ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : (prod.receivedQty > 0 ? 'bg-amber-50 text-amber-800 border-amber-300' : 'bg-rose-50 text-rose-800 border-rose-200')"
+                                                      x-text="(parseInt(prod.receivedQty !== undefined ? prod.receivedQty : prod.submittedQty) || 0) + ' Pcs'"></span>
+                                            </template>
+                                            <template x-if="!selectedDocForDetail?.isPhysicalReceived">
+                                                <span class="inline-block px-2.5 py-1 rounded-md text-[11px] font-bold bg-slate-100 text-slate-500">
+                                                    0 Pcs (Belum Diterima)
+                                                </span>
+                                            </template>
+                                        </td>
+                                        <td class="py-3 px-4 text-center">
+                                            <template x-if="selectedDocForDetail?.isPhysicalReceived">
+                                                <div>
+                                                    <template x-if="(prod.selisih || 0) === 0">
+                                                        <span class="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 border border-emerald-200 font-extrabold px-2 py-0.5 rounded text-[10.5px]">
+                                                            <span class="material-symbols-rounded text-[13px]">check_circle</span>
+                                                            <span>Lengkap (0 Tertinggal)</span>
+                                                        </span>
+                                                    </template>
+                                                    <template x-if="(prod.selisih || 0) > 0">
+                                                        <div class="space-y-0.5">
+                                                            <span class="inline-flex items-center gap-1 bg-rose-50 text-rose-800 border border-rose-300 font-black px-2 py-0.5 rounded text-[10.5px]">
+                                                                <span class="material-symbols-rounded text-[13px]">warning</span>
+                                                                <span x-text="'Tertinggal: ' + prod.selisih + ' ' + prod.unit"></span>
+                                                            </span>
+                                                            <span class="block text-[9.5px] font-bold text-amber-700" x-text="prod.followUpAction === 'kirim_susulan' ? '• Pantau Pengiriman Susulan' : '• Dicatat Selisih'"></span>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </template>
+                                            <template x-if="!selectedDocForDetail?.isPhysicalReceived">
+                                                <span class="text-slate-400 italic text-[11px]">Menunggu Cek Fisik</span>
+                                            </template>
+                                        </td>
+                                        <td class="py-3 px-4 text-right font-mono font-black text-slate-900" x-text="'Rp ' + (prod.subtotal ? Number(prod.subtotal).toLocaleString('id-ID') : '150.000')"></td>
+                                        <td class="py-3 px-4 text-center">
+                                            <button type="button"
+                                                    @click="openPhysicalReceiveModal(selectedDocForDetail, prod.sku)"
+                                                    class="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg font-extrabold text-[11px] inline-flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                                                    title="Atur Jumlah Diterima untuk Produk Ini">
+                                                <span class="material-symbols-rounded text-[14px]">tune</span>
+                                                <span>Atur Qty</span>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                            <tfoot class="bg-slate-50/80 border-t border-slate-200 font-bold text-slate-800">
+                                <tr>
+                                    <td colspan="2" class="py-3 px-4 text-slate-600 uppercase tracking-wider text-[11px]">Rekapitulasi Fisik:</td>
+                                    <td class="py-3 px-4 text-center font-black font-mono text-[#0052cc] text-xs" x-text="calculateDocTotalQty(selectedDocForDetail)"></td>
+                                    <td class="py-3 px-4 text-center font-black font-mono text-emerald-700 text-xs" x-text="calculateDocTotalReceivedQty(selectedDocForDetail)"></td>
+                                    <td class="py-3 px-4 text-center font-black font-mono text-xs" :class="calculateDocTotalTertinggalQty(selectedDocForDetail) > 0 ? 'text-rose-600' : 'text-emerald-600'" x-text="calculateDocTotalTertinggalQty(selectedDocForDetail) > 0 ? (calculateDocTotalTertinggalQty(selectedDocForDetail) + ' Unit Tertinggal') : 'Semua Lengkap (0 Tertinggal)'"></td>
+                                    <td class="py-3 px-4 text-right font-black font-mono text-slate-900 text-[13px]" x-text="selectedDocForDetail?.subtotal || 'Rp 0'"></td>
+                                    <td class="py-3 px-4 text-center">
+                                        <button type="button"
+                                                @click="openPhysicalReceiveModal(selectedDocForDetail)"
+                                                class="text-amber-700 hover:text-amber-900 font-extrabold text-[11px] underline cursor-pointer">
+                                            Atur Semua
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- TIMELINE TRACKING ALUR RETUR -->
+                <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs space-y-3">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-rounded text-[18px] text-slate-700">timeline</span>
+                        <h4 class="text-xs font-black text-slate-800 uppercase tracking-wider">Riwayat Status &amp; Alur Penanganan Retur</h4>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-2 pt-1 text-center">
+                        <!-- Step 1 -->
+                        <div class="p-2.5 rounded-xl border bg-emerald-50 border-emerald-200 text-emerald-900 space-y-0.5">
+                            <span class="material-symbols-rounded text-[18px] text-emerald-600 block">check_circle</span>
+                            <div class="font-black text-[11px]">1. Diajukan Kasir</div>
+                            <div class="text-[10px] text-slate-500" x-text="selectedDocForDetail?.date"></div>
+                        </div>
+
+                        <!-- Step 2 -->
+                        <div class="p-2.5 rounded-xl border space-y-0.5"
+                             :class="{
+                                 'bg-emerald-50 border-emerald-200 text-emerald-900': selectedDocForDetail?.statusKey === 'disetujui' || selectedDocForDetail?.statusKey === 'selesai',
+                                 'bg-amber-50 border-amber-200 text-amber-900': selectedDocForDetail?.statusKey === 'menunggu_approval',
+                                 'bg-rose-50 border-rose-200 text-rose-900': selectedDocForDetail?.statusKey === 'ditolak',
+                                 'bg-purple-50 border-purple-200 text-purple-900': selectedDocForDetail?.statusKey === 'revisi'
+                             }">
+                            <span class="material-symbols-rounded text-[18px] block"
+                                  :class="{
+                                      'text-emerald-600': selectedDocForDetail?.statusKey === 'disetujui' || selectedDocForDetail?.statusKey === 'selesai',
+                                      'text-amber-600': selectedDocForDetail?.statusKey === 'menunggu_approval',
+                                      'text-rose-600': selectedDocForDetail?.statusKey === 'ditolak',
+                                      'text-purple-600': selectedDocForDetail?.statusKey === 'revisi'
+                                  }"
+                                  x-text="selectedDocForDetail?.statusKey === 'ditolak' ? 'cancel' : (selectedDocForDetail?.statusKey === 'revisi' ? 'edit_note' : (selectedDocForDetail?.statusKey === 'menunggu_approval' ? 'hourglass_top' : 'verified'))"></span>
+                            <div class="font-black text-[11px]">2. Review Manager</div>
+                            <div class="text-[10px] text-slate-500" x-text="selectedDocForDetail?.statusLabel"></div>
+                        </div>
+
+                        <!-- Step 3 -->
+                        <div class="p-2.5 rounded-xl border space-y-0.5"
+                             :class="(selectedDocForDetail?.statusKey === 'disetujui' || selectedDocForDetail?.statusKey === 'selesai') ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-slate-50 border-slate-200 text-slate-400'">
+                            <span class="material-symbols-rounded text-[18px] block" :class="(selectedDocForDetail?.statusKey === 'disetujui' || selectedDocForDetail?.statusKey === 'selesai') ? 'text-emerald-600' : 'text-slate-400'">local_shipping</span>
+                            <div class="font-black text-[11px]">3. Pengiriman DC</div>
+                            <div class="text-[10px] text-slate-500" x-text="selectedDocForDetail?.driver || 'Andi Pratama'"></div>
+                        </div>
+
+                        <!-- Step 4 -->
+                        <div class="p-2.5 rounded-xl border space-y-0.5"
+                             :class="selectedDocForDetail?.isPhysicalReceived ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-slate-50 border-slate-200 text-slate-400'">
+                            <span class="material-symbols-rounded text-[18px] block" :class="selectedDocForDetail?.isPhysicalReceived ? 'text-emerald-600' : 'text-slate-400'">warehouse</span>
+                            <div class="font-black text-[11px]">4. Masuk Stok Retur</div>
+                            <div class="text-[10px] text-slate-500" x-text="selectedDocForDetail?.isPhysicalReceived ? 'Terkarantina DC' : 'Menunggu Fisik'"></div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Modal Footer with Contextual Actions -->
+            <div class="px-6 py-4 bg-white border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 shrink-0">
+                <button type="button" @click="showDetailDocModal = false" class="px-4 py-2 rounded-xl text-slate-700 font-bold hover:bg-slate-100 cursor-pointer">
+                    Tutup
+                </button>
+
+                <div class="flex items-center gap-2">
+                    <!-- If pending approval: Manager action buttons right in modal! -->
+                    <template x-if="selectedDocForDetail?.needsApproval || selectedDocForDetail?.statusKey === 'menunggu_approval'">
+                        <div class="flex items-center gap-2">
+                            <button type="button"
+                                    @click="showDetailDocModal = false; openRejectModal(selectedDocForDetail);"
+                                    class="px-4 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold border border-rose-200 cursor-pointer">
+                                Tolak Retur
+                            </button>
+                            <button type="button"
+                                    @click="showDetailDocModal = false; openRevisionModal(selectedDocForDetail);"
+                                    class="px-4 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold border border-purple-200 cursor-pointer">
+                                Minta Revisi
+                            </button>
+                            <button type="button"
+                                    @click="showDetailDocModal = false; openApproveModal(selectedDocForDetail);"
+                                    class="px-5 py-2 rounded-xl bg-[#16a34a] hover:bg-[#15803d] text-white font-bold shadow-xs cursor-pointer flex items-center gap-1.5">
+                                <span class="material-symbols-rounded text-[17px]">check_circle</span>
+                                <span>Setujui Retur</span>
+                            </button>
+                        </div>
+                    </template>
+
+                    <!-- Button to adjust return stock received per product (Anti-stok tertinggal) -->
+                    <template x-if="selectedDocForDetail && selectedDocForDetail.direction === 'toko_ke_gudang'">
+                        <button type="button"
+                                @click="openPhysicalReceiveModal(selectedDocForDetail)"
+                                class="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold shadow-xs cursor-pointer flex items-center gap-1.5 transition-colors">
+                            <span class="material-symbols-rounded text-[17px]">tune</span>
+                            <span x-text="selectedDocForDetail.isPhysicalReceived ? 'Atur Ulang / Tambah Qty Diterima' : 'Atur Qty Diterima Fisik'"></span>
+                        </button>
+                    </template>
+
+                    <!-- If physically received: also offer BAST digital archive -->
+                    <template x-if="selectedDocForDetail?.isPhysicalReceived">
+                        <button type="button"
+                                @click="showDetailDocModal = false; viewBast(selectedDocForDetail);"
+                                class="px-5 py-2 rounded-xl bg-[#0047b3] hover:bg-[#003994] text-white font-bold shadow-xs cursor-pointer flex items-center gap-1.5">
+                            <span class="material-symbols-rounded text-[17px]">print</span>
+                            <span>Lihat Arsip BAST</span>
+                        </button>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- MODAL 1: PERSETUJUAN RETUR (APPROVE) -->
+    <!-- ======================================================== -->
+    <div x-show="showApproveModal" style="display: none;"
+         class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4"
+         x-transition.opacity>
+        <div @click.away="showApproveModal = false"
+             class="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-slate-200 overflow-hidden">
+            <div class="px-6 py-5 bg-emerald-50 border-b border-emerald-100 flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center">
+                        <span class="material-symbols-rounded text-[22px]">verified</span>
                     </div>
                     <div>
-                        <label class="block text-[11px] font-extrabold text-slate-600 uppercase tracking-wider mb-1.5">SATUAN KEMASAN</label>
-                        <select x-model="newDocUnit" class="w-full bg-[#f1f5f9] border border-slate-200 rounded-xl px-3.5 py-2.5 text-[13px] font-bold text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-none">
-                            <option>Karton</option>
-                            <option>Pouch</option>
-                            <option>Pack</option>
-                            <option>Btl</option>
-                            <option>Kaleng</option>
-                        </select>
+                        <h3 class="text-[15px] font-black text-slate-900">Setujui Pengajuan Retur</h3>
+                        <p class="text-[11px] text-slate-500 font-medium">Otorisasi Manager Operasional</p>
                     </div>
                 </div>
-                <div>
-                    <label class="block text-[11px] font-extrabold text-slate-600 uppercase tracking-wider mb-1.5">KATEGORI ALASAN & ARMADA</label>
-                    <input type="text" x-model="newDocReason" :placeholder="modalMode === 'toko_ke_gudang' ? 'Contoh: Kemasan penyok saat bongkar muat' : 'Contoh: Kompensasi klaim retur #RTR-TK-2024-0892'"
-                           class="w-full bg-[#f1f5f9] border border-slate-200 rounded-xl px-3.5 py-2.5 text-[13px] font-medium text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-none">
+                <button @click="showApproveModal = false" class="text-slate-400 hover:text-slate-600 cursor-pointer">
+                    <span class="material-symbols-rounded text-[20px]">close</span>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-4 text-xs" x-if="selectedDocForApproval">
+                <p class="text-slate-700 leading-relaxed">
+                    Apakah Anda yakin ingin menyetujui dokumen pengajuan retur <strong class="font-mono font-bold text-slate-900" x-text="selectedDocForApproval?.docNo"></strong> dari cabang <strong x-text="selectedDocForApproval?.branchOrigin"></strong>?
+                </p>
+
+                <div class="bg-slate-50 rounded-xl p-3 border border-slate-200 space-y-1">
+                    <div class="font-bold text-slate-800">Daftar Barang Retur:</div>
+                    <template x-for="p in selectedDocForApproval?.products" :key="p.name">
+                        <div class="flex items-center justify-between text-slate-600">
+                            <span x-text="p.name"></span>
+                            <span class="font-mono font-bold" x-text="formatQtyClean(p)"></span>
+                        </div>
+                    </template>
+                </div>
+
+                <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 leading-relaxed">
+                    <strong>Pemberitahuan SOP:</strong> Persetujuan ini TIDAK menambahkan barang ke Stok Retur Gudang. Barang baru resmi masuk stok retur saat staf Gudang mengonfirmasi penerimaan fisik.
                 </div>
             </div>
 
-            <div class="px-6 py-4 bg-[#f8fafc] border-t border-slate-200 flex items-center justify-end gap-2.5">
-                <button @click="showModal = false" class="px-4 py-2 rounded-xl bg-slate-200/70 hover:bg-slate-200 text-slate-700 text-[12px] font-extrabold cursor-pointer">Batal</button>
-                <button @click="
-                    draftDirection = modalMode;
-                    draftSku = newDocSku || 'Minyak Goreng Sawit 2L';
-                    draftQty = newDocQty || 12;
-                    draftUnit = newDocUnit;
-                    submitQuickDraft();
-                    showModal = false;
-                    newDocSku = '';
-                    newDocReason = '';
-                " class="px-5 py-2 rounded-xl text-white text-[12px] font-extrabold shadow-xs cursor-pointer"
-                   :class="modalMode === 'toko_ke_gudang' ? 'bg-[#0047b3] hover:bg-[#003994]' : 'bg-[#16a34a] hover:bg-[#15803d]'">
-                    Simpan & Terbitkan Dokumen
+            <div class="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5">
+                <button @click="showApproveModal = false" class="px-4 py-2 rounded-xl text-slate-700 font-bold hover:bg-slate-200 cursor-pointer">Batal</button>
+                <button @click="confirmApprove()" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-xs cursor-pointer">Ya, Setujui Pengajuan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- MODAL 2: TOLAK RETUR (REJECT) -->
+    <!-- ======================================================== -->
+    <div x-show="showRejectModal" style="display: none;"
+         class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4"
+         x-transition.opacity>
+        <div @click.away="showRejectModal = false"
+             class="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-slate-200 overflow-hidden">
+            <div class="px-6 py-5 bg-rose-50 border-b border-rose-100 flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center">
+                        <span class="material-symbols-rounded text-[22px]">cancel</span>
+                    </div>
+                    <div>
+                        <h3 class="text-[15px] font-black text-slate-900">Tolak Pengajuan Retur</h3>
+                        <p class="text-[11px] text-slate-500 font-medium">Pembatalan Alur Retur Cabang</p>
+                    </div>
+                </div>
+                <button @click="showRejectModal = false" class="text-slate-400 hover:text-slate-600 cursor-pointer">
+                    <span class="material-symbols-rounded text-[20px]">close</span>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-4 text-xs" x-if="selectedDocForReject">
+                <p class="text-slate-700">
+                    Anda akan menolak dokumen <strong class="font-mono font-bold text-slate-900" x-text="selectedDocForReject?.docNo"></strong>. Silakan masukkan alasan penolakan secara jelas:
+                </p>
+
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Alasan Penolakan <span class="text-rose-500">*</span></label>
+                    <textarea x-model="rejectReason" rows="3"
+                              placeholder="Contoh: Kerusakan akibat kelalaian operasional toko / Tidak sesuai kriteria klaim produsen..."
+                              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-medium focus:border-rose-500 focus:outline-none"></textarea>
+                </div>
+            </div>
+
+            <div class="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5">
+                <button @click="showRejectModal = false" class="px-4 py-2 rounded-xl text-slate-700 font-bold hover:bg-slate-200 cursor-pointer">Batal</button>
+                <button @click="confirmReject()" class="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-xs cursor-pointer">Tolak Pengajuan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- MODAL 3: MINTA REVISI DOKUMEN -->
+    <!-- ======================================================== -->
+    <div x-show="showRevisionModal" style="display: none;"
+         class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4"
+         x-transition.opacity>
+        <div @click.away="showRevisionModal = false"
+             class="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-slate-200 overflow-hidden">
+            <div class="px-6 py-5 bg-purple-50 border-b border-purple-100 flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center">
+                        <span class="material-symbols-rounded text-[22px]">edit_note</span>
+                    </div>
+                    <div>
+                        <h3 class="text-[15px] font-black text-slate-900">Minta Revisi Dokumen Retur</h3>
+                        <p class="text-[11px] text-slate-500 font-medium">Instruksi Perbaikan untuk Toko</p>
+                    </div>
+                </div>
+                <button @click="showRevisionModal = false" class="text-slate-400 hover:text-slate-600 cursor-pointer">
+                    <span class="material-symbols-rounded text-[20px]">close</span>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-4 text-xs" x-if="selectedDocForRevision">
+                <p class="text-slate-700">
+                    Masukkan instruksi perbaikan data untuk dokumen <strong class="font-mono font-bold text-slate-900" x-text="selectedDocForRevision?.docNo"></strong>:
+                </p>
+
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Catatan Permintaan Revisi <span class="text-rose-500">*</span></label>
+                    <textarea x-model="revisionNotes" rows="3"
+                              placeholder="Contoh: Kuantitas melebihi sisa stok sistem, mohon sesuaikan kuantitas fisik riil barang..."
+                              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-medium focus:border-purple-500 focus:outline-none"></textarea>
+                </div>
+            </div>
+
+            <div class="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5">
+                <button @click="showRevisionModal = false" class="px-4 py-2 rounded-xl text-slate-700 font-bold hover:bg-slate-200 cursor-pointer">Batal</button>
+                <button @click="confirmRevision()" class="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold shadow-xs cursor-pointer">Kirim Permintaan Revisi</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- MODAL 4: ATUR & KONFIRMASI PENERIMAAN FISIK GUDANG (ANTI-STOK TERTINGGAL) -->
+    <!-- ======================================================== -->
+    <div x-show="showPhysicalModal" style="display: none;"
+         class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4"
+         x-transition.opacity>
+        <div @click.away="showPhysicalModal = false"
+             class="bg-white rounded-2xl w-full max-w-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+            
+            <!-- Modal Header -->
+            <div class="px-6 py-4.5 bg-gradient-to-r from-amber-600 to-amber-700 text-white flex items-center justify-between shrink-0 shadow-xs">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shadow-2xs">
+                        <span class="material-symbols-rounded text-2xl">tune</span>
+                    </div>
+                    <div>
+                        <h3 class="text-base font-black leading-tight tracking-tight">Atur Kuantitas Stok Retur Diterima (Gudang Pusat)</h3>
+                        <p class="text-xs text-amber-100 font-medium">Sesuaikan kuantitas fisik riil per produk agar tidak ada stok yang tertinggal atau tercecer.</p>
+                    </div>
+                </div>
+                <button @click="showPhysicalModal = false" class="text-white/80 hover:text-white cursor-pointer p-1 rounded-lg hover:bg-white/10 transition-colors">
+                    <span class="material-symbols-rounded text-[22px]">close</span>
+                </button>
+            </div>
+
+            <!-- Modal Body (Scrollable) -->
+            <div class="p-6 overflow-y-auto space-y-5 text-xs flex-1" x-if="receivingDoc">
+                
+                <!-- Document Info Strip -->
+                <div class="p-3.5 bg-amber-50/60 rounded-xl border border-amber-200 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                        <span class="text-[10px] font-extrabold text-amber-900/60 uppercase tracking-wider">NO. DOKUMEN RETUR</span>
+                        <div class="font-mono font-black text-slate-900 text-[14px]" x-text="receivingDoc?.docNo"></div>
+                    </div>
+                    <div>
+                        <span class="text-[10px] font-extrabold text-amber-900/60 uppercase tracking-wider">ASAL TOKO CABANG</span>
+                        <div class="font-bold text-slate-800" x-text="receivingDoc?.branchOrigin"></div>
+                    </div>
+                    <div>
+                        <span class="text-[10px] font-extrabold text-amber-900/60 uppercase tracking-wider">KASIR PENGAJU</span>
+                        <div class="text-slate-700 font-bold" x-text="receivingDoc?.cashierName || 'Kasir Cabang'"></div>
+                    </div>
+                </div>
+
+                <!-- Rekonsiliasi Realtime Counters & Global Quick Button -->
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+                    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-rounded text-[18px] text-amber-600">calculate</span>
+                            <span class="text-xs font-black text-slate-800 uppercase tracking-wider">Rekonsiliasi Real-Time Kuantitas:</span>
+                        </div>
+                        <button type="button"
+                                @click="setAllFormItemsFull()"
+                                class="px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-extrabold inline-flex items-center gap-1 transition-colors cursor-pointer shadow-2xs">
+                            <span class="material-symbols-rounded text-[14px]">done_all</span>
+                            <span>Setel Terima Penuh 100% (Tanpa Ada yang Tertinggal)</span>
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        <div class="p-3 rounded-xl border border-blue-200 bg-blue-50/60 flex items-center justify-between">
+                            <div>
+                                <span class="text-[10px] font-extrabold text-blue-700 uppercase">Diajukan Kasir</span>
+                                <div class="text-lg font-black font-mono text-blue-900" x-text="calculateTotalSubmittedForm() + ' Unit'"></div>
+                            </div>
+                            <span class="material-symbols-rounded text-2xl text-blue-400">upload</span>
+                        </div>
+
+                        <div class="p-3 rounded-xl border border-emerald-200 bg-emerald-50/60 flex items-center justify-between">
+                            <div>
+                                <span class="text-[10px] font-extrabold text-emerald-700 uppercase">Diterima Fisik Gudang</span>
+                                <div class="text-lg font-black font-mono text-emerald-900" x-text="calculateTotalReceivedForm() + ' Unit'"></div>
+                            </div>
+                            <span class="material-symbols-rounded text-2xl text-emerald-400">warehouse</span>
+                        </div>
+
+                        <div class="p-3 rounded-xl border flex items-center justify-between"
+                             :class="calculateTotalTertinggalForm() > 0 ? 'border-rose-300 bg-rose-50/80' : 'border-slate-200 bg-slate-50'">
+                            <div>
+                                <span class="text-[10px] font-extrabold uppercase" :class="calculateTotalTertinggalForm() > 0 ? 'text-rose-700' : 'text-slate-500'">Stok Tertinggal</span>
+                                <div class="text-lg font-black font-mono" :class="calculateTotalTertinggalForm() > 0 ? 'text-rose-700' : 'text-slate-700'" x-text="calculateTotalTertinggalForm() + ' Unit'"></div>
+                            </div>
+                            <span class="material-symbols-rounded text-2xl" :class="calculateTotalTertinggalForm() > 0 ? 'text-rose-500' : 'text-slate-300'" x-text="calculateTotalTertinggalForm() > 0 ? 'warning' : 'check_circle'"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Form Items Checklist with Stepper Controls -->
+                <div class="space-y-3">
+                    <label class="block font-black text-slate-800 uppercase tracking-wider text-[11px]">
+                        Atur Kuantitas Diterima per Produk (Diajukan vs Diterima):
+                    </label>
+
+                    <div class="space-y-3">
+                        <template x-for="(itm, idx) in physicalItemsForm" :key="idx">
+                            <div class="p-4 bg-white border rounded-xl shadow-2xs space-y-3 transition-all"
+                                 :class="(highlightedSku && itm.sku === highlightedSku) ? 'border-amber-400 ring-2 ring-amber-200' : 'border-slate-200/90'">
+                                
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-black text-slate-900 text-[13px]" x-text="itm.name"></span>
+                                            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600" x-text="itm.category"></span>
+                                        </div>
+                                        <span class="text-[10.5px] font-mono text-slate-400 block" x-text="'SKU: ' + itm.sku"></span>
+                                    </div>
+                                    <span class="bg-blue-100 text-[#0052cc] text-xs font-bold px-3 py-1 rounded-lg"
+                                          x-text="'Diajukan: ' + itm.submittedQty + ' ' + itm.unit"></span>
+                                </div>
+
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                                    <!-- Input & Quick Steppers -->
+                                    <div>
+                                        <label class="block font-bold text-slate-700 mb-1">
+                                            Jumlah Diterima Gudang <span class="text-rose-500">*</span>
+                                        </label>
+                                        <div class="flex items-center gap-1.5">
+                                            <!-- Decrement -->
+                                            <button type="button"
+                                                    @click="decrementFormItem(itm)"
+                                                    class="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-base flex items-center justify-center shrink-0 cursor-pointer">
+                                                -
+                                            </button>
+                                            
+                                            <!-- Direct Input -->
+                                            <input type="number"
+                                                   x-model="itm.receivedQty"
+                                                   @input="updateItemDiscrepancy(itm)"
+                                                   min="0"
+                                                   :max="itm.submittedQty"
+                                                   class="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-mono font-black text-sm text-center focus:border-amber-500 focus:outline-none">
+                                            
+                                            <!-- Increment -->
+                                            <button type="button"
+                                                    @click="incrementFormItem(itm)"
+                                                    class="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-base flex items-center justify-center shrink-0 cursor-pointer">
+                                                +
+                                            </button>
+
+                                            <!-- Unit text -->
+                                            <span class="font-bold text-slate-600 text-xs shrink-0 px-1" x-text="itm.unit"></span>
+
+                                            <!-- Quick Full Button -->
+                                            <button type="button"
+                                                    @click="setFormItemFull(itm)"
+                                                    class="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-[10.5px] font-bold shrink-0 cursor-pointer"
+                                                    title="Terima kuantitas penuh">
+                                                Max
+                                            </button>
+                                            <!-- Quick 0 Button -->
+                                            <button type="button"
+                                                    @click="setFormItemZero(itm)"
+                                                    class="px-2 py-1 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-[10.5px] font-bold shrink-0 cursor-pointer"
+                                                    title="Set 0 (semua tertinggal)">
+                                                0
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Status Kalkulasi Selisih / Tertinggal -->
+                                    <div>
+                                        <label class="block font-bold text-slate-700 mb-1">Status Kuantitas</label>
+                                        <div class="px-3 py-1.5 rounded-lg font-mono font-bold text-xs flex items-center justify-between border"
+                                             :class="itm.selisih > 0 ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'">
+                                            <span x-text="itm.selisih > 0 ? '⚠ Tertinggal: ' + itm.selisih + ' ' + itm.unit : '✓ Lengkap 100% (Tidak Tertinggal)'"></span>
+                                            <span class="material-symbols-rounded text-[16px]" x-text="itm.selisih > 0 ? 'warning' : 'check_circle'"></span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Follow-up Actions for Left-behind stock -->
+                                <template x-if="itm.selisih > 0">
+                                    <div class="p-3 bg-amber-50/70 border border-amber-200 rounded-xl space-y-2 mt-2">
+                                        <div class="flex items-center gap-1.5 text-amber-900 font-extrabold text-[11px]">
+                                            <span class="material-symbols-rounded text-[15px] text-amber-600">inventory</span>
+                                            <span x-text="'TINDAK LANJUT ' + itm.selisih + ' ' + itm.unit + ' STOK TERTINGGAL:'"></span>
+                                        </div>
+                                        
+                                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                                            <label class="flex items-center gap-2 p-2 rounded-lg bg-white border border-amber-200 cursor-pointer hover:bg-amber-50">
+                                                <input type="radio" x-model="itm.followUpAction" value="kirim_susulan" class="text-amber-600">
+                                                <span class="font-bold text-slate-800">Jadwalkan Pengiriman Susulan (Tetap Dipantau)</span>
+                                            </label>
+                                            <label class="flex items-center gap-2 p-2 rounded-lg bg-white border border-amber-200 cursor-pointer hover:bg-amber-50">
+                                                <input type="radio" x-model="itm.followUpAction" value="batal_sisa" class="text-amber-600">
+                                                <span class="font-bold text-slate-800">Batalkan Sisa &amp; Kembalikan ke Cabang</span>
+                                            </label>
+                                        </div>
+
+                                        <div>
+                                            <label class="block font-bold text-slate-700 mb-1 text-[10.5px]">
+                                                Catatan Alasan Selisih / Stok Tertinggal:
+                                            </label>
+                                            <input type="text"
+                                                   x-model="itm.discrepancyReason"
+                                                   placeholder="Contoh: Barang tertinggal di gudang cabang A, akan diangkut trip delivery berikutnya..."
+                                                   class="w-full px-3 py-1.5 bg-white border border-amber-300 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-amber-500">
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Inspector and Timestamp Form -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">Petugas Penerima Gudang (QC)</label>
+                        <input type="text" x-model="physicalInspector" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-800">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">Waktu Konfirmasi Fisik</label>
+                        <input type="text" x-model="physicalReceivedDate" readonly class="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-xs font-mono text-slate-600">
+                    </div>
+                </div>
+
+                <!-- Isolation and Anti-Loss Policy -->
+                <div class="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-700 leading-relaxed space-y-1">
+                    <div class="font-extrabold flex items-center gap-1.5 text-slate-900">
+                        <span class="material-symbols-rounded text-[16px] text-[#0052cc]">shield</span>
+                        <span>JAMINAN SISTEM BEBAS STOK TERTINGGAL:</span>
+                    </div>
+                    <p>
+                        Setiap kuantitas yang Anda masukkan di atas akan langsung dialokasikan ke <strong>Stok Retur Gudang Pusat</strong>. Bila terdapat sisa stok tertinggal, sistem tetap menyimpannya dalam pantauan penerimaan susulan sehingga Manager dapat menambahkan sisa stok tersebut kapan saja ketika fisik tiba.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="px-6 py-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2.5 shrink-0">
+                <button type="button" @click="showPhysicalModal = false" class="px-4 py-2 rounded-xl text-slate-700 font-bold hover:bg-slate-200 cursor-pointer">Batal</button>
+                <button type="button" @click="confirmPhysicalReceipt()" class="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold shadow-xs cursor-pointer flex items-center gap-1.5">
+                    <span class="material-symbols-rounded text-[18px]">done_all</span>
+                    <span>Simpan &amp; Perbarui Stok Retur Gudang</span>
                 </button>
             </div>
         </div>
     </div>
 
-    <!-- Interactive Toast Notification -->
+    <!-- ======================================================== -->
+    <!-- MODAL 5: DETAIL ARSIP BAST RESMI -->
+    <!-- ======================================================== -->
+    <div x-show="showBastModal" style="display: none;"
+         class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4"
+         x-transition.opacity>
+        <div @click.away="showBastModal = false"
+             class="bg-white rounded-2xl w-full max-w-lg shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+            <div class="px-6 py-4 bg-slate-800 text-white flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-rounded text-[20px] text-emerald-400">verified</span>
+                    <h3 class="text-sm font-black">Berita Acara Serah Terima (BAST) Digital</h3>
+                </div>
+                <button @click="showBastModal = false" class="text-slate-400 hover:text-white cursor-pointer">
+                    <span class="material-symbols-rounded text-[20px]">close</span>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-4 text-xs" x-if="selectedBastDoc">
+                <div class="text-center pb-3 border-b border-slate-200">
+                    <h4 class="text-base font-black text-slate-900 tracking-tight">KOPERASI KARYAWAN INDAH KIAT (KOPKAR ILP)</h4>
+                    <p class="text-[11px] text-slate-500 font-medium">BUKTI RESMI SERAH TERIMA BARANG RETUR LOGISTIK GUDANG</p>
+                    <div class="inline-block mt-2 font-mono font-black text-slate-800 bg-slate-100 px-3 py-1 rounded-md text-xs border border-slate-200"
+                         x-text="selectedBastDoc?.physicalReceiptData?.bastNo || 'BAST-2024/05/TK-0888'"></div>
+                </div>
+
+                <div class="space-y-2 text-[11.5px]">
+                    <div class="flex justify-between py-1 border-b border-slate-100">
+                        <span class="text-slate-500">Ref. Dokumen Retur:</span>
+                        <span class="font-mono font-bold text-slate-800" x-text="selectedBastDoc?.docNo"></span>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-slate-100">
+                        <span class="text-slate-500">Pihak Toko (Pelepas):</span>
+                        <span class="font-bold text-slate-800" x-text="selectedBastDoc?.branchOrigin + ' (' + (selectedBastDoc?.cashierName || 'Kasir') + ')'"></span>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-slate-100">
+                        <span class="text-slate-500">Pihak Gudang (Penerima QC):</span>
+                        <span class="font-bold text-slate-800" x-text="selectedBastDoc?.physicalReceiptData?.receivedBy || 'Hendra W. (DC Head)'"></span>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-slate-100">
+                        <span class="text-slate-500">Waktu Serah Terima Fisik:</span>
+                        <span class="font-mono text-slate-800" x-text="selectedBastDoc?.physicalReceiptData?.receivedDate || selectedBastDoc?.date"></span>
+                    </div>
+                </div>
+
+                <!-- Table BAST Items -->
+                <div class="border border-slate-200 rounded-xl overflow-hidden">
+                    <table class="w-full text-left text-[11px]">
+                        <thead class="bg-slate-50 font-bold text-slate-600 border-b border-slate-200">
+                            <tr>
+                                <th class="p-2">Item Barang</th>
+                                <th class="p-2 text-center">Diajukan</th>
+                                <th class="p-2 text-center">Fisik Diterima</th>
+                                <th class="p-2 text-center">Selisih</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            <template x-for="bItem in (selectedBastDoc?.physicalReceiptData?.items || selectedBastDoc?.products)" :key="bItem.name">
+                                <tr>
+                                    <td class="p-2 font-medium" x-text="bItem.name"></td>
+                                    <td class="p-2 text-center font-mono" x-text="formatQtyClean(bItem)"></td>
+                                    <td class="p-2 text-center font-mono font-bold text-amber-800" x-text="(parseInt(bItem.receivedQty !== undefined ? bItem.receivedQty : (bItem.submittedQty || bItem.qty)) || 0) + ' Pcs'"></td>
+                                    <td class="p-2 text-center font-mono" :class="(bItem.selisih > 0) ? 'text-rose-600 font-bold' : 'text-emerald-600'" x-text="(bItem.selisih || 0)"></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+
+                <template x-if="selectedBastDoc?.physicalReceiptData?.hasDiscrepancy">
+                    <div class="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-[11px] text-rose-800">
+                        <strong>Catatan Selisih:</strong> <span x-text="selectedBastDoc?.physicalReceiptData?.discrepancyReason"></span>
+                    </div>
+                </template>
+            </div>
+
+            <div class="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5">
+                <button type="button" @click="showBastModal = false" class="px-4 py-2 rounded-xl text-slate-700 font-bold hover:bg-slate-200 cursor-pointer">Tutup</button>
+                <button type="button" @click="triggerToast('Mengunduh arsip BAST digital (PDF)...'); showBastModal = false;" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold inline-flex items-center gap-1.5 cursor-pointer">
+                    <span class="material-symbols-rounded text-[16px]">download</span>
+                    <span>Unduh PDF BAST</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- MODAL 6: BUAT PENGAJUAN RETUR BARU -->
+    <!-- ======================================================== -->
+    <div x-show="showModal" style="display: none;"
+         class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4"
+         x-transition.opacity>
+        <div @click.away="showModal = false"
+             class="bg-white rounded-2xl w-full max-w-lg shadow-2xl border border-slate-200 overflow-hidden">
+            <div class="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-xl bg-[#0047b3] text-white flex items-center justify-center">
+                        <span class="material-symbols-rounded text-[20px]">outbox</span>
+                    </div>
+                    <div>
+                        <h3 class="text-[15px] font-black text-slate-900">Buat Pengajuan Retur Toko &rarr; Gudang</h3>
+                        <p class="text-[11px] font-medium text-slate-500">Ajukan pengembalian produk rusak/ED/overstock ke Gudang Pusat</p>
+                    </div>
+                </div>
+                <button @click="showModal = false" class="text-slate-400 hover:text-slate-600 cursor-pointer">
+                    <span class="material-symbols-rounded text-[18px]">close</span>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-4 text-xs">
+                <div>
+                    <label class="block font-extrabold text-slate-600 uppercase tracking-wider mb-1">ASAL CABANG / TOKO</label>
+                    <select x-model="newDocBranch" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold text-slate-800 focus:outline-none focus:border-blue-500">
+                        <option value="Cabang A">Cabang A</option>
+                        <option value="Cabang B">Cabang B</option>
+                        <option value="Toko Pusat">Toko Pusat</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block font-extrabold text-slate-600 uppercase tracking-wider mb-1">NAMA PETUGAS KASIR PENGAJU</label>
+                    <input type="text" x-model="newDocCashier" placeholder="Nama Kasir Cabang"
+                           class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block font-extrabold text-slate-600 uppercase tracking-wider mb-1">NAMA PRODUK / SKU</label>
+                    <input type="text" x-model="newDocSku" placeholder="Contoh: PRD-007 - Minyak Goreng Sawit 2L"
+                           class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-none">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block font-extrabold text-slate-600 uppercase tracking-wider mb-1">KUANTITAS DIAJUKAN</label>
+                        <input type="number" x-model="newDocQty" min="1"
+                               class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block font-extrabold text-slate-600 uppercase tracking-wider mb-1">SATUAN KEMASAN</label>
+                        <select x-model="newDocUnit" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold text-slate-800 focus:outline-none focus:border-blue-500">
+                            <option>Pcs</option>
+                            <option>Karton</option>
+                            <option>Pack</option>
+                            <option>Botol</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block font-extrabold text-slate-600 uppercase tracking-wider mb-1">KONDISI FISIK</label>
+                    <select x-model="newDocCondition" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold text-slate-800 focus:outline-none focus:border-blue-500">
+                        <option value="RUSAK / BOCOR">RUSAK / BOCOR</option>
+                        <option value="KEDALUWARSA / H-14">KEDALUWARSA / H-14</option>
+                        <option value="MUTASI OVERSTOCK">MUTASI OVERSTOCK</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block font-extrabold text-slate-600 uppercase tracking-wider mb-1">CATATAN &amp; ALASAN DETAIL DARI KASIR</label>
+                    <input type="text" x-model="newDocReason" placeholder="Contoh: Kemasan penyok rembes saat dibongkar kasir toko"
+                           class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-medium text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-none">
+                </div>
+            </div>
+
+            <div class="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5">
+                <button type="button" @click="showModal = false" class="px-4 py-2 rounded-xl text-slate-700 font-bold hover:bg-slate-200 cursor-pointer">Batal</button>
+                <button type="button" @click="submitQuickDraft()" class="px-5 py-2 rounded-xl bg-[#0047b3] hover:bg-[#003994] text-white font-bold shadow-xs cursor-pointer">
+                    Simpan &amp; Ajukan Retur
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
     <div x-show="showToast" style="display: none;"
          x-transition:enter="transition ease-out duration-200"
          x-transition:enter-start="opacity-0 translate-y-3"
@@ -1035,8 +2513,11 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
          x-transition:leave="transition ease-in duration-150"
          x-transition:leave-start="opacity-100 translate-y-0"
          x-transition:leave-end="opacity-0 translate-y-3"
-         class="fixed bottom-6 right-6 z-50 bg-[#0f172a] text-white px-4 py-3 rounded-xl shadow-xl border border-slate-700 flex items-center gap-3 text-[12.5px] font-bold">
-        <span class="material-symbols-rounded text-[18px] text-emerald-400">check_circle</span>
+         class="fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl shadow-xl border flex items-center gap-3 text-[12.5px] font-bold text-white"
+         :class="toastType === 'error' ? 'bg-rose-900 border-rose-700' : 'bg-slate-900 border-slate-700'">
+        <span class="material-symbols-rounded text-[18px]" :class="toastType === 'error' ? 'text-rose-400' : 'text-emerald-400'">
+            <span x-text="toastType === 'error' ? 'error' : 'check_circle'"></span>
+        </span>
         <span x-text="toastMessage"></span>
     </div>
 

@@ -8,60 +8,7 @@
     activeTab: 'all', // all | barang_masuk | retur_keluar | retur_masuk | stock_opname
     searchQuery: '',
 
-    operationalLogs: [
-        {
-            id: 'LOG-OP-001',
-            type: 'barang_masuk',
-            typeLabel: 'Penerimaan Barang',
-            badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-            icon: 'inventory_2',
-            refNo: 'SJ-DC-20261024-001',
-            bastNo: 'BAST-IN-20261024-001',
-            date: '24 Oktober 2026 • 09:30 WIB',
-            operator: 'Budi Kurniawan (Kasir)',
-            details: 'Penerimaan transfer 4 item dari Gudang DC Pusat (Beras, Minyak, Gula, Terigu). Fisik 100% lengkap tanpa selisih.',
-            status: 'DITERIMA_LENGKAP'
-        },
-        {
-            id: 'LOG-OP-002',
-            type: 'retur_keluar',
-            typeLabel: 'Pengajuan Retur Toko',
-            badgeClass: 'bg-amber-50 text-amber-700 border-amber-200',
-            icon: 'assignment_return',
-            refNo: 'RET-20261024-001',
-            bastNo: '-',
-            date: '24 Oktober 2026 • 10:15 WIB',
-            operator: 'Budi Kurniawan (Kasir)',
-            details: 'Pengajuan retur ke DC Pusat: 2 botol Sirup Marjan pecah kemasan saat handling di lorong. Menunggu serah terima fisik kurir DC.',
-            status: 'DISETUJUI_SPV'
-        },
-        {
-            id: 'LOG-OP-003',
-            type: 'retur_masuk',
-            typeLabel: 'Retur Masuk DC',
-            badgeClass: 'bg-purple-50 text-purple-700 border-purple-200',
-            icon: 'assignment_returned',
-            refNo: 'DO-RET-20261024-001',
-            bastNo: 'BAST-RET-20261024-001',
-            date: '24 Oktober 2026 • 11:00 WIB',
-            operator: 'Budi Kurniawan (Kasir)',
-            details: 'Penerimaan barang pengganti garansi dari DC: 3 kaleng Biskuit Khong Guan kondisi prima, lot baru.',
-            status: 'SELESAI_DIVERIFIKASI'
-        },
-        {
-            id: 'LOG-OP-004',
-            type: 'stock_opname',
-            typeLabel: 'Stock Opname',
-            badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
-            icon: 'fact_check',
-            refNo: 'SO-20261023-01',
-            bastNo: 'DOC-SO-01',
-            date: '23 Oktober 2026 • 21:30 WIB',
-            operator: 'Budi Kurniawan (Kasir) & Supervisor',
-            details: 'Stock counting Lorong A (Sembako & Kebutuhan Pokok): 15 SKU dihitung fisik, akurasi stok 99.4%, selisih 1 botol saus tiram.',
-            status: 'SELESAI_REKONSILIASI'
-        }
-    ],
+    operationalLogs: [],
 
     get filteredLogs() {
         return this.operationalLogs.filter(log => {
@@ -120,7 +67,7 @@ class="flex flex-col h-screen w-full font-sans">
                             <span class="text-[11px] font-extrabold text-emerald-800 uppercase tracking-wider">Barang Masuk DC</span>
                             <span class="material-symbols-rounded text-emerald-600 text-[20px]">inventory_2</span>
                         </div>
-                        <h2 class="text-2xl font-black text-emerald-700 mt-1.5 font-mono">1 BAST</h2>
+                        <h2 class="text-2xl font-black text-emerald-700 mt-1.5 font-mono" x-text="(operationalLogs.filter(l => l.type === 'barang_masuk').length) + ' BAST'">0 BAST</h2>
                         <span class="text-xs font-bold text-emerald-600 mt-1 block">100% Terverifikasi Lengkap</span>
                     </div>
 
@@ -129,7 +76,7 @@ class="flex flex-col h-screen w-full font-sans">
                             <span class="text-[11px] font-extrabold text-amber-800 uppercase tracking-wider">Retur Toko Diajukan</span>
                             <span class="material-symbols-rounded text-amber-600 text-[20px]">assignment_return</span>
                         </div>
-                        <h2 class="text-2xl font-black text-amber-700 mt-1.5 font-mono">1 Pengajuan</h2>
+                        <h2 class="text-2xl font-black text-amber-700 mt-1.5 font-mono" x-text="(operationalLogs.filter(l => l.type === 'retur_keluar').length) + ' Pengajuan'">0 Pengajuan</h2>
                         <span class="text-xs font-bold text-amber-600 mt-1 block">Menunggu Serah Terima Fisik</span>
                     </div>
 
@@ -138,7 +85,7 @@ class="flex flex-col h-screen w-full font-sans">
                             <span class="text-[11px] font-extrabold text-purple-800 uppercase tracking-wider">Klaim Garansi Diterima</span>
                             <span class="material-symbols-rounded text-purple-600 text-[20px]">assignment_returned</span>
                         </div>
-                        <h2 class="text-2xl font-black text-purple-700 mt-1.5 font-mono">1 BAST</h2>
+                        <h2 class="text-2xl font-black text-purple-700 mt-1.5 font-mono" x-text="(operationalLogs.filter(l => l.type === 'retur_masuk').length) + ' BAST'">0 BAST</h2>
                         <span class="text-xs font-bold text-purple-600 mt-1 block">Barang Pengganti Layak</span>
                     </div>
 
@@ -147,7 +94,7 @@ class="flex flex-col h-screen w-full font-sans">
                             <span class="text-[11px] font-extrabold text-blue-800 uppercase tracking-wider">Stock Opname</span>
                             <span class="material-symbols-rounded text-blue-600 text-[20px]">fact_check</span>
                         </div>
-                        <h2 class="text-2xl font-black text-[#0052cc] mt-1.5 font-mono">99.4%</h2>
+                        <h2 class="text-2xl font-black text-[#0052cc] mt-1.5 font-mono">-</h2>
                         <span class="text-xs font-bold text-blue-600 mt-1 block">Akurasi Fisik vs Buku</span>
                     </div>
                 </div>
@@ -239,8 +186,7 @@ class="flex flex-col h-screen w-full font-sans">
                     </template>
                     <div x-show="filteredLogs.length === 0" class="p-12 text-center text-gray-400">
                         <span class="material-symbols-rounded text-4xl mb-2 text-gray-300">history_edu</span>
-                        <p class="font-bold text-gray-600">Tidak ada catatan operasional</p>
-                        <p class="text-xs text-gray-400 mt-0.5">Silakan pilih kategori tab lain atau ubah kata kunci pencarian.</p>
+                        <p class="font-bold text-gray-600">Belum ada riwayat aktivitas operasional.</p>
                     </div>
                 </div>
 

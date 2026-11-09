@@ -29,16 +29,7 @@
                 this.member = this.members[0];
             }
         } else {
-            this.member = {
-                id: 'MBR-001',
-                nik: '1274092100340001',
-                name: 'Bambang Pamungkas',
-                dept: 'Logistik & Gudang',
-                phone: '81234567890',
-                creditLimit: 5000000,
-                currentDebt: 1250000,
-                status: 'AKTIF'
-            };
+            this.member = null;
         }
     },
 
@@ -93,7 +84,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                 <a href="{{ url('/members') }}" class="p-2 rounded-lg text-gray-400 hover:text-gray-800 hover:bg-gray-100 transition-colors">
                     <span class="material-symbols-rounded">arrow_back</span>
                 </a>
-                <h1 class="text-[18px] font-black text-gray-900 tracking-tight">Detail Profil Anggota Kopkar</h1>
+                <h1 class="text-[18px] font-black text-gray-900 tracking-tight">Detail Anggota</h1>
             </div>
 
             <div class="flex items-center gap-6 text-gray-500">
@@ -111,6 +102,19 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
         <!-- Scrollable Workspace -->
         <div class="flex-1 overflow-y-auto px-8 pb-[100px]">
+            <template x-if="!member">
+                <div class="py-16 text-center text-slate-400 space-y-3">
+                    <span class="material-symbols-rounded text-4xl text-slate-300 block">person_off</span>
+                    <h4 class="font-bold text-slate-800 text-sm">Data Anggota Tidak Ditemukan</h4>
+                    <p class="text-xs text-slate-500">Pilih anggota dari daftar untuk melihat atau mengedit profil.</p>
+                    <a href="{{ url('/members') }}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0052cc] text-white rounded-xl text-xs font-bold hover:bg-[#0043a8] transition-colors">
+                        <span class="material-symbols-rounded text-[16px]">arrow_back</span>
+                        <span>Kembali ke Daftar Anggota</span>
+                    </a>
+                </div>
+            </template>
+
+            <template x-if="member">
             <div class="flex flex-col lg:flex-row gap-6 items-start">
                 
                 <!-- Left: Informasi Personal -->
@@ -218,10 +222,11 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                 </div>
 
             </div>
+            </template>
         </div>
         
         <!-- Bottom Action Bar -->
-        <div class="absolute bottom-0 left-0 right-0 h-[72px] bg-white border-t border-gray-200 flex items-center justify-between px-8 z-10 shadow-lg">
+        <div x-show="member" class="absolute bottom-0 left-0 right-0 h-[72px] bg-white border-t border-gray-200 flex items-center justify-between px-8 z-10 shadow-lg">
             <div class="flex items-center gap-2 text-gray-500 text-xs">
                 <span class="material-symbols-rounded text-[18px] text-[#0052cc]">info</span>
                 <span>Perubahan data profil dan plafon langsung tersimpan ke basis data anggota.</span>

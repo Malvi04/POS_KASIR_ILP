@@ -31,28 +31,7 @@
             }
         } catch (e) {}
 
-        // Fallback default sample receipt
-        this.receipt = {
-            id: '#TRX-99201',
-            rawId: 'TRX-99201',
-            time: '11:42 WIB',
-            date: '24 Oktober 2026',
-            terminal: 'Kasir 01',
-            cashier: 'Budi Kurniawan',
-            method: 'TUNAI',
-            methodLabel: 'Uang Tunai',
-            items: [
-                { name: 'Indomie Goreng Spcl', qty: 3, unit: 'Pcs', price: 3200, total: 9600 },
-                { name: 'Oreo Vanilla 133g', qty: 1, unit: 'Pcs', price: 8200, total: 8200 },
-                { name: 'Teh Pucuk 350ml', qty: 2, unit: 'Botol', price: 4000, total: 8000 }
-            ],
-            subtotal: 25800,
-            discount: 1300,
-            tax: 2838,
-            total: 28638,
-            cashGiven: 50000,
-            change: 21362
-        };
+        this.receipt = null;
     },
 
     printStruk() {
@@ -209,6 +188,7 @@ class="flex flex-col min-h-screen w-full bg-[#f8f9fa] font-sans">
 
         </div>
 
+    </div>
     </main>
 </div>
 @endsection

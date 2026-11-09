@@ -22,11 +22,10 @@
             try {
                 this.documents = JSON.parse(stored);
             } catch(e) {
-                this.documents = this.getDefaultDocs();
+                this.documents = [];
             }
         } else {
-            this.documents = this.getDefaultDocs();
-            this.saveDocs();
+            this.documents = [];
         }
     },
 
@@ -35,79 +34,7 @@
     },
 
     getDefaultDocs() {
-        return [
-            {
-                id: 1,
-                docNo: '#SJ-DC-20261024-001',
-                date: '24 Oktober 2026 • 09:30 WIB',
-                warehouseOrigin: 'DC Cikarang (Pusat Logistik)',
-                destinationStore: 'Minimarket ILP - Sektor A',
-                driverName: 'Rahmat Hidayat',
-                plateNumber: 'B 9102 UQ',
-                status: 'MENUNGGU_VERIFIKASI', // MENUNGGU_VERIFIKASI | DITERIMA_LENGKAP | DITERIMA_SELISIH
-                receivedAt: null,
-                receiverName: null,
-                generalNotes: '',
-                items: [
-                    { sku: '899275321004', name: 'Indomie Goreng Spesial 85g', category: 'Makanan', unit: 'Pcs', qtySent: 120, qtyReceived: 120, condition: 'BAIK', note: '' },
-                    { sku: '8991234567890', name: 'Aqua Mineral 600ml', category: 'Minuman', unit: 'Botol', qtySent: 96, qtyReceived: 96, condition: 'BAIK', note: '' },
-                    { sku: '8993456789012', name: 'Ultra Milk Full Cream 1L', category: 'Minuman', unit: 'Tetra', qtySent: 48, qtyReceived: 48, condition: 'BAIK', note: '' },
-                    { sku: '8992345678901', name: 'Chitato Sapi Panggang 68g', category: 'Snack', unit: 'Pcs', qtySent: 36, qtyReceived: 36, condition: 'BAIK', note: '' }
-                ]
-            },
-            {
-                id: 2,
-                docNo: '#SJ-DC-20261024-002',
-                date: '24 Oktober 2026 • 11:15 WIB',
-                warehouseOrigin: 'DC Cikarang (Pusat Logistik)',
-                destinationStore: 'Minimarket ILP - Sektor A',
-                driverName: 'Dedi Kurnia',
-                plateNumber: 'B 9844 XZ',
-                status: 'MENUNGGU_VERIFIKASI',
-                receivedAt: null,
-                receiverName: null,
-                generalNotes: '',
-                items: [
-                    { sku: '8994567890123', name: 'Beras Pandan Wangi 5kg', category: 'Kebutuhan Pokok', unit: 'Pack', qtySent: 25, qtyReceived: 25, condition: 'BAIK', note: '' },
-                    { sku: '8995678901234', name: 'Minyak Goreng Sania 2L', category: 'Kebutuhan Pokok', unit: 'Pouch', qtySent: 60, qtyReceived: 60, condition: 'BAIK', note: '' },
-                    { sku: '8996789012345', name: 'Gula Pasir Gulaku 1kg', category: 'Kebutuhan Pokok', unit: 'Pack', qtySent: 40, qtyReceived: 40, condition: 'BAIK', note: '' }
-                ]
-            },
-            {
-                id: 3,
-                docNo: '#SJ-DC-20261023-014',
-                date: '23 Oktober 2026 • 14:20 WIB',
-                warehouseOrigin: 'DC Cibitung (Hub Sembako)',
-                destinationStore: 'Minimarket ILP - Sektor A',
-                driverName: 'Andi Pratama',
-                plateNumber: 'B 9481 UQ',
-                status: 'DITERIMA_LENGKAP',
-                receivedAt: '23 Okt 2026 14:45 WIB',
-                receiverName: 'Budi Kurniawan (Kasir)',
-                generalNotes: 'Penerimaan fisik lengkap, segel boks dalam kondisi prima.',
-                items: [
-                    { sku: '8997890123456', name: 'Sunlight Jeruk Nipis 755ml', category: 'Pembersih', unit: 'Botol', qtySent: 48, qtyReceived: 48, condition: 'BAIK', note: 'Sesuai' },
-                    { sku: '8998901234567', name: 'Deterjen Rinso Molto 800g', category: 'Pembersih', unit: 'Pack', qtySent: 30, qtyReceived: 30, condition: 'BAIK', note: 'Sesuai' }
-                ]
-            },
-            {
-                id: 4,
-                docNo: '#SJ-DC-20261022-009',
-                date: '22 Oktober 2026 • 10:05 WIB',
-                warehouseOrigin: 'DC Cikarang (Pusat Logistik)',
-                destinationStore: 'Minimarket ILP - Sektor A',
-                driverName: 'Joko Susilo',
-                plateNumber: 'B 9211 UQ',
-                status: 'DITERIMA_SELISIH',
-                receivedAt: '22 Okt 2026 10:35 WIB',
-                receiverName: 'Budi Kurniawan (Kasir)',
-                generalNotes: 'Ditemukan selisih kurang 2 pack karena kemasan sobek di perjalanan truk pengirim.',
-                items: [
-                    { sku: '8993456789012', name: 'Ultra Milk Cokelat 1L', category: 'Minuman', unit: 'Tetra', qtySent: 48, qtyReceived: 46, condition: 'RUSAK', note: '2 pack sobek/bocor rembes di karton' },
-                    { sku: '8991234567890', name: 'Teh Pucuk Harum 350ml', category: 'Minuman', unit: 'Botol', qtySent: 72, qtyReceived: 72, condition: 'BAIK', note: 'Kondisi baik' }
-                ]
-            }
-        ];
+        return [];
     },
 
     get filteredDocuments() {
@@ -248,7 +175,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             <span class="material-symbols-rounded text-[14px]">chevron_right</span>
                             <span class="text-[#0052cc]">BARANG MASUK TRANSFER</span>
                         </div>
-                        <h1 class="text-2xl font-black text-gray-900 tracking-tight">Penerimaan Barang Masuk (Gudang DC <span class="material-symbols-rounded relative top-1 text-[22px]">arrow_forward</span> Toko)</h1>
+                        <h1 class="text-2xl font-black text-gray-900 tracking-tight">Barang Masuk</h1>
                         <p class="text-xs text-gray-500 mt-1 font-medium">Verifikasi surat jalan transfer dari gudang pusat dan pencatatan selisih barang.</p>
                     </div>
 
@@ -353,98 +280,133 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
 
                     <div class="overflow-x-auto min-w-0 w-full">
-                        <table class="w-full text-left border-collapse min-w-[900px]">
+                        <table class="w-full text-left border-collapse text-xs min-w-[1050px]">
                             <thead>
                                 <tr class="bg-gray-50/80 border-b border-gray-200 text-gray-600 font-bold tracking-wider uppercase text-[11px] whitespace-nowrap">
-                                    <th class="px-6 py-3.5 text-left w-[200px]">NO. SURAT JALAN</th>
-                                    <th class="px-4 py-3.5 text-left w-[180px]">GUDANG ASAL</th>
-                                    <th class="px-4 py-3.5 text-left w-[160px]">ARMADA / DRIVER</th>
-                                    <th class="px-4 py-3.5 text-center w-[120px]">TOTAL KOLI</th>
-                                    <th class="px-4 py-3.5 text-center w-[160px]">STATUS</th>
-                                    <th class="px-6 py-3.5 text-right w-[150px]">AKSI VERIFIKASI</th>
+                                    <th class="px-4 py-3.5 text-left">No. Surat Jalan</th>
+                                    <th class="px-4 py-3.5 text-left">Tanggal</th>
+                                    <th class="px-4 py-3.5 text-left">Gudang Asal</th>
+                                    <th class="px-4 py-3.5 text-left">Toko Tujuan</th>
+                                    <th class="px-4 py-3.5 text-left">SKU</th>
+                                    <th class="px-4 py-3.5 text-left">Nama Produk</th>
+                                    <th class="px-4 py-3.5 text-left">Kategori</th>
+                                    <th class="px-4 py-3.5 text-center">Qty Dikirim</th>
+                                    <th class="px-4 py-3.5 text-left">Pengirim</th>
+                                    <th class="px-4 py-3.5 text-left">Plat Nomor</th>
+                                    <th class="px-4 py-3.5 text-center">Status</th>
+                                    <th class="px-4 py-3.5 text-center">Aksi Verifikasi</th>
                                 </tr>
                             </thead>
-                            <tbody class="text-sm divide-y divide-gray-100">
+                            <tbody class="text-slate-700">
                                 <template x-for="doc in filteredDocuments" :key="doc.id">
-                                    <tr class="hover:bg-blue-50/30 transition-colors">
-                                        <!-- No Dokumen -->
-                                        <td class="px-6 py-3.5 whitespace-nowrap">
-                                            <div class="flex flex-col">
-                                                <span class="font-mono font-bold text-gray-900 text-[13px]" x-text="doc.docNo">#SJ-DC-20261024-001</span>
-                                                <span class="text-[11px] text-gray-500 mt-0.5" x-text="doc.date">24 Okt 2026 • 09:30</span>
-                                            </div>
-                                        </td>
-
-                                        <!-- Gudang Asal -->
-                                        <td class="px-4 py-3.5">
-                                            <div class="flex flex-col">
-                                                <span class="font-bold text-gray-800 text-[13px]" x-text="doc.warehouseOrigin">DC Cikarang</span>
-                                                <span class="text-[11px] text-gray-500 flex items-center gap-1 mt-0.5">
-                                                    <span class="material-symbols-rounded text-[13px] text-gray-400">arrow_forward</span>
-                                                    <span x-text="doc.destinationStore">Minimarket ILP</span>
-                                                </span>
-                                            </div>
-                                        </td>
-
-                                        <!-- Driver -->
-                                        <td class="px-4 py-3.5 whitespace-nowrap">
-                                            <div class="flex flex-col">
-                                                <span class="font-bold text-gray-800 text-[12.5px]" x-text="doc.driverName">Rahmat Hidayat</span>
-                                                <span class="font-mono text-[11px] text-gray-500 font-medium" x-text="doc.plateNumber">B 9102 UQ</span>
-                                            </div>
-                                        </td>
-
-                                        <!-- Total Item -->
-                                        <td class="px-4 py-3.5 text-center whitespace-nowrap">
-                                            <div class="inline-flex flex-col items-center">
-                                                <span class="font-bold text-gray-900 text-[13px]" x-text="doc.items.length + ' SKU'">4 SKU</span>
-                                                <span class="text-[11px] text-gray-500 font-medium" x-text="doc.items.reduce((a, b) => a + Number(b.qtySent), 0) + ' Unit'">300 Unit</span>
-                                            </div>
-                                        </td>
-
-                                        <!-- Status Badge -->
-                                        <td class="px-4 py-3.5 text-center whitespace-nowrap">
-                                            <template x-if="doc.status === 'MENUNGGU_VERIFIKASI'">
-                                                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                                                    <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                                                    <span>Menunggu Verifikasi</span>
-                                                </span>
+                                    <template x-for="(it, iIdx) in ((doc.items && doc.items.length > 0) ? doc.items : [{ sku: '-', name: '-', category: '-', qtySent: 0, unit: 'Unit' }])" :key="iIdx">
+                                        <tr class="hover:bg-blue-50/30 transition-colors" :class="iIdx === 0 ? 'border-t border-gray-200' : 'border-t border-gray-100'">
+                                            <!-- Parent Col 1: No. Surat Jalan -->
+                                            <template x-if="iIdx === 0">
+                                                <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap bg-white font-mono font-bold text-gray-900 text-[13px]">
+                                                    <span x-text="doc.docNo"></span>
+                                                </td>
                                             </template>
-                                            <template x-if="doc.status === 'DITERIMA_LENGKAP'">
-                                                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                                    <span class="material-symbols-rounded text-[14px]">check_circle</span>
-                                                    <span>Diterima Lengkap</span>
-                                                </span>
-                                            </template>
-                                            <template x-if="doc.status === 'DITERIMA_SELISIH'">
-                                                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
-                                                    <span class="material-symbols-rounded text-[14px]">warning</span>
-                                                    <span>Diterima Selisih</span>
-                                                </span>
-                                            </template>
-                                        </td>
 
-                                        <!-- Aksi -->
-                                        <td class="px-6 py-3.5 text-right whitespace-nowrap">
-                                            <template x-if="doc.status === 'MENUNGGU_VERIFIKASI'">
-                                                <button type="button"
-                                                        @click="openVerification(doc)"
-                                                        class="px-4 py-2 bg-[#0052cc] hover:bg-[#0043a8] text-white rounded-xl text-xs font-bold transition-all shadow-xs inline-flex items-center gap-1.5 ml-auto cursor-pointer">
-                                                    <span class="material-symbols-rounded text-[16px]">fact_check</span>
-                                                    <span>Periksa Dokumen</span>
-                                                </button>
+                                            <!-- Parent Col 2: Tanggal -->
+                                            <template x-if="iIdx === 0">
+                                                <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap bg-white text-xs text-gray-500 font-medium" x-text="doc.date">
+                                                </td>
                                             </template>
-                                            <template x-if="doc.status !== 'MENUNGGU_VERIFIKASI'">
-                                                <button type="button"
-                                                        @click="openBastView(doc)"
-                                                        class="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-gray-700 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1.5 ml-auto cursor-pointer">
-                                                    <span class="material-symbols-rounded text-[16px]">receipt_long</span>
-                                                    <span>Lihat BAST</span>
-                                                </button>
+
+                                            <!-- Parent Col 3: Gudang Asal -->
+                                            <template x-if="iIdx === 0">
+                                                <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap bg-white font-bold text-gray-800 text-xs" x-text="doc.warehouseOrigin">
+                                                </td>
                                             </template>
-                                        </td>
-                                    </tr>
+
+                                            <!-- Parent Col 4: Toko Tujuan -->
+                                            <template x-if="iIdx === 0">
+                                                <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap bg-white text-xs text-gray-600 font-medium" x-text="doc.destinationStore">
+                                                </td>
+                                            </template>
+
+                                            <!-- Child Col 5: SKU -->
+                                            <td class="px-4 py-3 align-middle whitespace-nowrap font-mono font-bold text-gray-700 text-xs" x-text="it.sku || '-'"></td>
+
+                                            <!-- Child Col 6: Nama Produk -->
+                                            <td class="px-4 py-3 align-middle whitespace-nowrap font-bold text-gray-900 text-xs max-w-[200px] truncate" :title="it.name" x-text="it.name"></td>
+
+                                            <!-- Child Col 7: Kategori -->
+                                            <td class="px-4 py-3 align-middle whitespace-nowrap text-xs text-slate-500" x-text="it.category || '-'"></td>
+
+                                            <!-- Child Col 8: Qty Dikirim -->
+                                            <td class="px-4 py-3 align-middle whitespace-nowrap text-center font-mono font-bold text-xs bg-slate-50/50">
+                                                <span class="inline-block bg-blue-50 text-[#0047b3] border border-blue-200 px-2.5 py-0.5 rounded font-black font-mono text-xs" x-text="it.qtySent + ' ' + (it.unit || 'Unit')"></span>
+                                            </td>
+
+                                            <!-- Parent Col 9: Pengirim -->
+                                            <template x-if="iIdx === 0">
+                                                <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap bg-white text-xs font-bold text-gray-800" x-text="doc.driverName || '-'">
+                                                </td>
+                                            </template>
+
+                                            <!-- Parent Col 10: Plat Nomor -->
+                                            <template x-if="iIdx === 0">
+                                                <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap bg-white font-mono text-xs text-gray-500" x-text="doc.plateNumber || '-'">
+                                                </td>
+                                            </template>
+
+                                            <!-- Parent Col 11: Status -->
+                                            <template x-if="iIdx === 0">
+                                                <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap bg-white text-center">
+                                                    <template x-if="doc.status === 'MENUNGGU_VERIFIKASI'">
+                                                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap">
+                                                            <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                                            <span>Menunggu Verifikasi</span>
+                                                        </span>
+                                                    </template>
+                                                    <template x-if="doc.status === 'DITERIMA_LENGKAP'">
+                                                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+                                                            <span class="material-symbols-rounded text-[14px]">check_circle</span>
+                                                            <span>Diterima Lengkap</span>
+                                                        </span>
+                                                    </template>
+                                                    <template x-if="doc.status === 'DITERIMA_SELISIH'">
+                                                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">
+                                                            <span class="material-symbols-rounded text-[14px]">warning</span>
+                                                            <span>Diterima Selisih</span>
+                                                        </span>
+                                                    </template>
+                                                </td>
+                                            </template>
+
+                                            <!-- Parent Col 12: Aksi Verifikasi -->
+                                            <template x-if="iIdx === 0">
+                                                <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap text-center bg-white">
+                                                    <div class="inline-flex items-center justify-center gap-1.5">
+                                                        <template x-if="doc.status === 'MENUNGGU_VERIFIKASI'">
+                                                            <button type="button"
+                                                                    @click="openVerification(doc)"
+                                                                    class="px-4 py-2 bg-[#0052cc] hover:bg-[#0043a8] text-white rounded-xl text-xs font-bold transition-all shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
+                                                                <span class="material-symbols-rounded text-[16px]">fact_check</span>
+                                                                <span>Periksa Dokumen</span>
+                                                            </button>
+                                                        </template>
+                                                        <template x-if="doc.status !== 'MENUNGGU_VERIFIKASI'">
+                                                            <button type="button"
+                                                                    @click="openBastView(doc)"
+                                                                    class="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-gray-700 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer">
+                                                                <span class="material-symbols-rounded text-[16px]">receipt_long</span>
+                                                                <span>Lihat BAST</span>
+                                                            </button>
+                                                        </template>
+                                                    </div>
+                                                </td>
+                                            </template>
+                                        </tr>
+                                    </template>
                                 </template>
+                                <tr x-show="!filteredDocuments || filteredDocuments.length === 0">
+                                    <td colspan="12" class="py-12 text-center text-slate-400 font-medium">
+                                        Belum ada dokumen penerimaan barang.
+                                    </td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>

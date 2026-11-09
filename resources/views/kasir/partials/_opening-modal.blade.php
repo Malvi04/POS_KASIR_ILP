@@ -109,16 +109,67 @@
                     </div>
                     <p class="text-[10px] text-gray-500 mt-1">Identitas terkunci otomatis dari akun login portal.</p>
                 </div>
-                <div>
+                <div x-data="{ showPinHelpModal: false }">
                     <div class="flex items-center justify-between mb-1">
                         <label class="block text-xs font-bold text-gray-700">PIN Pribadi Petugas</label>
-                        <span class="text-[10px] text-gray-400 font-mono" x-text="'Akun: ' + (selectedStaffObj.username || selectedStaffObj.name)"></span>
+                        <div class="flex items-center gap-2">
+                            <button type="button" @click="showPinHelpModal = true" class="text-[10.5px] text-amber-700 hover:text-amber-800 underline font-bold cursor-pointer">Lupa PIN?</button>
+                            <span class="text-[10px] text-gray-400 font-mono" x-text="'Akun: ' + (selectedStaffObj.username || selectedStaffObj.name)"></span>
+                        </div>
                     </div>
                     <input type="password"
                            x-model="staffPinInput"
                            placeholder="Masukkan 6-digit PIN..."
                            class="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white font-mono text-xs font-bold text-gray-900 outline-none focus:border-[#0052cc]">
                     <p class="text-[10px] text-amber-700 font-medium mt-1">Demo PIN Petugas Ini: <span class="font-mono font-bold" x-text="selectedStaffObj.pin || '123456'">123456</span></p>
+
+                    <!-- MODAL BANTUAN LUPA PIN KASIR DI TERMINAL -->
+                    <template x-teleport="body">
+                        <div x-show="showPinHelpModal"
+                             x-transition.opacity
+                             style="display: none;"
+                             class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+                            <div @click.away="showPinHelpModal = false"
+                                 class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden text-left p-6 space-y-4">
+                                <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                                    <div class="flex items-center gap-2.5">
+                                        <div class="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
+                                            <span class="material-symbols-rounded text-[22px]">pin</span>
+                                        </div>
+                                        <div>
+                                            <h3 class="font-bold text-slate-900 text-sm">Bantuan Lupa PIN Terminal POS</h3>
+                                            <p class="text-[11px] text-slate-500">Prosedur Reset PIN Kasir Kopkar ILP</p>
+                                        </div>
+                                    </div>
+                                    <button type="button" @click="showPinHelpModal = false" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 cursor-pointer">
+                                        <span class="material-symbols-rounded text-[18px]">close</span>
+                                    </button>
+                                </div>
+                                <div class="space-y-3 text-xs text-slate-600">
+                                    <div class="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 leading-relaxed">
+                                        <strong class="block text-amber-950 font-bold mb-1">Pemberitahuan Keamanan:</strong>
+                                        PIN 6-digit kasir adalah kredensial fisik pembukaan kasir/shift yang terpisah dari password portal. Demi mencegah manipulasi kas fisik, reset PIN wajib dilakukan secara tatap muka dengan <strong>Manager Cabang</strong> yang berwenang.
+                                    </div>
+                                    <div class="space-y-2">
+                                        <div class="font-bold text-slate-800 text-[11.5px]">Langkah Pemulihan:</div>
+                                        <ol class="list-decimal pl-4 space-y-1.5 text-[11px]">
+                                            <li>Laporkan kendala langsung kepada Manager Cabang yang sedang bertugas di gerai ini.</li>
+                                            <li>Tunjukkan bukti identitas (KTA Koperasi atau ID Karyawan Pabrik dengan NIK).</li>
+                                            <li>Manager akan membuka menu <em>Kelola Akun &gt; Pemulihan Akun</em> untuk menerbitkan PIN sementara baru khusus untuk akun Anda.</li>
+                                        </ol>
+                                    </div>
+                                    <div class="p-2.5 bg-slate-50 rounded-lg text-[10.5px] text-slate-500 border border-slate-200">
+                                        <em>Catatan: Reset PIN tidak akan mengubah password akun login portal web Anda.</em>
+                                    </div>
+                                </div>
+                                <div class="flex justify-end pt-2 border-t border-slate-100">
+                                    <button type="button" @click="showPinHelpModal = false" class="px-4 py-2 bg-[#0052cc] hover:bg-[#0043a8] text-white text-xs font-bold rounded-xl transition-colors cursor-pointer">
+                                        Mengerti &amp; Tutup
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
                 </div>
             </div>
 

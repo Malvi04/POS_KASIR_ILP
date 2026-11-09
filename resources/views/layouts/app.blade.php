@@ -11,6 +11,48 @@
     @vite('resources/css/app.css')
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
     <script>
+        // One-time Clean Storage Migration for ILP POS (Eliminates demo & mock data permanently)
+        (function() {
+            const RESET_FLAG = 'pos_ilp_v3_clean_init';
+            if (localStorage.getItem(RESET_FLAG) !== 'true') {
+                const keysToClear = [
+                    'pos_ilp_inventory_products_v1',
+                    'pos_ilp_members_v1',
+                    'pos_ilp_branches_v1',
+                    'pos_ilp_transactions_v1',
+                    'pos_ilp_held_bills_v1',
+                    'pos_ilp_active_cart_v1',
+                    'pos_ilp_coupons_v1',
+                    'pos_ilp_refund_history_v1',
+                    'pos_ilp_goods_in_docs_v1',
+                    'pos_ilp_manager_returns_v1',
+                    'pos_ilp_manager_retur_masuk_v1',
+                    'pos_ilp_return_in_docs_v1',
+                    'pos_ilp_retur_history_docs_v1',
+                    'pos_ilp_retur_draft_items_v1',
+                    'pos_ilp_stok_retur_gudang_v1',
+                    'pos_ilp_umkm_partners_v1',
+                    'pos_ilp_umkm_products_v1',
+                    'pos_ilp_promotions_v1',
+                    'pos_ilp_attendance_v1',
+                    'pos_ilp_leaves_v1',
+                    'pos_ilp_audit_logs_v1',
+                    'pos_ilp_session_history_v1',
+                    'pos_ilp_cash_movements_v1',
+                    'pos_ilp_stock_opname_history_v1',
+                    'pos_ilp_active_opname_v1',
+                    'pos_ilp_credit_limit_requests_v1',
+                    'pos_ilp_operator_history_v1',
+                    'pos_ilp_active_session_v1',
+                    'pos_ilp_active_operator_v1',
+                    'pos_ilp_terminals_v1',
+                    'pos_cashier_opened'
+                ];
+                keysToClear.forEach(k => localStorage.removeItem(k));
+                localStorage.setItem(RESET_FLAG, 'true');
+            }
+        })();
+
         window.cashierOpeningData = function() {
             const defaultStaffList = [
                 { id: 'USR-01', name: 'Andi Pratama', username: 'andi_kasir', password: 'andi123', nik: '202409821001', role: 'Kasir Operasional', pin: '123456', initials: 'AP', badgeClass: 'bg-blue-100 text-blue-700', branch: 'Pusat', assignedBranches: [{ branch: 'Pusat', status: 'AKTIF' }] },
@@ -21,385 +63,63 @@
 
             const defaultTerminals = [
                 // Pusat: POS-01 sampai POS-05
-                {
-                    id: 'POS-01',
-                    label: 'POS-01',
-                    name: 'Terminal POS-01',
-                    branch: 'Pusat',
-                    code: 'TERM-01',
-                    isActive: true,
-                    status: 'HANDOVER_PENDING',
-                    sessionsTodayCount: 2,
-                    activeCashierName: null,
-                    activeCashierId: null,
-                    activeStartedAt: null,
-                    activeSessionId: null,
-                    handover: {
-                        fromSessionId: 'CS-20261019-K01-002',
-                        fromCashierId: 'USR-01',
-                        fromCashierName: 'Andi Pratama',
-                        endedAt: '10:00',
-                        expectedCash: 1750000,
-                        actualCash: 1740000,
-                        variance: -10000,
-                        varianceStatus: 'PENDING_REVIEW',
-                        varianceNote: 'Selisih kurang Rp 10.000 saat antrean padat pukul 09.30 (Tanggung jawab Andi Pratama)',
-                        heldBillsCount: 2
-                    }
-                },
-                {
-                    id: 'POS-02',
-                    label: 'POS-02',
-                    name: 'Terminal POS-02',
-                    branch: 'Pusat',
-                    code: 'TERM-02',
-                    isActive: true,
-                    status: 'AVAILABLE',
-                    sessionsTodayCount: 1,
-                    activeCashierName: null,
-                    activeCashierId: null,
-                    activeStartedAt: null,
-                    activeSessionId: null,
-                    handover: null
-                },
-                {
-                    id: 'POS-03',
-                    label: 'POS-03',
-                    name: 'Terminal POS-03',
-                    branch: 'Pusat',
-                    code: 'TERM-03',
-                    isActive: true,
-                    status: 'ACTIVE_OTHER',
-                    sessionsTodayCount: 2,
-                    activeCashierName: 'Andi Pratama',
-                    activeCashierId: 'USR-01',
-                    activeStartedAt: '08:00',
-                    activeSessionId: 'CS-20261019-P03-001',
-                    handover: null
-                },
-                {
-                    id: 'POS-04',
-                    label: 'POS-04',
-                    name: 'Terminal POS-04',
-                    branch: 'Pusat',
-                    code: 'TERM-04',
-                    isActive: true,
-                    status: 'AVAILABLE',
-                    sessionsTodayCount: 0,
-                    activeCashierName: null,
-                    activeCashierId: null,
-                    activeStartedAt: null,
-                    activeSessionId: null,
-                    handover: null
-                },
-                {
-                    id: 'POS-05',
-                    label: 'POS-05',
-                    name: 'Terminal POS-05',
-                    branch: 'Pusat',
-                    code: 'TERM-05',
-                    isActive: false,
-                    inactiveReason: 'Sedang dalam perbaikan scanner barcode & printer struk',
-                    status: 'AVAILABLE',
-                    sessionsTodayCount: 0,
-                    activeCashierName: null,
-                    activeCashierId: null,
-                    activeStartedAt: null,
-                    activeSessionId: null,
-                    handover: null
-                },
+                { id: 'POS-01', label: 'POS-01', name: 'Terminal POS-01', branch: 'Pusat', code: 'TERM-01', isActive: true, status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null },
+                { id: 'POS-02', label: 'POS-02', name: 'Terminal POS-02', branch: 'Pusat', code: 'TERM-02', isActive: true, status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null },
+                { id: 'POS-03', label: 'POS-03', name: 'Terminal POS-03', branch: 'Pusat', code: 'TERM-03', isActive: true, status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null },
+                { id: 'POS-04', label: 'POS-04', name: 'Terminal POS-04', branch: 'Pusat', code: 'TERM-04', isActive: true, status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null },
+                { id: 'POS-05', label: 'POS-05', name: 'Terminal POS-05', branch: 'Pusat', code: 'TERM-05', isActive: false, inactiveReason: 'Sedang dalam perbaikan scanner barcode & printer struk', status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null },
 
                 // Cabang A: POS-06 sampai POS-10
-                {
-                    id: 'POS-06',
-                    label: 'POS-06',
-                    name: 'Terminal POS-06',
-                    branch: 'Cabang A',
-                    code: 'TERM-06',
-                    isActive: true,
-                    status: 'AVAILABLE',
-                    sessionsTodayCount: 1,
-                    activeCashierName: null,
-                    activeCashierId: null,
-                    activeStartedAt: null,
-                    activeSessionId: null,
-                    handover: null
-                },
-                {
-                    id: 'POS-07',
-                    label: 'POS-07',
-                    name: 'Terminal POS-07',
-                    branch: 'Cabang A',
-                    code: 'TERM-07',
-                    isActive: true,
-                    status: 'HANDOVER_PENDING',
-                    sessionsTodayCount: 1,
-                    activeCashierName: null,
-                    activeCashierId: null,
-                    activeStartedAt: null,
-                    activeSessionId: null,
-                    handover: {
-                        fromSessionId: 'CS-20261019-K02-001',
-                        fromCashierId: 'USR-03',
-                        fromCashierName: 'Citra Dewi',
-                        endedAt: '10:00',
-                        expectedCash: 1420000,
-                        actualCash: 1420000,
-                        variance: 0,
-                        varianceStatus: 'SESUAI',
-                        varianceNote: 'Saldo fisik sesuai dengan perhitungan sistem',
-                        heldBillsCount: 0
-                    }
-                },
-                {
-                    id: 'POS-08',
-                    label: 'POS-08',
-                    name: 'Terminal POS-08',
-                    branch: 'Cabang A',
-                    code: 'TERM-08',
-                    isActive: true,
-                    status: 'AVAILABLE',
-                    sessionsTodayCount: 0,
-                    activeCashierName: null,
-                    activeCashierId: null,
-                    activeStartedAt: null,
-                    activeSessionId: null,
-                    handover: null
-                },
-                {
-                    id: 'POS-09',
-                    label: 'POS-09',
-                    name: 'Terminal POS-09',
-                    branch: 'Cabang A',
-                    code: 'TERM-09',
-                    isActive: true,
-                    status: 'AVAILABLE',
-                    sessionsTodayCount: 0,
-                    activeCashierName: null,
-                    activeCashierId: null,
-                    activeStartedAt: null,
-                    activeSessionId: null,
-                    handover: null
-                },
-                {
-                    id: 'POS-10',
-                    label: 'POS-10',
-                    name: 'Terminal POS-10',
-                    branch: 'Cabang A',
-                    code: 'TERM-10',
-                    isActive: false,
-                    inactiveReason: 'Terminal dinonaktifkan sementara oleh Manager (Audit Jaringan)',
-                    status: 'AVAILABLE',
-                    sessionsTodayCount: 0,
-                    activeCashierName: null,
-                    activeCashierId: null,
-                    activeStartedAt: null,
-                    activeSessionId: null,
-                    handover: null
-                },
+                { id: 'POS-06', label: 'POS-06', name: 'Terminal POS-06', branch: 'Cabang A', code: 'TERM-06', isActive: true, status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null },
+                { id: 'POS-07', label: 'POS-07', name: 'Terminal POS-07', branch: 'Cabang A', code: 'TERM-07', isActive: true, status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null },
+                { id: 'POS-08', label: 'POS-08', name: 'Terminal POS-08', branch: 'Cabang A', code: 'TERM-08', isActive: true, status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null },
+                { id: 'POS-09', label: 'POS-09', name: 'Terminal POS-09', branch: 'Cabang A', code: 'TERM-09', isActive: true, status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null },
+                { id: 'POS-10', label: 'POS-10', name: 'Terminal POS-10', branch: 'Cabang A', code: 'TERM-10', isActive: false, inactiveReason: 'Terminal dinonaktifkan sementara oleh Manager (Audit Jaringan)', status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null },
 
                 // Cabang B: POS-11 sampai POS-15
-                {
-                    id: 'POS-11',
-                    label: 'POS-11',
-                    name: 'Terminal POS-11',
-                    branch: 'Cabang B',
-                    code: 'TERM-11',
-                    isActive: true,
-                    status: 'AVAILABLE',
-                    sessionsTodayCount: 1,
-                    activeCashierName: null,
-                    activeCashierId: null,
-                    activeStartedAt: null,
-                    activeSessionId: null,
-                    handover: null
-                },
-                {
-                    id: 'POS-12',
-                    label: 'POS-12',
-                    name: 'Terminal POS-12',
-                    branch: 'Cabang B',
-                    code: 'TERM-12',
-                    isActive: true,
-                    status: 'AVAILABLE',
-                    sessionsTodayCount: 0,
-                    activeCashierName: null,
-                    activeCashierId: null,
-                    activeStartedAt: null,
-                    activeSessionId: null,
-                    handover: null
-                },
-                {
-                    id: 'POS-13',
-                    label: 'POS-13',
-                    name: 'Terminal POS-13',
-                    branch: 'Cabang B',
-                    code: 'TERM-13',
-                    isActive: true,
-                    status: 'AVAILABLE',
-                    sessionsTodayCount: 0,
-                    activeCashierName: null,
-                    activeCashierId: null,
-                    activeStartedAt: null,
-                    activeSessionId: null,
-                    handover: null
-                },
-                {
-                    id: 'POS-14',
-                    label: 'POS-14',
-                    name: 'Terminal POS-14',
-                    branch: 'Cabang B',
-                    code: 'TERM-14',
-                    isActive: true,
-                    status: 'AVAILABLE',
-                    sessionsTodayCount: 0,
-                    activeCashierName: null,
-                    activeCashierId: null,
-                    activeStartedAt: null,
-                    activeSessionId: null,
-                    handover: null
-                },
-                {
-                    id: 'POS-15',
-                    label: 'POS-15',
-                    name: 'Terminal POS-15',
-                    branch: 'Cabang B',
-                    code: 'TERM-15',
-                    isActive: true,
-                    status: 'AVAILABLE',
-                    sessionsTodayCount: 0,
-                    activeCashierName: null,
-                    activeCashierId: null,
-                    activeStartedAt: null,
-                    activeSessionId: null,
-                    handover: null
-                }
+                { id: 'POS-11', label: 'POS-11', name: 'Terminal POS-11', branch: 'Cabang B', code: 'TERM-11', isActive: true, status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null },
+                { id: 'POS-12', label: 'POS-12', name: 'Terminal POS-12', branch: 'Cabang B', code: 'TERM-12', isActive: true, status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null },
+                { id: 'POS-13', label: 'POS-13', name: 'Terminal POS-13', branch: 'Cabang B', code: 'TERM-13', isActive: true, status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null },
+                { id: 'POS-14', label: 'POS-14', name: 'Terminal POS-14', branch: 'Cabang B', code: 'TERM-14', isActive: true, status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null },
+                { id: 'POS-15', label: 'POS-15', name: 'Terminal POS-15', branch: 'Cabang B', code: 'TERM-15', isActive: true, status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null }
             ];
 
-            const defaultSessionHistory = [
-                {
-                    sessionId: 'CS-20261019-K01-001',
-                    businessDay: '19 Oktober 2026',
-                    terminalId: 'kasir_1',
-                    terminalLabel: 'Kasir 01',
-                    cashierId: 'USR-02',
-                    cashierName: 'Budi Kurniawan',
-                    startedAt: '06:00',
-                    endedAt: '08:00',
-                    openingCash: 500000,
-                    cashSalesNet: 680000,
-                    qrisSales: 310000,
-                    creditSales: 150000,
-                    cashIn: 0,
-                    cashOut: 30000,
-                    cashReturn: 0,
-                    cashDrop: 0,
-                    expectedClosingCash: 1150000,
-                    actualClosingCash: 1150000,
-                    cashVariance: 0,
-                    status: 'CLOSED',
-                    reviewStatus: 'VERIFIED',
-                    closeNote: 'Serah terima pagi ke Andi Pratama sesuai fisik laci.',
-                    handoverToName: 'Andi Pratama',
-                    trxCount: 19,
-                    syncStatus: 'SYNCED'
-                },
-                {
-                    sessionId: 'CS-20261019-K01-002',
-                    businessDay: '19 Oktober 2026',
-                    terminalId: 'kasir_1',
-                    terminalLabel: 'Kasir 01',
-                    cashierId: 'USR-01',
-                    cashierName: 'Andi Pratama',
-                    startedAt: '08:00',
-                    endedAt: '10:00',
-                    openingCash: 1150000,
-                    cashSalesNet: 650000,
-                    qrisSales: 420000,
-                    creditSales: 240000,
-                    cashIn: 0,
-                    cashOut: 50000,
-                    cashReturn: 0,
-                    cashDrop: 0,
-                    expectedClosingCash: 1750000,
-                    actualClosingCash: 1740000,
-                    cashVariance: -10000,
-                    status: 'PENDING_REVIEW',
-                    reviewStatus: 'PENDING_REVIEW',
-                    closeNote: 'Selisih kurang Rp 10.000 saat antrean padat pukul 09.30. Uang fisik Rp 1.740.000 diserahkan ke sesi berikutnya.',
-                    handoverToName: 'Budi Kurniawan',
-                    trxCount: 24,
-                    syncStatus: 'SYNCED'
-                },
-                {
-                    sessionId: 'CS-20261019-K02-001',
-                    businessDay: '19 Oktober 2026',
-                    terminalId: 'kasir_2',
-                    terminalLabel: 'Kasir 02',
-                    cashierId: 'USR-03',
-                    cashierName: 'Citra Dewi',
-                    startedAt: '08:00',
-                    endedAt: '10:00',
-                    openingCash: 500000,
-                    cashSalesNet: 920000,
-                    qrisSales: 540000,
-                    creditSales: 180000,
-                    cashIn: 0,
-                    cashOut: 0,
-                    cashReturn: 0,
-                    cashDrop: 0,
-                    expectedClosingCash: 1420000,
-                    actualClosingCash: 1420000,
-                    cashVariance: 0,
-                    status: 'CLOSED',
-                    reviewStatus: 'VERIFIED',
-                    closeNote: 'Saldo fisik sesuai, siap diserahterimakan.',
-                    handoverToName: 'Menunggu Konfirmasi',
-                    trxCount: 27,
-                    syncStatus: 'SYNCED'
-                }
-            ];
+            const defaultSessionHistory = [];
 
             const defaultActiveSession = {
-                sessionId: 'CS-20261019-K01-003',
-                businessDayId: 'BD-20261019-01',
-                businessDayDate: '19 Oktober 2026',
-                storeLocation: 'Minimarket - Sektor A',
-                terminalId: 'kasir_1',
-                terminalLabel: 'Kasir 01',
-                cashierId: 'USR-02',
-                cashierName: 'Budi Kurniawan',
-                cashierNik: '202409821002',
-                cashierRole: 'Kasir Utama',
-                startedAt: '10:00',
-                openingCash: 1740000,
-                isHandoverOpening: true,
-                handoverFromName: 'Andi Pratama',
-                handoverFromSessionId: 'CS-20261019-K01-002',
-                prevVarianceLocked: -10000,
-                cashSalesNet: 850000,
-                qrisSales: 620000,
-                creditSales: 450000,
-                splitCashPortion: 120000,
-                splitNonCashPortion: 80000,
-                cashIn: 100000,
-                cashOut: 35000,
-                cashReturn: 25000,
-                cashDrop: 500000,
-                trxCount: 28,
-                heldBillsCount: 3,
-                status: 'OPEN',
+                sessionId: '',
+                businessDayId: 'BD-' + new Date().toISOString().slice(0, 10).replace(/-/g, ''),
+                businessDayDate: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+                storeLocation: 'Pusat',
+                terminalId: '',
+                terminalLabel: '',
+                cashierId: '',
+                cashierName: '',
+                cashierNik: '',
+                cashierRole: '',
+                startedAt: '',
+                openingCash: 0,
+                isHandoverOpening: false,
+                handoverFromName: '',
+                handoverFromSessionId: '',
+                prevVarianceLocked: 0,
+                cashSalesNet: 0,
+                qrisSales: 0,
+                creditSales: 0,
+                splitCashPortion: 0,
+                splitNonCashPortion: 0,
+                cashIn: 0,
+                cashOut: 0,
+                cashReturn: 0,
+                cashDrop: 0,
+                trxCount: 0,
+                heldBillsCount: 0,
+                status: 'CLOSED',
                 isOffline: false,
                 pendingSyncCount: 0
             };
 
-            const defaultCashMovements = [
-                { id: 'CM-001', time: '10:00', type: 'HANDOVER_IN', label: 'Konfirmasi Uang Awal Serah Terima (dari Andi Pratama)', amount: 1740000, direction: 'in', actor: 'Budi Kurniawan' },
-                { id: 'CM-002', time: '10:25', type: 'KAS_MASUK', label: 'Tambahan Uang Pecahan Receh dari Brankas', amount: 100000, direction: 'in', actor: 'Budi Kurniawan' },
-                { id: 'CM-003', time: '10:50', type: 'PENGELUARAN_TUNAI', label: 'Beli Plastik Kresek & Kertas Thermal Darurat', amount: 35000, direction: 'out', actor: 'Budi Kurniawan' },
-                { id: 'CM-004', time: '11:15', type: 'RETUR_TUNAI', label: 'Retur Tunai #TRX-99182 (1x Susu UHT Rusak Kemasan)', amount: 25000, direction: 'out', actor: 'Budi Kurniawan' },
-                { id: 'CM-005', time: '11:30', type: 'CASH_DROP', label: 'Setor Kas Sementara ke Brankas (Laci Penuh)', amount: 500000, direction: 'out', actor: 'Budi Kurniawan' }
-            ];
+            const defaultCashMovements = [];
 
             return {
                 selectedShift: 'POS-01',
@@ -450,7 +170,7 @@
                 showDenomModal: false,
                 denomTarget: 'opening', // 'opening' | 'closing'
                 denomMode: 'idr',
-                kasOpening: '1.740.000,00',
+                kasOpening: '0,00',
                 catatanOpening: '',
                 denomTotal: 0,
                 showSuccessToast: false,
@@ -555,7 +275,7 @@
                             const parsed = JSON.parse(rawUsers);
                             if (Array.isArray(parsed)) {
                                 parsed.forEach(u => {
-                                    if (u.role && u.role.toUpperCase() === 'KASIR' && u.status !== 'NONAKTIF') {
+                                    if (u.role && u.role.toUpperCase().includes('KASIR') && u.status !== 'NONAKTIF') {
                                         const existsIdx = list.findIndex(s => s.id === u.id || (s.nik && u.nik && s.nik === u.nik) || (s.username && u.username && s.username === u.username));
                                         const userBranch = u.branch || (u.assignedBranches && u.assignedBranches[0]?.branch) || 'Pusat';
                                         if (existsIdx === -1) {
@@ -875,17 +595,7 @@
                         if (savedOpHist) {
                             this.operatorHistory = JSON.parse(savedOpHist);
                         } else {
-                            this.operatorHistory = [
-                                {
-                                    id: 'OPH-001',
-                                    sessionId: this.activeSession ? this.activeSession.sessionId : 'CS-20261019-K01-003',
-                                    terminalId: this.activeSession ? this.activeSession.terminalId : 'kasir_1',
-                                    fromStaff: null,
-                                    toStaff: { id: this.activeOperator.id, name: this.activeOperator.name, nik: this.activeOperator.nik },
-                                    switchedAt: (this.activeSession && this.activeSession.startedAt) ? this.activeSession.startedAt : '10:00',
-                                    reason: 'Pembukaan Sesi Terminal'
-                                }
-                            ];
+                            this.operatorHistory = [];
                         }
                     } catch (e) {
                         console.warn('Failed to parse session storage', e);
@@ -1505,11 +1215,7 @@
                             amount: openingNumeric,
                             direction: 'in',
                             actor: staff.name
-                        },
-                        { id: 'CM-002', time: nowTime, type: 'KAS_MASUK', label: 'Tambahan Uang Pecahan Receh dari Brankas', amount: 100000, direction: 'in', actor: staff.name },
-                        { id: 'CM-003', time: nowTime, type: 'PENGELUARAN_TUNAI', label: 'Beli Plastik Kresek & Kertas Thermal Darurat', amount: 35000, direction: 'out', actor: staff.name },
-                        { id: 'CM-004', time: nowTime, type: 'RETUR_TUNAI', label: 'Retur Tunai Pelanggan #TRX-99182', amount: 25000, direction: 'out', actor: staff.name },
-                        { id: 'CM-005', time: nowTime, type: 'CASH_DROP', label: 'Setor Kas Sementara ke Brankas (Amankan Laci)', amount: 500000, direction: 'out', actor: staff.name }
+                        }
                     ];
 
                     // Inisialisasi Operator Aktif & Catatan Riwayat
@@ -1827,6 +1533,8 @@
                     if (u.pathname === '/' || u.pathname === '') return false;
                     // Never intercept standalone login pages
                     if (u.pathname === '/login-kasir' || u.pathname === '/login-manager') return false;
+                    // Owner/Admin console uses clean native page lifecycle to ensure Alpine state integrity
+                    if (u.pathname.startsWith('/owner') || u.pathname.startsWith('/manager') || u.pathname === '/cabang') return false;
                     return true;
                 } catch {
                     return false;
@@ -1859,6 +1567,15 @@
                     if (doc.body) {
                         document.body.className = doc.body.className;
                         document.body.innerHTML = doc.body.innerHTML;
+
+                        // Re-execute scripts from newly loaded HTML so page-level functions & Alpine component definitions exist
+                        const scripts = Array.from(document.body.querySelectorAll('script'));
+                        scripts.forEach(oldScript => {
+                            const newScript = document.createElement('script');
+                            Array.from(oldScript.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
+                            newScript.textContent = oldScript.textContent;
+                            oldScript.parentNode.replaceChild(newScript, oldScript);
+                        });
                     }
                     if (window.Alpine) {
                         window.Alpine.initTree(document.body);

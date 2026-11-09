@@ -38,25 +38,19 @@
     initAttendance() {
         const stored = localStorage.getItem('pos_ilp_attendance_v1');
         if (stored) {
-            try { this.attendanceList = JSON.parse(stored); } catch(e) { this.attendanceList = this.getDefaultAttendance(); }
+            try { this.attendanceList = JSON.parse(stored); } catch(e) { this.attendanceList = []; }
         } else {
-            this.attendanceList = this.getDefaultAttendance();
-            this.saveAttendance();
+            this.attendanceList = [];
         }
 
         const storedLeaves = localStorage.getItem('pos_ilp_leaves_v1');
         if (storedLeaves) {
-            try { this.leaveRequests = JSON.parse(storedLeaves); } catch(e) { this.leaveRequests = this.getDefaultLeaves(); }
+            try { this.leaveRequests = JSON.parse(storedLeaves); } catch(e) { this.leaveRequests = []; }
         } else {
-            this.leaveRequests = this.getDefaultLeaves();
-            this.saveLeaves();
+            this.leaveRequests = [];
         }
 
-        this.shifts = [
-            { id: 1, name: 'Shift Pagi (07:00 - 15:00)', staff: ['Andi Setiawan', 'Budi Kurniawan', 'Citra Dewi'], branch: 'Cabang Pusat' },
-            { id: 2, name: 'Shift Siang (14:30 - 22:30)', staff: ['Bambang Pamungkas', 'Dedi Nurcahyo', 'Eka Ramadhan'], branch: 'Cabang Pusat' },
-            { id: 3, name: 'Shift Pagi Cabang A (07:30 - 15:30)', staff: ['Ahmad Fauzi', 'Siti Aminah'], branch: 'Cabang A' }
-        ];
+        this.shifts = [];
     },
 
     saveAttendance() {
@@ -68,20 +62,11 @@
     },
 
     getDefaultAttendance() {
-        return [
-            { id: 1, terminal: 'Kasir 1', staffName: 'Andi Setiawan', checkIn: '06:55', checkOut: '15:05', branch: 'Cabang Pusat', status: 'TEPAT_WAKTU' },
-            { id: 2, terminal: 'Kasir 2', staffName: 'Bambang Pamungkas', checkIn: '07:15', checkOut: '-', branch: 'Cabang A', status: 'TERLAMBAT' },
-            { id: 3, terminal: 'Kasir 3', staffName: 'Citra Dewi', checkIn: '06:50', checkOut: '-', branch: 'Cabang Pusat', status: 'TEPAT_WAKTU' },
-            { id: 4, terminal: 'Kasir 4', staffName: 'Dedi Nurcahyo', checkIn: '06:45', checkOut: '-', branch: 'Cabang Pusat', status: 'TEPAT_WAKTU' },
-            { id: 5, terminal: 'Kasir 5', staffName: 'Eka Ramadhan', checkIn: '07:02', checkOut: '-', branch: 'Cabang A', status: 'TEPAT_WAKTU' }
-        ];
+        return [];
     },
 
     getDefaultLeaves() {
-        return [
-            { id: 1, staffName: 'Rico Wijaya', type: 'SAKIT', date: '24 Okt 2026', reason: 'Demam flu butuh istirahat', status: 'DISETUJUI' },
-            { id: 2, staffName: 'Santi Larasati', type: 'CUTI', date: '25-27 Okt 2026', reason: 'Keperluan keluarga di luar kota', status: 'MENUNGGU' }
-        ];
+        return [];
     },
 
     get filteredAttendance() {
@@ -210,7 +195,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
         <!-- Top Header -->
         <header class="h-[72px] bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
             <div class="flex items-center h-full">
-                <h1 class="text-[18px] font-black text-gray-900 mr-8 tracking-tight">Manajemen Absensi</h1>
+                <h1 class="text-[18px] font-black text-gray-900 mr-8 tracking-tight">Absensi & Shift</h1>
 
                 <nav class="flex h-full gap-8">
                     <button type="button"
@@ -383,9 +368,15 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                             <td class="py-3.5 px-6 text-gray-600 whitespace-nowrap" x-text="row.branch"></td>
                                         </tr>
                                     </template>
-                                    <tr x-show="filteredAttendance.length === 0">
-                                        <td colspan="6" class="text-center py-8 text-gray-400">
-                                            Tidak ada data absensi yang sesuai filter.
+                                    <tr x-show="!filteredAttendance || filteredAttendance.length === 0">
+                                        <td colspan="6" class="text-center py-12 text-gray-400 font-medium">
+                                            <p class="text-sm">Belum ada data absensi hari ini.</p>
+                                            <div class="mt-3">
+                                                <button type="button" @click="showCheckInModal = true" class="px-4 py-2 bg-[#0052cc] text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 shadow-sm hover:bg-[#0043a8] transition-colors cursor-pointer">
+                                                    <span class="material-symbols-rounded text-[16px]">fingerprint</span>
+                                                    <span>Catat Absensi</span>
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 </tbody>
@@ -418,7 +409,10 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
             <!-- TAB 2: JADWAL SHIFT -->
             <div x-show="activeTab === 'jadwal'" style="display: none;">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div x-show="shifts.length === 0" class="bg-white border border-gray-200 rounded-2xl p-12 text-center text-gray-400 font-medium">
+                    Belum ada jadwal shift yang dikonfigurasi.
+                </div>
+                <div x-show="shifts.length > 0" class="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <template x-for="shift in shifts" :key="shift.id">
                         <div class="bg-white border border-gray-200 rounded-2xl p-5 shadow-xs">
                             <div class="flex items-center gap-2 mb-3">
@@ -512,6 +506,17 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         </td>
                                     </tr>
                                 </template>
+                                    <tr x-show="!filteredLeaves || filteredLeaves.length === 0">
+                                        <td colspan="6" class="text-center py-12 text-gray-400 font-medium">
+                                            <p class="text-sm">Belum ada pengajuan izin atau cuti.</p>
+                                            <div class="mt-3">
+                                                <button type="button" @click="showIzinModal = true" class="px-4 py-2 bg-[#0052cc] text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 shadow-sm hover:bg-[#0043a8] transition-colors cursor-pointer">
+                                                    <span class="material-symbols-rounded text-[16px]">add</span>
+                                                    <span>Ajukan Izin / Cuti</span>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
                             </tbody>
                         </table>
                     </div>

@@ -196,11 +196,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
         <!-- Top Header -->
         <header class="h-[72px] bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
             <div class="flex flex-col justify-center">
-                <h1 class="text-[18px] font-black text-gray-900 tracking-tight leading-none mb-1">Stock Opname & Audit Fisik</h1>
-                <div class="flex items-center gap-1 text-gray-500">
-                    <span class="material-symbols-rounded text-[14px]">store</span>
-                    <span class="text-[12px] font-medium">Minimarket Kopkar ILP - Gerai Utama</span>
-                </div>
+                <h1 class="text-[18px] font-black text-gray-900 tracking-tight leading-none">Stock Opname</h1>
             </div>
 
             <div class="flex items-center gap-4 text-gray-500">
@@ -367,11 +363,20 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     </td>
                                 </tr>
                             </template>
-                            <tr x-show="filteredItems.length === 0">
+                            <tr x-show="items.length === 0">
+                                <td colspan="6" class="text-center py-12 text-slate-400">
+                                    <span class="material-symbols-rounded text-4xl mb-2 text-slate-300">inventory_2</span>
+                                    <p class="font-bold text-sm text-slate-700">Belum ada data produk untuk stock opname.</p>
+                                    <a href="{{ url('/inventory') }}" class="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0052cc] text-white text-xs font-bold hover:bg-[#0043a8] transition-colors">
+                                        <span class="material-symbols-rounded text-[16px]">add</span>
+                                        <span>Kelola Master Produk</span>
+                                    </a>
+                                </td>
+                            </tr>
+                            <tr x-show="items.length > 0 && filteredItems.length === 0">
                                 <td colspan="6" class="text-center py-12 text-gray-400">
-                                    <span class="material-symbols-rounded text-4xl mb-2 text-gray-300">inventory_2</span>
-                                    <p class="font-bold text-gray-600">Tidak ada produk yang cocok</p>
-                                    <p class="text-xs text-gray-400 mt-0.5">Silakan ganti kata kunci atau filter.</p>
+                                    <span class="material-symbols-rounded text-4xl mb-2 text-gray-300">search_off</span>
+                                    <p class="font-bold text-gray-600">Tidak ada produk yang cocok dengan filter pencarian.</p>
                                 </td>
                             </tr>
                         </tbody>

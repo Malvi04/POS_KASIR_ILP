@@ -42,7 +42,7 @@
                     </div>
                     <div>
                         <h2 class="text-gray-900 font-black text-base">Identitas Petugas</h2>
-                        <p class="text-gray-500 text-xs mt-0.5">Akun portal terautentikasi resmi</p>
+                        
                     </div>
                 </div>
 

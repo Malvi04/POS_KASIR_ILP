@@ -75,7 +75,7 @@
     },
 
     initSettings() {
-        const stored = localStorage.getItem('pos_ilp_manager_settings_v1');
+        const stored = localStorage.getItem('pos_ilp_manager_settings_v1') || localStorage.getItem('pos_ilp_store_settings_v1');
         if (stored) {
             try {
                 const s = JSON.parse(stored);
@@ -105,6 +105,7 @@
             savedAt: this.lastSaved
         };
         localStorage.setItem('pos_ilp_manager_settings_v1', JSON.stringify(dataToSave));
+        localStorage.setItem('pos_ilp_store_settings_v1', JSON.stringify(dataToSave));
 
         this.currentPassword = '';
         this.newPassword = '';
@@ -156,8 +157,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                 <!-- Subheader: Title & Navigation Sub-Menu Tabs -->
                 <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                     <div>
-                        <h1 class="text-[19px] font-bold text-gray-900 tracking-tight">Pengaturan Sistem & Akun Manager</h1>
-                        <p class="text-[13px] text-gray-500 mt-0.5">Kelola identitas profil Account Manager, info outlet, serta keamanan dan PIN otorisasi kasir.</p>
+                        <h1 class="text-[19px] font-bold text-gray-900 tracking-tight">Pengaturan</h1>
+                        
                     </div>
 
                     <!-- Navigation Sub-Menu / Tabs -->

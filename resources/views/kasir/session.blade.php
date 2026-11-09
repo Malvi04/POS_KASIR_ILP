@@ -264,6 +264,17 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-100">
+                                    <tr x-show="!cashMovements || cashMovements.length === 0">
+                                        <td colspan="5" class="py-12 text-center text-gray-400 font-medium">
+                                            <p class="text-sm">Belum ada mutasi kas laci.</p>
+                                            <div class="mt-3">
+                                                <button type="button" @click="showCashMovementModal = true" class="px-4 py-2 bg-[#0052cc] text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 shadow-sm hover:bg-[#0043a8] transition-colors cursor-pointer">
+                                                    <span class="material-symbols-rounded text-[16px]">add</span>
+                                                    <span>Catat Kas Laci</span>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
                                     <template x-for="mv in cashMovements" :key="mv.id">
                                         <tr class="hover:bg-blue-50/30 transition-colors">
                                             <td class="py-3 px-4 font-mono text-gray-600 whitespace-nowrap" x-text="mv.id + ' • ' + mv.time"></td>
@@ -307,6 +318,11 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-100">
+                                    <tr x-show="!operatorHistory || operatorHistory.length === 0">
+                                        <td colspan="5" class="py-12 text-center text-gray-400 font-medium">
+                                            Belum ada riwayat pergantian operator.
+                                        </td>
+                                    </tr>
                                     <template x-for="(op, idx) in operatorHistory" :key="op.id || idx">
                                         <tr class="hover:bg-blue-50/30 transition-colors">
                                             <td class="py-3 px-4 font-mono font-bold text-gray-800 whitespace-nowrap" x-text="op.switchedAt"></td>

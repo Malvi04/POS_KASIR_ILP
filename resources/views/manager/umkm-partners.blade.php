@@ -88,18 +88,16 @@
     initUmkm() {
         const storedPartners = localStorage.getItem('pos_ilp_umkm_partners_v1');
         if (storedPartners) {
-            try { this.partners = JSON.parse(storedPartners); } catch(e) { this.partners = this.getDefaultPartners(); }
+            try { this.partners = JSON.parse(storedPartners); } catch(e) { this.partners = []; }
         } else {
-            this.partners = this.getDefaultPartners();
-            this.saveUmkm();
+            this.partners = [];
         }
 
         const storedProducts = localStorage.getItem('pos_ilp_umkm_products_v1');
         if (storedProducts) {
-            try { this.partnerProducts = JSON.parse(storedProducts); } catch(e) { this.partnerProducts = this.getDefaultProducts(); }
+            try { this.partnerProducts = JSON.parse(storedProducts); } catch(e) { this.partnerProducts = []; }
         } else {
-            this.partnerProducts = this.getDefaultProducts();
-            this.saveUmkm();
+            this.partnerProducts = [];
         }
     },
 
@@ -111,182 +109,13 @@
     partners: [],
 
     getDefaultPartners() {
-        return [
-            {
-                id: 5,
-                key: 'dapur_bu_eni',
-                initial: 'D',
-                name: 'Dapur Bu Eni - Keripik Nusantara',
-                location: 'Jakarta Timur, DKI Jakarta',
-                category: 'Snack',
-                sku: 8,
-                stockStatus: 'aman',
-                stockLabel: 'Aman',
-                totalSales: 'Rp 6.450.000',
-                status: 'AKTIF',
-                regCode: 'UMKM-JKT-042',
-                picWhatsapp: 'Ibu Eni Suhartini - 0813-8899-7711',
-                bankName: 'BCA',
-                bankAccount: '8830-192-881',
-                bankHolder: 'a/n Dapur Eni Nusantara',
-                phone: '0813-8899-7711'
-            },
-            {
-                id: 1,
-                key: 'keripik_ibu_siti',
-                initial: 'K',
-                name: 'Keripik Ibu Siti',
-                location: 'Sleman, Yogyakarta',
-                category: 'Snack',
-                sku: 12,
-                stockStatus: 'aman',
-                stockLabel: 'Aman',
-                totalSales: 'Rp 4.250.000',
-                status: 'AKTIF',
-                regCode: 'UMKM-YGY-018',
-                picWhatsapp: 'Ibu Siti Aminah - 0812-8890-1122',
-                bankName: 'BRI',
-                bankAccount: '0341-01-029384-502',
-                bankHolder: 'a/n Keripik Ibu Siti Sleman',
-                phone: '0812-8890-1122'
-            },
-            {
-                id: 2,
-                key: 'batik_cantik_arum',
-                initial: 'B',
-                name: 'Batik Cantik Arum',
-                location: 'Solo, Jawa Tengah',
-                category: 'Kerajinan',
-                sku: 45,
-                stockStatus: 'restock',
-                stockLabel: 'Perlu Restock',
-                totalSales: 'Rp 15.800.000',
-                status: 'AKTIF',
-                regCode: 'UMKM-SLO-009',
-                picWhatsapp: 'Ibu Arum Kusuma - 0813-4455-9900',
-                bankName: 'MANDIRI',
-                bankAccount: '138-00-1928374-2',
-                bankHolder: 'a/n Galeri Batik Cantik Arum',
-                phone: '0813-4455-9900'
-            },
-            {
-                id: 3,
-                key: 'madu_hutan_asli',
-                initial: 'M',
-                name: 'Madu Hutan Asli',
-                location: 'Bogor, Jawa Barat',
-                category: 'Minuman',
-                sku: 5,
-                stockStatus: 'aman',
-                stockLabel: 'Aman',
-                totalSales: 'Rp 2.100.000',
-                status: 'AKTIF',
-                regCode: 'UMKM-BGR-027',
-                picWhatsapp: 'Bpk. Hendra Wijaya - 0857-1122-3344',
-                bankName: 'BSI',
-                bankAccount: '7192-8374-11',
-                bankHolder: 'a/n Koperasi Madu Hutan Bogor',
-                phone: '0857-1122-3344'
-            },
-            {
-                id: 4,
-                key: 'telor_asin_brebes',
-                initial: 'T',
-                name: 'Telor Asin Brebes Maknyus',
-                location: 'Brebes, Jawa Tengah',
-                category: 'Snack',
-                sku: 2,
-                stockStatus: 'kosong',
-                stockLabel: 'Kosong',
-                totalSales: 'Rp 0',
-                status: 'NON-AKTIF',
-                regCode: 'UMKM-BRB-034',
-                picWhatsapp: 'Bpk. Wahyu Hidayat - 0819-7788-5566',
-                bankName: 'BNI',
-                bankAccount: '0892-1123-44',
-                bankHolder: 'a/n Telor Asin Maknyus Brebes',
-                phone: '0819-7788-5566'
-            }
-        ];
+        return [];
     },
 
     partnerProducts: [],
 
     getDefaultProducts() {
-        return [
-            {
-                id: 101,
-                partnerKey: 'dapur_bu_eni',
-                partnerName: 'Dapur Bu Eni - Keripik Nusantara',
-                regCode: 'UMKM-JKT-042',
-                name: 'Keripik Singkong Balado Renyah 150gr',
-                barcode: 'KNS-8991204-551',
-                category: 'Makanan Ringan Tradisional',
-                shelfLife: 'Kemasan Awet (3-6 Bln)',
-                expDate: '11/14/2025',
-                netPrice: 8500,
-                posMargin: 1500,
-                sellPrice: 10000,
-                stockQty: 50,
-                rack: 'Cabang Utama - Rak Display UMKM 01',
-                returnPolicy: 'Retur 100% ke Mitra UMKM',
-                settlement: 'Mingguan (Tiap Jumat Sore)'
-            },
-            {
-                id: 102,
-                partnerKey: 'keripik_ibu_siti',
-                partnerName: 'Keripik Ibu Siti',
-                regCode: 'UMKM-YGY-018',
-                name: 'Keripik Singkong Pedas Daun Jeruk 250g',
-                barcode: 'KNS-8991204-118',
-                category: 'Makanan Ringan Tradisional',
-                shelfLife: 'Kemasan Awet (3-6 Bln)',
-                expDate: '10/20/2025',
-                netPrice: 12750,
-                posMargin: 2250,
-                sellPrice: 15000,
-                stockQty: 5,
-                rack: 'Cabang Utama - Rak Display UMKM 01',
-                returnPolicy: 'Retur 100% ke Mitra UMKM',
-                settlement: 'Mingguan (Tiap Jumat Sore)'
-            },
-            {
-                id: 103,
-                partnerKey: 'batik_cantik_arum',
-                partnerName: 'Batik Cantik Arum',
-                regCode: 'UMKM-SLO-009',
-                name: 'Kain Batik Parang Klasik Solo',
-                barcode: 'KNS-8991204-210',
-                category: 'Kerajinan & Wastra Lokal',
-                shelfLife: 'Kemasan Awet (Non-Expired)',
-                expDate: '-',
-                netPrice: 72250,
-                posMargin: 12750,
-                sellPrice: 85000,
-                stockQty: 2,
-                rack: 'Cabang Utama - Galeri Kerajinan 02',
-                returnPolicy: 'Retur 100% ke Mitra UMKM',
-                settlement: 'Bulanan (Tanggal 1)'
-            },
-            {
-                id: 104,
-                partnerKey: 'madu_hutan_asli',
-                partnerName: 'Madu Hutan Asli',
-                regCode: 'UMKM-BGR-027',
-                name: 'Madu Hutan Odeng Murni 350ml',
-                barcode: 'KNS-8991204-305',
-                category: 'Minuman Herbal & Kesehatan',
-                shelfLife: 'Kemasan Awet (3-6 Bln)',
-                expDate: '12/30/2025',
-                netPrice: 55250,
-                posMargin: 9750,
-                sellPrice: 65000,
-                stockQty: 28,
-                rack: 'Cabang Utama - Rak Kesehatan 03',
-                returnPolicy: 'Diskon Clearance Toko (-30%)',
-                settlement: 'Bi-Weekly (2 Minggu Sekali)'
-            }
-        ];
+        return [];
     },
 
     get currentFormMitra() {
@@ -379,17 +208,32 @@
         if (rawInventory) {
             try {
                 let inv = JSON.parse(rawInventory);
-                inv.unshift({
-                    sku: newProduct.barcode,
-                    barcode: newProduct.barcode,
+                const cleanBarcode = String(newProduct.barcode || '').trim();
+                const existingIdx = inv.findIndex(p => (p.sku && String(p.sku).trim().toUpperCase() === cleanBarcode.toUpperCase()) || (p.barcode && String(p.barcode).trim() === cleanBarcode));
+                const itemPayload = {
+                    sku: cleanBarcode,
+                    barcode: cleanBarcode,
+                    name: newProduct.name + ' (' + mitra.name + ')',
                     nama: newProduct.name + ' (' + mitra.name + ')',
+                    category: 'Konsinyasi UMKM',
                     kategori: 'Konsinyasi UMKM',
-                    hargaBeli: newProduct.netPrice,
-                    hargaJual: newProduct.sellPrice,
-                    stok: newProduct.stockQty,
+                    brand: mitra.name,
+                    price: Number(newProduct.sellPrice) || 0,
+                    hargaJual: Number(newProduct.sellPrice) || 0,
+                    memberPrice: Number(newProduct.sellPrice) || 0,
+                    hargaBeli: Number(newProduct.netPrice) || 0,
+                    stock: Number(newProduct.stockQty) || 0,
+                    stok: Number(newProduct.stockQty) || 0,
+                    minStock: 5,
+                    unit: 'Pcs',
                     satuan: 'Pcs',
-                    status: 'AKTIF'
-                });
+                    status: (Number(newProduct.stockQty) || 0) <= 0 ? 'HABIS' : 'TERSEDIA'
+                };
+                if (existingIdx >= 0) {
+                    inv[existingIdx] = { ...inv[existingIdx], ...itemPayload };
+                } else {
+                    inv.unshift(itemPayload);
+                }
                 localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(inv));
             } catch(e) {}
         }
@@ -490,10 +334,7 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
                                 <span>/</span>
                                 <span class="text-[#0052cc] font-bold">Mitra UMKM</span>
                             </div>
-                            <h1 class="text-[26px] lg:text-[28px] font-black text-[#0f172a] tracking-tight leading-tight">Manajemen Mitra UMKM</h1>
-                            <p class="text-[13.5px] text-slate-500 font-medium mt-1">
-                                Kelola data mitra produsen dan produk konsinyasi Anda secara efisien.
-                            </p>
+                            <h1 class="text-[26px] lg:text-[28px] font-black text-[#0f172a] tracking-tight leading-tight">Mitra UMKM</h1>
                         </div>
 
                         <!-- Action Buttons: List Produk Mitra, Tambah Produk Mitra, Tambah Mitra Baru -->
@@ -528,8 +369,8 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
                             </div>
                             <div class="min-w-0">
                                 <div class="text-[12.5px] font-semibold text-slate-500">Total Mitra Aktif</div>
-                                <div class="text-[22px] font-black text-[#0f172a] tracking-tight mt-0.5 leading-tight">42 Mitra</div>
-                                <div class="text-[11px] font-extrabold text-[#16a34a] mt-1.5">+3 bulan ini</div>
+                                <div class="text-[22px] font-black text-[#0f172a] tracking-tight mt-0.5 leading-tight" x-text="(partners ? partners.length : 0) + ' Mitra'">0 Mitra</div>
+                                <div class="text-[11px] font-extrabold text-slate-400 mt-1.5" x-text="(partners ? partners.filter(p => p.status === 'AKTIF').length : 0) + ' Aktif'">0 Aktif</div>
                             </div>
                         </div>
 
@@ -540,8 +381,8 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
                             </div>
                             <div class="min-w-0">
                                 <div class="text-[12.5px] font-semibold text-slate-500">Produk Titipan (SKU)</div>
-                                <div class="text-[22px] font-black text-[#0f172a] tracking-tight mt-0.5 leading-tight">158 SKU</div>
-                                <div class="text-[11px] font-medium text-slate-400 mt-1.5">Rata-rata 4 SKU/Mitra</div>
+                                <div class="text-[22px] font-black text-[#0f172a] tracking-tight mt-0.5 leading-tight" x-text="(partnerProducts ? partnerProducts.length : 0) + ' SKU'">0 SKU</div>
+                                <div class="text-[11px] font-medium text-slate-400 mt-1.5">Produk Konsinyasi</div>
                             </div>
                         </div>
 
@@ -552,7 +393,7 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
                             </div>
                             <div class="min-w-0">
                                 <div class="text-[12.5px] font-semibold text-slate-500">Penjualan Konsinyasi</div>
-                                <div class="text-[21px] font-black text-[#0f172a] font-mono tracking-tight mt-0.5 leading-tight">Rp 12.4M</div>
+                                <div class="text-[21px] font-black text-[#0f172a] font-mono tracking-tight mt-0.5 leading-tight">Rp 0</div>
                                 <div class="text-[11px] font-extrabold text-[#16a34a] mt-1.5">Bulan Berjalan</div>
                             </div>
                         </div>
@@ -564,8 +405,8 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
                             </div>
                             <div class="min-w-0">
                                 <div class="text-[12.5px] font-semibold text-slate-500">Tagihan Unpaid</div>
-                                <div class="text-[21px] font-black text-[#dc2626] font-mono tracking-tight mt-0.5 leading-tight">Rp 4.1M</div>
-                                <div class="text-[11px] font-extrabold text-[#dc2626] mt-1.5">8 Invoice Jatuh Tempo</div>
+                                <div class="text-[21px] font-black text-slate-700 font-mono tracking-tight mt-0.5 leading-tight">Rp 0</div>
+                                <div class="text-[11px] font-medium text-slate-400 mt-1.5">0 Invoice</div>
                             </div>
                         </div>
                     </div>
@@ -729,6 +570,17 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
                                             </td>
                                         </tr>
                                     </template>
+                                    <tr x-show="!filteredPartners || filteredPartners.length === 0">
+                                        <td colspan="7" class="py-12 text-center text-slate-400 font-medium">
+                                            <p class="text-sm">Belum ada data mitra UMKM.</p>
+                                            <div class="mt-3">
+                                                <button type="button" @click="showAddModal = true" class="px-4 py-2 bg-[#0047b3] text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 shadow-sm hover:bg-[#003994] transition-colors cursor-pointer">
+                                                    <span class="material-symbols-rounded text-[16px]">add</span>
+                                                    <span>Tambah Mitra Baru</span>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
                                 </tbody>
                             </table>
                         </div>
@@ -736,7 +588,7 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
                         <!-- Pagination Footer -->
                         <div class="px-6 py-4 bg-white border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-[12.5px]">
                             <div class="text-slate-500 font-medium">
-                                Menampilkan <span class="font-extrabold text-slate-800" x-text="'1 - ' + filteredPartners.length">1 - 4</span> dari <span class="font-extrabold text-slate-800">42</span> mitra
+                                Menampilkan <span class="font-extrabold text-slate-800" x-text="filteredPartners ? filteredPartners.length : 0">0</span> mitra
                             </div>
                             <div class="flex items-center gap-1.5">
                                 <button class="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-400 flex items-center justify-center cursor-not-allowed">
@@ -968,6 +820,17 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
                                             </td>
                                         </tr>
                                     </template>
+                                    <tr x-show="!filteredProducts || filteredProducts.length === 0">
+                                        <td colspan="6" class="py-12 text-center text-slate-400 font-medium">
+                                            <p class="text-sm">Belum ada data produk mitra UMKM.</p>
+                                            <div class="mt-3">
+                                                <button type="button" @click="subPage = 'input_produk'" class="px-4 py-2 bg-[#0047b3] text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 shadow-sm hover:bg-[#003994] transition-colors cursor-pointer">
+                                                    <span class="material-symbols-rounded text-[16px]">add</span>
+                                                    <span>Tambah Produk Mitra</span>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
                                 </tbody>
                             </table>
                         </div>

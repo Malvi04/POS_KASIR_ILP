@@ -28,171 +28,38 @@
     },
 
     // Default Seed Products (10 items)
-    defaultProducts: [
-        {
-            sku: 'PRD-001',
-            barcode: '8991234567890',
-            name: 'Aqua Mineral 600ml',
-            brand: 'Danone Indonesia',
-            category: 'Minuman',
-            rackLocation: 'Lorong A - Rak 01 (Minuman Dingin)',
-            stock: 450,
-            minStock: 50,
-            unit: 'Botol',
-            price: 5500,
-            memberPrice: 5000,
-            status: 'TERSEDIA',
-            batchLot: 'AQ-202610-09',
-            expiredDate: '2027-11-15'
-        },
-        {
-            sku: 'PRD-002',
-            barcode: '8992345678901',
-            name: 'Chitato Sapi Panggang 68g',
-            brand: 'Indofood',
-            category: 'Snack',
-            rackLocation: 'Lorong B - Rak 03 (Makanan Ringan)',
-            stock: 8,
-            minStock: 20,
-            unit: 'Pcs',
-            price: 12800,
-            memberPrice: 12000,
-            status: 'STOK_RENDAH',
-            batchLot: 'CT-202609-02',
-            expiredDate: '2027-01-12'
-        },
-        {
-            sku: 'PRD-003',
-            barcode: '8993456789012',
-            name: 'Ultra Milk Full Cream 1L',
-            brand: 'Ultrajaya',
-            category: 'Minuman',
-            rackLocation: 'Chiller Susu 02',
-            stock: 32,
-            minStock: 15,
-            unit: 'Tetra',
-            price: 19200,
-            memberPrice: 18500,
-            status: 'NEAR_EXPIRED',
-            batchLot: 'UM-202608-11',
-            expiredDate: '2026-11-10'
-        },
-        {
-            sku: 'PRD-004',
-            barcode: '8994567890123',
-            name: 'Beras Pandan Wangi 5kg',
-            brand: 'Lokal Berdikari',
-            category: 'Kebutuhan Pokok',
-            rackLocation: 'Palet Depan Kasir - Sembako',
-            stock: 120,
-            minStock: 30,
-            unit: 'Pack',
-            price: 82000,
-            memberPrice: 79000,
-            status: 'TERSEDIA',
-            batchLot: 'BPW-202610-01',
-            expiredDate: '2027-04-30'
-        },
-        {
-            sku: 'PRD-005',
-            barcode: '8995678901234',
-            name: 'Sunlight Jeruk Nipis 755ml',
-            brand: 'Unilever',
-            category: 'Pembersih',
-            rackLocation: 'Lorong C - Rak 02 (Kebersihan)',
-            stock: 54,
-            minStock: 25,
-            unit: 'Botol',
-            price: 15500,
-            memberPrice: 14500,
-            status: 'TERSEDIA',
-            batchLot: 'SN-202609-15',
-            expiredDate: '2028-09-20'
-        },
-        {
-            sku: 'PRD-006',
-            barcode: '899275321004',
-            name: 'Indomie Goreng Spesial 85g',
-            brand: 'Indofood',
-            category: 'Makanan',
-            rackLocation: 'Lorong B - Rak 01 (Mie Instan)',
-            stock: 320,
-            minStock: 80,
-            unit: 'Pcs',
-            price: 3500,
-            memberPrice: 3200,
-            status: 'TERSEDIA',
-            batchLot: 'IDM-202610-44',
-            expiredDate: '2027-08-18'
-        },
-        {
-            sku: 'PRD-007',
-            barcode: '8996789012345',
-            name: 'Minyak Goreng Sania 2L',
-            brand: 'Wilmar',
-            category: 'Kebutuhan Pokok',
-            rackLocation: 'Lorong A - Rak 04 (Minyak Goreng)',
-            stock: 6,
-            minStock: 24,
-            unit: 'Pouch',
-            price: 36000,
-            memberPrice: 34500,
-            status: 'STOK_RENDAH',
-            batchLot: 'SN-202610-08',
-            expiredDate: '2027-12-22'
-        },
-        {
-            sku: 'PRD-008',
-            barcode: '8997890123456',
-            name: 'Teh Pucuk Harum 350ml',
-            brand: 'Mayora',
-            category: 'Minuman',
-            rackLocation: 'Lorong A - Rak 02 (Teh Siap Minum)',
-            stock: 140,
-            minStock: 40,
-            unit: 'Botol',
-            price: 4000,
-            memberPrice: 3800,
-            status: 'TERSEDIA',
-            batchLot: 'TP-202609-29',
-            expiredDate: '2027-10-05'
-        },
-        {
-            sku: 'PRD-009',
-            barcode: '8998901234567',
-            name: 'Oreo Vanilla 133g',
-            brand: 'Mondelez',
-            category: 'Snack',
-            rackLocation: 'Lorong B - Rak 02 (Biskuit)',
-            stock: 14,
-            minStock: 25,
-            unit: 'Pcs',
-            price: 9500,
-            memberPrice: 9000,
-            status: 'NEAR_EXPIRED',
-            batchLot: 'OR-202608-05',
-            expiredDate: '2026-11-15'
-        },
-        {
-            sku: 'PRD-010',
-            barcode: '8999012345678',
-            name: 'Gula Pasir Gulaku 1kg',
-            brand: 'Sugar Group',
-            category: 'Kebutuhan Pokok',
-            rackLocation: 'Palet Depan Kasir - Sembako',
-            stock: 0,
-            minStock: 20,
-            unit: 'Pack',
-            price: 18000,
-            memberPrice: 17500,
-            status: 'HABIS',
-            batchLot: 'GL-202607-12',
-            expiredDate: '2028-01-10'
-        }
-    ],
+    defaultProducts: [],
 
     // Product state
     products: [],
+
+    deduplicateProducts(items) {
+        if (!Array.isArray(items)) return { unique: [], hasDuplicates: false };
+        const unique = [];
+        const seenSku = new Set();
+        const seenBarcode = new Set();
+        let hasDuplicates = false;
+
+        items.forEach(p => {
+            if (!p) return;
+            const sku = p.sku !== undefined && p.sku !== null ? String(p.sku).trim().toUpperCase() : '';
+            const barcode = p.barcode !== undefined && p.barcode !== null ? String(p.barcode).trim() : '';
+
+            const isDupSku = Boolean(sku && seenSku.has(sku));
+            const isDupBarcode = Boolean(barcode && seenBarcode.has(barcode));
+
+            if (isDupSku || isDupBarcode) {
+                hasDuplicates = true;
+                return;
+            }
+
+            if (sku) seenSku.add(sku);
+            if (barcode) seenBarcode.add(barcode);
+            unique.push(p);
+        });
+
+        return { unique, hasDuplicates };
+    },
 
     initProducts() {
         try {
@@ -200,16 +67,18 @@
             if (raw) {
                 const parsed = JSON.parse(raw);
                 if (Array.isArray(parsed) && parsed.length > 0) {
-                    this.products = parsed;
+                    const result = this.deduplicateProducts(parsed);
+                    this.products = result.unique;
+                    if (result.hasDuplicates) {
+                        this.saveProductsToStorage();
+                    }
                     return;
                 }
             }
         } catch (e) {
             console.error('Failed to parse inventory storage:', e);
         }
-        // Fallback to default
-        this.products = JSON.parse(JSON.stringify(this.defaultProducts));
-        this.saveProductsToStorage();
+        this.products = [];
     },
 
     saveProductsToStorage() {
@@ -222,18 +91,25 @@
     },
 
     resetToDefaultCatalog() {
-        if (confirm('Kembalikan seluruh katalog ke data bawaan simulasi (10 produk)? Data yang telah dibuat atau diedit akan ditimpa.')) {
-            this.products = JSON.parse(JSON.stringify(this.defaultProducts));
-            this.saveProductsToStorage();
-            this.triggerToast('Katalog berhasil di-reset ke 10 produk bawaan.', 'info');
-        }
+        this.products = [];
+        this.saveProductsToStorage();
+        this.triggerToast('Katalog produk telah dikosongkan.', 'info');
     },
 
     // Categories list for filtering and form
     get availableCategories() {
         const standard = ['Minuman', 'Snack', 'Kebutuhan Pokok', 'Pembersih', 'Makanan', 'Obat & Kesehatan'];
-        const existing = this.products.map(p => p.category).filter(Boolean);
-        return Array.from(new Set([...standard, ...existing]));
+        const catMap = new Map();
+        standard.forEach(c => catMap.set(c.trim().toLowerCase(), c.trim()));
+        (this.products || []).forEach(p => {
+            if (p && p.category) {
+                const label = String(p.category).trim();
+                if (label && !catMap.has(label.toLowerCase())) {
+                    catMap.set(label.toLowerCase(), label);
+                }
+            }
+        });
+        return Array.from(catMap.values());
     },
 
     get filteredProducts() {
@@ -315,12 +191,14 @@
         batchLot: '',
         expiredDate: ''
     },
+    duplicateExistingProduct: null,
     formErrors: {},
 
     openCreateModal() {
         this.modalMode = 'create';
         this.formSkuOriginal = '';
         this.formErrors = {};
+        this.duplicateExistingProduct = null;
 
         // Generate next SKU: PRD-XXX
         let maxNum = 0;
@@ -363,6 +241,7 @@
         this.modalMode = 'edit';
         this.formSkuOriginal = product.sku;
         this.formErrors = {};
+        this.duplicateExistingProduct = null;
 
         let expVal = '';
         if (product.expiredDate) {
@@ -405,25 +284,42 @@
 
     saveProduct() {
         this.formErrors = {};
+        this.duplicateExistingProduct = null;
         const f = this.formData;
 
-        if (!f.name || !f.name.trim()) {
+        const cleanSku = (f.sku || '').trim().toUpperCase();
+        const cleanBarcode = (f.barcode || '').trim();
+        const cleanName = (f.name || '').trim();
+
+        if (!cleanName) {
             this.formErrors.name = 'Nama produk wajib diisi.';
         }
-        if (!f.barcode || !f.barcode.trim()) {
-            this.formErrors.barcode = 'Barcode produk wajib diisi.';
-        } else {
-            const dupBarcode = this.products.find(p => p.barcode.trim() === f.barcode.trim() && (this.modalMode === 'create' || p.sku !== this.formSkuOriginal));
-            if (dupBarcode) {
-                this.formErrors.barcode = `Barcode '${f.barcode}' sudah digunakan oleh produk '${dupBarcode.name}'.`;
-            }
-        }
-        if (!f.sku || !f.sku.trim()) {
+
+        // 1. Periksa SKU terlebih dahulu
+        if (!cleanSku) {
             this.formErrors.sku = 'SKU produk wajib diisi.';
         } else {
-            const dupSku = this.products.find(p => p.sku.trim().toUpperCase() === f.sku.trim().toUpperCase() && (this.modalMode === 'create' || p.sku !== this.formSkuOriginal));
+            const dupSku = this.products.find(p => 
+                (p.sku || '').trim().toUpperCase() === cleanSku && 
+                (this.modalMode === 'create' || (p.sku || '').trim().toUpperCase() !== (this.formSkuOriginal || '').trim().toUpperCase())
+            );
             if (dupSku) {
-                this.formErrors.sku = `SKU '${f.sku}' sudah terdaftar pada produk lain.`;
+                this.formErrors.sku = 'SKU sudah terdaftar. Silakan gunakan data produk yang sudah ada.';
+                this.duplicateExistingProduct = dupSku;
+            }
+        }
+
+        // 2. Periksa barcode jika diisi
+        if (cleanBarcode) {
+            const dupBarcode = this.products.find(p => 
+                (p.barcode || '').trim() === cleanBarcode && 
+                (this.modalMode === 'create' || (p.sku || '').trim().toUpperCase() !== (this.formSkuOriginal || '').trim().toUpperCase())
+            );
+            if (dupBarcode) {
+                this.formErrors.barcode = 'Barcode sudah digunakan oleh produk lain.';
+                if (!this.duplicateExistingProduct) {
+                    this.duplicateExistingProduct = dupBarcode;
+                }
             }
         }
         if (f.price === null || f.price === '' || Number(f.price) < 0) {
@@ -572,8 +468,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             <span class="material-symbols-rounded text-[14px]">chevron_right</span>
                             <span class="text-[#0052cc]">DATA BARANG & INFORMASI STOK</span>
                         </div>
-                        <h1 class="text-2xl font-black text-gray-900 tracking-tight">Katalog Informasi Stok & Data Barang</h1>
-                        <p class="text-xs text-gray-500 mt-1 font-medium">Kelola data barang toko, mutasi stok, harga jual member/umum, lokasi rak, dan status kedaluwarsa.</p>
+                        <h1 class="text-2xl font-black text-gray-900 tracking-tight">Informasi Stok & Produk</h1>
                     </div>
 
                     <div class="flex items-center gap-2.5">
@@ -705,87 +600,83 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
 
                     <div class="overflow-x-auto min-w-0 w-full">
-                        <table class="w-full text-left border-collapse min-w-[850px]">
+                        <table class="w-full text-left border-collapse min-w-[1100px]">
                             <thead>
                                 <tr class="bg-gray-50/80 border-b border-gray-200 text-gray-600 font-bold tracking-wider uppercase text-[11px] whitespace-nowrap">
-                                    <th class="px-6 py-3.5 text-left w-[260px]">PRODUK & BRAND</th>
-                                    <th class="px-4 py-3.5 text-left w-[150px]">BARCODE / SKU</th>
-                                    <th class="px-4 py-3.5 text-center w-[110px]">SISA STOK</th>
-                                    <th class="px-4 py-3.5 text-right w-[160px]">HARGA UMUM & MEMBER</th>
-                                    <th class="px-4 py-3.5 text-center w-[120px]">STATUS</th>
-                                    <th class="px-6 py-3.5 text-center w-[110px]">AKSI</th>
+                                    <th class="px-4 py-3.5 text-left w-[100px] min-w-[100px]">SKU</th>
+                                    <th class="px-4 py-3.5 text-left w-[120px] min-w-[120px]">BARCODE</th>
+                                    <th class="px-4 py-3.5 text-left min-w-[190px] max-w-[240px]">NAMA PRODUK</th>
+                                    <th class="px-4 py-3.5 text-left w-[110px] min-w-[110px]">BRAND</th>
+                                    <th class="px-4 py-3.5 text-center w-[120px]">KATEGORI</th>
+                                    <th class="px-4 py-3.5 text-center w-[90px]">SISA STOK</th>
+                                    <th class="px-4 py-3.5 text-right w-[120px]">HARGA UMUM</th>
+                                    <th class="px-4 py-3.5 text-right w-[120px]">HARGA MEMBER</th>
+                                    <th class="px-4 py-3.5 text-center w-[130px]">STATUS</th>
+                                    <th class="px-4 py-3.5 text-center w-[110px]">AKSI</th>
                                 </tr>
                             </thead>
                             <tbody class="text-sm divide-y divide-gray-100">
                                 <template x-for="p in filteredProducts" :key="p.sku">
                                     <tr class="hover:bg-blue-50/30 transition-colors">
-                                        <!-- Produk & Brand -->
-                                        <td class="px-6 py-3.5">
-                                            <div class="flex flex-col">
-                                                <span class="font-bold text-gray-900 text-[13px]" x-text="p.name"></span>
-                                                <div class="flex items-center gap-2 mt-0.5">
-                                                    <span class="text-[11px] text-gray-500 font-medium" x-text="p.brand || 'Lokal'"></span>
-                                                    <span class="text-gray-300">•</span>
-                                                    <span class="bg-[#eef2ff] text-[#0052cc] text-[10px] font-bold px-2 py-0.5 rounded-full" x-text="p.category"></span>
-                                                </div>
-                                            </div>
-                                        </td>
+                                        <!-- SKU -->
+                                        <td class="px-4 py-3.5 font-mono text-xs font-bold text-gray-700 whitespace-nowrap" x-text="p.sku"></td>
 
-                                        <!-- Barcode / SKU -->
-                                        <td class="px-4 py-3.5 whitespace-nowrap">
-                                            <div class="flex flex-col">
-                                                <span class="font-mono text-[12px] font-bold text-gray-700" x-text="p.barcode"></span>
-                                                <span class="font-mono text-[10px] text-gray-400 mt-0.5" x-text="p.sku"></span>
-                                            </div>
+                                        <!-- Barcode -->
+                                        <td class="px-4 py-3.5 font-mono text-xs text-gray-500 whitespace-nowrap" x-text="p.barcode"></td>
+
+                                        <!-- Nama Produk -->
+                                        <td class="px-4 py-3.5 font-bold text-gray-900 text-xs whitespace-nowrap max-w-[240px] truncate" :title="p.name" x-text="p.name"></td>
+
+                                        <!-- Brand -->
+                                        <td class="px-4 py-3.5 text-xs text-gray-500 whitespace-nowrap" x-text="p.brand || 'Lokal'"></td>
+
+                                        <!-- Kategori -->
+                                        <td class="px-4 py-3.5 text-center whitespace-nowrap">
+                                            <span class="bg-[#eef2ff] text-[#0052cc] text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap" x-text="p.category"></span>
                                         </td>
 
                                         <!-- Sisa Stok -->
                                         <td class="px-4 py-3.5 text-center whitespace-nowrap">
-                                            <div class="inline-flex flex-col items-center">
-                                                <span class="font-black text-[14px]"
-                                                      :class="p.stock === 0 ? 'text-gray-400 line-through' : (p.stock <= p.minStock ? 'text-amber-600' : 'text-gray-900')"
-                                                      x-text="p.stock"></span>
-                                                <span class="text-[10.5px] text-gray-500 font-medium" x-text="p.unit || 'Pcs'"></span>
-                                            </div>
+                                            <span class="font-bold text-xs font-mono"
+                                                  :class="p.stock === 0 ? 'text-gray-400 line-through' : (p.stock <= p.minStock ? 'text-amber-600' : 'text-gray-900')"
+                                                  x-text="p.stock + ' ' + (p.unit || 'Pcs')"></span>
                                         </td>
 
-                                        <!-- Harga Umum & Member -->
-                                        <td class="px-4 py-3.5 text-right whitespace-nowrap">
-                                            <div class="flex flex-col items-end">
-                                                <span class="font-mono font-bold text-gray-900 text-[13px]" x-text="formatRupiah(p.price)"></span>
-                                                <span class="text-[10px] text-emerald-600 font-semibold" x-text="'Member: ' + formatRupiah(p.memberPrice || p.price)"></span>
-                                            </div>
-                                        </td>
+                                        <!-- Harga Umum -->
+                                        <td class="px-4 py-3.5 text-right whitespace-nowrap font-mono font-bold text-gray-900 text-xs" x-text="formatRupiah(p.price)"></td>
+
+                                        <!-- Harga Member -->
+                                        <td class="px-4 py-3.5 text-right whitespace-nowrap font-mono font-semibold text-emerald-600 text-xs" x-text="formatRupiah(p.memberPrice || p.price)"></td>
 
                                         <!-- Status -->
                                         <td class="px-4 py-3.5 text-center whitespace-nowrap">
                                             <template x-if="p.status === 'TERSEDIA'">
-                                                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
                                                     <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                                                     <span>Tersedia</span>
                                                 </span>
                                             </template>
                                             <template x-if="p.status === 'STOK_RENDAH'">
-                                                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap">
                                                     <span class="material-symbols-rounded text-[13px]">warning</span>
                                                     <span>Stok Rendah</span>
                                                 </span>
                                             </template>
                                             <template x-if="p.status === 'NEAR_EXPIRED'">
-                                                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">
                                                     <span class="material-symbols-rounded text-[13px]">event_busy</span>
                                                     <span>Hampir ED</span>
                                                 </span>
                                             </template>
                                             <template x-if="p.status === 'HABIS'">
-                                                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 text-gray-600 border border-gray-200">
+                                                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 text-gray-600 border border-gray-200 whitespace-nowrap">
                                                     <span>Kosong</span>
                                                 </span>
                                             </template>
                                         </td>
 
                                         <!-- Aksi (CRUD Buttons) -->
-                                        <td class="px-6 py-3.5 text-center whitespace-nowrap">
+                                        <td class="px-4 py-3.5 text-center whitespace-nowrap">
                                             <div class="inline-flex items-center justify-center gap-1.5">
                                                 <!-- Detail Button -->
                                                 <button type="button"
@@ -818,13 +709,12 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <!-- Empty State -->
                                 <template x-if="filteredProducts.length === 0">
                                     <tr>
-                                        <td colspan="6" class="px-6 py-12 text-center">
+                                        <td colspan="10" class="px-6 py-12 text-center">
                                             <div class="flex flex-col items-center justify-center max-w-sm mx-auto space-y-3">
                                                 <div class="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center text-gray-400">
                                                     <span class="material-symbols-rounded text-[28px]">search_off</span>
                                                 </div>
-                                                <h4 class="text-sm font-bold text-gray-800">Tidak Ada Produk Ditemukan</h4>
-                                                <p class="text-xs text-gray-500">Tidak ada produk yang sesuai dengan kata kunci pencarian atau filter kategori yang Anda pilih.</p>
+                                                <h4 class="text-sm font-bold text-gray-800">Belum ada data produk.</h4>
                                                 <div class="flex items-center gap-2 pt-2">
                                                     <button type="button"
                                                             @click="searchQuery = ''; selectedCategory = 'all'"
@@ -949,7 +839,15 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     </button>
                                 </div>
                                 <template x-if="formErrors.barcode">
-                                    <p class="text-rose-500 text-[11px] mt-1 font-semibold" x-text="formErrors.barcode"></p>
+                                    <div class="mt-1">
+                                        <p class="text-rose-500 text-[11px] font-semibold" x-text="formErrors.barcode"></p>
+                                        <template x-if="duplicateExistingProduct">
+                                            <button type="button" @click="openEditModal(duplicateExistingProduct)" class="text-[11px] text-[#0052cc] hover:underline font-bold mt-1 inline-flex items-center gap-1 cursor-pointer">
+                                                <span class="material-symbols-rounded text-[14px]">edit</span>
+                                                <span>Buka dan edit data produk ini</span>
+                                            </button>
+                                        </template>
+                                    </div>
                                 </template>
                             </div>
 
@@ -961,7 +859,15 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                        placeholder="PRD-001"
                                        class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono font-bold text-xs uppercase">
                                 <template x-if="formErrors.sku">
-                                    <p class="text-rose-500 text-[11px] mt-1 font-semibold" x-text="formErrors.sku"></p>
+                                    <div class="mt-1">
+                                        <p class="text-rose-500 text-[11px] font-semibold" x-text="formErrors.sku"></p>
+                                        <template x-if="duplicateExistingProduct">
+                                            <button type="button" @click="openEditModal(duplicateExistingProduct)" class="text-[11px] text-[#0052cc] hover:underline font-bold mt-1 inline-flex items-center gap-1 cursor-pointer">
+                                                <span class="material-symbols-rounded text-[14px]">edit</span>
+                                                <span>Buka dan edit data produk ini</span>
+                                            </button>
+                                        </template>
+                                    </div>
                                 </template>
                             </div>
 
@@ -1033,9 +939,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     <option value="Pcs">Pcs</option>
                                     <option value="Botol">Botol</option>
                                     <option value="Pack">Pack</option>
-                                    <option value="Pouch">Pouch</option>
                                     <option value="Karton">Karton</option>
-                                    <option value="Tetra">Tetra</option>
                                     <option value="Kaleng">Kaleng</option>
                                     <option value="Sachet">Sachet</option>
                                     <option value="Kg">Kg</option>

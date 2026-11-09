@@ -211,7 +211,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
         <!-- Top Header -->
         <header class="h-[68px] bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
             <div class="flex items-center gap-3">
-                <h1 class="text-[16px] font-black text-gray-900 tracking-tight">Stock Opname Kasir</h1>
+                <h1 class="text-[16px] font-black text-gray-900 tracking-tight">Stock Opname</h1>
                 <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200" x-text="activeSession.terminalLabel || 'Kasir 01'"></span>
             </div>
 
@@ -394,8 +394,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <tr x-show="filteredItems.length === 0">
                                     <td colspan="6" class="text-center py-12 text-gray-400">
                                         <span class="material-symbols-rounded text-4xl mb-2 text-gray-300">inventory_2</span>
-                                        <p class="font-bold text-gray-600">Tidak ada produk yang cocok</p>
-                                        <p class="text-xs text-gray-400 mt-0.5">Silakan ganti kata kunci atau filter.</p>
+                                        <p class="font-bold text-gray-600">Belum ada data produk untuk stock opname.</p>
                                     </td>
                                 </tr>
                             </tbody>

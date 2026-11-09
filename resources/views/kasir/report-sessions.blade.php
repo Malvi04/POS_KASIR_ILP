@@ -38,66 +38,11 @@
                 }
             } catch(e) {}
         }
-        this.pastSessions = this.getDefaultPastSessions();
+        this.pastSessions = [];
     },
 
     getDefaultPastSessions() {
-        return [
-            {
-                id: 'CS-20261024-K01-001',
-                date: '24 Oktober 2026',
-                shift: 'Pagi (07:00 - 10:00 WIB)',
-                terminal: 'Kasir 01',
-                cashier: 'Budi Kurniawan',
-                openingFloat: 500000,
-                cashSales: 310000,
-                nonCashSales: 0,
-                cashOut: 0,
-                expectedCash: 810000,
-                actualCash: 810000,
-                variance: 0,
-                varianceStatus: 'SESUAI',
-                notes: 'Sesi berakhir pada pergantian shift awal, saldo fisik tepat sesuai sistem.',
-                status: 'HANDOVER_DONE',
-                verifiedBy: 'Siti Aminah (SPV)'
-            },
-            {
-                id: 'CS-20261023-K01-002',
-                date: '23 Oktober 2026',
-                shift: 'Siang/Malam (14:00 - 22:00 WIB)',
-                terminal: 'Kasir 01',
-                cashier: 'Budi Kurniawan',
-                openingFloat: 500000,
-                cashSales: 1640000,
-                nonCashSales: 890000,
-                cashOut: 20000,
-                expectedCash: 2120000,
-                actualCash: 2115000,
-                variance: -5000,
-                varianceStatus: 'SELISIH_KURANG',
-                notes: 'Selisih kurang Rp 5.000 akibat pembulatan koin kembalian saat jam ramai sore.',
-                status: 'CLOSED',
-                verifiedBy: 'Bambang Sudiro (SPV)'
-            },
-            {
-                id: 'CS-20261023-K01-001',
-                date: '23 Oktober 2026',
-                shift: 'Pagi (07:00 - 14:00 WIB)',
-                terminal: 'Kasir 01',
-                cashier: 'Budi Kurniawan',
-                openingFloat: 500000,
-                cashSales: 1450000,
-                nonCashSales: 620000,
-                cashOut: 0,
-                expectedCash: 1950000,
-                actualCash: 1950000,
-                variance: 0,
-                varianceStatus: 'SESUAI',
-                notes: 'Penutupan sesi berjalan lancar tanpa kendala fisik.',
-                status: 'CLOSED',
-                verifiedBy: 'Siti Aminah (SPV)'
-            }
-        ];
+        return [];
     },
 
     viewSession(session) {
@@ -179,13 +124,13 @@ class="flex flex-col h-screen w-full font-sans">
 
                         <div class="p-4 bg-emerald-50/60 rounded-xl border border-emerald-100">
                             <span class="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">Penjualan Tunai Bersih</span>
-                            <span class="text-lg font-black font-mono text-emerald-700 mt-1 block" x-text="formatRupiah(activeSession.cashSalesNet || 970000)">Rp 970.000</span>
+                            <span class="text-lg font-black font-mono text-emerald-700 mt-1 block" x-text="formatRupiah(activeSession.cashSalesNet || 0)">Rp 0</span>
                             <span class="text-[11px] text-emerald-600 mt-0.5 block">Termasuk porsi split-bill</span>
                         </div>
 
                         <div class="p-4 bg-blue-50/60 rounded-xl border border-blue-100">
                             <span class="text-[10px] font-bold text-blue-700 uppercase tracking-wider block">Penjualan Non-Tunai</span>
-                            <span class="text-lg font-black font-mono text-[#0052cc] mt-1 block" x-text="formatRupiah(totalNonCashSales || 700000)">Rp 700.000</span>
+                            <span class="text-lg font-black font-mono text-[#0052cc] mt-1 block" x-text="formatRupiah(totalNonCashSales || 0)">Rp 0</span>
                             <span class="text-[11px] text-blue-600 mt-0.5 block">QRIS, Debit, Kredit Anggota</span>
                         </div>
 
@@ -222,7 +167,12 @@ class="flex flex-col h-screen w-full font-sans">
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100">
-                                <template x-for="sesi in pastSessions" :key="sesi.id">
+                                    <tr x-show="!pastSessions || pastSessions.length === 0">
+                                        <td colspan="8" class="text-center py-12 text-gray-400 font-medium">
+                                            Belum ada riwayat sesi kasir.
+                                        </td>
+                                    </tr>
+                                    <template x-for="sesi in pastSessions" :key="sesi.id">
                                     <tr class="hover:bg-blue-50/30 transition-colors">
                                         <td class="px-5 py-3.5 font-mono font-bold text-[#0052cc] whitespace-nowrap" x-text="sesi.id"></td>
                                         <td class="px-5 py-3.5">

@@ -21,18 +21,10 @@
             }
         } catch (e) {}
 
-        if (!this.members || this.members.length === 0) {
-            this.members = [
-                { id: 'MBR-001', nik: '1029384756', name: 'Santoso', dept: 'Logistik & Distribusi - Area 4', creditLimit: 2500000, currentDebt: 1380000, status: 'AKTIF' },
-                { id: 'MBR-002', nik: '327501002230004', name: 'Bambang Pamungkas', dept: 'Logistik & Gudang', creditLimit: 5000000, currentDebt: 500000, status: 'AKTIF' },
-                { id: 'MBR-003', nik: '327501440230012', name: 'Siti Lestari', dept: 'Administrasi & Keuangan', creditLimit: 5000000, currentDebt: 3800000, status: 'AKTIF' },
-                { id: 'MBR-004', nik: '327501002230099', name: 'Andri Setiawan', dept: 'Produksi A', creditLimit: 5000000, currentDebt: 5000000, status: 'DIBLOKIR' }
-            ];
-            localStorage.setItem('pos_ilp_members_v1', JSON.stringify(this.members));
-        }
+        if (!this.members) this.members = [];
 
         // Set default selected member
-        this.selectedMember = this.members[0];
+        this.selectedMember = this.members.length > 0 ? this.members[0] : null;
 
         // Load active cart
         try {
@@ -42,13 +34,7 @@
             }
         } catch (e) {}
 
-        if (!this.cartItems || this.cartItems.length === 0) {
-            this.cartItems = [
-                { name: 'Indomie Goreng Spcl', qty: 3, unit: 'Pcs', price: 3200, memberPrice: 3200 },
-                { name: 'Oreo Vanilla 133g', qty: 1, unit: 'Pcs', price: 9500, memberPrice: 8200 },
-                { name: 'Teh Pucuk 350ml', qty: 2, unit: 'Botol', price: 4000, memberPrice: 4000 }
-            ];
-        }
+        if (!this.cartItems) this.cartItems = [];
     },
 
     get filteredMemberList() {
