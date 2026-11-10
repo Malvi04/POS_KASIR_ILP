@@ -1,0 +1,58 @@
+flowchart TD
+    %% Activity Diagram: Penerimaan Barang Masuk (Goods Receipt / Transfer Gudang DC)
+    %% Sistem POS Minimarket Koperasi PT Indo Lampung Perkasa
+
+    subgraph LANE_SUPPLIER_DC["GUDANG PUSAT (DC) / SUPPLIER"]
+        G_Start((Mulai)) --> G_Dispatch["Armada ekspedisi DC diberangkatkan menuju toko cabang"]
+        G_Dispatch --> G_Arrive["Sopir tiba di toko & menyerahkan Surat Jalan (Delivery Order) fisik"]
+        G_Arrive --> G_Unload["Sopir bersama petugas toko membongkar muatan barang"]
+    end
+
+    subgraph LANE_STORE_CLERK["KASIR / PETUGAS GUDANG TOKO"]
+        G_Unload --> K_OpenMenu["Buka menu Barang Masuk di antarmuka kasir (/kasir/produk/masuk)"]
+        K_OpenMenu --> K_FindDoc["Cari dokumen penerimaan berdasarkan Nomor Surat Jalan / PO"]
+        K_FindDoc --> K_InspectItems["Pemeriksaan fisik barang bersama sopir:
+        1. Cek kesesuaian SKU / Barcode produk
+        2. Hitung jumlah fisik yang diterima (Pcs / Dus)
+        3. Cek kondisi fisik barang & tanggal kedaluwarsa (ED)"]
+        
+        K_InspectItems --> K_CheckDiscrepancy{"Apakah terdapat selisih atau kerusakan fisik?"}
+
+        K_CheckDiscrepancy -- "Tidak (Semua Baik & Sesuai)" --> K_InputGoodQty["Input jumlah diterima sesuai surat jalan (Kondisi: BAIK)"]
+        
+        K_CheckDiscrepancy -- "Ya (Ada Rusak / Kurang / Lebih)" --> K_RecordCondition["Catat klasifikasi kondisi barang:
+        - BAIK (diterima masuk stok)
+        - RUSAK / BOCOR (ditolak / dialokasikan ke retur)
+        - KEMASAN CACAT (dikarantina)
+        - SELISIH KURANG (catat deviasi)"]
+        
+        K_InputGoodQty --> K_SubmitVerify["Klik 'Verifikasi & Terima Barang Masuk' (/goods-receipts/{id}/verify)"]
+        K_RecordCondition --> K_SubmitVerify
+
+        K_SubmitVerify --> K_SignDoc["Tanda tangan Berita Acara Penerimaan Barang bersama sopir ekspedisi"]
+        K_SignDoc --> G_End((Selesai))
+    end
+
+    subgraph LANE_SYSTEM["SISTEM POS & DATABASE"]
+        K_FindDoc --> SYS_LoadDoc["Sistem ambil detail dokumen penerimaan dari database (Daftar Item, Qty Kirim)"]
+        
+        K_SubmitVerify --> SYS_Transaction["Buka Database Transaction Penerimaan Barang"]
+        SYS_Transaction --> SYS_UpdateMasterStock["Tambah kuantitas barang berkondisi BAIK ke master stok produk toko"]
+        SYS_UpdateMasterStock --> SYS_RecordDamaged["Jika ada barang rusak: Otomatis buat draf Retur Barang Toko ke DC"]
+        SYS_RecordDamaged --> SYS_UpdateDocStatus["Ubah status dokumen penerimaan menjadi VERIFIED / SELESAI"]
+        SYS_UpdateDocStatus --> SYS_LogAudit["Catat audit log penerimaan barang & riwayat pergerakan stok"]
+        SYS_LogAudit --> SYS_PrintReceipt["Generate & Cetak Berita Acara Penerimaan Barang"]
+        SYS_PrintReceipt --> K_SignDoc
+    end
+
+    classDef supplier fill:#f3e8ff,stroke:#9333ea,color:#3b0764,stroke-width:1.2px;
+    classDef cashier fill:#eff6ff,stroke:#2563eb,color:#1e3a8a,stroke-width:1.2px;
+    classDef system fill:#f0fdf4,stroke:#16a34a,color:#14532d,stroke-width:1.2px;
+    classDef decision fill:#fff7ed,stroke:#ea580c,color:#7c2d12,stroke-width:1.2px;
+    classDef startend fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:1.5px;
+
+    class G_Start,G_End startend;
+    class K_CheckDiscrepancy decision;
+    class G_Dispatch,G_Arrive,G_Unload supplier;
+    class K_OpenMenu,K_FindDoc,K_InspectItems,K_InputGoodQty,K_RecordCondition,K_SubmitVerify,K_SignDoc cashier;
+    class SYS_LoadDoc,SYS_Transaction,SYS_UpdateMasterStock,SYS_RecordDamaged,SYS_UpdateDocStatus,SYS_LogAudit,SYS_PrintReceipt system;

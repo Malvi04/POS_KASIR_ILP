@@ -1,0 +1,75 @@
+flowchart TD
+    %% Activity Diagram: Retur Barang & Pengembalian Dana (Customer Refund & Retur Toko ke DC)
+    %% Sistem POS Minimarket Koperasi PT Indo Lampung Perkasa
+
+    subgraph PHASE_CUSTOMER_REFUND["1. ALUR REFUND / RETUR BELANJA PELANGGAN DI KASIR"]
+        R_Start((Mulai)) --> R_CustBring["Pelanggan membawa barang rusak/cacat/kadaluarsa beserta struk belanja"]
+        R_CustBring --> R_CashierFind["Kasir cari nomor faktur transaksi di menu Refund (/kasir/transaksi/refund)"]
+        R_CashierFind --> R_SysShowInvoice["Sistem tampilkan detail transaksi: barang, jumlah, & metode bayar asal"]
+        
+        R_SysShowInvoice --> R_SelectItems["Kasir pilih barang yang diretur, isi jumlah, & pilih alasan retur:
+        - Kemasan Bocor / Rusak
+        - Kedaluwarsa (ED)
+        - Salah Beli / Cacat Pabrik"]
+        
+        R_SelectItems --> R_RequestSPV["Kasir meminta otorisasi Supervisor (Wajib Anti-Fraud)"]
+        R_RequestSPV --> R_InputSPVPIN["Supervisor input PIN 6-digit pada PIN Pad Otorisasi Void/Refund"]
+        R_InputSPVPIN --> R_VerifySPV{"PIN Supervisor Valid?"}
+
+        R_VerifySPV -- "Tidak" --> R_RejectRefund["Otorisasi Ditolak / Batalkan Refund"]
+        R_RejectRefund --> R_EndCancel((Batal / Selesai))
+
+        R_VerifySPV -- "Ya" --> R_ExecuteRefund["Sistem memproses pengembalian dana & pembatalan transaksi"]
+        R_ExecuteRefund --> R_CheckOrigPayment{"Metode Pembayaran Awal Transaksi?"}
+
+        R_CheckOrigPayment -- "Tunai" --> R_CashRefund["Kasir keluarkan uang tunai dari laci (dicatat sebagai RETUR_TUNAI pada arus kas)"]
+        R_CheckOrigPayment -- "Kredit / Kasbon Anggota" --> R_CreditReversal["Sistem kurangi saldo piutang anggota & pulihkan sisa limit plafon belanja"]
+        R_CheckOrigPayment -- "Non-Tunai (QRIS/Debit)" --> R_NonCashRefund["Kasir lakukan pengembalian dana non-tunai / voucher pengganti sesuai kebijakan toko"]
+
+        R_CashRefund --> R_RestoreStock["Sistem pulihkan stok barang layak ke inventori / tandai barang rusak ke keranjang retur"]
+        R_CreditReversal --> R_RestoreStock
+        R_NonCashRefund --> R_RestoreStock
+
+        R_RestoreStock --> R_PrintRefundSlip["Cetak Nota Bukti Retur Penjualan Thermal"]
+        R_PrintRefundSlip --> R_GiveCustomer["Serahkan uang/bukti retur kepada pelanggan"]
+    end
+
+    subgraph PHASE_STORE_RETURN["2. ALUR RETUR BARANG DARI TOKO KE GUDANG DC PUSAT / SUPPLIER"]
+        R_GiveCustomer --> S_CollectDamaged["Petugas mengumpulkan barang retur rusak/bocor/kadaluarsa dari rak toko"]
+        S_CollectDamaged --> S_OpenReturnMenu["Buka menu Retur Barang Toko (/kasir/retur atau /retur)"]
+        S_OpenReturnMenu --> S_CreateDraft["Buat Dokumen Retur Baru:
+        1. Arah: Toko ke Gudang DC atau Toko ke Supplier
+        2. Kategori: Rusak, Kadaluarsa (ED), Cacat, Overstock
+        3. Input item barang, jumlah, armada ekspedisi, supir, & plat nomor"]
+        
+        S_CreateDraft --> S_SaveDraft["Sistem simpan dokumen retur (Status: DRAFT DIAJUKAN / CEK FISIK)"]
+        S_SaveDraft --> S_PhysicalCheck["Pemeriksaan fisik barang oleh Bagian Gudang & Sopir Ekspedisi"]
+        
+        S_PhysicalCheck --> S_ManagerReview["Supervisor / Manager Toko meninjau dokumen retur di /retur"]
+        S_ManagerReview --> S_ApproveReturn{"Keputusan Manager Toko?"}
+
+        S_ApproveReturn -- "Ditolak" --> S_RejectReturnDoc["Tolak pengajuan retur & beri catatan penolakan"]
+        S_RejectReturnDoc --> R_EndCancel
+
+        S_ApproveReturn -- "Disetujui" --> S_ApproveReturnDoc["Manager setujui dokumen retur (Status: DISETUJUI / SELESAI)"]
+        S_ApproveReturnDoc --> S_DeductDefectStock["Sistem mengurangi stok barang rusak dari inventori toko cabang"]
+        S_DeductDefectStock --> S_RecordClaim["Catat piutang klaim ganti rugi / nota kredit kepada DC atau Supplier"]
+        S_RecordClaim --> S_PrintDeliveryOrder["Cetak Surat Jalan Retur Barang Toko"]
+        S_PrintDeliveryOrder --> R_EndFinish((Selesai))
+    end
+
+    classDef customer fill:#f3e8ff,stroke:#9333ea,color:#3b0764,stroke-width:1.2px;
+    classDef cashier fill:#eff6ff,stroke:#2563eb,color:#1e3a8a,stroke-width:1.2px;
+    classDef supervisor fill:#fffbeb,stroke:#d97706,color:#78350f,stroke-width:1.2px;
+    classDef system fill:#f0fdf4,stroke:#16a34a,color:#14532d,stroke-width:1.2px;
+    classDef decision fill:#fff7ed,stroke:#ea580c,color:#7c2d12,stroke-width:1.2px;
+    classDef error fill:#fee2e2,stroke:#dc2626,color:#7f1d1d,stroke-width:1.2px;
+    classDef startend fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:1.5px;
+
+    class R_Start,R_EndFinish startend;
+    class R_EndCancel,R_RejectRefund,S_RejectReturnDoc error;
+    class R_VerifySPV,R_CheckOrigPayment,S_ApproveReturn decision;
+    class R_CustBring,R_GiveCustomer customer;
+    class R_CashierFind,R_SelectItems,R_RequestSPV,R_CashRefund,R_PrintRefundSlip,S_CollectDamaged,S_OpenReturnMenu,S_CreateDraft,S_SaveDraft,S_PrintDeliveryOrder cashier;
+    class R_InputSPVPIN,S_PhysicalCheck,S_ManagerReview,S_ApproveReturnDoc supervisor;
+    class R_SysShowInvoice,R_ExecuteRefund,R_CreditReversal,R_NonCashRefund,R_RestoreStock,S_DeductDefectStock,S_RecordClaim system;

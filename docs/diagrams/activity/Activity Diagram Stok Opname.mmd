@@ -1,0 +1,71 @@
+flowchart TD
+    %% Activity Diagram: Stok Opname Toko (Audit Fisik Persediaan & Penyesuaian Stok)
+    %% Sistem POS Minimarket Koperasi PT Indo Lampung Perkasa
+
+    subgraph LANE_MANAGER["MANAGER / SUPERVISOR"]
+        M_Start((Mulai)) --> M_Login["Login ke Portal Manajerial (/stock-opname)"]
+        M_Login --> M_CreateSession["Buat Sesi Opname Baru: Input Judul, Lokasi Cabang, & Kategori Barang"]
+        M_CreateSession --> M_Snapshot["Sistem membuat snapshot stok sistem saat itu (Status: DRAFT, Kode: SOP-YYYYMMDD-XXXX)"]
+        
+        M_Snapshot -.-> K_OpenMenu
+
+        K_SubmitAudit -.-> M_ReviewVariance["Manager meninjau Laporan Varians Hasil Perhitungan Fisik"]
+        M_ReviewVariance --> M_CheckDiff{"Terdapat selisih stok (Varians ≠ 0)?"}
+
+        M_CheckDiff -- "Tidak (Semua Sesuai)" --> M_ApproveAction["Setujui Hasil Opname Langsung"]
+        
+        M_CheckDiff -- "Ya (Ada Selisih Kurang / Lebih)" --> M_AnalyzeDiscrepancy["Analisis deviasi: Hilang/Cacat vs Bonus Supplier/Salah Hitung"]
+        M_AnalyzeDiscrepancy --> M_NeedRecount{"Perlu Hitung Ulang (Recount)?"}
+
+        M_NeedRecount -- "Ya (Selisih Mencurigakan)" --> M_RequestRecount["Kirim instruksi hitung ulang untuk item atau rak terkait"]
+        M_RequestRecount -.-> K_ScanProduct
+
+        M_NeedRecount -- "Tidak (Selisih Wajar / Dikonfirmasi)" --> M_InputNotes["Isi Berita Acara & Catatan Penyesuaian Selisih"]
+        M_InputNotes --> M_ApproveAction
+
+        M_ApproveAction --> M_ExecuteAdjustment["Klik 'Selesaikan & Sesuaikan Stok' (/complete)"]
+        M_ExecuteAdjustment --> M_ExportReport["Ekspor Berita Acara Hasil Audit Stok Opname (CSV / PDF)"]
+        M_ExportReport --> M_End((Selesai))
+    end
+
+    subgraph LANE_CASHIER["KASIR / PETUGAS AUDIT"]
+        K_OpenMenu["Buka menu Stok Opname Kasir (/kasir/stock-opname)"]
+        K_OpenMenu --> K_SelectDraft["Pilih sesi opname aktif berstatus DRAFT"]
+        K_SelectDraft --> K_ScanProduct["Scan barcode barang di rak atau cari nama produk"]
+        
+        K_ScanProduct --> K_InputCount["Input kuantitas fisik hasil hitung (atau mode increment scan +1)"]
+        K_InputCount --> K_SaveItemCount["Simpan hitungan fisik item ke draf opname"]
+        
+        K_SaveItemCount --> K_HasMore{"Masih ada barang di rak yang belum dihitung?"}
+        K_HasMore -- "Ya" --> K_ScanProduct
+        K_HasMore -- "Tidak" --> K_SubmitAudit["Kirim hasil hitung fisik ke Manager (Submit Audit)"]
+    end
+
+    subgraph LANE_SYSTEM["SISTEM POS & DATABASE"]
+        M_Snapshot --> SYS_InitSession["Inisialisasi tabel StockOpname & salin snapshot data produk ke StockOpnameItems"]
+        
+        K_SaveItemCount --> SYS_CalcVariance["Sistem hitung otomatis selisih varians:
+        1. Variance = Physical Stock - System Stock
+        2. Variance Value = Variance * Unit Cost (HPP)
+        3. Status: Sesuai, Hilang/Selisih Kurang, atau Lebih/Bonus Supplier"]
+        
+        SYS_CalcVariance --> SYS_UpdateItem["Simpan verifikasi fisik & status is_audited = true"]
+
+        M_ExecuteAdjustment --> SYS_Transaction["Jalankan Database Transaction Penyesuaian Persediaan"]
+        SYS_Transaction --> SYS_AdjustMasterStock["Perbarui stok master produk di database sesuai hasil fisik yang disetujui"]
+        SYS_AdjustMasterStock --> SYS_RecordLedger["Catat riwayat mutasi ke Stock Correction & Audit Trail"]
+        SYS_RecordLedger --> SYS_UpdateStatus["Ubah status sesi opname menjadi COMPLETED"]
+        SYS_UpdateStatus --> M_ExportReport
+    end
+
+    classDef manager fill:#eff6ff,stroke:#2563eb,color:#1e3a8a,stroke-width:1.2px;
+    classDef cashier fill:#f0fdf4,stroke:#16a34a,color:#14532d,stroke-width:1.2px;
+    classDef system fill:#f8fafc,stroke:#475569,color:#1e293b,stroke-width:1.2px;
+    classDef decision fill:#fffbeb,stroke:#d97706,color:#78350f,stroke-width:1.2px;
+    classDef startend fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:1.5px;
+
+    class M_Start,M_End startend;
+    class M_CheckDiff,M_NeedRecount,K_HasMore decision;
+    class M_Login,M_CreateSession,M_ReviewVariance,M_AnalyzeDiscrepancy,M_RequestRecount,M_InputNotes,M_ApproveAction,M_ExecuteAdjustment,M_ExportReport manager;
+    class K_OpenMenu,K_SelectDraft,K_ScanProduct,K_InputCount,K_SaveItemCount,K_SubmitAudit cashier;
+    class M_Snapshot,SYS_InitSession,SYS_CalcVariance,SYS_UpdateItem,SYS_Transaction,SYS_AdjustMasterStock,SYS_RecordLedger,SYS_UpdateStatus system;

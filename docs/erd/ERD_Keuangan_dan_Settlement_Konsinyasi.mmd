@@ -1,0 +1,97 @@
+
+erDiagram
+    USERS {
+        bigint id PK
+        string name
+    }
+    CHART_OF_ACCOUNTS {
+        bigint id PK
+        string account_code UK
+        string account_name
+        string account_type
+    }
+    ACCOUNT_MAPPINGS {
+        bigint id PK
+        string mapping_key UK
+        bigint account_id FK
+    }
+    JOURNAL_ENTRIES {
+        bigint id PK
+        string journal_number UK
+        datetime journal_date
+        string source_type
+        bigint created_by FK
+        string status
+    }
+    JOURNAL_ENTRY_LINES {
+        bigint id PK
+        bigint journal_entry_id FK
+        bigint account_id FK
+        decimal debit
+        decimal credit
+        string description
+    }
+    FISCAL_PERIODS {
+        bigint id PK
+        date start_date
+        date end_date
+        string status
+    }
+    SUPPLIERS {
+        bigint id PK
+        string name
+    }
+    CONSIGNMENT_SETTLEMENTS {
+        bigint id PK
+        string settlement_number UK
+        bigint supplier_id FK
+        date period_start
+        date period_end
+        datetime created_at
+        decimal total_amount
+        string status
+    }
+    CONSIGNMENT_SETTLEMENT_ITEMS {
+        bigint id PK
+        bigint settlement_id FK
+        bigint sale_item_allocation_id FK
+        decimal qty
+        decimal supplier_unit_price
+        decimal amount
+    }
+    SALE_ITEM_ALLOCATIONS {
+        bigint id PK
+        bigint sale_item_id FK
+        bigint inventory_layer_id FK
+        decimal qty
+    }
+    CASH_HANDOVER_HEADERS {
+        bigint id PK
+        string handover_number UK
+        bigint cash_session_id FK
+        bigint received_by FK
+        datetime handover_at
+        decimal total_amount
+        string status
+    }
+    CASH_HANDOVER_ITEMS {
+        bigint id PK
+        bigint handover_id FK
+        string tender_type
+        decimal amount
+    }
+    CASH_SESSIONS {
+        bigint id PK
+        bigint cashier_id FK
+    }
+
+    CHART_OF_ACCOUNTS ||--o{ ACCOUNT_MAPPINGS : mapped
+    CHART_OF_ACCOUNTS ||--o{ JOURNAL_ENTRY_LINES : posted
+    JOURNAL_ENTRIES ||--|{ JOURNAL_ENTRY_LINES : contains
+    USERS ||--o{ JOURNAL_ENTRIES : creates
+    SUPPLIERS ||--o{ CONSIGNMENT_SETTLEMENTS : settled
+    CONSIGNMENT_SETTLEMENTS ||--|{ CONSIGNMENT_SETTLEMENT_ITEMS : contains
+    SALE_ITEM_ALLOCATIONS ||--o{ CONSIGNMENT_SETTLEMENT_ITEMS : settled_from
+    CASH_SESSIONS ||--o{ CASH_HANDOVER_HEADERS : handed_over
+    USERS ||--o{ CASH_HANDOVER_HEADERS : receives
+    CASH_HANDOVER_HEADERS ||--|{ CASH_HANDOVER_ITEMS : breakdown

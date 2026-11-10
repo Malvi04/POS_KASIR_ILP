@@ -1,0 +1,116 @@
+
+erDiagram
+    USERS {
+        bigint id PK
+        string name
+        string email UK
+        string password
+        boolean is_active
+    }
+    ROLES {
+        bigint id PK
+        string name UK
+    }
+    PERMISSIONS {
+        bigint id PK
+        string code UK
+        string name
+    }
+    USER_ROLES {
+        bigint user_id FK
+        bigint role_id FK
+    }
+    ROLE_PERMISSIONS {
+        bigint role_id FK
+        bigint permission_id FK
+    }
+    LOCATIONS {
+        bigint id PK
+        string code UK
+        string name
+        string type
+        boolean is_active
+    }
+    USER_LOCATION_ACCESS {
+        bigint user_id FK
+        bigint location_id FK
+    }
+    EMPLOYEES {
+        bigint id PK
+        bigint user_id FK
+        string employee_code UK
+        string name
+    }
+    MEMBERS {
+        bigint id PK
+        string member_code UK
+        string name
+        string phone
+        boolean is_active
+    }
+    SUPPLIERS {
+        bigint id PK
+        string supplier_code UK
+        string name
+        string supplier_type
+        boolean is_active
+    }
+    PRODUCT_CATEGORIES {
+        bigint id PK
+        string name
+    }
+    UNITS {
+        bigint id PK
+        string name
+        string symbol
+    }
+    PRODUCTS {
+        bigint id PK
+        string sku UK
+        string name
+        bigint category_id FK
+        bigint base_unit_id FK
+        string product_type
+        boolean is_active
+    }
+    PRODUCT_BARCODES {
+        bigint id PK
+        bigint product_id FK
+        string barcode UK
+    }
+    PRODUCT_UNIT_CONVERSIONS {
+        bigint id PK
+        bigint product_id FK
+        bigint unit_id FK
+        decimal conversion_factor
+    }
+    PRODUCT_SUPPLIERS {
+        bigint id PK
+        bigint product_id FK
+        bigint supplier_id FK
+        string supplier_sku
+    }
+    SUPPLIER_PRODUCT_TERMS {
+        bigint id PK
+        bigint product_supplier_id FK
+        decimal purchase_price
+        string ownership_type
+        date effective_from
+        date effective_to
+    }
+
+    USERS ||--o{ USER_ROLES : has
+    ROLES ||--o{ USER_ROLES : assigned
+    ROLES ||--o{ ROLE_PERMISSIONS : grants
+    PERMISSIONS ||--o{ ROLE_PERMISSIONS : includes
+    USERS ||--o{ USER_LOCATION_ACCESS : authorized
+    LOCATIONS ||--o{ USER_LOCATION_ACCESS : accessible
+    USERS ||--o| EMPLOYEES : profile
+    PRODUCT_CATEGORIES ||--o{ PRODUCTS : categorizes
+    UNITS ||--o{ PRODUCTS : base_unit
+    PRODUCTS ||--o{ PRODUCT_BARCODES : identifies
+    PRODUCTS ||--o{ PRODUCT_UNIT_CONVERSIONS : converts
+    UNITS ||--o{ PRODUCT_UNIT_CONVERSIONS : unit
+    PRODUCTS ||--o{ PRODUCT_SUPPLIERS : supplied_by
+    SUPPLIERS ||--o{ PRODUCT_SUPPLIERS : provides
+    PRODUCT_SUPPLIERS ||--o{ SUPPLIER_PRODUCT_TERMS : terms

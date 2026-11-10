@@ -26,4 +26,7 @@ Homestead.json
 Homestead.yaml
 Thumbs.db
 /scratch
+*.sqlite
+/pos_kasir_ilp
+
 

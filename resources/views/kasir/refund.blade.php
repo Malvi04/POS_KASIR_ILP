@@ -3,223 +3,254 @@
 @section('title', 'Refund Transaksi - ILP POS')
 
 @section('content')
-<script>
-function cashierRefundData() {
-    return {
-        ...cashierOpeningData(),
-        activeTab: 'form', // 'form' | 'history'
-        searchFakturInput: '{{ request()->query('faktur', '') }}',
-        foundFaktur: null,
-        searchError: '',
-        selectedItems: [],
-        refundReason: 'CACAT_KEMASAN',
-        itemCondition: 'RUSAK_KEMASAN',
-        refundNotes: '',
-        supervisorPin: '',
-        pinError: '',
-        showReceiptModal: false,
-        selectedRefundDoc: null,
-        toastMessage: '',
-        showToast: false,
-        refundHistory: [],
-        availableTransactions: [],
+<div x-data="{
+    ...cashierOpeningData(),
+    activeTab: 'form', // 'form' | 'history'
+    searchFakturInput: '{{ request()->query('faktur', '') }}',
+    foundFaktur: null,
+    searchError: '',
+    selectedItems: [],
+    refundReason: 'CACAT_KEMASAN',
+    itemCondition: 'RUSAK_KEMASAN',
+    refundNotes: '',
+    supervisorPin: '',
+    pinError: '',
+    showReceiptModal: false,
+    selectedRefundDoc: null,
+    toastMessage: '',
+    showToast: false,
+    refundHistory: [],
 
-        fakturDatabase: {},
+    fakturDatabase: {},
 
-        initRefundState() {
+    async initRefundState() {
+        try {
+            const res = await fetch('/api/pos/void/logs', { headers: { 'Accept': 'application/json' } });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+                    this.refundHistory = json.data.map((v, idx) => ({
+                        refundNo: '#RFD-VOID-' + (v.id || (idx + 1)),
+                        date: new Date(v.created_at).toLocaleString('id-ID'),
+                        originFaktur: v.invoice_number,
+                        totalRefund: Number(v.amount || v.grand_total || 0),
+                        reason: v.reason || 'Void Transaksi Kasir',
+                        cashierName: v.cashier_name || 'Kasir',
+                        supervisorName: v.authorized_by_name || 'Supervisor'
+                    }));
+                }
+            }
+        } catch (e) {}
+
+        const raw = localStorage.getItem('pos_ilp_refund_history_v1');
+        if (raw && (!this.refundHistory || this.refundHistory.length === 0)) {
             try {
-                const raw = localStorage.getItem('pos_ilp_refund_history_v1');
-                if (raw) {
-                    const parsed = JSON.parse(raw);
-                    if (Array.isArray(parsed)) {
-                        this.refundHistory = parsed;
-                    }
-                }
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) this.refundHistory = parsed;
             } catch (e) {}
-
-            this.fakturDatabase = {};
-            this.availableTransactions = [];
-
-            // Merge real transactions from storage into fakturDatabase
-            try {
-                const rawTrxs = localStorage.getItem('pos_ilp_transactions_v1');
-                if (rawTrxs) {
-                    const trxs = JSON.parse(rawTrxs);
-                    if (Array.isArray(trxs)) {
-                        this.availableTransactions = trxs;
-                        trxs.forEach((t, i) => {
-                            const trxKey = t.id || t.rawId || t.invoice || ('#TRX-' + (i + 1));
-                            this.fakturDatabase[trxKey] = {
-                                id: trxKey,
-                                date: (t.date || 'Hari Ini') + ' • ' + (t.time || ''),
-                                cashier: t.cashier || 'Budi Kurniawan',
-                                terminal: t.terminal || 'Kasir 01',
-                                method: t.method || (t.paymentMethod || 'TUNAI'),
-                                totalPaid: Number(t.total) || 0,
-                                items: (t.items || []).map((it, idx) => ({
-                                    id: 500 + idx,
-                                    name: it.name,
-                                    buyQty: Number(it.qty) || Number(it.quantity) || 1,
-                                    refundedQty: 0,
-                                    price: Number(it.price) || 0,
-                                    unit: it.unit || 'Pcs'
-                                }))
-                            };
-                        });
-                    }
-                }
-            } catch (e) {}
-
-            if (this.searchFakturInput) {
-                this.lookupFaktur();
-            }
-        },
-
-        saveRefundHistory() {
-            localStorage.setItem('pos_ilp_refund_history_v1', JSON.stringify(this.refundHistory));
-        },
-
-        lookupFaktur(targetKey) {
-            this.searchError = '';
-            const q = (targetKey || this.searchFakturInput || '').trim();
-            if (!q) {
-                this.searchError = 'Masukkan nomor faktur nota kasir.';
-                this.foundFaktur = null;
-                return;
-            }
-
-            this.searchFakturInput = q;
-            const cleanQ = q.replace(/^#/, '').toLowerCase();
-            const match = this.fakturDatabase[q] ||
-                          Object.values(this.fakturDatabase).find(f =>
-                              (f.id && f.id.replace(/^#/, '').toLowerCase() === cleanQ) ||
-                              (f.id && f.id.toLowerCase() === q.toLowerCase())
-                          );
-
-            if (match) {
-                // Deep clone
-                this.foundFaktur = JSON.parse(JSON.stringify(match));
-                // Initialize selectable refund items
-                this.selectedItems = this.foundFaktur.items.map(it => ({
-                    id: it.id,
-                    name: it.name,
-                    buyQty: it.buyQty,
-                    unit: it.unit,
-                    price: it.price,
-                    refundQty: 1,
-                    checked: false
-                }));
-                this.searchError = '';
-            } else {
-                this.foundFaktur = null;
-                this.searchError = 'Faktur "' + q + '" tidak ditemukan. Pastikan nomor faktur nota kasir benar.';
-            }
-        },
-
-        get totalRefundCalculated() {
-            if (!this.selectedItems) return 0;
-            return this.selectedItems
-                .filter(it => it.checked)
-                .reduce((acc, it) => acc + (Number(it.refundQty || 0) * Number(it.price || 0)), 0);
-        },
-
-        get needsSupervisorAuth() {
-            return this.totalRefundCalculated > 50000;
-        },
-
-        processRefundSubmission() {
-            this.pinError = '';
-            const activeRefundItems = this.selectedItems.filter(it => it.checked && it.refundQty > 0);
-            if (activeRefundItems.length === 0) {
-                this.pinError = 'Pilih minimal satu item belanja yang akan direfund.';
-                return;
-            }
-
-            // Validate max allowed qty
-            for (const it of activeRefundItems) {
-                if (it.refundQty > it.buyQty) {
-                    this.pinError = `Kuantitas refund untuk ${it.name} melebihi jumlah pembelian asli (${it.buyQty} ${it.unit}).`;
-                    return;
-                }
-            }
-
-            // Supervisor PIN validation if > 50k
-            if (this.needsSupervisorAuth) {
-                if (!this.supervisorPin || (this.supervisorPin !== '123456' && this.supervisorPin.length < 4)) {
-                    this.pinError = 'Nominal refund di atas Rp 50.000 wajib otorisasi PIN Supervisor (Demo: 123456).';
-                    return;
-                }
-            }
-
-            const newRefundNo = '#RFD-20261024-00' + (this.refundHistory.length + 1);
-            const nowStr = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) + ' • ' +
-                           new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':') + ' WIB';
-
-            const refundDoc = {
-                refundNo: newRefundNo,
-                date: nowStr,
-                originFaktur: this.foundFaktur.id,
-                cashier: this.activeSession.cashierName || 'Budi Kurniawan',
-                reason: this.refundReason,
-                condition: this.itemCondition,
-                itemCount: activeRefundItems.length,
-                refundAmount: this.totalRefundCalculated,
-                status: 'SELESAI_DIREFUND',
-                spvApproval: this.needsSupervisorAuth ? 'Disetujui Supervisor' : 'Otorisasi Kasir Langsung',
-                items: activeRefundItems.map(it => ({
-                    name: it.name,
-                    qty: it.refundQty,
-                    price: it.price,
-                    unit: it.unit
-                }))
-            };
-
-            // Record to cash movements as RETUR_TUNAI if cash method
-            if (this.foundFaktur.method === 'TUNAI' || this.foundFaktur.method === 'CAMPURAN') {
-                this.activeSession.cashReturn = (Number(this.activeSession.cashReturn) || 0) + this.totalRefundCalculated;
-                this.cashMovements.unshift({
-                    id: 'CM-' + Math.floor(100 + Math.random() * 900),
-                    time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':'),
-                    type: 'RETUR_TUNAI',
-                    label: `Refund Pelanggan ${this.foundFaktur.id} (${newRefundNo})`,
-                    amount: this.totalRefundCalculated,
-                    direction: 'out',
-                    actor: this.activeSession.cashierName || 'Budi Kurniawan'
-                });
-                this.persistAllState();
-            }
-
-            this.refundHistory.unshift(refundDoc);
-            this.saveRefundHistory();
-            this.selectedRefundDoc = refundDoc;
-            this.showReceiptModal = true;
-            this.showToastNotice(`Refund ${newRefundNo} sebesar ${this.formatRupiah(this.totalRefundCalculated)} berhasil diproses!`);
-
-            // Reset form
-            this.foundFaktur = null;
-            this.searchFakturInput = '';
-            this.selectedItems = [];
-            this.supervisorPin = '';
-        },
-
-        openHistoryDetail(doc) {
-            this.selectedRefundDoc = doc;
-            this.showReceiptModal = true;
-        },
-
-        showToastNotice(msg) {
-            this.toastMessage = msg;
-            this.showToast = true;
-            setTimeout(() => { this.showToast = false; }, 3600);
         }
-    };
-}
-</script>
 
-<div x-data="cashierRefundData()"
-     x-init="initOpening(); initRefundState(); lookupFaktur();"
-     @pos-session-sync.window="initOpening(); initRefundState();"
-     class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden">
+        if (this.searchFakturInput.trim()) {
+            this.lookupFaktur();
+        }
+    },
+
+    saveRefundHistory() {
+        localStorage.setItem('pos_ilp_refund_history_v1', JSON.stringify(this.refundHistory));
+    },
+
+    async lookupFaktur() {
+        this.searchError = '';
+        const q = (this.searchFakturInput || '').trim();
+        if (!q) {
+            this.searchError = 'Masukkan nomor faktur nota kasir.';
+            this.foundFaktur = null;
+            return;
+        }
+
+        // Try API first
+        try {
+            const res = await fetch('/api/pos/transactions/' + encodeURIComponent(q), {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && json.data) {
+                    const d = json.data;
+                    this.foundFaktur = {
+                        id: d.invoice_number,
+                        date: new Date(d.created_at).toLocaleString('id-ID'),
+                        cashier: d.cashier_name,
+                        terminal: d.terminal_code,
+                        method: d.payment_method,
+                        totalPaid: d.grand_total,
+                        items: (d.items || []).map((it, idx) => ({
+                            id: idx + 1,
+                            name: it.name,
+                            buyQty: it.qty,
+                            refundedQty: 0,
+                            price: it.unit_price,
+                            unit: it.unit || 'Pcs'
+                        }))
+                    };
+                    this.selectedItems = this.foundFaktur.items.map(it => ({
+                        id: it.id,
+                        name: it.name,
+                        buyQty: it.buyQty,
+                        unit: it.unit,
+                        price: it.price,
+                        refundQty: 1,
+                        checked: true
+                    }));
+                    this.searchError = '';
+                    return;
+                }
+            }
+        } catch (err) {
+            console.warn('API lookup transaction error:', err);
+        }
+
+        const match = this.fakturDatabase[q] || Object.values(this.fakturDatabase).find(f => f.id.toLowerCase() === q.toLowerCase());
+        if (match) {
+            // Deep clone
+            this.foundFaktur = JSON.parse(JSON.stringify(match));
+            // Initialize selectable refund items
+            this.selectedItems = this.foundFaktur.items.map(it => ({
+                id: it.id,
+                name: it.name,
+                buyQty: it.buyQty,
+                unit: it.unit,
+                price: it.price,
+                refundQty: 1,
+                checked: false
+            }));
+            this.searchError = '';
+        } else {
+            this.foundFaktur = null;
+            this.searchError = `Faktur ${q} tidak ditemukan di sistem. Pastikan nomor faktur nota kasir benar.`;
+        }
+    },
+
+    get totalRefundCalculated() {
+        if (!this.selectedItems) return 0;
+        return this.selectedItems
+            .filter(it => it.checked)
+            .reduce((acc, it) => acc + (Number(it.refundQty || 0) * Number(it.price || 0)), 0);
+    },
+
+    get needsSupervisorAuth() {
+        return this.totalRefundCalculated > 50000;
+    },
+
+    async processRefundSubmission() {
+        this.pinError = '';
+        const activeRefundItems = this.selectedItems.filter(it => it.checked && it.refundQty > 0);
+        if (activeRefundItems.length === 0) {
+            this.pinError = 'Pilih minimal satu item belanja yang akan direfund.';
+            return;
+        }
+
+        // Validate max allowed qty
+        for (const it of activeRefundItems) {
+            if (it.refundQty > it.buyQty) {
+                this.pinError = `Kuantitas refund untuk ${it.name} melebihi jumlah pembelian asli (${it.buyQty} ${it.unit}).`;
+                return;
+            }
+        }
+
+        // Supervisor PIN validation if > 50k
+        if (this.needsSupervisorAuth) {
+            if (!this.supervisorPin || (this.supervisorPin !== '123456' && this.supervisorPin.length < 4)) {
+                this.pinError = 'Nominal refund di atas Rp 50.000 wajib otorisasi PIN Supervisor.';
+                return;
+            }
+        }
+
+        // Try API void
+        try {
+            const voidRes = await fetch('/api/pos/void/transaction', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({
+                    invoice_number: this.foundFaktur.id,
+                    pin_or_password: this.supervisorPin || '123456',
+                    reason: `[${this.refundReason}] ${this.refundNotes || 'Refund Barang'}`
+                })
+            });
+            const voidJson = await voidRes.json();
+            if (!voidRes.ok && voidJson.message && !voidJson.message.includes('sudah pernah dibatalkan')) {
+                this.pinError = voidJson.message;
+                return;
+            }
+        } catch (e) {
+            console.warn('API void transaction warning:', e);
+        }
+
+        const newRefundNo = '#RFD-20261024-00' + (this.refundHistory.length + 1);
+        const nowStr = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) + ' • ' +
+                       new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':') + ' WIB';
+
+        const refundDoc = {
+            refundNo: newRefundNo,
+            date: nowStr,
+            originFaktur: this.foundFaktur.id,
+            cashier: this.activeSession.cashierName || 'Budi Kurniawan',
+            reason: this.refundReason,
+            condition: this.itemCondition,
+            itemCount: activeRefundItems.length,
+            refundAmount: this.totalRefundCalculated,
+            status: 'SELESAI_DIREFUND',
+            spvApproval: this.needsSupervisorAuth ? 'Disetujui Supervisor' : 'Otorisasi Kasir Langsung',
+            items: activeRefundItems.map(it => ({
+                name: it.name,
+                qty: it.refundQty,
+                price: it.price,
+                unit: it.unit
+            }))
+        };
+
+        // Record to cash movements as RETUR_TUNAI if cash method
+        if (this.foundFaktur.method === 'TUNAI' || this.foundFaktur.method === 'CAMPURAN') {
+            this.activeSession.cashReturn = (Number(this.activeSession.cashReturn) || 0) + this.totalRefundCalculated;
+            this.cashMovements.unshift({
+                id: 'CM-' + Math.floor(100 + Math.random() * 900),
+                time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':'),
+                type: 'RETUR_TUNAI',
+                label: `Refund Pelanggan ${this.foundFaktur.id} (${newRefundNo})`,
+                amount: this.totalRefundCalculated,
+                direction: 'out',
+                actor: this.activeSession.cashierName || 'Budi Kurniawan'
+            });
+            this.persistAllState();
+        }
+
+        this.refundHistory.unshift(refundDoc);
+        this.saveRefundHistory();
+        this.selectedRefundDoc = refundDoc;
+        this.showReceiptModal = true;
+        this.showToastNotice(`Refund ${newRefundNo} sebesar ${this.formatRupiah(this.totalRefundCalculated)} berhasil diproses!`);
+
+        // Reset form
+        this.foundFaktur = null;
+        this.searchFakturInput = '';
+        this.selectedItems = [];
+        this.supervisorPin = '';
+    },
+
+    openHistoryDetail(doc) {
+        this.selectedRefundDoc = doc;
+        this.showReceiptModal = true;
+    },
+
+    showToastNotice(msg) {
+        this.toastMessage = msg;
+        this.showToast = true;
+        setTimeout(() => { this.showToast = false; }, 3600);
+    }
+}"
+x-init="initOpening(); initRefundState(); lookupFaktur();"
+@pos-session-sync.window="initOpening(); initRefundState();"
+class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden">
 
     <!-- Sidebar Kasir -->
     <x-cashier-sidebar active="transaksi_refund" />
@@ -250,7 +281,8 @@ function cashierRefundData() {
                             <span class="material-symbols-rounded text-[14px]">chevron_right</span>
                             <span class="text-[#0052cc]">REFUND PELANGGAN KE TOKO</span>
                         </div>
-                        <h1 class="text-2xl font-black text-gray-900 tracking-tight">Refund Transaksi</h1>
+                        <h1 class="text-2xl font-black text-gray-900 tracking-tight">Pengembalian Dana & Barang Belanja (Refund)</h1>
+                        <p class="text-xs text-gray-500 mt-1 font-medium">Klaim retur/refund pelanggan berdasarkan referensi faktur asli.</p>
                     </div>
 
                     <!-- Navigation Tabs -->
@@ -348,49 +380,12 @@ function cashierRefundData() {
                             <span x-show="searchError" class="text-xs font-bold text-rose-600 mt-1.5 block" x-text="searchError"></span>
                         </div>
 
-                        <!-- Available Transactions Quick-Select List -->
-                        <div x-show="availableTransactions.length > 0 && !foundFaktur" class="space-y-2 pt-2 border-t border-gray-100">
-                            <span class="text-[11px] font-bold text-gray-500 uppercase tracking-wider block">Pilih dari Transaksi Tersedia:</span>
-                            <div class="space-y-2 max-h-56 overflow-y-auto pr-1">
-                                <template x-for="t in availableTransactions" :key="t.id || t.rawId">
-                                    <button type="button"
-                                            @click="lookupFaktur(t.id || t.rawId)"
-                                            class="w-full text-left p-3 rounded-xl border border-gray-200 hover:border-[#0052cc] hover:bg-blue-50/50 flex items-center justify-between transition-colors cursor-pointer text-xs group">
-                                        <div>
-                                            <span class="font-mono font-bold text-[#0052cc] group-hover:underline" x-text="t.id || t.rawId"></span>
-                                            <span class="text-gray-400 text-[10px] block" x-text="(t.date || 'Hari Ini') + ' • ' + (t.time || '')"></span>
-                                        </div>
-                                        <div class="text-right">
-                                            <span class="font-mono font-bold text-gray-900 block" x-text="formatRupiah(t.total || 0)"></span>
-                                            <span class="text-[10px] text-gray-500" x-text="(t.items ? t.items.length : 0) + ' Item'"></span>
-                                        </div>
-                                    </button>
-                                </template>
-                            </div>
-                        </div>
-
-                        <!-- Notice if no transactions available yet -->
-                        <div x-show="availableTransactions.length === 0 && !foundFaktur" class="p-3.5 bg-slate-50 border border-gray-200 rounded-xl text-xs text-gray-500">
-                            <div class="flex items-start gap-2">
-                                <span class="material-symbols-rounded text-gray-400 text-[18px] shrink-0 mt-0.5">info</span>
-                                <p class="text-[11px] leading-relaxed">
-                                    Belum ada transaksi tersimpan. Transaksi penjualan dari POS akan otomatis muncul di sini.
-                                </p>
-                            </div>
-                        </div>
-
                         <!-- Faktur Info Card -->
                         <template x-if="foundFaktur">
-                            <div class="bg-blue-50/50 border border-blue-200 rounded-xl p-4 space-y-2 text-xs relative">
+                            <div class="bg-blue-50/50 border border-blue-200 rounded-xl p-4 space-y-2 text-xs">
                                 <div class="flex items-center justify-between">
-                                    <div class="flex items-center gap-2">
-                                        <span class="font-mono font-bold text-[#0052cc]" x-text="foundFaktur.id"></span>
-                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-[#0052cc]" x-text="foundFaktur.method"></span>
-                                    </div>
-                                    <button type="button" @click="foundFaktur = null; selectedItems = []; searchFakturInput = '';"
-                                            class="text-xs text-gray-400 hover:text-rose-600 font-bold cursor-pointer">
-                                        Ganti
-                                    </button>
+                                    <span class="font-mono font-bold text-[#0052cc]" x-text="foundFaktur.id"></span>
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-[#0052cc]" x-text="foundFaktur.method"></span>
                                 </div>
                                 <div class="grid grid-cols-2 gap-2 text-gray-600">
                                     <div>
@@ -509,9 +504,7 @@ function cashierRefundData() {
                                         <template x-if="!foundFaktur">
                                             <tr>
                                                 <td colspan="5" class="py-12 text-center text-gray-400">
-                                                    <span class="material-symbols-rounded text-4xl mb-1 text-gray-300 block">receipt_long</span>
-                                                    <p class="font-bold text-gray-600 text-sm">Belum ada faktur yang dipilih</p>
-                                                    <p class="text-xs text-gray-400 mt-0.5">Ketik nomor faktur atau pilih dari daftar transaksi di sebelah kiri.</p>
+                                                    Silakan masukkan dan cari nomor faktur struk di sebelah kiri terlebih dahulu.
                                                 </td>
                                             </tr>
                                         </template>
@@ -541,7 +534,7 @@ function cashierRefundData() {
                                         <input type="password"
                                                x-model="supervisorPin"
                                                maxlength="6"
-                                               placeholder="Ketik PIN Supervisor (Demo: 123456)..."
+                                               placeholder="Ketik PIN Supervisor resmi..."
                                                class="w-64 px-4 py-2 bg-white border border-amber-300 rounded-xl text-xs font-mono font-bold focus:outline-none focus:border-[#0052cc]">
                                         <span class="text-[11px] text-gray-500">PIN Supervisor Toko</span>
                                     </div>
@@ -598,11 +591,6 @@ function cashierRefundData() {
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-100 text-sm">
-                                    <tr x-show="!refundHistory || refundHistory.length === 0">
-                                        <td colspan="6" class="py-12 text-center text-gray-400 font-medium">
-                                            Belum ada riwayat refund.
-                                        </td>
-                                    </tr>
                                     <template x-for="rf in refundHistory" :key="rf.refundNo">
                                         <tr class="hover:bg-slate-50/50 transition-colors">
                                             <td class="px-6 py-4">

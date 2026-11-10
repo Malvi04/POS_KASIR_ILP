@@ -1,0 +1,97 @@
+flowchart TD
+    %% Activity Diagram: Buka Tutup Sesi & Serah Terima Kasir (Cash Handover Wizard)
+    %% Sistem POS Minimarket Koperasi PT Indo Lampung Perkasa
+
+    subgraph PHASE_OPEN["1. ALUR BUKA SESI KASIR (SHIFT OPENING)"]
+        Start((Mulai)) --> Login["Kasir Login menggunakan NIK & PIN"]
+        Login --> SelectTerminal["Pilih Lokasi Cabang & Terminal (POS-01 s/d POS-15)"]
+        SelectTerminal --> CheckTerminal{"Cek Status Terminal di Sistem"}
+
+        CheckTerminal -- "Sesi Aktif Ditemukan" --> CheckOwner{"Sesi milik Kasir yang login?"}
+        CheckOwner -- "Ya" --> ResumeSession["Lanjutkan Sesi Aktif (Resumption)"]
+        ResumeSession --> EnterPOS["Masuk ke Terminal Transaksi POS"]
+
+        CheckOwner -- "Bukan (Milik Kasir Lain)" --> RejectOpening["Tolak Pembukaan Sesi (Wajib Ditutup oleh Kasir Terdaftar)"]
+        RejectOpening --> EndCancel((Selesai / Ditolak))
+
+        CheckTerminal -- "Status HANDOVER_PENDING" --> ViewHandover["Sistem tampilkan nominal operan dari kasir sebelumnya"]
+        ViewHandover --> RecvDenom["Kasir penerima hitung fisik laci via Kalkulator Denominasi"]
+        RecvDenom --> InputHandover["Input nominal uang awal yang diterima"]
+        InputHandover --> CheckMatch{"Sesuai dengan operan sebelumnya?"}
+        CheckMatch -- "Tidak Sesuai" --> NoteHandoverDiff["Catat selisih operan & minta verifikasi Supervisor"]
+        NoteHandoverDiff --> ConfirmInitial["Konfirmasi nominal uang modal awal aktual"]
+        CheckMatch -- "Sesuai" --> ConfirmInitial
+
+        CheckTerminal -- "Status AVAILABLE (Kosong)" --> OpenDenom["Kasir hitung uang modal laci via Kalkulator Denominasi"]
+        OpenDenom --> InputOpening["Input nominal modal awal laci (Opening Cash)"]
+        InputOpening --> ConfirmInitial
+
+        ConfirmInitial --> CreateShift["Sistem buat sesi shift baru (Status: OPEN, ID: CS-YYYYMMDD-XXX)"]
+        CreateShift --> EnterPOS
+    end
+
+    subgraph PHASE_OPS["2. OPERASIONAL SESI BERJALAN"]
+        EnterPOS --> ServeTrx["Kasir melayani transaksi penjualan di POS"]
+        ServeTrx --> NeedMovement{"Ada transaksi kas di luar penjualan?"}
+        
+        NeedMovement -- "Ya (Kas Masuk / Keluar / Drop)" --> RecordCashMovement["Catat Arus Kas Laci (Petty Cash In / Operational Cash Out / Cash Drop)"]
+        RecordCashMovement --> UpdateDrawer["Sistem perbarui saldo kas laci berjalan"]
+        UpdateDrawer --> ServeTrx
+
+        NeedMovement -- "Perlu Istirahat / Sholat" --> TempLock["Kunci Terminal Sementara (Terminal Lock) tanpa menutup sesi finansial"]
+        TempLock --> UnlockTerminal["Buka kunci dengan PIN Kasir / Pergantian Operator"]
+        UnlockTerminal --> ServeTrx
+
+        NeedMovement -- "Shift Berakhir" --> RequestClose["Kasir pilih menu 'Tutup Sesi Kasir' di /kasir/sesi"]
+    end
+
+    subgraph PHASE_CLOSE["3. WIZARD TUTUP SESI & SERAH TERIMA (3-STEP CASH HANDOVER)"]
+        RequestClose --> Step1["Langkah 1: Ringkasan Sistem & Perhitungan Fisik (Blind Count)"]
+        Step1 --> SysSummary["Sistem rekapitulasi: Modal Awal + Penjualan Tunai + Kas Masuk - Kas Keluar = Expected Cash"]
+        SysSummary --> CountDrawer["Kasir hitung uang fisik laci lembar & koin via Kalkulator Denominasi"]
+        CountDrawer --> HandleHold{"Ada transaksi tertahan (Held Bill)?"}
+        HandleHold -- "Ya" --> SettleHeld["Tentukan aksi: Wariskan (Inherit) ke kasir baru atau Batalkan"]
+        HandleHold -- "Tidak" --> Step2
+        SettleHeld --> Step2
+
+        Step2["Langkah 2: Rekonsiliasi & Analisis Selisih Kas"]
+        Step2 --> CompareCash["Sistem bandingkan Uang Fisik Aktual vs Kas Seharusnya (Variance)"]
+        CompareCash --> CheckDiff{"Apakah terdapat selisih?"}
+
+        CheckDiff -- "Selisih Rp 0 (Sesuai)" --> MarkBalanced["Status: SESUAI"]
+        CheckDiff -- "Variance < 0 (Selisih Kurang)" --> Shortage["Kasir isi kategori selisih & alasan kekurangan kas"]
+        CheckDiff -- "Variance > 0 (Selisih Lebih)" --> Overage["Kasir isi keterangan sumber kelebihan kas"]
+
+        MarkBalanced --> Step3
+        Shortage --> ReviewSPV["Tandai perlu ditinjau / otorisasi Supervisor"]
+        Overage --> ReviewSPV
+        ReviewSPV --> Step3
+
+        Step3["Langkah 3: Alokasi Modal & Serah Terima Kas"]
+        Step3 --> HandoverChoice{"Metode Penutupan Shift?"}
+
+        HandoverChoice -- "Serah Terima ke Kasir Berikutnya" --> NextCashier["Input NIK & PIN Kasir Pengganti serta catatan serah terima"]
+        NextCashier --> SetPending["Sistem tandai terminal berstatus HANDOVER_PENDING"]
+
+        HandoverChoice -- "Tutup Toko / Setor Brankas" --> DropSafe["Uang fisik laci diserahkan ke Supervisor / disimpan di brankas toko"]
+        DropSafe --> SetClosed["Sistem tandai terminal berstatus AVAILABLE"]
+
+        SetPending --> FinalizeClose["Sistem tutup sesi shift (Status: CLOSED / HANDOVER_DONE)"]
+        SetClosed --> FinalizeClose
+
+        FinalizeClose --> PrintReport["Cetak Struk Rekapitulasi Kas & Berita Acara Serah Terima"]
+        PrintReport --> Finish((Selesai))
+    end
+
+    classDef phase fill:#f0f4f8,stroke:#0052cc,stroke-width:2px,color:#0f172a;
+    classDef startend fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:1.5px;
+    classDef process fill:#eff6ff,stroke:#2563eb,color:#1e3a8a,stroke-width:1.2px;
+    classDef decision fill:#fffbeb,stroke:#d97706,color:#78350f,stroke-width:1.2px;
+    classDef error fill:#fee2e2,stroke:#dc2626,color:#7f1d1d,stroke-width:1.2px;
+    classDef system fill:#f1f5f9,stroke:#475569,color:#1e293b,stroke-width:1.2px;
+
+    class Start,Finish startend;
+    class EndCancel,RejectOpening error;
+    class CheckTerminal,CheckOwner,CheckMatch,NeedMovement,HandleHold,CheckDiff,HandoverChoice decision;
+    class Login,SelectTerminal,ResumeSession,RecvDenom,InputHandover,ConfirmInitial,OpenDenom,InputOpening,ServeTrx,RecordCashMovement,TempLock,UnlockTerminal,RequestClose,Step1,CountDrawer,SettleHeld,Step2,Shortage,Overage,ReviewSPV,Step3,NextCashier,DropSafe,PrintReport process;
+    class EnterPOS,CreateShift,UpdateDrawer,SysSummary,CompareCash,MarkBalanced,SetPending,SetClosed,FinalizeClose,ViewHandover system;

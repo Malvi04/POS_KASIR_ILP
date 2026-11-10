@@ -16,7 +16,21 @@
 
     documents: [],
 
-    initGoodsIn() {
+    async initGoodsIn() {
+        try {
+            const res = await fetch('/api/goods-receipts', { headers: { 'Accept': 'application/json' } });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+                    this.documents = json.data;
+                    this.saveDocs();
+                    return;
+                }
+            }
+        } catch(e) {
+            console.warn('API goods-receipts fetch error:', e);
+        }
+
         const stored = localStorage.getItem('pos_ilp_goods_in_docs_v1');
         if (stored) {
             try {
@@ -127,7 +141,26 @@
             original.receiverName = (this.activeSession?.cashierName || 'Budi Kurniawan') + ' (Kasir)';
             original.generalNotes = this.verifyNotes.trim() || (hasVariance ? 'Penerimaan diverifikasi dengan catatan selisih/kondisi.' : 'Penerimaan fisik barang transfer lengkap dan sesuai.');
 
-            // Update master inventory stock!
+            // Update master inventory stock via API
+            if (original.id && typeof original.id === 'number') {
+                try {
+                    fetch('/api/goods-receipts/' + original.id + '/verify', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                        body: JSON.stringify({
+                            receiver_name: original.receiverName,
+                            notes: original.generalNotes,
+                            items: (original.items || []).map(it => ({
+                                id: it.id,
+                                qty_received: it.qtyReceived,
+                                condition: it.condition,
+                                note: it.note
+                            }))
+                        })
+                    }).catch(err => console.warn('API sync receipt error', err));
+                } catch (e) {}
+            }
+
             this.updateInventoryStock(original.items);
             this.saveDocs();
 

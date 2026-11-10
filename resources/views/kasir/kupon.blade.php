@@ -31,18 +31,37 @@
     },
 
     coupons: [],
+    isLoadingCoupons: false,
 
-    initCoupons() {
+    async initCoupons() {
+        this.isLoadingCoupons = true;
+        try {
+            const res = await fetch('/api/coupons?per_page=100');
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && Array.isArray(json.data)) {
+                    this.coupons = json.data;
+                    this.saveCoupons();
+                    this.isLoadingCoupons = false;
+                    return;
+                }
+            }
+        } catch (e) {
+            console.warn('Coupon API fetch error:', e);
+        } finally {
+            this.isLoadingCoupons = false;
+        }
+
         const stored = localStorage.getItem('pos_ilp_coupons_v1');
         if (stored) {
             try {
                 this.coupons = JSON.parse(stored);
+                if (Array.isArray(this.coupons)) return;
             } catch (e) {
                 this.coupons = [];
             }
-        } else {
-            this.coupons = [];
         }
+        this.coupons = [];
     },
 
     saveCoupons() {
@@ -132,6 +151,30 @@
         this.showNewKuponModal = false;
         this.triggerToast('Kupon ' + newEntry.id + ' berhasil didaftarkan dan tervalidasi!');
 
+        // Post to backend database asynchronously
+        try {
+            fetch('/api/coupons', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({
+                    category: this.formKupon.category,
+                    serial_number: newEntry.id,
+                    recipient_name: newEntry.recipientName,
+                    recipient_nik: newEntry.recipientNik,
+                    recipient_dept: newEntry.recipientRole,
+                    volume: newEntry.qty,
+                    nominal_value: newEntry.nominal,
+                    notes: newEntry.itemDetail,
+                    status: newEntry.status
+                })
+            }).then(r => r.json()).then(res => {
+                if (res.success && res.data && res.data.id) {
+                    newEntry.raw_id = res.data.id;
+                    this.saveCoupons();
+                }
+            }).catch(err => console.warn('Coupons API background sync', err));
+        } catch(e) {}
+
         // Reset form
         this.formKupon.code = '';
         this.formKupon.recipientName = '';
@@ -160,6 +203,22 @@
             this.editingKupon.dotClass = dot;
             this.coupons[idx] = this.editingKupon;
             this.saveCoupons();
+
+            if (this.editingKupon.raw_id) {
+                fetch(`/api/coupons/${this.editingKupon.raw_id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({
+                        recipient_name: this.editingKupon.recipientName,
+                        recipient_dept: this.editingKupon.recipientRole,
+                        nominal_value: this.editingKupon.nominal,
+                        volume: this.editingKupon.qty,
+                        notes: this.editingKupon.itemDetail,
+                        status: this.editingKupon.status
+                    })
+                }).catch(err => console.warn('Coupon edit API sync', err));
+            }
+
             this.triggerToast('Kupon ' + this.editingKupon.id + ' berhasil diperbarui!');
         }
         this.showEditKuponModal = false;
@@ -179,6 +238,15 @@
             return;
         }
         const idToDelete = this.selectedKupon.id;
+        const rawId = this.selectedKupon.raw_id;
+
+        if (rawId) {
+            fetch(`/api/coupons/${rawId}`, {
+                method: 'DELETE',
+                headers: { 'Accept': 'application/json' }
+            }).catch(err => console.warn('Coupon delete API sync', err));
+        }
+
         this.coupons = this.coupons.filter(c => c.id !== idToDelete);
         this.saveCoupons();
         this.showDeleteModal = false;

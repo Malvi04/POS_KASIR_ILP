@@ -16,14 +16,35 @@
 
     transactions: [],
 
-    defaultTransactions: [],
+    async initTransactions() {
+        try {
+            const params = new URLSearchParams({
+                search: this.searchQuery.trim(),
+                payment_method: this.methodFilter,
+                status: this.statusFilter,
+                date: this.dateFilter,
+                per_page: 50
+            });
+            const res = await fetch(`/api/pos/transactions?${params.toString()}`, {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && Array.isArray(json.data)) {
+                    this.transactions = json.data;
+                    localStorage.setItem('pos_ilp_transactions_v1', JSON.stringify(this.transactions));
+                    return;
+                }
+            }
+        } catch (e) {
+            console.warn('API transactions fetch error:', e);
+        }
 
-    initTransactions() {
         try {
             const raw = localStorage.getItem('pos_ilp_transactions_v1');
             if (raw) {
                 const parsed = JSON.parse(raw);
-                if (Array.isArray(parsed) && parsed.length > 0) {
+                if (Array.isArray(parsed)) {
                     this.transactions = parsed;
                     return;
                 }
@@ -38,9 +59,9 @@
             if (this.statusFilter !== 'all' && t.status !== this.statusFilter) return false;
             if (this.searchQuery.trim() !== '') {
                 const q = this.searchQuery.toLowerCase();
-                const matchId = t.id.toLowerCase().includes(q);
-                const matchCashier = t.cashier.toLowerCase().includes(q);
-                const matchItems = t.items.some(it => it.name.toLowerCase().includes(q));
+                const matchId = (t.id || '').toLowerCase().includes(q);
+                const matchCashier = (t.cashier || '').toLowerCase().includes(q);
+                const matchItems = Array.isArray(t.items) && t.items.some(it => (it.name || '').toLowerCase().includes(q));
                 return matchId || matchCashier || matchItems;
             }
             return true;
@@ -174,6 +195,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <span class="material-symbols-rounded absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-[20px]">search</span>
                         <input type="text"
                                x-model="searchQuery"
+                               @input.debounce.300ms="initTransactions()"
                                placeholder="Cari nomor faktur (#TRX-...), nama kasir, atau nama item..."
                                class="w-full pl-11 pr-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 text-[13px] shadow-xs font-medium bg-slate-50/50">
                     </div>
@@ -182,6 +204,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <!-- Method Filter -->
                         <div class="relative">
                             <select x-model="methodFilter"
+                                    @change="initTransactions()"
                                     class="appearance-none bg-white border border-gray-200 rounded-xl px-4 py-2.5 pr-10 text-[13px] text-gray-700 focus:outline-none focus:border-[#0052cc] shadow-xs font-semibold cursor-pointer">
                                 <option value="all">Semua Metode Pembayaran</option>
                                 <option value="TUNAI">Tunai</option>
@@ -195,6 +218,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <!-- Status Filter -->
                         <div class="relative">
                             <select x-model="statusFilter"
+                                    @change="initTransactions()"
                                     class="appearance-none bg-white border border-gray-200 rounded-xl px-4 py-2.5 pr-10 text-[13px] text-gray-700 focus:outline-none focus:border-[#0052cc] shadow-xs font-semibold cursor-pointer">
                                 <option value="all">Semua Status</option>
                                 <option value="SELESAI">Selesai (Lunas)</option>

@@ -1,0 +1,145 @@
+flowchart TD
+    %% Activity Diagram: Transaksi Penjualan dan Pembayaran Multi-Payment
+    %% Sistem POS Minimarket Koperasi PT Indo Lampung Perkasa
+
+    subgraph LANE_CUSTOMER["PELANGGAN"]
+        CustStart((Mulai)) --> CustBring["Membawa barang belanjaan ke meja kasir"]
+        CustBring --> CustMember{"Pelanggan Anggota Koperasi?"}
+        CustMember -- "Ya" --> CustShowNIK["Menyerahkan NIK / Kartu Anggota"]
+        CustMember -- "Bukan" --> CustWaitScan["Menunggu kasir memindai barang"]
+        CustShowNIK --> CustWaitScan
+
+        CustWaitScan --> CustCoupon{"Memiliki Kupon / Voucher Promo?"}
+        CustCoupon -- "Ya" --> CustGiveCoupon["Memberikan kode voucher / Kupon BBM"]
+        CustCoupon -- "Tidak" --> CustConfirmTotal
+        CustGiveCoupon --> CustConfirmTotal
+
+        CustConfirmTotal["Melihat total belanja pada display kasir"]
+        CustConfirmTotal --> CustChoosePay{"Pilih Metode Pembayaran"}
+
+        CustChoosePay -- "Tunai" --> CustPayCash["Menyerahkan uang tunai"]
+        CustChoosePay -- "QRIS" --> CustScanQRIS["Scan kode QRIS via Mobile Banking / E-Wallet"]
+        CustChoosePay -- "Kartu Debit / EDC" --> CustGiveCard["Menyerahkan kartu debit untuk digesek di EDC"]
+        CustChoosePay -- "Kredit Kasbon Anggota" --> CustReqCredit["Mengajukan tempo kasbon potong gaji PT ILP"]
+        CustChoosePay -- "Pembayaran Campuran" --> CustPaySplit["Membayar sebagian tunai & sebagian non-tunai"]
+
+        CustPayCash --> CustReceiveReceipt["Menerima struk belanja thermal, uang kembalian, dan barang"]
+        CustScanQRIS --> CustReceiveReceipt
+        CustGiveCard --> CustReceiveReceipt
+        CustReqCredit --> CustReceiveReceipt
+        CustPaySplit --> CustReceiveReceipt
+        CustReceiveReceipt --> CustEnd((Selesai))
+    end
+
+    subgraph LANE_CASHIER["KASIR"]
+        CashierStart["Inisiasi transaksi di antarmuka POS (/pos)"]
+        CustBring -.-> CashierStart
+        CustShowNIK -.-> InputMember["Input NIK Anggota pada kolom pelanggan"]
+        CustWaitScan -.-> ScanProduct["Scan barcode barang atau ketik nama/SKU produk"]
+
+        ScanProduct --> CheckStockItem{"Barang ditemukan & stok ada?"}
+        CheckStockItem -- "Tidak" --> AlertItem["Peringatan: Produk tidak ditemukan / stok kosong"]
+        AlertItem --> ScanProduct
+        CheckStockItem -- "Ya" --> AddToCart["Tambahkan produk ke keranjang belanja"]
+
+        AddToCart --> NeedHold{"Antrean terhenti / pelanggan ambil barang tambahan?"}
+        NeedHold -- "Ya" --> HoldAction["Simpan Transaksi Sementara (Hold Bill)"]
+        HoldAction --> RecallAction["Panggil kembali saat siap (Recall Bill)"]
+        RecallAction --> ReviewCart
+
+        NeedHold -- "Tidak" --> ReviewCart["Periksa daftar barang di keranjang"]
+
+        ReviewCart --> CheckCancel{"Ada pembatalan barang (Void Item)?"}
+        CheckCancel -- "Ya" --> RequestVoid["Minta otorisasi pembatalan ke Supervisor"]
+        CheckCancel -- "Tidak" --> CheckDiscManual
+
+        CustGiveCoupon -.-> InputCoupon["Input kode kupon diskon / serial Kupon BBM"]
+        InputCoupon --> CheckDiscManual{"Perlu diskon manual di luar promo?"}
+        
+        CheckDiscManual -- "Ya" --> RequestSPVDisc["Minta persetujuan diskon manual ke Supervisor"]
+        CheckDiscManual -- "Tidak" --> ClickPay["Klik tombol Bayar (Checkout)"]
+
+        RequestVoid -.-> SPVAuthVoid
+        RequestSPVDisc -.-> SPVAuthDisc
+        SPVApprovedDisc -.-> ClickPay
+        SPVApprovedVoid -.-> ReviewCart
+
+        ClickPay --> ProcessPayment["Pilih metode & input rincian pembayaran"]
+        CustPayCash -.-> ProcessPayment
+        CustScanQRIS -.-> ProcessPayment
+        CustGiveCard -.-> ProcessPayment
+        CustReqCredit -.-> ProcessPayment
+        CustPaySplit -.-> ProcessPayment
+
+        ProcessPayment --> SubmitCheckout["Kirim transaksi ke sistem backend"]
+        SubmitCheckout --> PrintThermal["Cetak struk thermal 58mm/80mm"]
+        PrintThermal -.-> CustReceiveReceipt
+    end
+
+    subgraph LANE_SUPERVISOR["SUPERVISOR / MANAGER"]
+        SPVAuthVoid["Supervisor input PIN 6-digit pada PIN Pad Otorisasi Void"]
+        SPVAuthVoid --> VerifyVoidPIN{"PIN Supervisor Valid?"}
+        VerifyVoidPIN -- "Ya" --> SPVApprovedVoid["Item dibatalkan & tercatat di audit log"]
+        VerifyVoidPIN -- "Tidak" --> SPVRejectVoid["Otorisasi Void ditolak"]
+        SPVRejectVoid --> ReviewCart
+
+        SPVAuthDisc["Supervisor input PIN 6-digit untuk otorisasi Diskon Manual"]
+        SPVAuthDisc --> VerifyDiscPIN{"PIN Supervisor Valid?"}
+        VerifyDiscPIN -- "Ya" --> SPVApprovedDisc["Diskon diterapkan ke keranjang belanja"]
+        VerifyDiscPIN -- "Tidak" --> SPVRejectDisc["Otorisasi Diskon ditolak"]
+        SPVRejectDisc --> ClickPay
+    end
+
+    subgraph LANE_POS_SYSTEM["SISTEM POS & DATABASE"]
+        InputMember --> ValidateMember["Validasi status anggota & ambil sisa limit kasbon"]
+        ValidateMember --> ApplyMemberPrice["Terapkan harga khusus member koperasi"]
+        ApplyMemberPrice --> ReviewCart
+
+        ScanProduct --> QueryProduct["Cari data barang di database PostgreSQL"]
+        QueryProduct --> CheckExpiredDisc["Periksa tanggal kedaluwarsa: Diskon otomatis H-30 (10%) atau H-14 (25%)"]
+        CheckExpiredDisc --> CheckStockItem
+
+        InputCoupon --> ValidateCoupon["Validasi masa berlaku, kuota, & minimal belanja kupon"]
+        ValidateCoupon --> ApplyCouponDisc["Potong nominal diskon dari kupon"]
+        ApplyCouponDisc --> ReviewCart
+
+        SubmitCheckout --> TransactDB["Buka Database Transaction"]
+        TransactDB --> PayValidation{"Validasi Metode Pembayaran"}
+
+        PayValidation -- "Tunai" --> CalcChange["Hitung uang kembalian (Cash Received - Grand Total) & buka laci kas"]
+        PayValidation -- "QRIS" --> VerifyQR["Verifikasi status transaksi sukses & nomor referensi bank"]
+        PayValidation -- "EDC" --> RecordEDC["Catat nomor kartu & approval code mesin EDC"]
+        PayValidation -- "Kredit Kasbon" --> CheckLimit{"Sisa limit kasbon mencukupi?"}
+        CheckLimit -- "Tidak" --> RejectCredit["Tolak pembayaran kasbon / minta metode lain"]
+        CheckLimit -- "Ya" --> RecordDebt["Catat penambahan piutang belanja anggota koperasi"]
+        PayValidation -- "Campuran" --> ValidSplit["Validasi: Jumlah Tunai + Non-Tunai = Grand Total"]
+
+        RejectCredit --> ProcessPayment
+
+        CalcChange --> FinalizeDB["Simpan Transaksi, Detail Item, & Mutasi Kas"]
+        VerifyQR --> FinalizeDB
+        RecordEDC --> FinalizeDB
+        RecordDebt --> FinalizeDB
+        ValidSplit --> FinalizeDB
+
+        FinalizeDB --> DeductStock["Kurangi stok barang master (Multi-Satuan base unit)"]
+        DeductStock --> UpdateShift["Akumulasikan omzet ke Sesi Kasir Aktif (Shift)"]
+        UpdateShift --> GenInvoice["Terbitkan Nomor Faktur Resmi (TRX-YYYYMMDD-XXXX)"]
+        GenInvoice --> PrintThermal
+    end
+
+    classDef customer fill:#f3e8ff,stroke:#9333ea,color:#3b0764,stroke-width:1.2px;
+    classDef cashier fill:#eff6ff,stroke:#2563eb,color:#1e3a8a,stroke-width:1.2px;
+    classDef supervisor fill:#fffbeb,stroke:#d97706,color:#78350f,stroke-width:1.2px;
+    classDef system fill:#f0fdf4,stroke:#16a34a,color:#14532d,stroke-width:1.2px;
+    classDef decision fill:#fff7ed,stroke:#ea580c,color:#7c2d12,stroke-width:1.2px;
+    classDef error fill:#fee2e2,stroke:#dc2626,color:#7f1d1d,stroke-width:1.2px;
+    classDef startend fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:1.5px;
+
+    class CustStart,CustEnd startend;
+    class CustMember,CustCoupon,CustChoosePay,CheckStockItem,NeedHold,CheckCancel,CheckDiscManual,VerifyVoidPIN,VerifyDiscPIN,PayValidation,CheckLimit decision;
+    class AlertItem,SPVRejectVoid,SPVRejectDisc,RejectCredit error;
+    class CustBring,CustShowNIK,CustWaitScan,CustGiveCoupon,CustConfirmTotal,CustPayCash,CustScanQRIS,CustGiveCard,CustReqCredit,CustPaySplit,CustReceiveReceipt customer;
+    class CashierStart,InputMember,ScanProduct,AddToCart,HoldAction,RecallAction,ReviewCart,RequestVoid,InputCoupon,RequestSPVDisc,ClickPay,ProcessPayment,SubmitCheckout,PrintThermal cashier;
+    class SPVAuthVoid,SPVApprovedVoid,SPVAuthDisc,SPVApprovedDisc supervisor;
+    class ValidateMember,ApplyMemberPrice,QueryProduct,CheckExpiredDisc,ValidateCoupon,ApplyCouponDisc,TransactDB,CalcChange,VerifyQR,RecordEDC,RecordDebt,ValidSplit,FinalizeDB,DeductStock,UpdateShift,GenInvoice system;

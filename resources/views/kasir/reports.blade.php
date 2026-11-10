@@ -14,18 +14,47 @@
 
     transactions: [],
 
-    initReports() {
+    async initReports() {
+        try {
+            const res = await fetch('/api/pos/transactions?per_page=100', {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+                    this.transactions = json.data.map(t => ({
+                        id: t.id,
+                        sessionId: t.terminal || 'Kasir 01',
+                        terminal: t.terminal || 'Kasir 01',
+                        time: t.time || '11:42 WIB',
+                        cashier: t.cashier || 'Budi Kurniawan',
+                        method: t.method || 'TUNAI',
+                        cashPortion: Number(t.cashPortion || 0),
+                        nonCashPortion: Number(t.nonCashPortion || 0),
+                        subtotal: Number(t.subtotal || 0),
+                        tax: Number(t.tax || 0),
+                        total: Number(t.total || 0),
+                        status: t.status || 'SELESAI',
+                        date: t.date || new Date().toISOString().split('T')[0]
+                    }));
+                    return;
+                }
+            }
+        } catch (e) {
+            console.warn('API report fetch fallback:', e);
+        }
+
         const raw = localStorage.getItem('pos_ilp_transactions_v1');
         if (raw) {
             try {
                 const trxs = JSON.parse(raw);
-                if (trxs && trxs.length > 0) {
+                if (Array.isArray(trxs)) {
                     this.transactions = trxs.map(t => ({
                         id: t.id || t.trxId || '#TRX-001',
-                        sessionId: t.sessionId || 'CS-20261024-K01-003',
+                        sessionId: t.sessionId || 'CS-POS01',
                         terminal: t.terminal || 'Kasir 01',
-                        time: t.time || '11:42 WIB',
-                        cashier: t.cashier || 'Budi Kurniawan',
+                        time: t.time || new Date().toLocaleTimeString('id-ID'),
+                        cashier: t.cashier || 'Kasir',
                         method: t.method || (t.paymentMethod || 'TUNAI'),
                         cashPortion: Number(t.cashGiven || t.cashPortion || 0),
                         nonCashPortion: Number(t.nonCashPortion || 0),
@@ -42,18 +71,17 @@
         this.transactions = [];
     },
 
-    getDefaultTransactions() {
-        return [];
-    },
-
     get filteredTransactions() {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const yestStr = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+
         return this.transactions.filter(t => {
             // Period filter
-            if (this.periodFilter === 'today' && t.date !== '2026-10-24') return false;
-            if (this.periodFilter === 'yesterday' && t.date !== '2026-10-23') return false;
+            if (this.periodFilter === 'today' && t.date !== todayStr) return false;
+            if (this.periodFilter === 'yesterday' && t.date !== yestStr) return false;
 
             // Session filter
-            if (this.selectedSessionFilter === 'active' && t.sessionId !== this.activeSession.sessionId && t.sessionId !== 'CS-20261024-K01-003') return false;
+            if (this.selectedSessionFilter === 'active' && this.activeSession && t.sessionId !== this.activeSession.sessionId) return false;
             if (this.selectedSessionFilter !== 'all' && this.selectedSessionFilter !== 'active' && t.sessionId !== this.selectedSessionFilter) return false;
 
             // Method filter
@@ -65,7 +93,7 @@
             // Search query
             if (this.searchQuery) {
                 const q = this.searchQuery.toLowerCase();
-                if (!t.id.toLowerCase().includes(q) && !t.cashier.toLowerCase().includes(q) && !t.sessionId.toLowerCase().includes(q)) {
+                if (!t.id.toLowerCase().includes(q) && !(t.cashier || '').toLowerCase().includes(q) && !(t.sessionId || '').toLowerCase().includes(q)) {
                     return false;
                 }
             }

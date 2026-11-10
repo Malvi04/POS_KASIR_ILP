@@ -33,14 +33,48 @@
     // Return History Documents (Toko -> Gudang DC) with SOP Lifecycle
     historyDocuments: [],
 
-    initRetur() {
+    async initRetur() {
         this.initOpening();
+        try {
+            const res = await fetch('/api/returns?direction=toko_ke_gudang', { headers: { 'Accept': 'application/json' } });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+                    this.historyDocuments = json.data.map(d => ({
+                        rawId: d.id,
+                        docNo: d.docNo,
+                        date: d.date,
+                        storeLocation: 'Minimarket ILP - Sektor A',
+                        targetWarehouse: 'DC Cikarang (Pusat Logistik)',
+                        sopStatus: d.statusKey === 'disetujui' ? 'DISETUJUI_DC' : (d.statusKey === 'draft' ? 'DIAJUKAN_TOKO' : 'CEK_FISIK_DC'),
+                        statusLabel: d.statusLabel,
+                        statusDesc: d.conditionDesc || 'Pengajuan retur barang ke gudang logistik.',
+                        totalSku: (d.products || []).length || 1,
+                        totalKoli: (d.products || []).reduce((sum, p) => sum + (parseInt(p.qty, 10) || 1), 0),
+                        totalClaimValue: parseInt((d.subtotal || '').replace(/[^0-9]/g, ''), 10) || 0,
+                        submittedBy: 'Kasir Toko',
+                        spvApprover: d.statusKey === 'disetujui' ? 'Supervisor Toko' : null,
+                        dispatchedAt: null,
+                        items: (d.products || []).map(p => ({
+                            sku: 'SKU-' + p.name.substring(0, 4).toUpperCase(),
+                            name: p.name,
+                            qty: p.qty,
+                            reason: d.conditionLabel
+                        }))
+                    }));
+                }
+            }
+        } catch(e) {
+            console.warn('API retur fetch error:', e);
+        }
+
         try {
             const savedDraft = localStorage.getItem('pos_ilp_retur_draft_items_v1');
             if (savedDraft !== null) {
                 this.draftItems = JSON.parse(savedDraft);
             } else {
                 this.draftItems = [];
+                this.persistReturState();
             }
 
             const savedHistory = localStorage.getItem('pos_ilp_retur_history_docs_v1');
@@ -290,6 +324,26 @@
         };
 
         this.historyDocuments.unshift(newDoc);
+
+        // Sync to API
+        try {
+            fetch('/api/returns', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({
+                    direction: 'toko_ke_gudang',
+                    condition_type: this.draftItems[0]?.reason === 'RUSAK_BOCOR' ? 'rusak' : (this.draftItems[0]?.reason === 'KEDALUWARSA' ? 'ed' : 'overstock'),
+                    sku: this.draftItems[0]?.sku || 'SKU-001',
+                    qty: this.totalDraftQty || 1,
+                    unit: 'Pcs',
+                    reason: this.draftItems[0]?.note || 'Pengajuan retur toko ke DC',
+                    driver_name: 'Armada Internal DC',
+                    vehicle_plate: 'B 9102 UQ',
+                    subtotal: this.totalDraftValue || 0
+                })
+            }).catch(e => console.warn('API sync return error', e));
+        } catch (e) {}
+
         this.draftItems = [];
         this.persistReturState();
         this.activeTab = 'history';

@@ -7,14 +7,52 @@
     ...cashierOpeningData(),
     receipt: null,
 
-    initReceipt() {
+    async initReceipt() {
         const urlParams = new URLSearchParams(window.location.search);
         const fakturParam = urlParams.get('faktur');
 
         if (fakturParam) {
+            // 1. Try fetching directly from PostgreSQL backend API
+            try {
+                const cleanId = fakturParam.replace('#', '').trim();
+                const res = await fetch(`/api/pos/transactions/${encodeURIComponent(cleanId)}`);
+                if (res.ok) {
+                    const json = await res.json();
+                    if (json.success && json.data) {
+                        const d = json.data;
+                        this.receipt = {
+                            id: d.invoice_number,
+                            rawId: d.id,
+                            time: new Date(d.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
+                            date: new Date(d.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+                            terminal: d.terminal_code || 'Kasir 01',
+                            cashier: d.cashier_name,
+                            method: d.payment_method,
+                            methodLabel: d.payment_method === 'TUNAI' ? 'Uang Tunai' : (d.payment_method === 'QRIS' ? 'QRIS Dinamis' : (d.payment_method === 'KREDIT' ? 'Kredit Anggota' : (d.payment_method === 'CAMPURAN' ? 'Tunai + QRIS' : d.payment_method))),
+                            items: (d.items || []).map(it => ({
+                                name: it.name,
+                                qty: it.qty,
+                                unit: it.unit || 'Pcs',
+                                price: it.unit_price,
+                                total: it.total_price
+                            })),
+                            subtotal: d.subtotal,
+                            discount: d.discount_total,
+                            tax: d.tax_total,
+                            total: d.grand_total,
+                            cashGiven: d.cash_received,
+                            change: d.change_returned
+                        };
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.warn('Could not fetch receipt from API, falling back to localStorage', e);
+            }
+
             try {
                 const trxs = JSON.parse(localStorage.getItem('pos_ilp_transactions_v1') || '[]');
-                const found = trxs.find(t => t.id === fakturParam || t.rawId === fakturParam);
+                const found = trxs.find(t => t.id === fakturParam || t.rawId === fakturParam || t.invoice_number === fakturParam);
                 if (found) {
                     this.receipt = found;
                     return;
@@ -28,6 +66,41 @@
             if (rawLatest) {
                 this.receipt = JSON.parse(rawLatest);
                 return;
+            }
+        } catch (e) {}
+
+        // Try load latest transaction from database
+        try {
+            const res = await fetch('/api/pos/transactions?per_page=1');
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+                    const d = json.data[0];
+                    this.receipt = {
+                        id: d.id,
+                        rawId: d.rawId || d.id,
+                        time: d.time || new Date().toLocaleTimeString('id-ID'),
+                        date: d.date || new Date().toLocaleDateString('id-ID'),
+                        terminal: d.terminal || 'Kasir 01',
+                        cashier: d.cashier || 'Kasir',
+                        method: d.method,
+                        methodLabel: d.methodLabel || d.method,
+                        items: (d.items || []).map(it => ({
+                            name: it.name,
+                            qty: it.qty,
+                            unit: it.unit || 'Pcs',
+                            price: it.price,
+                            total: it.total || (it.price * it.qty)
+                        })),
+                        subtotal: d.subtotal,
+                        discount: d.discount || 0,
+                        tax: d.tax || 0,
+                        total: d.total,
+                        cashGiven: d.cashGiven || d.total,
+                        change: d.change || 0
+                    };
+                    return;
+                }
             }
         } catch (e) {}
 
@@ -66,8 +139,22 @@ class="flex flex-col min-h-screen w-full bg-[#f8f9fa] font-sans">
     <!-- Main Content -->
     <main class="flex-1 overflow-y-auto bg-slate-50 relative py-8 px-4 flex justify-center items-start print:p-0 print:bg-white">
 
+        <!-- If no receipt -->
+        <template x-if="!receipt">
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center max-w-md w-full">
+                <span class="material-symbols-rounded text-4xl text-gray-400 mb-2">receipt_long</span>
+                <h3 class="font-bold text-gray-800 text-sm">Belum Ada Struk Dipilih</h3>
+                <p class="text-xs text-gray-500 mt-1">Silakan lakukan transaksi di terminal kasir atau pilih dari riwayat transaksi.</p>
+                <div class="flex items-center justify-center gap-3 mt-4">
+                    <a href="/pos" class="px-4 py-2 bg-[#0052cc] text-white font-bold text-xs rounded-xl">Ke Kasir POS</a>
+                    <a href="/kasir/transaksi/riwayat" class="px-4 py-2 bg-gray-100 text-gray-700 font-bold text-xs rounded-xl">Riwayat Transaksi</a>
+                </div>
+            </div>
+        </template>
+
         <!-- Receipt Thermal Card (80mm / 400px) -->
-        <div class="bg-white w-full max-w-[400px] rounded-2xl shadow-xl border border-gray-200 p-8 flex flex-col shrink-0 relative print:shadow-none print:border-none print:p-2 print:max-w-none">
+        <template x-if="receipt">
+            <div class="bg-white w-full max-w-[400px] rounded-2xl shadow-xl border border-gray-200 p-8 flex flex-col shrink-0 relative print:shadow-none print:border-none print:p-2 print:max-w-none">
 
             <!-- Receipt Header -->
             <div class="text-center mb-4">
@@ -185,8 +272,7 @@ class="flex flex-col min-h-screen w-full bg-[#f8f9fa] font-sans">
                 <p class="text-[10px] text-gray-500">Barang yang sudah dibeli dapat ditukar maksimal 1x24 jam dengan membawa struk ini.</p>
                 <p class="text-[9px] text-gray-400 font-mono pt-1">Call Center: 0800-1-ILPPOS • info@kopkarilp.co.id</p>
             </div>
-
-        </div>
+        </template>
 
     </div>
     </main>

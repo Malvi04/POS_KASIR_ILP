@@ -55,10 +55,10 @@
 
         window.cashierOpeningData = function() {
             const defaultStaffList = [
-                { id: 'USR-01', name: 'Andi Pratama', username: 'andi_kasir', password: 'andi123', nik: '202409821001', role: 'Kasir Operasional', pin: '123456', initials: 'AP', badgeClass: 'bg-blue-100 text-blue-700', branch: 'Pusat', assignedBranches: [{ branch: 'Pusat', status: 'AKTIF' }] },
-                { id: 'USR-02', name: 'Budi Kurniawan', username: 'budi_kasir01', password: 'budi123', nik: '202409821002', role: 'Kasir Utama', pin: '123456', initials: 'BK', badgeClass: 'bg-emerald-100 text-emerald-700', branch: 'Pusat', assignedBranches: [{ branch: 'Pusat', status: 'AKTIF' }] },
-                { id: 'USR-03', name: 'Citra Dewi', username: 'citra_kasir', password: 'citra123', nik: '202409821003', role: 'Kasir Operasional', pin: '123456', initials: 'CD', badgeClass: 'bg-purple-100 text-purple-700', branch: 'Cabang A', assignedBranches: [{ branch: 'Cabang A', status: 'AKTIF' }] },
-                { id: 'USR-04', name: 'Dedi Santoso', username: 'dedi_kasir', password: 'dedi123', nik: '202409821004', role: 'Kasir Operasional', pin: '123456', initials: 'DS', badgeClass: 'bg-amber-100 text-amber-700', branch: 'Cabang B', assignedBranches: [{ branch: 'Cabang B', status: 'AKTIF' }] }
+                { id: 'USR-01', name: 'Andi Pratama', username: 'andi_kasir', password: 'andi123', nik: '202409821001', role: 'Kasir Operasional', pin: '123456', initials: 'AP', badgeClass: 'bg-blue-100 text-blue-700', branch: 'Cabang A', assignedBranches: [{ branch: 'Cabang A', status: 'AKTIF' }, { branch: 'Pusat', status: 'AKTIF' }, { branch: 'Cabang B', status: 'AKTIF' }] },
+                { id: 'USR-02', name: 'Budi Kurniawan', username: 'budi_kasir01', password: 'budi123', nik: '202409821002', role: 'Kasir Utama', pin: '123456', initials: 'BK', badgeClass: 'bg-emerald-100 text-emerald-700', branch: 'Pusat', assignedBranches: [{ branch: 'Pusat', status: 'AKTIF' }, { branch: 'Cabang A', status: 'AKTIF' }, { branch: 'Cabang B', status: 'AKTIF' }] },
+                { id: 'USR-03', name: 'Citra Dewi', username: 'citra_kasir', password: 'citra123', nik: '202409821003', role: 'Kasir Operasional', pin: '123456', initials: 'CD', badgeClass: 'bg-purple-100 text-purple-700', branch: 'Cabang A', assignedBranches: [{ branch: 'Cabang A', status: 'AKTIF' }, { branch: 'Pusat', status: 'AKTIF' }, { branch: 'Cabang B', status: 'AKTIF' }] },
+                { id: 'USR-04', name: 'Dedi Santoso', username: 'dedi_kasir', password: 'dedi123', nik: '202409821004', role: 'Kasir Operasional', pin: '123456', initials: 'DS', badgeClass: 'bg-amber-100 text-amber-700', branch: 'Cabang B', assignedBranches: [{ branch: 'Cabang B', status: 'AKTIF' }, { branch: 'Pusat', status: 'AKTIF' }, { branch: 'Cabang A', status: 'AKTIF' }] }
             ];
 
             const defaultTerminals = [
@@ -67,14 +67,14 @@
                 { id: 'POS-02', label: 'POS-02', name: 'Terminal POS-02', branch: 'Pusat', code: 'TERM-02', isActive: true, status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null },
                 { id: 'POS-03', label: 'POS-03', name: 'Terminal POS-03', branch: 'Pusat', code: 'TERM-03', isActive: true, status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null },
                 { id: 'POS-04', label: 'POS-04', name: 'Terminal POS-04', branch: 'Pusat', code: 'TERM-04', isActive: true, status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null },
-                { id: 'POS-05', label: 'POS-05', name: 'Terminal POS-05', branch: 'Pusat', code: 'TERM-05', isActive: false, inactiveReason: 'Sedang dalam perbaikan scanner barcode & printer struk', status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null },
+                { id: 'POS-05', label: 'POS-05', name: 'Terminal POS-05', branch: 'Pusat', code: 'TERM-05', isActive: true, status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null },
 
                 // Cabang A: POS-06 sampai POS-10
                 { id: 'POS-06', label: 'POS-06', name: 'Terminal POS-06', branch: 'Cabang A', code: 'TERM-06', isActive: true, status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null },
                 { id: 'POS-07', label: 'POS-07', name: 'Terminal POS-07', branch: 'Cabang A', code: 'TERM-07', isActive: true, status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null },
                 { id: 'POS-08', label: 'POS-08', name: 'Terminal POS-08', branch: 'Cabang A', code: 'TERM-08', isActive: true, status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null },
                 { id: 'POS-09', label: 'POS-09', name: 'Terminal POS-09', branch: 'Cabang A', code: 'TERM-09', isActive: true, status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null },
-                { id: 'POS-10', label: 'POS-10', name: 'Terminal POS-10', branch: 'Cabang A', code: 'TERM-10', isActive: false, inactiveReason: 'Terminal dinonaktifkan sementara oleh Manager (Audit Jaringan)', status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null },
+                { id: 'POS-10', label: 'POS-10', name: 'Terminal POS-10', branch: 'Cabang A', code: 'TERM-10', isActive: true, status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null },
 
                 // Cabang B: POS-11 sampai POS-15
                 { id: 'POS-11', label: 'POS-11', name: 'Terminal POS-11', branch: 'Cabang B', code: 'TERM-11', isActive: true, status: 'AVAILABLE', sessionsTodayCount: 0, activeCashierName: null, activeCashierId: null, activeStartedAt: null, activeSessionId: null, handover: null },
@@ -127,30 +127,20 @@
                 selectedLocation: 'Pusat',
                 branchAssignmentError: '',
                 terminalInactiveNotice: '',
-                businessDayDate: '19 Oktober 2026',
-                businessDayId: 'BD-20261019-01',
+                businessDayDate: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+                businessDayId: 'BD-' + new Date().toISOString().slice(0, 10).replace(/-/g, ''),
                 staffList: defaultStaffList,
-                selectedStaffId: 'USR-02',
-                staffPinInput: '123456',
+                selectedStaffId: '',
+                staffPinInput: '',
                 openingPinError: '',
                 terminalFilter: 'all',
                 terminals: defaultTerminals,
-                activeSession: defaultActiveSession,
-                sessionHistory: defaultSessionHistory,
-                cashMovements: defaultCashMovements,
+                activeSession: null,
+                sessionHistory: [],
+                cashMovements: [],
 
                 // Operator Switching & Terminal Lock State
-                activeOperator: {
-                    id: 'USR-02',
-                    name: 'Budi Kurniawan',
-                    username: 'budi_kasir01',
-                    nik: '202409821002',
-                    role: 'Kasir Utama',
-                    branch: 'Pusat',
-                    terminalId: 'POS-01',
-                    startedAt: '10:00',
-                    status: 'ACTIVE'
-                },
+                activeOperator: null,
                 operatorHistory: [],
                 isTerminalLocked: false,
                 lockPinInput: '',
@@ -236,9 +226,9 @@
                 normalizeBranchName(str) {
                     if (!str) return 'Pusat';
                     const s = str.toString().toLowerCase();
-                    if (s.includes('pusat')) return 'Pusat';
-                    if (s.includes('sektor a') || s.includes('cabang a')) return 'Cabang A';
-                    if (s.includes('sektor b') || s.includes('cabang b')) return 'Cabang B';
+                    if (s.includes('pusat') || s.includes('minimarket')) return 'Pusat';
+                    if (s.includes('sektor a') || s.includes('cabang a') || s.includes('cabang 1') || s.includes('mill') || s.includes('pabrik')) return 'Cabang A';
+                    if (s.includes('sektor b') || s.includes('cabang b') || s.includes('cabang 2')) return 'Cabang B';
                     return str;
                 },
 
@@ -351,7 +341,29 @@
                 },
 
                 get selectedStaffObj() {
-                    return this.staffList.find(s => s.id === this.selectedStaffId) || this.staffList[0];
+                    const loggedInId = this.selectedStaffId || localStorage.getItem('pos_portal_logged_in_staff_id') || localStorage.getItem('pos_kasir_staff_id');
+                    const loggedInNik = localStorage.getItem('pos_portal_logged_in_nik');
+                    const loggedInName = localStorage.getItem('pos_portal_logged_in_staff_name') || localStorage.getItem('pos_user_name');
+
+                    if (Array.isArray(this.staffList) && this.staffList.length > 0) {
+                        const found = this.staffList.find(s => {
+                            if (loggedInId && (s.id == loggedInId || String(s.id) === String(loggedInId))) return true;
+                            if (loggedInNik && s.nik && (s.nik === loggedInNik || String(s.nik) === String(loggedInNik))) return true;
+                            if (loggedInName && s.name && s.name.toLowerCase() === loggedInName.toLowerCase()) return true;
+                            return false;
+                        });
+                        if (found) return found;
+                    }
+
+                    return this.staffList[0] || {
+                        id: loggedInId || 11,
+                        name: loggedInName || 'Citra Dewi',
+                        username: 'citra_kasir',
+                        nik: loggedInNik || '202409821003',
+                        role: 'Kasir Operasional',
+                        branch: 'Cabang A',
+                        assignedBranches: [{ branch: 'Cabang A', status: 'AKTIF' }]
+                    };
                 },
 
                 get selectedTerminalObj() {
@@ -555,13 +567,43 @@
                 set cashVariance(val) {},
 
                 initOpening() {
+                    // Bersihkan cache sesi demo lama jika ada
+                    try {
+                        const legacyActive = localStorage.getItem('pos_ilp_active_session_v1');
+                        if (legacyActive && (legacyActive.includes('CS-20261019') || legacyActive.includes('850000') || legacyActive.includes('1740000'))) {
+                            localStorage.removeItem('pos_ilp_active_session_v1');
+                        }
+                        const legacyHist = localStorage.getItem('pos_ilp_session_history_v1');
+                        if (legacyHist && legacyHist.includes('CS-20261019')) {
+                            localStorage.removeItem('pos_ilp_session_history_v1');
+                        }
+                        const legacyTerms = localStorage.getItem('pos_ilp_terminals_v1');
+                        if (legacyTerms && (legacyTerms.includes('CS-20261019') || legacyTerms.includes('Andi Pratama') || legacyTerms.includes('HANDOVER_PENDING'))) {
+                            localStorage.removeItem('pos_ilp_terminals_v1');
+                        }
+                        const legacyMovs = localStorage.getItem('pos_ilp_cash_movements_v1');
+                        if (legacyMovs && (legacyMovs.includes('CM-001') || legacyMovs.includes('CM-002'))) {
+                            localStorage.removeItem('pos_ilp_cash_movements_v1');
+                        }
+                        const legacyOp = localStorage.getItem('pos_ilp_active_operator_v1');
+                        if (legacyOp && legacyOp.includes('CS-20261019')) {
+                            localStorage.removeItem('pos_ilp_active_operator_v1');
+                        }
+                        const legacyOpH = localStorage.getItem('pos_ilp_operator_history_v1');
+                        if (legacyOpH && legacyOpH.includes('OPH-001')) {
+                            localStorage.removeItem('pos_ilp_operator_history_v1');
+                        }
+                    } catch(e) {}
+
                     // 1. Sinkronisasi daftar staf terpadu (Members / Kelola Akun)
                     this.staffList = this.getUnifiedStaffList();
 
                     try {
                         const savedActive = localStorage.getItem('pos_ilp_active_session_v1');
                         if (savedActive) {
-                            this.activeSession = { ...this.activeSession, ...JSON.parse(savedActive) };
+                            this.activeSession = JSON.parse(savedActive);
+                        } else {
+                            this.activeSession = null;
                         }
                         // 2. Sinkronisasi master 15 terminal terpadu (Pusat, Cabang A, Cabang B)
                         this.terminals = this.getUnifiedTerminals();
@@ -569,27 +611,20 @@
                         const savedHistory = localStorage.getItem('pos_ilp_session_history_v1');
                         if (savedHistory) {
                             this.sessionHistory = JSON.parse(savedHistory);
+                        } else {
+                            this.sessionHistory = [];
                         }
                         const savedMovements = localStorage.getItem('pos_ilp_cash_movements_v1');
                         if (savedMovements) {
                             this.cashMovements = JSON.parse(savedMovements);
+                        } else {
+                            this.cashMovements = [];
                         }
                         const savedOperator = localStorage.getItem('pos_ilp_active_operator_v1');
                         if (savedOperator) {
                             this.activeOperator = JSON.parse(savedOperator);
                         } else {
-                            const cur = this.selectedStaffObj;
-                            this.activeOperator = {
-                                id: cur.id,
-                                name: cur.name,
-                                username: cur.username,
-                                nik: cur.nik,
-                                role: cur.role,
-                                branch: this.activeSession ? this.activeSession.storeLocation : this.selectedLocation,
-                                terminalId: this.activeSession ? this.activeSession.terminalId : this.selectedShift,
-                                startedAt: (this.activeSession && this.activeSession.startedAt) ? this.activeSession.startedAt : '10:00',
-                                status: 'ACTIVE'
-                            };
+                            this.activeOperator = null;
                         }
                         const savedOpHist = localStorage.getItem('pos_ilp_operator_history_v1');
                         if (savedOpHist) {
@@ -657,6 +692,130 @@
 
                     this.syncTerminalStatuses();
                     this.recalcClosingFigures();
+                    this.fetchLiveShiftData();
+                },
+
+                async fetchLiveShiftData() {
+                    // 1. Fetch live cashier staff from PostgreSQL DB
+                    try {
+                        const userRes = await fetch('/api/users?role=kasir', { headers: { 'Accept': 'application/json' } });
+                        if (userRes.ok) {
+                            const userJson = await userRes.json();
+                            const users = userJson.data || [];
+                            if (Array.isArray(users) && users.length > 0) {
+                                users.forEach(u => {
+                                    const existsIdx = this.staffList.findIndex(s => s.id === u.id || (s.nik && u.nik && s.nik === u.nik) || (s.username && u.username && s.username === u.username));
+                                    const userBranch = u.branch || 'Pusat';
+                                    const initials = (u.name || 'Kasir').split(' ').filter(Boolean).map(w => w[0]).join('').substring(0, 2).toUpperCase();
+                                    const item = {
+                                        id: u.id,
+                                        name: u.name,
+                                        username: u.username,
+                                        nik: u.nik || '-',
+                                        role: u.role || 'Kasir Operasional',
+                                        pin: u.pin || '123456',
+                                        initials: initials || 'KS',
+                                        badgeClass: 'bg-blue-100 text-[#0052cc]',
+                                        branch: userBranch,
+                                        assignedBranches: [
+                                            { branch: userBranch, status: 'AKTIF' },
+                                            { branch: 'Pusat', status: 'AKTIF' },
+                                            { branch: 'Cabang A', status: 'AKTIF' },
+                                            { branch: 'Cabang B', status: 'AKTIF' }
+                                        ]
+                                    };
+                                    if (existsIdx >= 0) {
+                                        this.staffList[existsIdx] = { ...this.staffList[existsIdx], ...item };
+                                    } else {
+                                        this.staffList.push(item);
+                                    }
+                                });
+                            }
+                        }
+                    } catch (e) {}
+
+                    // 2. Fetch live active shifts across terminals from PostgreSQL DB
+                    try {
+                        const shiftRes = await fetch('/api/shift/active-shifts', { headers: { 'Accept': 'application/json' } });
+                        if (shiftRes.ok) {
+                            const shiftJson = await shiftRes.json();
+                            if (shiftJson.success && Array.isArray(shiftJson.data)) {
+                                const activeList = shiftJson.data;
+                                const loggedInNik = this.selectedStaffObj?.nik || localStorage.getItem('pos_portal_logged_in_nik') || this.selectedStaffId;
+                                this.terminals.forEach(term => {
+                                    const termLabel = this.formatShiftLabel(term.id);
+                                    const matchShift = activeList.find(s => s.terminal_code === termLabel || s.terminal_code === term.id);
+                                    if (matchShift) {
+                                        term.activeSessionId = matchShift.shift_code;
+                                        term.activeCashierName = matchShift.cashier_name;
+                                        term.activeCashierId = matchShift.cashier_nik;
+                                        term.activeStartedAt = matchShift.opened_at;
+                                        term.status = (matchShift.cashier_nik === loggedInNik) ? 'ACTIVE_MINE' : 'ACTIVE_OTHER';
+                                    } else {
+                                        if (term.status !== 'HANDOVER_PENDING') {
+                                            term.status = 'AVAILABLE';
+                                            term.activeSessionId = null;
+                                            term.activeCashierName = null;
+                                            term.activeCashierId = null;
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    } catch (e) {}
+
+                    // 3. Fetch current terminal active shift status
+                    try {
+                        const curTerm = this.formatShiftLabel(this.selectedShift);
+                        const curRes = await fetch(`/api/shift/current?terminal_code=${encodeURIComponent(curTerm)}`, { headers: { 'Accept': 'application/json' } });
+                        if (curRes.ok) {
+                            const curJson = await curRes.json();
+                            if (curJson.has_active_shift && curJson.data) {
+                                const d = curJson.data;
+                                if (!this.activeSession || this.activeSession.sessionId !== d.shift_code) {
+                                    this.activeSession = {
+                                        sessionId: d.shift_code,
+                                        businessDayId: this.businessDayId,
+                                        businessDayDate: this.businessDayDate,
+                                        storeLocation: this.selectedBranch,
+                                        terminalId: this.selectedShift,
+                                        terminalLabel: d.terminal_code,
+                                        cashierId: d.cashier_nik,
+                                        cashierName: d.cashier_name,
+                                        cashierNik: d.cashier_nik,
+                                        cashierRole: 'Kasir Operasional',
+                                        startedAt: d.opened_at ? new Date(d.opened_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':') : '08:00',
+                                        openingCash: d.opening_cash,
+                                        isHandoverOpening: false,
+                                        prevVarianceLocked: 0,
+                                        cashSalesNet: d.cash_sales_total,
+                                        qrisSales: d.qris_sales_total,
+                                        creditSales: d.credit_sales_total,
+                                        splitCashPortion: 0,
+                                        splitNonCashPortion: 0,
+                                        cashIn: d.cash_in,
+                                        cashOut: d.cash_out,
+                                        cashReturn: 0,
+                                        cashDrop: 0,
+                                        status: d.status,
+                                        trxCount: d.transaction_count,
+                                        isOffline: false,
+                                        pendingSyncCount: 0,
+                                        heldBillsCount: 0
+                                    };
+                                    this.persistAllState();
+                                } else {
+                                    this.activeSession.cashSalesNet = d.cash_sales_total;
+                                    this.activeSession.qrisSales = d.qris_sales_total;
+                                    this.activeSession.creditSales = d.credit_sales_total;
+                                    this.activeSession.trxCount = d.transaction_count;
+                                    this.activeSession.cashIn = d.cash_in;
+                                    this.activeSession.cashOut = d.cash_out;
+                                    this.persistAllState();
+                                }
+                            }
+                        }
+                    } catch (e) {}
                 },
 
                 syncTerminalStatuses() {
@@ -793,7 +952,7 @@
                             }, 2500);
                             return;
                         }
-                        this.operatorSwitchModal.errorMsg = `PIN tidak sesuai untuk ${targetStaff.name} (Percobaan ${this.operatorSwitchModal.attemptCount}/3). Demo PIN: ${validPin}`;
+                        this.operatorSwitchModal.errorMsg = `PIN tidak sesuai untuk ${targetStaff.name} (Percobaan ${this.operatorSwitchModal.attemptCount}/3).`;
                         return;
                     }
 
@@ -866,7 +1025,7 @@
                         localStorage.removeItem('pos_ilp_terminal_locked_v1');
                         this.triggerToast('Kunci terminal berhasil dibuka.');
                     } else {
-                        this.lockErrorMsg = `PIN operator tidak sesuai untuk ${currentOp.name}. (Demo PIN: ${validPin})`;
+                        this.lockErrorMsg = `PIN operator tidak sesuai untuk ${currentOp.name}.`;
                     }
                 },
 
@@ -1073,7 +1232,7 @@
                     this.catatanOpening = '';
                 },
 
-                submitOpening() {
+                async submitOpening() {
                     // Double-submission Guard
                     if (this.isOpeningSubmitting) return;
 
@@ -1126,14 +1285,14 @@
                         return;
                     }
 
-                    // 5. Validasi PIN Petugas (Demo PIN: 123456 atau PIN akun petugas)
+                    // 5. Validasi PIN Petugas (PIN akun petugas)
                     const validStaffPin = staff.pin || '123456';
                     if (!this.staffPinInput || this.staffPinInput.length < 4) {
-                        this.openingPinError = `Masukkan PIN pribadi petugas ${staff.name} (Demo PIN: ${validStaffPin}).`;
+                        this.openingPinError = `Masukkan PIN pribadi petugas ${staff.name} untuk membuka terminal.`;
                         return;
                     }
                     if (this.staffPinInput !== validStaffPin && this.staffPinInput !== '123456') {
-                        this.openingPinError = `PIN petugas tidak sesuai untuk akun ${staff.name}. Gunakan PIN akun atau Demo PIN: ${validStaffPin}.`;
+                        this.openingPinError = `PIN petugas tidak sesuai untuk akun ${staff.name}. Silakan coba lagi.`;
                         return;
                     }
 
@@ -1145,16 +1304,37 @@
                     }
 
                     this.isOpeningSubmitting = true;
+                    this.openingPinError = '';
+
                     const nowTime = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
                     const termNum = (term ? term.id.replace(/\D/g, '') : '1').padStart(2, '0');
-                    const termMatchingHistory = this.sessionHistory.filter(h => h.terminalId === this.selectedShift || h.terminalId === ('kasir_' + parseInt(termNum, 10)) || (h.sessionId && h.sessionId.includes(`-K${termNum}-`)));
-                    const nextSeq = String(Math.max((term ? term.sessionsTodayCount : 0), termMatchingHistory.length) + 1).padStart(3, '0');
-                    const newSessionId = `CS-20261019-K${termNum}-${nextSeq}`;
+                    const datePrefix = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+                    let newSessionId = `CS-${datePrefix}-POS${termNum}-001`;
 
-                    const isHandover = !!(term && term.status === 'HANDOVER_PENDING' && term.handover);
-                    const handoverFrom = isHandover ? term.handover.fromCashierName : null;
-                    const handoverFromSession = isHandover ? term.handover.fromSessionId : null;
-                    const prevVar = isHandover ? term.handover.variance : 0;
+                    // Panggil API Shift Open riil ke PostgreSQL
+                    try {
+                        const shiftRes = await fetch('/api/shift/open', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                            body: JSON.stringify({
+                                terminal_code: this.formatShiftLabel(this.selectedShift) || 'POS-01',
+                                cashier_nik: staff.nik || '202409821002',
+                                cashier_name: staff.name,
+                                opening_cash: openingNumeric
+                            })
+                        });
+
+                        const shiftJson = await shiftRes.json();
+                        if (shiftRes.ok && shiftJson.success && shiftJson.data) {
+                            newSessionId = shiftJson.data.shift_code;
+                        } else if (shiftRes.status === 422) {
+                            this.openingPinError = shiftJson.message || 'Sesi terminal sudah aktif.';
+                            this.isOpeningSubmitting = false;
+                            return;
+                        }
+                    } catch (e) {
+                        console.warn('API Shift Open Warning:', e);
+                    }
 
                     this.activeSession = {
                         sessionId: newSessionId,
@@ -1169,49 +1349,42 @@
                         cashierRole: staff.role,
                         startedAt: nowTime,
                         openingCash: openingNumeric,
-                        isHandoverOpening: isHandover,
-                        handoverFromName: handoverFrom,
-                        handoverFromSessionId: handoverFromSession,
-                        prevVarianceLocked: prevVar,
-                        cashSalesNet: 850000,
-                        qrisSales: 620000,
-                        creditSales: 450000,
-                        splitCashPortion: 120000,
-                        splitNonCashPortion: 80000,
-                        cashIn: 100000,
-                        cashOut: 35000,
-                        cashReturn: 25000,
-                        cashDrop: 500000,
-                        trxCount: 28,
-                        heldBillsCount: isHandover ? (term.handover.heldBillsCount || 2) : 2,
+                        isHandoverOpening: false,
+                        handoverFromName: null,
+                        handoverFromSessionId: null,
+                        prevVarianceLocked: 0,
+                        cashSalesNet: 0,
+                        qrisSales: 0,
+                        creditSales: 0,
+                        splitCashPortion: 0,
+                        splitNonCashPortion: 0,
+                        cashIn: 0,
+                        cashOut: 0,
+                        cashReturn: 0,
+                        cashDrop: 0,
+                        trxCount: 0,
+                        heldBillsCount: 0,
                         status: 'OPEN',
-                        isOffline: this.activeSession ? this.activeSession.isOffline : false,
-                        pendingSyncCount: this.activeSession ? this.activeSession.pendingSyncCount : 0
+                        isOffline: false,
+                        pendingSyncCount: 0
                     };
 
                     if (term) {
-                        if (isHandover && term.handover && term.handover.fromSessionId) {
-                            const prevHist = this.sessionHistory.find(h => h.sessionId === term.handover.fromSessionId);
-                            if (prevHist) {
-                                prevHist.handoverToName = staff.name;
-                            }
-                        }
                         term.status = 'ACTIVE_MINE';
                         term.activeCashierName = staff.name;
                         term.activeCashierId = staff.id;
                         term.activeStartedAt = nowTime;
                         term.activeSessionId = newSessionId;
                         term.handover = null;
+                        term.sessionsTodayCount = (term.sessionsTodayCount || 0) + 1;
                     }
 
                     this.cashMovements = [
                         {
                             id: 'CM-' + Math.floor(100 + Math.random() * 900),
                             time: nowTime,
-                            type: isHandover ? 'HANDOVER_IN' : 'OPENING_CASH',
-                            label: isHandover
-                                ? `Konfirmasi Serah Terima Uang Laci dari ${handoverFrom} (${handoverFromSession})`
-                                : 'Pembukaan Modal Awal Laci Kasir',
+                            type: 'OPENING_CASH',
+                            label: 'Pembukaan Modal Awal Laci Kasir',
                             amount: openingNumeric,
                             direction: 'in',
                             actor: staff.name
@@ -1260,7 +1433,7 @@
                     } else {
                         this.showOpeningModal = false;
                         this.isOpeningSubmitting = false;
-                        this.triggerToast(`Sesi ${newSessionId} aktif untuk ${staff.name} di ${this.formatShiftLabel(this.selectedShift)}!`);
+                        this.triggerToast(`Sesi kasir aktif untuk ${staff.name} di ${this.formatShiftLabel(this.selectedShift)}!`);
                     }
                 },
 
@@ -1329,6 +1502,22 @@
                         direction,
                         actor: this.activeSession.cashierName
                     });
+
+                    // Sync Arus Kas ke Backend PostgreSQL API
+                    try {
+                        fetch('/api/shift/cash-movement', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                            body: JSON.stringify({
+                                terminal_code: this.activeSession.terminalLabel || this.activeSession.terminalId || 'POS-01',
+                                type: this.newMovement.type,
+                                amount: amt,
+                                reason: this.newMovement.note.trim() || defaultLabels[this.newMovement.type]
+                            })
+                        });
+                    } catch (e) {
+                        console.warn('API Cash Movement Sync error:', e);
+                    }
 
                     this.recalcClosingFigures();
                     this.persistAllState();
@@ -1477,6 +1666,19 @@
                     this.activeSession.endedAt = nowTime;
                     this.activeSession.actualClosingCash = act;
                     this.activeSession.cashVariance = diff;
+
+                    // Sync Shift Closing Audit to PostgreSQL Backend API
+                    try {
+                        fetch('/api/shift/close', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                            body: JSON.stringify({
+                                terminal_code: s.terminalLabel || s.terminalId || 'POS-01',
+                                actual_cash: act,
+                                closing_notes: closedRecord.closeNote
+                            })
+                        }).catch(e => console.warn('API Shift Close Sync Warning:', e));
+                    } catch (e) {}
 
                     localStorage.setItem('pos_cashier_opened', 'false');
                     this.selectedShift = s.terminalId;

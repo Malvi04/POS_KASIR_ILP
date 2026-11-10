@@ -18,7 +18,7 @@
 
     myTransactions: [],
 
-    initMyReport() {
+    async initMyReport() {
         if (this.activeOperator) {
             this.activeCashierProfile.id = this.activeOperator.id;
             this.activeCashierProfile.name = this.activeOperator.name;
@@ -26,6 +26,30 @@
             this.activeCashierProfile.nik = this.activeOperator.nik;
             this.activeCashierProfile.role = this.activeOperator.role || 'Kasir Operasional';
         }
+
+        try {
+            const res = await fetch('/api/pos/transactions?per_page=100', { headers: { 'Accept': 'application/json' } });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+                    const myName = (this.activeOperator ? this.activeOperator.name : (this.activeSession.cashierName || 'Budi Kurniawan')).toLowerCase();
+                    const filtered = json.data.filter(t => !t.cashier || t.cashier.toLowerCase() === myName);
+                    this.myTransactions = (filtered.length > 0 ? filtered : json.data).map(t => ({
+                        id: t.id,
+                        time: t.time,
+                        method: t.method,
+                        total: Number(t.total || 0),
+                        discount: Number(t.discount || 0),
+                        itemCount: Array.isArray(t.items) ? t.items.length : 1,
+                        status: t.status || 'SELESAI'
+                    }));
+                    return;
+                }
+            }
+        } catch (e) {
+            console.warn('API report by cashier error:', e);
+        }
+
         const raw = localStorage.getItem('pos_ilp_transactions_v1');
         if (raw) {
             try {
@@ -35,7 +59,7 @@
                     const filtered = trxs.filter(t => !t.cashier || t.cashier.toLowerCase() === myName);
                     this.myTransactions = (filtered.length > 0 ? filtered : trxs).map(t => ({
                         id: t.id || t.trxId || '#TRX-001',
-                        time: t.time || '11:42 WIB',
+                        time: t.time || new Date().toLocaleTimeString('id-ID'),
                         method: t.method || (t.paymentMethod || 'TUNAI'),
                         total: Number(t.total || 0),
                         discount: Number(t.discount || 0),
@@ -50,7 +74,6 @@
     },
 
     productCategoryShare: [],
-
     refundActivities: [],
 
     get totalMySales() {

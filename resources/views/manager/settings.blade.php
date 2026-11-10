@@ -74,43 +74,118 @@
         this.triggerToast('Formulir dikembalikan ke pengaturan awal.');
     },
 
-    initSettings() {
-        const stored = localStorage.getItem('pos_ilp_manager_settings_v1') || localStorage.getItem('pos_ilp_store_settings_v1');
-        if (stored) {
-            try {
-                const s = JSON.parse(stored);
-                if (s.profileName) this.profileName = s.profileName;
-                if (s.profileEmail) this.profileEmail = s.profileEmail;
-                if (s.profilePhone) this.profilePhone = s.profilePhone;
-                if (s.storeName) this.storeName = s.storeName;
-                if (s.storeAddress) this.storeAddress = s.storeAddress;
-                if (s.posPin) this.posPin = s.posPin;
-            } catch(e) {}
+    // Pengaturan Pajak (PPN) - Modul D (Akses Owner / Superadmin)
+    taxRatePercent: 11,
+    taxEnabled: true,
+    taxMethod: 'EXCLUDE',
+    isSavingTax: false,
+
+    async initSettings() {
+        try {
+            const res = await fetch('/api/settings', {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && json.data) {
+                    const d = json.data;
+                    if (d.store) {
+                        this.storeName = d.store.store_name || this.storeName;
+                        this.storeCode = d.store.store_code || this.storeCode;
+                        this.storePhone = d.store.store_phone || this.storePhone;
+                        this.storeAddress = d.store.store_address || this.storeAddress;
+                        this.storeTaxId = d.store.store_tax_id || this.storeTaxId;
+                    }
+                    if (d.tax) {
+                        this.taxRatePercent = d.tax.tax_rate_percent ?? 11;
+                        this.taxEnabled = d.tax.tax_enabled ?? true;
+                        this.taxMethod = d.tax.tax_calculation_method || 'EXCLUDE';
+                    }
+                    if (d.security) {
+                        this.pinForVoid = d.security.void_require_supervisor_pin ?? true;
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Error fetching settings from API:', e);
         }
     },
 
-    saveSettings() {
+    async saveTaxSettings() {
+        this.isSavingTax = true;
+        try {
+            const res = await fetch('/api/settings/tax', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    tax_rate_percent: parseFloat(this.taxRatePercent),
+                    tax_enabled: Boolean(this.taxEnabled),
+                    tax_calculation_method: this.taxMethod
+                })
+            });
+            const json = await res.json();
+            if (res.ok && json.success) {
+                this.triggerToast(json.message);
+            } else {
+                alert('Gagal menyimpan pajak: ' + (json.message || 'Error'));
+            }
+        } catch (e) {
+            console.error('Error saving tax:', e);
+            alert('Gagal menghubungi server.');
+        } finally {
+            this.isSavingTax = false;
+        }
+    },
+
+    async saveSettings() {
         const now = new Date();
         const hh = String(now.getHours()).padStart(2, '0');
         const mm = String(now.getMinutes()).padStart(2, '0');
         this.lastSaved = 'Baru saja, ' + hh + ':' + mm + ' WIB';
 
-        const dataToSave = {
-            profileName: this.profileName,
-            profileEmail: this.profileEmail,
-            profilePhone: this.profilePhone,
-            storeName: this.storeName,
-            storeAddress: this.storeAddress,
-            posPin: this.posPin,
-            savedAt: this.lastSaved
-        };
-        localStorage.setItem('pos_ilp_manager_settings_v1', JSON.stringify(dataToSave));
-        localStorage.setItem('pos_ilp_store_settings_v1', JSON.stringify(dataToSave));
+        try {
+            // Save store profile
+            await fetch('/api/settings/store', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    store_name: this.storeName,
+                    store_phone: this.storePhone,
+                    store_address: this.storeAddress,
+                    store_tax_id: this.storeTaxId
+                })
+            });
 
-        this.currentPassword = '';
-        this.newPassword = '';
-        this.confirmPassword = '';
-        this.triggerToast('Perubahan pengaturan POS & PIN berhasil disimpan!');
+            // Save security settings
+            await fetch('/api/settings/security', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    void_require_supervisor_pin: Boolean(this.pinForVoid),
+                    manual_discount_require_pin: true
+                })
+            });
+
+            this.currentPassword = '';
+            this.newPassword = '';
+            this.confirmPassword = '';
+            this.triggerToast('Perubahan pengaturan toko & profil berhasil disimpan ke database!');
+        } catch (e) {
+            console.error('Error saving settings:', e);
+            this.triggerToast('Gagal menyimpan ke server.');
+        }
     },
 
     revokeSession(id, name) {
@@ -157,8 +232,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                 <!-- Subheader: Title & Navigation Sub-Menu Tabs -->
                 <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                     <div>
-                        <h1 class="text-[19px] font-bold text-gray-900 tracking-tight">Pengaturan</h1>
-                        
+                        <h1 class="text-[19px] font-bold text-gray-900 tracking-tight">Pengaturan Sistem & Akun Manager</h1>
+                        <p class="text-[13px] text-gray-500 mt-0.5">Kelola identitas profil Account Manager, info outlet, serta keamanan dan PIN otorisasi kasir.</p>
                     </div>
 
                     <!-- Navigation Sub-Menu / Tabs -->
@@ -177,6 +252,14 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 class="px-4 py-2 rounded-lg text-[13px] font-bold flex items-center gap-2 transition-colors cursor-pointer">
                             <span class="material-symbols-rounded text-[18px]">shield_lock</span>
                             <span>Keamanan & PIN POS</span>
+                        </button>
+
+                        <button type="button"
+                                @click="activeTab = 'pajak'"
+                                :class="activeTab === 'pajak' ? 'bg-[#0052cc] text-white shadow-sm' : 'bg-white text-gray-600 hover:bg-gray-50'"
+                                class="px-4 py-2 rounded-lg text-[13px] font-bold flex items-center gap-2 transition-colors cursor-pointer">
+                            <span class="material-symbols-rounded text-[18px]">receipt_long</span>
+                            <span>Pengaturan Pajak (PPN)</span>
                         </button>
                     </div>
                 </div>
@@ -740,6 +823,108 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         class="w-full py-2.5 bg-[#e9eef5] hover:bg-[#cbd5e1]/80 text-gray-800 font-bold text-[12.5px] rounded-xl transition-colors cursor-pointer">
                                     Keluar dari Semua Perangkat Lain
                                 </button>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- ========================================================= -->
+                <!-- TAB 3: PENGATURAN PAJAK (PPN) - MODUL D OWNER ACCESS     -->
+                <!-- ========================================================= -->
+                <div x-show="activeTab === 'pajak'" style="display: none;" class="grid grid-cols-12 gap-6 items-start">
+                    
+                    <div class="col-span-12 lg:col-span-7 space-y-6">
+                        <div class="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+                            <div class="flex items-center justify-between pb-4 mb-6 border-b border-gray-100">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-9 h-9 rounded-lg bg-[#dbeafe] text-[#0052cc] flex items-center justify-center shrink-0">
+                                        <span class="material-symbols-rounded text-[20px]">receipt_long</span>
+                                    </div>
+                                    <div>
+                                        <h2 class="text-[15px] font-bold text-gray-900">Konfigurasi Pajak Pertambahan Nilai (PPN)</h2>
+                                        <p class="text-[12px] text-gray-500">Khusus Owner & Superadmin: Menentukan persentase pajak transaksi kasir POS.</p>
+                                    </div>
+                                </div>
+                                <span class="bg-purple-100 text-purple-700 text-[10.5px] font-bold px-3 py-1 rounded-full uppercase">
+                                    Akses Owner
+                                </span>
+                            </div>
+
+                            <div class="space-y-5">
+                                <!-- Status Pajak Switch -->
+                                <div class="p-4 rounded-xl border border-gray-200 bg-[#f8f9fa] flex items-center justify-between">
+                                    <div>
+                                        <h4 class="text-[13px] font-bold text-gray-800">Aktifkan Perhitungan PPN Kasir</h4>
+                                        <p class="text-[11.5px] text-gray-500">Jika dinonaktifkan, transaksi POS tidak dikenakan PPN.</p>
+                                    </div>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" x-model="taxEnabled" class="sr-only peer">
+                                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0052cc]"></div>
+                                    </label>
+                                </div>
+
+                                <!-- Persentase Tarif PPN -->
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-[12.5px] font-bold text-gray-700 mb-1.5">Tarif PPN (%)</label>
+                                        <div class="relative">
+                                            <input type="number" step="0.1" min="0" max="100" x-model="taxRatePercent"
+                                                   class="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-[#0052cc] focus:ring-1 focus:ring-[#0052cc] focus:outline-none text-[13.5px] font-bold text-gray-800 bg-white">
+                                            <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs">%</span>
+                                        </div>
+                                        <p class="text-[11px] text-gray-400 mt-1">Standar UU Harmonisasi Perpajakan (11% atau 12%).</p>
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-[12.5px] font-bold text-gray-700 mb-1.5">Metode Perhitungan</label>
+                                        <select x-model="taxMethod" class="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-[#0052cc] focus:ring-1 focus:ring-[#0052cc] focus:outline-none text-[13.5px] text-gray-800 bg-white">
+                                            <option value="EXCLUDE">Harga Belum Termasuk PPN (Exclude)</option>
+                                            <option value="INCLUDE">Harga Sudah Termasuk PPN (Include)</option>
+                                        </select>
+                                        <p class="text-[11px] text-gray-400 mt-1">Format penagihan pada struk kasir.</p>
+                                    </div>
+                                </div>
+
+                                <!-- NPWP Toko -->
+                                <div>
+                                    <label class="block text-[12.5px] font-bold text-gray-700 mb-1.5">Nomor Pokok Wajib Pajak (NPWP)</label>
+                                    <input type="text" x-model="storeTaxId" placeholder="01.882.991.4-012.000"
+                                           class="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-[#0052cc] focus:ring-1 focus:ring-[#0052cc] focus:outline-none text-[13.5px] font-mono text-gray-800 bg-white">
+                                    <p class="text-[11px] text-gray-400 mt-1">Dicetak pada bagian footer struk belanja dan faktur penjualan.</p>
+                                </div>
+                            </div>
+
+                            <!-- Footer Save Button -->
+                            <div class="mt-6 pt-5 border-t border-gray-100 flex items-center justify-end">
+                                <button type="button" @click="saveTaxSettings()" :disabled="isSavingTax"
+                                        class="px-6 py-2.5 bg-[#0052cc] text-white font-bold text-[13px] rounded-lg shadow-sm hover:bg-[#0043a8] transition-colors cursor-pointer flex items-center gap-2 disabled:opacity-50">
+                                    <span x-show="isSavingTax" class="material-symbols-rounded text-sm animate-spin">progress_activity</span>
+                                    <span>Simpan Pengaturan Pajak</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Info & Ringkasan -->
+                    <div class="col-span-12 lg:col-span-5 space-y-6">
+                        <div class="bg-blue-50/50 border border-blue-200 rounded-2xl p-6 shadow-sm space-y-4">
+                            <div class="flex items-center gap-2.5">
+                                <span class="material-symbols-rounded text-[#0052cc] text-[22px]">info</span>
+                                <h3 class="font-bold text-[#0052cc] text-[14px]">Informasi Kepatuhan Pajak</h3>
+                            </div>
+                            <p class="text-xs text-gray-600 leading-relaxed">
+                                Pengaturan tarif pajak PPN di sini langsung disinkronkan ke seluruh terminal kasir di 3 cabang minimarket ILP. Kasir tidak memiliki wewenang untuk mengubah atau menonaktifkan tarif PPN ini.
+                            </p>
+                            <div class="p-3 bg-white rounded-xl border border-blue-100 text-xs space-y-1">
+                                <div class="flex justify-between">
+                                    <span class="text-gray-500">Tarif Aktif Saat Ini:</span>
+                                    <span class="font-bold text-gray-800" x-text="taxRatePercent + '%'"></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-500">Status Pemungutan:</span>
+                                    <span class="font-bold" :class="taxEnabled ? 'text-green-600' : 'text-red-500'" x-text="taxEnabled ? 'Dipungut' : 'Bebas Pajak'"></span>
+                                </div>
                             </div>
                         </div>
                     </div>

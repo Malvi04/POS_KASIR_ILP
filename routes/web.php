@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\Shared\AuthController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -11,6 +12,9 @@ Route::get('/', function () {
     return view('welcome');
 });
 
+Route::post('/login', [AuthController::class, 'login'])->name('login');
+Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+
 Route::get('/login-kasir', function () {
     return view('welcome', ['initialRole' => 'Kasir']);
 })->name('cashier.login');
@@ -18,6 +22,10 @@ Route::get('/login-kasir', function () {
 Route::get('/login-manager', function () {
     return view('welcome', ['initialRole' => 'Manager']);
 })->name('manager.login');
+
+Route::get('/manager/login', function () {
+    return view('welcome', ['initialRole' => 'Manager']);
+});
 
 /*
 |--------------------------------------------------------------------------
@@ -87,7 +95,7 @@ Route::get('/owner/profile', function () {
 */
 Route::get('/manager/dashboard', function () {
     return view('manager.dashboard');
-});
+})->name('manager.dashboard');
 
 Route::get('/manager/inventory', function () {
     return view('manager.inventory');
@@ -101,7 +109,7 @@ Route::get('/manager/kirim-barang', function () {
 
 Route::get('/manager/stock-opname', function () {
     return view('manager.stock-opname');
-});
+})->name('manager.stock-opname');
 
 Route::get('/manager/retur', function () {
     return view('manager.retur', [
@@ -122,7 +130,7 @@ Route::get('/manager/members', function () {
 
 Route::get('/manager/member-detail', function () {
     return view('manager.member-detail');
-});
+})->name('manager.member-detail');
 
 Route::get('/manager/umkm-partners', function () {
     return view('manager.umkm-partners');
@@ -130,11 +138,11 @@ Route::get('/manager/umkm-partners', function () {
 
 Route::get('/manager/promosi', function () {
     return view('manager.promosi');
-});
+})->name('manager.promosi');
 
 Route::get('/manager/absensi', function () {
     return view('manager.absensi');
-});
+})->name('manager.absensi');
 
 Route::get('/manager/reports', function () {
     return view('manager.reports');
@@ -178,12 +186,24 @@ Route::get('/members', function () {
     return view('owner.members');
 })->name('members');
 
+Route::get('/member-detail', function () {
+    return view('manager.member-detail');
+});
+
 Route::get('/umkm-partners', function () {
     if (request('role') === 'manager') {
         return view('manager.umkm-partners');
     }
     return view('owner.umkm-partners');
 })->name('umkm-partners');
+
+Route::get('/promosi', function () {
+    return view('manager.promosi');
+})->name('promosi');
+
+Route::get('/absensi', function () {
+    return view('manager.absensi');
+})->name('absensi');
 
 Route::get('/reports', function () {
     if (request('role') === 'manager') {
@@ -210,20 +230,8 @@ Route::get('/settings', function () {
     return view('owner.settings');
 })->name('settings');
 
-Route::get('/pos', function () {
-    return view('kasir.pos');
-});
-
-Route::get('/select-shift', function () {
-    return view('kasir.select-shift');
-});
-
-Route::get('/proses-kredit', function () {
-    return view('kasir.proses-kredit');
-});
-
-Route::get('/kupon', function () {
-    return view('kasir.kupon');
+Route::get('/stock-opname', function () {
+    return view('manager.stock-opname');
 });
 
 Route::get('/retur', function () {
@@ -239,30 +247,10 @@ Route::get('/retur-masuk', function () {
     ]);
 });
 
-Route::get('/cetak-struk', function () {
-    return view('kasir.cetak-struk');
-});
-
-Route::get('/absensi', function () {
-    return view('manager.absensi');
-});
-
-Route::get('/member-detail', function () {
-    return view('manager.member-detail');
-});
-
-Route::get('/stock-opname', function () {
-    return view('manager.stock-opname');
-});
-
 Route::get('/kirim-barang', function () {
     return view('manager.kirim-barang', [
         'activeNav' => 'kirim_barang'
     ]);
-});
-
-Route::get('/promosi', function () {
-    return view('manager.promosi');
 });
 
 /*
@@ -270,21 +258,35 @@ Route::get('/promosi', function () {
 | Cashier Role Routes (ILP POS Kasir)
 |--------------------------------------------------------------------------
 */
-
 // 1. POS Utama
-// /pos handled above
+Route::get('/pos', function () {
+    return view('kasir.pos');
+})->name('cashier.pos');
+
+Route::get('/kasir/pos', function () {
+    return view('kasir.pos');
+});
 
 // 2. Sesi Kasir
 Route::get('/kasir/sesi', function () {
     return view('kasir.session');
 })->name('cashier.session');
+Route::get('/cashier-session', function () {
+    return view('kasir.session');
+});
 
 // 3. Produk Submenu
 Route::get('/kasir/produk/masuk', function () {
     return view('kasir.goods-in');
 });
+Route::get('/cashier-goods-in', function () {
+    return view('kasir.goods-in');
+});
 
 Route::get('/kasir/inventory', function () {
+    return view('kasir.inventory');
+});
+Route::get('/cashier-inventory', function () {
     return view('kasir.inventory');
 });
 
@@ -292,8 +294,14 @@ Route::get('/kasir/inventory', function () {
 Route::get('/kasir/retur', function () {
     return view('kasir.retur');
 });
+Route::get('/cashier-retur', function () {
+    return view('kasir.retur');
+});
 
 Route::get('/kasir/retur/masuk', function () {
+    return view('kasir.return-in');
+});
+Route::get('/cashier-return-in', function () {
     return view('kasir.return-in');
 });
 
@@ -301,12 +309,21 @@ Route::get('/kasir/retur/masuk', function () {
 Route::get('/kasir/transaksi/riwayat', function () {
     return view('kasir.transactions');
 });
+Route::get('/cashier-transactions', function () {
+    return view('kasir.transactions');
+});
 
 Route::get('/kasir/transaksi/ditahan', function () {
     return view('kasir.held-bills');
 });
+Route::get('/cashier-held-bills', function () {
+    return view('kasir.held-bills');
+});
 
 Route::get('/kasir/transaksi/refund', function () {
+    return view('kasir.refund');
+});
+Route::get('/cashier-refund', function () {
     return view('kasir.refund');
 });
 
@@ -314,29 +331,52 @@ Route::get('/kasir/transaksi/refund', function () {
 Route::get('/kasir/members', function () {
     return view('kasir.members');
 });
+Route::get('/cashier-members', function () {
+    return view('kasir.members');
+});
 
 // 7. Laporan Submenu
 Route::get('/kasir/reports', function () {
+    return view('kasir.reports');
+});
+Route::get('/cashier-reports', function () {
     return view('kasir.reports');
 });
 
 Route::get('/kasir/laporan/kasir', function () {
     return view('kasir.report-by-cashier');
 });
+Route::get('/cashier-report-by-cashier', function () {
+    return view('kasir.report-by-cashier');
+});
 
 Route::get('/kasir/laporan/sesi', function () {
+    return view('kasir.report-sessions');
+});
+Route::get('/cashier-report-sessions', function () {
     return view('kasir.report-sessions');
 });
 
 Route::get('/kasir/laporan/operasional', function () {
     return view('kasir.report-operational');
 });
+Route::get('/cashier-report-operational', function () {
+    return view('kasir.report-operational');
+});
 
 // 8. Kupon
-// /kupon handled above
+Route::get('/kupon', function () {
+    return view('kasir.kupon');
+});
+Route::get('/kasir/kupon', function () {
+    return view('kasir.kupon');
+});
 
 // 9. Stock Opname
 Route::get('/kasir/stock-opname', function () {
+    return view('kasir.stock-opname');
+});
+Route::get('/cashier-stock-opname', function () {
     return view('kasir.stock-opname');
 });
 
@@ -344,12 +384,36 @@ Route::get('/kasir/stock-opname', function () {
 Route::get('/kasir/settings', function () {
     return view('kasir.settings');
 });
-
-// Login & Placeholder
-Route::get('/kasir/login', function () {
-    return view('kasir.login');
+Route::get('/cashier-settings', function () {
+    return view('kasir.settings');
 });
 
+// 11. Select Shift, Proses Kredit, Cetak Struk
+Route::get('/select-shift', function () {
+    return view('kasir.select-shift');
+});
+Route::get('/kasir/select-shift', function () {
+    return view('kasir.select-shift');
+});
+
+Route::get('/proses-kredit', function () {
+    return view('kasir.proses-kredit');
+});
+Route::get('/kasir/proses-kredit', function () {
+    return view('kasir.proses-kredit');
+});
+
+Route::get('/cetak-struk', function () {
+    return view('kasir.cetak-struk');
+});
+Route::get('/kasir/cetak-struk', function () {
+    return view('kasir.cetak-struk');
+});
+
+// Legacy redirects
+Route::get('/kasir/login', function () {
+    return redirect('/login-kasir');
+});
 Route::get('/kasir/placeholder', function () {
-    return view('kasir.placeholder');
+    return redirect('/kasir/pos');
 });

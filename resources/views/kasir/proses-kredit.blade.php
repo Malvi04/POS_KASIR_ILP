@@ -12,21 +12,43 @@
     toastMessage: '',
     showToast: false,
 
-    initCreditPage() {
-        // Load members
+    async initCreditPage() {
+        // Load members from API
         try {
-            const rawMembers = localStorage.getItem('pos_ilp_members_v1');
-            if (rawMembers) {
-                this.members = JSON.parse(rawMembers);
+            const res = await fetch('/api/pos/members/search', { headers: { 'Accept': 'application/json' } });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+                    this.members = json.data.map(m => ({
+                        id: m.member_code,
+                        nik: m.nik,
+                        name: m.name,
+                        dept: m.department,
+                        branch: m.branch,
+                        creditLimit: m.credit_limit,
+                        currentDebt: m.current_debt,
+                        status: m.status
+                    }));
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const nikParam = urlParams.get('nik');
+                    if (nikParam) {
+                        const found = this.members.find(m => m.nik === nikParam);
+                        this.selectedMember = found || this.members[0];
+                    } else {
+                        this.selectedMember = this.members[0];
+                    }
+                }
             }
-        } catch (e) {}
+        } catch (e) {
+            console.warn('API members fetch failed, fallback local:', e);
+        }
 
         if (!this.members) this.members = [];
+        if (!this.selectedMember && this.members.length > 0) {
+            this.selectedMember = this.members[0];
+        }
 
-        // Set default selected member
-        this.selectedMember = this.members.length > 0 ? this.members[0] : null;
-
-        // Load active cart
+        // Load active cart from POS
         try {
             const rawCart = localStorage.getItem('pos_ilp_active_cart_v1');
             if (rawCart) {
@@ -74,7 +96,7 @@
         return this.sisaPlafon - this.grandTotal;
     },
 
-    confirmCreditPayment() {
+    async confirmCreditPayment() {
         if (!this.selectedMember) {
             alert('Pilih anggota terlebih dahulu.');
             return;
@@ -84,65 +106,60 @@
             return;
         }
 
-        const now = new Date();
-        const dateStr = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
-        const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':') + ' WIB';
-        const trxId = '#TRX-KREDIT-' + now.getTime().toString().slice(-6);
-
-        // 1. Deduct member's plafon / increase debt
-        const memberIdx = this.members.findIndex(m => m.id === this.selectedMember.id || m.nik === this.selectedMember.nik);
-        if (memberIdx !== -1) {
-            this.members[memberIdx].currentDebt = (Number(this.members[memberIdx].currentDebt) || 0) + this.grandTotal;
-            localStorage.setItem('pos_ilp_members_v1', JSON.stringify(this.members));
-        }
-
-        // 2. Record transaction
-        const trxRecord = {
-            id: trxId,
-            rawId: 'TRX-' + Math.floor(1000 + Math.random() * 9000),
-            time: timeStr,
-            date: dateStr,
-            terminal: this.activeSession.terminalLabel || 'Kasir 01',
-            cashier: this.activeSession.cashierName || 'Budi Kurniawan',
-            method: 'KREDIT ANGGOTA',
-            methodLabel: 'Kredit Anggota (' + this.selectedMember.name + ')',
-            cashPortion: 0,
-            nonCashPortion: this.grandTotal,
-            subtotal: this.subtotal,
-            discount: 0,
-            tax: this.taxAmount,
-            total: this.grandTotal,
-            cashGiven: 0,
-            change: 0,
-            status: 'SELESAI',
-            syncStatus: 'SYNCED',
+        const payload = {
+            terminal_code: this.activeSession?.terminalLabel || 'POS-01',
+            cashier_nik: (this.activeOperator && this.activeOperator.nik) ? this.activeOperator.nik : (this.activeSession?.cashierNik || '202409821002'),
+            cashier_name: (this.activeOperator && this.activeOperator.name) ? this.activeOperator.name : (this.activeSession?.cashierName || 'Budi Kurniawan'),
+            payment_method: 'KREDIT',
+            member_nik: this.selectedMember.nik,
             items: this.cartItems.map(it => ({
+                sku: it.sku || 'GEN-ITEM',
+                barcode: it.barcode || '-',
                 name: it.name,
                 qty: it.qty,
                 unit: it.unit || 'Pcs',
                 price: it.memberPrice || it.price,
-                total: (it.memberPrice || it.price) * it.qty
+                member_price: it.memberPrice || it.price,
+                is_member: true
             }))
         };
 
         try {
-            const trxs = JSON.parse(localStorage.getItem('pos_ilp_transactions_v1') || '[]');
-            trxs.unshift(trxRecord);
-            localStorage.setItem('pos_ilp_transactions_v1', JSON.stringify(trxs));
-        } catch (e) {}
+            const res = await fetch('/api/pos/checkout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify(payload)
+            });
 
-        // 3. Save to latest receipt
-        localStorage.setItem('pos_ilp_latest_printed_receipt_v1', JSON.stringify(trxRecord));
+            const json = await res.json();
+            if (!res.ok || !json.success) {
+                alert(json.message || 'Transaksi kredit ditolak sistem!');
+                return;
+            }
 
-        // 4. Update session
-        this.activeSession.trxCount = (Number(this.activeSession.trxCount) || 0) + 1;
-        this.persistAllState();
+            const trxRecord = {
+                id: json.data.invoice_number,
+                rawId: json.data.id,
+                time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':') + ' WIB',
+                date: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+                terminal: json.data.terminal_code,
+                cashier: json.data.cashier_name,
+                method: 'KREDIT',
+                methodLabel: 'Kredit Anggota (' + this.selectedMember.name + ')',
+                subtotal: json.data.subtotal,
+                discount: json.data.discount_total,
+                tax: json.data.tax_total,
+                total: json.data.grand_total,
+                member: json.data.member,
+                items: this.cartItems
+            };
 
-        // 5. Clear cart
-        localStorage.removeItem('pos_ilp_active_cart_v1');
-
-        // 6. Redirect to receipt
-        window.location.href = '/cetak-struk?faktur=' + encodeURIComponent(trxId);
+            localStorage.setItem('pos_ilp_latest_printed_receipt_v1', JSON.stringify(trxRecord));
+            localStorage.removeItem('pos_ilp_active_cart_v1');
+            window.location.href = '/cetak-struk?faktur=' + encodeURIComponent(json.data.invoice_number);
+        } catch (e) {
+            alert('Gagal memproses pembayaran kredit ke server: ' + e.message);
+        }
     }
 }"
 x-init="initOpening(); initCreditPage();"

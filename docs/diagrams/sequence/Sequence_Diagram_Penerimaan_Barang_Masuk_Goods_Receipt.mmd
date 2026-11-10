@@ -1,0 +1,67 @@
+sequenceDiagram
+    autonumber
+
+    actor DC as Gudang Pusat (DC) / Supplier
+    actor Kasir as Kasir / Petugas Gudang Toko
+    participant UI as Antarmuka Kasir (/kasir/produk/masuk)
+    participant API as Backend REST API (GoodsReceiptController)
+    participant DB as Database PostgreSQL
+
+    %% ==========================================
+    %% 1. KEDATANGAN EKSPEDISI & CEK FISIK
+    %% ==========================================
+    rect rgb(238, 246, 255)
+        Note over DC,DB: FASE 1: Kedatangan Barang & Pemeriksaan Fisik Muatan
+
+        DC->>Kasir: Sopir tiba di toko & menyerahkan dokumen fisik Surat Jalan (Delivery Order)
+        Kasir->>UI: Buka menu Barang Masuk (/kasir/produk/masuk)
+        UI->>API: GET /api/goods-receipts
+        API->>DB: Query dokumen penerimaan barang berstatus PENDING / IN_TRANSIT
+        DB-->>API: Daftar dokumen pengiriman dari DC Cikarang / Supplier
+        API-->>UI: Tampilkan daftar Surat Jalan masuk
+
+        Kasir->>UI: Pilih dokumen sesuai nomor Surat Jalan pengiriman
+        UI-->>Kasir: Tampilkan daftar rincian barang, SKU, dan kuantitas yang dikirim
+
+        Note over DC,Kasir: Pemeriksaan Fisik Muatan Bersama Sopir Ekspedisi
+        loop Untuk Setiap Item Barang dalam Kiriman
+            Kasir->>DC: Bongkar muatan & hitung jumlah fisik barang
+            Kasir->>Kasir: Periksa kondisi kemasan produk & masa kedaluwarsa (ED)
+            alt Kondisi Barang Baik Sesuai Surat Jalan
+                Kasir->>UI: Input kuantitas diterima (Kondisi: BAIK)
+            else Terdapat Barang Rusak / Bocor / Cacat
+                Kasir->>UI: Input kuantitas fisik baik & catat kuantitas rusak (Kondisi: RUSAK)
+            end
+        end
+    end
+
+    %% ==========================================
+    %% 2. VERIFIKASI & UPDATE STOK PERSADAAN
+    %% ==========================================
+    rect rgb(240, 253, 244)
+        Note over DC,DB: FASE 2: Verifikasi Penerimaan & Pembaruan Stok Toko Otomatis
+
+        Kasir->>UI: Klik tombol 'Verifikasi & Terima Barang Masuk' (Verify)
+        UI->>API: POST /api/goods-receipts/{id}/verify { items: [ { id, qty_good, qty_damaged, condition } ] }
+        
+        API->>DB: Buka DB Transaction
+        loop Untuk Setiap Item yang Diterima BAIK
+            API->>DB: UPDATE products SET stock = stock + qty_good WHERE id = product_id
+            API->>DB: INSERT INTO stock_ledger (tipe: PENERIMAAN_BARANG_MASUK, qty: +qty_good)
+        end
+
+        opt Terdapat Barang yang Berkondisi RUSAK / CACAT
+            API->>DB: INSERT INTO store_return_headers (buat draf retur barang rusak ke DC)
+            API->>DB: INSERT INTO store_return_items (rincian barang rusak hasil verifikasi)
+            Note over API,DB: Barang rusak diisolasi otomatis untuk proses retur ganti rugi
+        end
+
+        API->>DB: UPDATE goods_receipts SET status = 'VERIFIED', verified_at = NOW()
+        API->>DB: Commit DB Transaction
+        DB-->>API: Persediaan barang berhasil diperbarui di database
+        
+        API-->>UI: HTTP 200 OK: Verifikasi Sukses & Stok Toko Bertambah
+        UI->>UI: Generate & Cetak Berita Acara Penerimaan Barang
+        Kasir-->>DC: Serahkan tanda tangan bukti Surat Jalan kepada sopir ekspedisi
+        Note over DC,Kasir: Proses penerimaan barang masuk selesai dan akuntabel
+    end

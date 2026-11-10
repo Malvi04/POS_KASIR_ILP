@@ -1,0 +1,140 @@
+sequenceDiagram
+    autonumber
+
+    actor Customer as Pelanggan
+    actor Cashier as Kasir
+    participant POS_UI as Antarmuka POS (/pos)
+    participant API as Backend REST API (TransactionController)
+    participant DB as Database PostgreSQL
+    actor SPV as Supervisor / Manager
+    participant Printer as Printer Thermal (58mm/80mm)
+
+    %% ==========================================
+    %% 1. SCAN BARANG & VALIDASI MEMBER/PROMO
+    %% ==========================================
+    rect rgb(238, 246, 255)
+        Note over Customer,Printer: FASE 1: Scan Barang, Validasi Anggota & Diskon Promo
+
+        Customer->>Cashier: Menyerahkan barang belanjaan
+        opt Pelanggan Adalah Anggota Koperasi
+            Customer->>Cashier: Berikan NIK / Kartu Anggota
+            Cashier->>POS_UI: Input NIK Anggota
+            POS_UI->>API: GET /api/pos/members/validate/{nik}
+            API->>DB: Query member berdasarkan NIK & hitung sisa plafon kredit
+            DB-->>API: Data Member (Nama, Unit Kerja, Plafon, Sisa Limit)
+            API-->>POS_UI: Member Valid (Terapkan Harga Khusus Anggota)
+        end
+
+        loop Untuk Setiap Produk Belanjaan
+            Cashier->>POS_UI: Scan Barcode atau Ketik Nama/SKU Produk
+            POS_UI->>API: GET /api/pos/products/barcode/{barcode}
+            API->>DB: SELECT * FROM products WHERE barcode = ?
+            DB-->>API: Data Produk (Nama, Harga, Satuan, Stok, Expired Date)
+            API->>API: Hitung Diskon Otomatis Expired Clearance (H-30: 10%, H-14: 25%)
+            API-->>POS_UI: Info Produk & Diskon Kadaluarsa
+            POS_UI->>POS_UI: Tambahkan Produk ke Keranjang Belanja Aktif
+        end
+
+        opt Pelanggan Memiliki Kupon / Voucher BBM
+            Customer->>Cashier: Berikan Kode Voucher / Kupon BBM
+            Cashier->>POS_UI: Input Kode Kupon
+            POS_UI->>API: POST /api/kasir/coupons/{id}/redeem
+            API->>DB: Validasi status, masa berlaku, kuota kupon
+            DB-->>API: Kupon Valid
+            API-->>POS_UI: Potongan Kupon Diterapkan ke Subtotal
+        end
+
+        opt Perlu Diskon Khusus Manual / Void Item
+            alt Void Pembatalan Item
+                Cashier->>POS_UI: Hapus Item dari Keranjang
+                POS_UI-->>Cashier: Wajib Input PIN Otorisasi Supervisor
+                SPV->>POS_UI: Input PIN 6-digit Supervisor
+                POS_UI->>API: POST /api/pos/void/authorize { pin, sku, reason }
+                API->>DB: Validasi PIN Supervisor & Catat ke void_logs
+                DB-->>API: Otorisasi Valid
+                API-->>POS_UI: Void Disetujui, Item Dihapus dari Keranjang
+            else Diskon Manual Kasir
+                Cashier->>POS_UI: Input Persentase / Nominal Diskon Manual
+                SPV->>POS_UI: Input PIN 6-digit Supervisor
+                POS_UI->>API: POST /api/pos/discount/authorize { pin, amount, reason }
+                API->>DB: Validasi PIN Supervisor
+                DB-->>API: Otorisasi Valid
+                API-->>POS_UI: Diskon Manual Diterapkan ke Total
+            end
+        end
+
+        opt Antrean Terhenti / Pelanggan Ambil Barang Tambahan
+            Cashier->>POS_UI: Simpan Transaksi Sementara (Hold Bill)
+            POS_UI->>API: POST /api/pos/hold { cart_items, customer_name }
+            API->>DB: Simpan ke tabel held_bills
+            DB-->>API: Bill Ditahan Tersimpan
+            Note over Cashier,POS_UI: Kasir dapat melayani antrean pelanggan lain
+            Cashier->>POS_UI: Panggil Kembali Transaksi (Recall Bill)
+            POS_UI->>API: POST /api/pos/recall/{id}
+            API-->>POS_UI: Muat Ulang Keranjang Belanja Pelanggan
+        end
+    end
+
+    %% ==========================================
+    %% 2. METODE PEMBAYARAN (MULTI-PAYMENT)
+    %% ==========================================
+    rect rgb(255, 251, 235)
+        Note over Customer,Printer: FASE 2: Pemilihan & Pemrosesan Metode Pembayaran
+
+        POS_UI->>POS_UI: Hitung: Subtotal - Diskon + PPN (11%) = Grand Total
+        POS_UI-->>Customer: Tampilkan Grand Total Tagihan pada Layar
+        Customer->>Cashier: Pilih Metode Pembayaran
+
+        alt Pembayaran 1: TUNAI (CASH)
+            Customer->>Cashier: Menyerahkan uang tunai
+            Cashier->>POS_UI: Input nominal uang tunai yang diterima
+            POS_UI->>POS_UI: Hitung Uang Kembalian (Cash Received - Grand Total)
+            POS_UI->>POS_UI: Buka Laci Kas Otomatis (Kick Cash Drawer)
+        else Pembayaran 2: QRIS (DINAMIS / STATIS)
+            POS_UI->>POS_UI: Generate QRIS Code pada layar kasir
+            Customer->>POS_UI: Scan & bayar via Mobile Banking / E-Wallet
+            POS_UI->>API: Verifikasi status pembayaran QRIS sukses
+        else Pembayaran 3: KARTU DEBIT / EDC
+            Cashier->>Customer: Gesek / Dip kartu pada mesin EDC
+            Cashier->>POS_UI: Input nomor kartu (4 digit terakhir) & Approval Code EDC
+        else Pembayaran 4: KREDIT / KASBON ANGGOTA KOPERASI (POTONG GAJI)
+            Cashier->>POS_UI: Pilih metode Tempo Kasbon PT ILP
+            POS_UI->>API: Validasi sisa limit kredit anggota >= Grand Total
+            alt Sisa Limit Mencukupi
+                API-->>POS_UI: Otorisasi Kredit Disetujui
+            else Sisa Limit Kurang
+                API-->>POS_UI: Plafon Tidak Cukup (Tolak / Alihkan ke Tunai)
+            end
+        else Pembayaran 5: PEMBAYARAN CAMPURAN (SPLIT PAYMENT)
+            Cashier->>POS_UI: Input Pembagian Nominal: Tunai + Non-Tunai
+            POS_UI->>POS_UI: Validasi akumulasi pembayaran = Grand Total
+        end
+    end
+
+    %% ==========================================
+    %% 3. CHECKOUT DATABASE & CETAK STRUK
+    %% ==========================================
+    rect rgb(240, 253, 244)
+        Note over Customer,Printer: FASE 3: Eksekusi Database Checkout & Cetak Struk
+
+        Cashier->>POS_UI: Klik tombol 'Selesaikan Pembayaran' (Checkout)
+        POS_UI->>API: POST /api/pos/checkout { items, payment_method, cash_received, member_nik, terminal_code }
+        
+        API->>DB: Buka DB Transaction
+        API->>DB: Verifikasi status sesi kasir aktif (CashierShift OPEN)
+        API->>DB: Potong stok master barang (Multi-Satuan Base Unit Conversion)
+        API->>DB: INSERT INTO transactions & transaction_items
+        API->>DB: UPDATE cashier_shifts (Akumulasi penjualan tunai / non-tunai)
+        opt Jika Transaksi Kredit Anggota
+            API->>DB: Tambahkan piutang belanja pada tabel members (Potong Gaji)
+        end
+        API->>DB: Commit DB Transaction
+        DB-->>API: Transaksi Sukses Tersimpan (Nomor Faktur: TRX-YYYYMMDD-XXXX)
+
+        API-->>POS_UI: HTTP 201 Created: { success: true, invoice, receipt_data }
+        
+        POS_UI->>Printer: Kirim format cetak struk thermal (58mm / 80mm)
+        Printer-->>Cashier: Struk belanja fisik tercetak
+        Cashier-->>Customer: Serahkan struk belanja, barang, & kembalian (jika ada)
+        Note over Customer,Cashier: Transaksi selesai dengan cepat dan akurat
+    end

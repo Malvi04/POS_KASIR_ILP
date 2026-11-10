@@ -1,0 +1,66 @@
+
+erDiagram
+    SUPPLIERS {
+        bigint id PK
+        string name
+    }
+    LOCATIONS {
+        bigint id PK
+        string name
+    }
+    USERS {
+        bigint id PK
+        string name
+    }
+    PURCHASES {
+        bigint id PK
+        string purchase_number UK
+        bigint supplier_id FK
+        bigint location_id FK
+        bigint created_by FK
+        date purchase_date
+        string status
+    }
+    PURCHASE_ITEMS {
+        bigint id PK
+        bigint purchase_id FK
+        bigint product_id FK
+        decimal qty
+        decimal purchase_price
+        string ownership_type
+    }
+    GOODS_RECEIPTS {
+        bigint id PK
+        string receipt_number UK
+        bigint purchase_id FK
+        bigint received_by FK
+        datetime received_at
+        string status
+    }
+    GOODS_RECEIPT_ITEMS {
+        bigint id PK
+        bigint goods_receipt_id FK
+        bigint purchase_item_id FK
+        bigint product_id FK
+        decimal qty_received
+        decimal actual_unit_cost
+        decimal supplier_price
+        string ownership_type
+        bigint supplier_id FK
+    }
+    PRODUCTS {
+        bigint id PK
+        string name
+    }
+
+    SUPPLIERS ||--o{ PURCHASES : supplies
+    LOCATIONS ||--o{ PURCHASES : destination
+    USERS ||--o{ PURCHASES : creates
+    PURCHASES ||--|{ PURCHASE_ITEMS : contains
+    PURCHASES ||--o{ GOODS_RECEIPTS : received_in
+    USERS ||--o{ GOODS_RECEIPTS : records
+    GOODS_RECEIPTS ||--|{ GOODS_RECEIPT_ITEMS : contains
+    PURCHASE_ITEMS ||--o{ GOODS_RECEIPT_ITEMS : fulfilled_by
+    PRODUCTS ||--o{ PURCHASE_ITEMS : ordered
+    PRODUCTS ||--o{ GOODS_RECEIPT_ITEMS : received
+    SUPPLIERS ||--o{ GOODS_RECEIPT_ITEMS : owns_consignment

@@ -61,7 +61,40 @@
         return { unique, hasDuplicates };
     },
 
-    initProducts() {
+    async initProducts() {
+        try {
+            const res = await fetch('/api/products?per_page=100', { headers: { 'Accept': 'application/json' } });
+            if (res.ok) {
+                const json = await res.json();
+                const items = json.data || (Array.isArray(json) ? json : []);
+                if (Array.isArray(items) && items.length > 0) {
+                    const mapped = items.map(p => ({
+                        id: p.id,
+                        sku: p.sku,
+                        barcode: p.barcode,
+                        name: p.name,
+                        brand: p.supplier_name || 'Lokal',
+                        category: p.category || 'Umum',
+                        rackLocation: p.rack_location || 'Lorong Toko',
+                        stock: p.stock ?? 0,
+                        minStock: p.min_stock ?? 10,
+                        unit: p.unit || 'Pcs',
+                        price: p.price ?? p.original_price ?? 0,
+                        memberPrice: p.member_price ?? p.original_member_price ?? p.price ?? 0,
+                        status: p.stock_status || this.calculateStatus(p.stock, p.min_stock, p.expired_date),
+                        batchLot: 'LOT-' + p.sku,
+                        expiredDate: p.expired_date || ''
+                    }));
+                    const result = this.deduplicateProducts(mapped);
+                    this.products = result.unique;
+                    this.saveProductsToStorage();
+                    return;
+                }
+            }
+        } catch (e) {
+            console.warn('API products fetch fallback:', e);
+        }
+
         try {
             const raw = localStorage.getItem('pos_ilp_inventory_products_v1');
             if (raw) {
@@ -133,15 +166,15 @@
     },
 
     get lowStockCount() {
-        return this.products.filter(p => p.status === 'STOK_RENDAH').length;
+        return this.products.filter(p => p.status === 'STOK_RENDAH' || (Number(p.stock) <= Number(p.minStock || 10) && Number(p.stock) > 0)).length;
     },
 
     get nearExpiredCount() {
-        return this.products.filter(p => p.status === 'NEAR_EXPIRED').length;
+        return this.products.filter(p => p.status === 'NEAR_EXPIRED' || p.status === 'CRITICAL' || p.status === 'WARNING').length;
     },
 
     get outOfStockCount() {
-        return this.products.filter(p => p.status === 'HABIS').length;
+        return this.products.filter(p => p.status === 'HABIS' || Number(p.stock) <= 0).length;
     },
 
     // Status calculator helper
@@ -240,6 +273,7 @@
     openEditModal(product) {
         this.modalMode = 'edit';
         this.formSkuOriginal = product.sku;
+        this.formIdOriginal = product.id;
         this.formErrors = {};
         this.duplicateExistingProduct = null;
 
@@ -282,7 +316,37 @@
         this.formData.barcode = '899' + Math.floor(1000000000 + Math.random() * 9000000000);
     },
 
-    saveProduct() {
+    // Tampilkan error validasi dari server (422) pada field terkait, scroll ke atas form,
+    // dan sinkronkan ulang daftar produk bila SKU/barcode ternyata sudah ada di database.
+    async showServerErrors(json, fallbackMessage) {
+        const fieldMap = {
+            sku: 'sku', barcode: 'barcode', name: 'name', price: 'price',
+            member_price: 'memberPrice', stock: 'stock', min_stock: 'minStock',
+        };
+        const serverErrors = (json && json.errors) || {};
+        const errors = {};
+        Object.keys(serverErrors).forEach(k => {
+            const target = fieldMap[k];
+            const msg = Array.isArray(serverErrors[k]) ? serverErrors[k][0] : serverErrors[k];
+            if (target) errors[target] = msg;
+        });
+        if (errors.sku) errors.sku = `SKU '${this.formData.sku}' sudah terdaftar di database. Gunakan SKU lain.`;
+        if (errors.barcode) errors.barcode = `Barcode '${this.formData.barcode}' sudah terdaftar di database. Gunakan barcode lain.`;
+        errors.general = (json && json.message) || fallbackMessage;
+        if (errors.sku || errors.barcode) {
+            errors.general = 'Produk gagal disimpan: SKU atau barcode sudah ada di database.';
+        }
+        this.formErrors = errors;
+        this.$nextTick(() => {
+            const body = document.getElementById('productFormBody');
+            if (body) body.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+        if (errors.sku || errors.barcode) {
+            await this.initProducts();
+        }
+    },
+
+    async saveProduct() {
         this.formErrors = {};
         this.duplicateExistingProduct = null;
         const f = this.formData;
@@ -366,23 +430,68 @@
             expiredDate: displayExpDate
         };
 
+        const apiPayload = {
+            sku: f.sku.trim().toUpperCase(),
+            barcode: f.barcode.trim(),
+            name: f.name.trim(),
+            category: f.category,
+            unit: f.unit.trim() || 'Pcs',
+            cost_price: Math.round(Number(f.price) * 0.8),
+            price: Number(f.price),
+            member_price: Number(f.memberPrice || f.price),
+            stock: Number(f.stock),
+            min_stock: Number(f.minStock),
+            rack_location: f.rackLocation.trim() || 'Display Rak',
+            expired_date: f.expiredDate || null,
+        };
+
         if (this.modalMode === 'create') {
-            this.products.unshift(payload);
-            this.saveProductsToStorage();
-            this.showProductModal = false;
-            this.triggerToast(`Produk '${payload.name}' berhasil ditambahkan ke katalog stok.`, 'success');
-        } else {
-            const idx = this.products.findIndex(p => p.sku === this.formSkuOriginal);
-            if (idx !== -1) {
-                this.products[idx] = payload;
-                this.saveProductsToStorage();
-                if (this.selectedProduct && this.selectedProduct.sku === this.formSkuOriginal) {
-                    this.selectedProduct = payload;
+            try {
+                const res = await fetch('/api/products', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify(apiPayload)
+                });
+                const json = await res.json();
+                if (!res.ok || !json.success) {
+                    await this.showServerErrors(json, 'Gagal menyimpan produk ke database.');
+                    return;
                 }
+                await this.initProducts();
                 this.showProductModal = false;
-                this.triggerToast(`Produk '${payload.name}' berhasil diperbarui.`, 'success');
-            } else {
-                this.formErrors.general = 'Produk tidak ditemukan di database katalog.';
+                this.triggerToast(`Produk '${apiPayload.name}' berhasil disimpan ke database master & POS.`, 'success');
+            } catch (err) {
+                this.products.unshift(payload);
+                this.saveProductsToStorage();
+                this.showProductModal = false;
+                this.triggerToast(`Produk '${payload.name}' disimpan (mode lokal).`, 'info');
+            }
+        } else {
+            const targetId = this.formIdOriginal || this.products.find(p => p.sku === this.formSkuOriginal)?.id;
+            try {
+                if (targetId) {
+                    const res = await fetch('/api/products/' + targetId, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                        body: JSON.stringify(apiPayload)
+                    });
+                    const json = await res.json();
+                    if (!res.ok || !json.success) {
+                        await this.showServerErrors(json, 'Gagal memperbarui produk di database.');
+                        return;
+                    }
+                }
+                await this.initProducts();
+                this.showProductModal = false;
+                this.triggerToast(`Produk '${apiPayload.name}' berhasil diperbarui di database master & POS.`, 'success');
+            } catch (err) {
+                const idx = this.products.findIndex(p => p.sku === this.formSkuOriginal);
+                if (idx !== -1) {
+                    this.products[idx] = payload;
+                    this.saveProductsToStorage();
+                    this.showProductModal = false;
+                    this.triggerToast(`Produk '${payload.name}' diperbarui (mode lokal).`, 'info');
+                }
             }
         }
     },
@@ -398,7 +507,7 @@
         this.showDeleteModal = true;
     },
 
-    confirmDelete() {
+    async confirmDelete() {
         if (!this.productToDelete) return;
         if (this.deleteConfirmInput.trim().toLowerCase() !== 'hapus') {
             return;
@@ -406,11 +515,27 @@
 
         const name = this.productToDelete.name;
         const targetSku = this.productToDelete.sku;
+        const targetId = this.productToDelete.id || this.products.find(p => p.sku === targetSku)?.id;
 
-        this.products = this.products.filter(p => p.sku !== targetSku);
-        this.saveProductsToStorage();
+        if (targetId) {
+            try {
+                const res = await fetch('/api/products/' + targetId, {
+                    method: 'DELETE',
+                    headers: { 'Accept': 'application/json' }
+                });
+                const json = await res.json();
+                if (!res.ok || !json.success) {
+                    this.triggerToast(json.message || 'Gagal menghapus produk.', 'error');
+                    return;
+                }
+            } catch (e) {
+                console.warn('API product delete fallback:', e);
+            }
+        }
 
-        if (this.selectedProduct && this.selectedProduct.sku === targetSku) {
+        await this.initProducts();
+
+        if (this.selectedProduct && (this.selectedProduct.sku === targetSku || this.selectedProduct.id === targetId)) {
             this.showDetailModal = false;
             this.selectedProduct = null;
         }
@@ -418,7 +543,7 @@
         this.showDeleteModal = false;
         this.productToDelete = null;
         this.deleteConfirmInput = '';
-        this.triggerToast(`Produk '${name}' berhasil dihapus dari katalog stok.`, 'info');
+        this.triggerToast(`Produk '${name}' berhasil dihapus dari database & POS.`, 'info');
     },
 
     openDetail(product) {
@@ -797,7 +922,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                 </div>
 
                 <!-- Body (Scrollable Form) -->
-                <div class="p-6 space-y-4 overflow-y-auto text-xs flex-1">
+                <div id="productFormBody" class="p-6 space-y-4 overflow-y-auto text-xs flex-1">
                     <!-- General Error Alert -->
                     <template x-if="formErrors.general">
                         <div class="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 flex items-center gap-2 font-medium">
