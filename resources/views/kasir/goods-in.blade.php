@@ -17,30 +17,48 @@
     documents: [],
 
     async initGoodsIn() {
+        let localDocs = [];
+        const stored = localStorage.getItem('pos_ilp_goods_in_docs_v1');
+        if (stored) {
+            try {
+                localDocs = JSON.parse(stored);
+                if (!Array.isArray(localDocs)) localDocs = [];
+            } catch(e) {
+                localDocs = [];
+            }
+        }
+        this.documents = localDocs;
+
         try {
             const res = await fetch('/api/goods-receipts', { headers: { 'Accept': 'application/json' } });
             if (res.ok) {
                 const json = await res.json();
-                if (json.success && Array.isArray(json.data) && json.data.length > 0) {
-                    this.documents = json.data;
+                if (json.success && Array.isArray(json.data)) {
+                    const apiDocs = json.data;
+                    const merged = [...apiDocs];
+                    // Pertahankan dokumen lokal yang belum tersimpan di backend atau draft
+                    for (const loc of localDocs) {
+                        const exists = merged.some(m => (m.id && m.id === loc.id) || (m.docNo && m.docNo === loc.docNo));
+                        if (!exists) {
+                            merged.push(loc);
+                        }
+                    }
+                    this.documents = merged;
                     this.saveDocs();
-                    return;
                 }
             }
         } catch(e) {
             console.warn('API goods-receipts fetch error:', e);
         }
 
-        const stored = localStorage.getItem('pos_ilp_goods_in_docs_v1');
-        if (stored) {
-            try {
-                this.documents = JSON.parse(stored);
-            } catch(e) {
-                this.documents = [];
+        // Sinkronisasi real-time antar tab (Manager Kirim Barang -> Kasir Barang Masuk)
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'pos_ilp_goods_in_docs_v1' && e.newValue) {
+                try {
+                    this.documents = JSON.parse(e.newValue);
+                } catch(err) {}
             }
-        } else {
-            this.documents = [];
-        }
+        });
     },
 
     saveDocs() {
@@ -85,6 +103,14 @@
     openVerification(doc) {
         // Clone doc to avoid direct mutation before confirmation
         this.selectedDoc = JSON.parse(JSON.stringify(doc));
+        if (this.selectedDoc && Array.isArray(this.selectedDoc.items)) {
+            // Default received quantity to sent quantity if not yet filled
+            this.selectedDoc.items.forEach(it => {
+                if (it.qtyReceived === undefined || it.qtyReceived === null || it.qtyReceived === 0) {
+                    it.qtyReceived = it.qtySent;
+                }
+            });
+        }
         this.verifyNotes = doc.generalNotes || '';
         this.showVerifyModal = true;
     },
@@ -107,25 +133,28 @@
             items.forEach(it => {
                 const receivedQty = parseInt(it.qtyReceived, 10) || 0;
                 if (receivedQty > 0) {
-                    const p = prods.find(pr => pr.sku === it.sku || pr.barcode === it.sku || (pr.nama && pr.nama.toLowerCase().includes(it.name.toLowerCase())));
+                    const p = prods.find(pr => (pr.sku && pr.sku === it.sku) || (pr.barcode && pr.barcode === it.sku) || (pr.name && pr.name.toLowerCase() === (it.name || '').toLowerCase()) || (pr.nama && pr.nama.toLowerCase() === (it.name || '').toLowerCase()));
                     if (p) {
-                        p.stok = (parseInt(p.stok, 10) || 0) + receivedQty;
+                        const cur = parseInt(p.stock !== undefined ? p.stock : (p.stok || 0), 10) || 0;
+                        p.stock = cur + receivedQty;
+                        p.stok = cur + receivedQty;
                     }
                 }
             });
             localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(prods));
+            window.dispatchEvent(new CustomEvent('pos-inventory-synced'));
         } catch(e) {
             console.error('Error updating stock', e);
         }
     },
 
-    confirmGoodsReceipt() {
+    async confirmGoodsReceipt() {
         if (!this.selectedDoc) return;
 
         const nowStr = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) + ' • ' +
                        new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':') + ' WIB';
 
-        const original = this.documents.find(d => d.id === this.selectedDoc.id);
+        const original = this.documents.find(d => (d.id && d.id === this.selectedDoc.id) || (d.docNo && d.docNo === this.selectedDoc.docNo));
         if (original) {
             // Apply items confirmation
             original.items = this.selectedDoc.items.map(it => ({
@@ -144,7 +173,7 @@
             // Update master inventory stock via API
             if (original.id && typeof original.id === 'number') {
                 try {
-                    fetch('/api/goods-receipts/' + original.id + '/verify', {
+                    await fetch('/api/goods-receipts/' + original.id + '/verify', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                         body: JSON.stringify({
@@ -157,8 +186,10 @@
                                 note: it.note
                             }))
                         })
-                    }).catch(err => console.warn('API sync receipt error', err));
-                } catch (e) {}
+                    });
+                } catch (e) {
+                    console.warn('API sync receipt error', e);
+                }
             }
 
             this.updateInventoryStock(original.items);

@@ -41,36 +41,68 @@
         setTimeout(() => { this.showToast = false; }, 3500);
     },
 
-    initKirimBarang() {
-        // Load data pengiriman dari storage existing (berbagi dengan barang masuk toko)
+    async initKirimBarang() {
+        // 1. Baca data pengiriman dari localStorage
+        let localDocs = [];
         const stored = localStorage.getItem('pos_ilp_goods_in_docs_v1');
         if (stored) {
             try {
-                const parsed = JSON.parse(stored);
-                if (Array.isArray(parsed)) {
-                    this.documents = parsed;
-                } else {
-                    this.documents = [];
-                }
+                localDocs = JSON.parse(stored);
+                if (!Array.isArray(localDocs)) localDocs = [];
             } catch(e) {
                 console.error('Failed to parse shipments storage:', e);
-                this.documents = [];
+                localDocs = [];
             }
-        } else {
-            this.documents = [];
+        }
+        this.documents = localDocs;
+
+        // 2. Fetch live data dari API backend goods-receipts
+        try {
+            const res = await fetch('/api/goods-receipts', { headers: { 'Accept': 'application/json' } });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && Array.isArray(json.data)) {
+                    const apiDocs = json.data;
+                    const merged = [...apiDocs];
+                    // Pertahankan local drafts atau offline shipments
+                    for (const loc of localDocs) {
+                        const exists = merged.some(m => (m.id && m.id === loc.id) || (m.docNo && m.docNo === loc.docNo));
+                        if (!exists) {
+                            merged.push(loc);
+                        }
+                    }
+                    this.documents = merged;
+                    this.saveDocuments();
+                }
+            }
+        } catch(e) {
+            console.warn('API goods-receipts fetch error:', e);
         }
 
-        // Load referensi produk katalog master
-        this.loadAvailableProducts();
+        // 3. Load referensi produk katalog master
+        await this.loadAvailableProducts();
+
+        // 4. Sinkronisasi real-time antar tab browser
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'pos_ilp_goods_in_docs_v1' && e.newValue) {
+                try {
+                    this.documents = JSON.parse(e.newValue);
+                } catch(err) {}
+            }
+            if (e.key === 'pos_ilp_inventory_products_v1') {
+                this.loadAvailableProducts();
+            }
+        });
     },
 
-    loadAvailableProducts() {
+    async loadAvailableProducts() {
         const raw = localStorage.getItem('pos_ilp_inventory_products_v1');
         if (raw) {
             try {
                 const parsed = JSON.parse(raw);
-                if (Array.isArray(parsed)) {
+                if (Array.isArray(parsed) && parsed.length > 0) {
                     this.availableProducts = parsed.map(p => ({
+                        id: p.id,
                         sku: p.sku || p.barcode || '-',
                         name: p.name || p.nama || '-',
                         category: p.category || p.kategori || 'Umum',
@@ -83,6 +115,30 @@
                 console.error('Failed to parse catalog products:', e);
             }
         }
+
+        // Fallback: Ambil dari API produk jika localStorage belum ada
+        try {
+            const res = await fetch('/api/pos/products/search?limit=100', { headers: { 'Accept': 'application/json' } });
+            if (res.ok) {
+                const json = await res.json();
+                const prods = json.data || json;
+                if (Array.isArray(prods) && prods.length > 0) {
+                    this.availableProducts = prods.map(p => ({
+                        id: p.id,
+                        sku: p.sku || p.barcode || '-',
+                        name: p.name || p.nama || '-',
+                        category: p.category || p.kategori || 'Umum',
+                        unit: p.unit || 'Pcs',
+                        stock: Math.max(0, Number(p.stock !== undefined ? p.stock : (p.stok || 0)))
+                    }));
+                    localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(this.availableProducts));
+                    return;
+                }
+            }
+        } catch(e) {
+            console.warn('Failed to load products from API:', e);
+        }
+
         this.availableProducts = [];
     },
 
@@ -202,7 +258,7 @@
         return null;
     },
 
-    submitShipment(mode = 'kirim') {
+    async submitShipment(mode = 'kirim') {
         const err = this.hasValidationErrors();
         if (err) {
             this.triggerToast(err, 'error');
@@ -238,7 +294,7 @@
                 condition: 'BAIK'
             }));
 
-            const newDoc = {
+            let newDoc = {
                 id: 'trf_' + Date.now(),
                 docNo: docNo,
                 date: dateStr,
@@ -257,6 +313,40 @@
                 items: preparedItems
             };
 
+            // Simpan ke database backend jika bukan offline
+            try {
+                const apiRes = await fetch('/api/goods-receipts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({
+                        docNo: docNo,
+                        origin_source: newDoc.warehouseOrigin,
+                        destination_store: newDoc.destinationStore,
+                        driver_name: newDoc.driverName,
+                        plate_number: newDoc.plateNumber,
+                        status: newDoc.status,
+                        notes: newDoc.generalNotes,
+                        items: preparedItems.map(it => ({
+                            sku: it.sku,
+                            name: it.name,
+                            category: it.category,
+                            unit: it.unit,
+                            qty_sent: it.qtySent,
+                            condition: it.condition
+                        }))
+                    })
+                });
+
+                if (apiRes.ok) {
+                    const apiJson = await apiRes.json();
+                    if (apiJson.success && apiJson.data) {
+                        newDoc = { ...newDoc, ...apiJson.data };
+                    }
+                }
+            } catch(apiErr) {
+                console.warn('API post shipment warning (persisted locally):', apiErr);
+            }
+
             // Jika status langsung dikirim, kurangi stok master gudang
             if (!isDraft) {
                 this.deductMasterStock(preparedItems);
@@ -268,9 +358,9 @@
 
             this.showCreateModal = false;
             if (isDraft) {
-                this.triggerToast(`Dokumen draft pengiriman ${docNo} berhasil disimpan. Stok gudang belum berkurang.`);
+                this.triggerToast(`Dokumen draft pengiriman ${newDoc.docNo} berhasil disimpan. Stok gudang belum berkurang.`);
             } else {
-                this.triggerToast(`Dokumen pengiriman ${docNo} berhasil dibuat & dikirim ke ${newDoc.destinationStore}. Stok gudang telah diperbarui!`);
+                this.triggerToast(`Dokumen pengiriman ${newDoc.docNo} berhasil dibuat & dikirim ke ${newDoc.destinationStore}. Stok gudang telah diperbarui!`);
             }
         } catch(e) {
             console.error('Error submitting shipment:', e);
@@ -302,13 +392,13 @@
         }
     },
 
-    dispatchDraft(doc) {
+    async dispatchDraft(doc) {
         if (!confirm(`Konfirmasi pengiriman fisik untuk dokumen ${doc.docNo}? Stok gudang akan dipotong sesuai kuantitas pengiriman.`)) {
             return;
         }
 
         // Validasi ketersediaan stok aktual
-        this.loadAvailableProducts();
+        await this.loadAvailableProducts();
         for (let it of doc.items) {
             const p = this.availableProducts.find(pr => pr.sku === it.sku);
             const currentStock = p ? p.stock : 0;
@@ -328,6 +418,50 @@
 
         doc.status = 'MENUNGGU_VERIFIKASI';
         doc.sentAt = `${dateStr} • ${timeStr}`;
+
+        // Sinkronisasi ke backend DB jika memiliki ID di database
+        if (typeof doc.id === 'number') {
+            try {
+                await fetch('/api/goods-receipts/' + doc.id + '/status', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ status: 'MENUNGGU_VERIFIKASI' })
+                });
+            } catch(e) {
+                console.warn('API update status error:', e);
+            }
+        } else {
+            try {
+                const apiRes = await fetch('/api/goods-receipts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({
+                        docNo: doc.docNo,
+                        origin_source: doc.warehouseOrigin,
+                        destination_store: doc.destinationStore,
+                        driver_name: doc.driverName,
+                        plate_number: doc.plateNumber,
+                        status: 'MENUNGGU_VERIFIKASI',
+                        notes: doc.generalNotes,
+                        items: (doc.items || []).map(it => ({
+                            sku: it.sku,
+                            name: it.name,
+                            category: it.category,
+                            unit: it.unit,
+                            qty_sent: it.qtySent,
+                            condition: it.condition
+                        }))
+                    })
+                });
+                if (apiRes.ok) {
+                    const apiJson = await apiRes.json();
+                    if (apiJson.success && apiJson.data) {
+                        doc.id = apiJson.data.id;
+                    }
+                }
+            } catch(e) {}
+        }
+
         this.saveDocuments();
 
         if (this.selectedDoc && this.selectedDoc.id === doc.id) {
@@ -337,11 +471,24 @@
         this.triggerToast(`Dokumen ${doc.docNo} berhasil dikirim! Status kini menunggu konfirmasi penerimaan toko.`);
     },
 
-    cancelDraft(doc) {
+    async cancelDraft(doc) {
         if (!confirm(`Batalkan dokumen draft pengiriman ${doc.docNo}?`)) {
             return;
         }
         doc.status = 'DIBATALKAN';
+
+        if (typeof doc.id === 'number') {
+            try {
+                await fetch('/api/goods-receipts/' + doc.id + '/status', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ status: 'DIBATALKAN' })
+                });
+            } catch(e) {
+                console.warn('API update status error:', e);
+            }
+        }
+
         this.saveDocuments();
 
         if (this.selectedDoc && this.selectedDoc.id === doc.id) {

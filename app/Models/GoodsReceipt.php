@@ -16,6 +16,7 @@ class GoodsReceipt extends Model
         'driver_name',
         'plate_number',
         'origin_source',
+        'destination_store',
         'status',
         'notes',
     ];

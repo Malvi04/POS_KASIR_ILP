@@ -285,6 +285,8 @@ Route::prefix('attendance')->group(function () {
 // Penerimaan Barang Masuk (Transfer Gudang DC / Supplier)
 Route::prefix('goods-receipts')->group(function () {
     Route::get('/', [GoodsReceiptController::class, 'index']);
+    Route::post('/', [GoodsReceiptController::class, 'store']);
     Route::post('/{id}/verify', [GoodsReceiptController::class, 'verify']);
+    Route::put('/{id}/status', [GoodsReceiptController::class, 'updateStatus']);
 });
 
