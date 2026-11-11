@@ -121,7 +121,7 @@
                            x-model="staffPinInput"
                            placeholder="Masukkan 6-digit PIN..."
                            class="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white font-mono text-xs font-bold text-gray-900 outline-none focus:border-[#0052cc]">
-                    <p class="text-[10px] text-amber-700 font-medium mt-1">Demo PIN Petugas Ini: <span class="font-mono font-bold" x-text="selectedStaffObj.pin || '123456'">123456</span></p>
+                    <p class="text-[10px] text-gray-500 font-medium mt-1">Gunakan PIN 6-digit kasir terdaftar Anda.</p>
 
                     <!-- MODAL BANTUAN LUPA PIN KASIR DI TERMINAL -->
                     <template x-teleport="body">

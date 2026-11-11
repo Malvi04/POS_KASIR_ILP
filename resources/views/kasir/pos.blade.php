@@ -14,7 +14,6 @@
 
     // Products Catalog State
     products: [],
-
     deduplicateProducts(items) {
         if (!Array.isArray(items)) return { unique: [], hasDuplicates: false };
         const unique = [];
@@ -43,7 +42,24 @@
         return { unique, hasDuplicates };
     },
 
-    initProducts() {
+    async initProducts() {
+        try {
+            const res = await fetch('/api/pos/products/search?limit=100', {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && Array.isArray(json.data)) {
+                    const result = this.deduplicateProducts(json.data);
+                    this.products = result.unique;
+                    localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(result.unique));
+                    return;
+                }
+            }
+        } catch (e) {
+            console.warn('API products search failed:', e);
+        }
+
         try {
             const raw = localStorage.getItem('pos_ilp_inventory_products_v1');
             if (raw) {
@@ -57,9 +73,8 @@
                     return;
                 }
             }
-        } catch (e) {
-            console.error('Error loading inventory products in POS:', e);
-        }
+        } catch (e) {}
+
         this.products = [];
     },
 
@@ -109,12 +124,20 @@
             if (raw) {
                 const parsed = JSON.parse(raw);
                 if (Array.isArray(parsed) && parsed.length > 0) {
-                    this.cart = parsed;
-                    return;
+                    // Bersihkan jika masih berisi data demo bawaan (Indomie & Ultra Milk)
+                    const isLegacyDemo = parsed.length === 2 && parsed.some(it => it.sku === 'PRD-006') && parsed.some(it => it.sku === 'PRD-003');
+                    if (!isLegacyDemo) {
+                        this.cart = parsed;
+                        return;
+                    } else {
+                        localStorage.removeItem('pos_ilp_active_cart_v1');
+                    }
                 }
             }
         } catch (e) {}
+        // Keranjang kasir bersih/kosong (0) sebelum kasir memilih produk
         this.cart = [];
+        this.saveCart();
     },
 
     saveCart() {
@@ -141,55 +164,168 @@
                 sku: p.sku || '',
                 barcode: p.barcode || '',
                 name: p.name || 'Produk',
+                originalPrice: Number(p.original_price || p.price) || 0,
                 price: Number(p.price) || 0,
-                memberPrice: Number(p.memberPrice || p.price) || 0,
+                memberPrice: Number(p.member_price || p.price) || 0,
                 qty: 1,
-                unit: p.unit || 'Pcs'
+                unit: p.unit || 'Pcs',
+                isTaxable: p.is_taxable !== false,
+                isNearExpired: Boolean(p.is_near_expired),
+                daysUntilExpiration: p.days_until_expiration,
+                clearanceDiscountPercent: Number(p.clearance_discount_percent) || 0,
+                clearanceWarningBadge: p.clearance_warning_badge || null
             });
         }
         this.saveCart();
-        this.triggerPosToast(`+1 ${p.name} ditambahkan`);
+        const discountNotice = p.is_near_expired ? ` (+Diskon Clearance ${p.clearance_discount_percent}%)` : '';
+        this.triggerPosToast(`+1 ${p.name}${discountNotice} ditambahkan`);
     },
 
     updateCartQty(index, delta) {
         if (this.cart[index]) {
-            this.cart[index].qty += delta;
-            if (this.cart[index].qty <= 0) {
-                this.cart.splice(index, 1);
+            if (delta < 0 && this.cart[index].qty === 1) {
+                // If reducing 1 to 0, require Supervisor Void authorization
+                this.requestVoidItem(index);
+                return;
             }
+            this.cart[index].qty += delta;
             this.saveCart();
         }
     },
 
-    removeFromCart(index) {
-        if (this.cart[index]) {
-            const name = this.cart[index].name;
-            this.cart.splice(index, 1);
-            this.saveCart();
-            this.triggerPosToast(`${name} dihapus dari keranjang`);
-        }
+    // Otorisasi Void / Anti-Fraud Control Modal
+    voidModal: {
+        open: false,
+        actionType: 'VOID_ITEM', // VOID_ITEM or VOID_ALL
+        itemIndex: null,
+        item: null,
+        pin: '',
+        reason: 'Pelanggan membatalkan barang',
+        error: '',
+        isSubmitting: false
     },
 
-    clearCart() {
+    requestVoidItem(index) {
+        if (!this.cart[index]) return;
+        this.voidModal.actionType = 'VOID_ITEM';
+        this.voidModal.itemIndex = index;
+        this.voidModal.item = this.cart[index];
+        this.voidModal.pin = '';
+        this.voidModal.reason = 'Pelanggan membatalkan barang';
+        this.voidModal.error = '';
+        this.voidModal.open = true;
+    },
+
+    requestVoidCart() {
         if (this.cart.length === 0) return;
-        if (confirm('Kosongkan seluruh isi keranjang belanja?')) {
-            this.cart = [];
-            this.saveCart();
-            this.triggerPosToast('Keranjang telah dikosongkan.');
+        this.voidModal.actionType = 'VOID_ALL';
+        this.voidModal.itemIndex = null;
+        this.voidModal.item = null;
+        this.voidModal.pin = '';
+        this.voidModal.reason = 'Batal transaksi seluruh keranjang';
+        this.voidModal.error = '';
+        this.voidModal.open = true;
+    },
+
+    async submitVoid() {
+        if (!this.voidModal.pin.trim()) {
+            this.voidModal.error = 'Masukkan PIN / Password Otorisasi Supervisor!';
+            return;
+        }
+
+        this.voidModal.isSubmitting = true;
+        this.voidModal.error = '';
+
+        try {
+            if (this.voidModal.actionType === 'VOID_ITEM' && this.voidModal.item) {
+                const res = await fetch('/api/pos/void/item', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({
+                        pin_or_password: this.voidModal.pin,
+                        item_sku: this.voidModal.item.sku || 'ITEM',
+                        item_name: this.voidModal.item.name,
+                        item_qty: this.voidModal.item.qty,
+                        amount_voided: (this.isMember ? this.voidModal.item.memberPrice : this.voidModal.item.price) * this.voidModal.item.qty,
+                        cashier_name: (this.activeOperator && this.activeOperator.name) ? this.activeOperator.name : (this.activeSession.cashierName || 'Kasir'),
+                        terminal_code: this.activeSession.terminalLabel || 'POS-01',
+                        reason: this.voidModal.reason
+                    })
+                });
+
+                const json = await res.json();
+                if (!res.ok || !json.success) {
+                    this.voidModal.error = json.message || 'Otorisasi ditolak!';
+                    this.voidModal.isSubmitting = false;
+                    return;
+                }
+
+                const removedName = this.voidModal.item.name;
+                this.cart.splice(this.voidModal.itemIndex, 1);
+                this.saveCart();
+                this.voidModal.open = false;
+                this.triggerPosToast(`Item [${removedName}] dibatalkan (Otorisasi: ${json.data.supervisor_name})`);
+            } else {
+                // Void All
+                const res = await fetch('/api/pos/void/authorize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({
+                        pin_or_password: this.voidModal.pin,
+                        action_type: 'VOID_TRANSACTION'
+                    })
+                });
+
+                const json = await res.json();
+                if (!res.ok || !json.authorized) {
+                    this.voidModal.error = json.message || 'Otorisasi PIN Supervisor ditolak!';
+                    this.voidModal.isSubmitting = false;
+                    return;
+                }
+
+                this.cart = [];
+                this.saveCart();
+                this.voidModal.open = false;
+                this.triggerPosToast(`Seluruh keranjang belanja berhasil dibatalkan oleh ${json.supervisor.name}`);
+            }
+        } catch (e) {
+            this.voidModal.error = 'Gagal menghubungi server otorisasi: ' + e.message;
+        } finally {
+            this.voidModal.isSubmitting = false;
         }
     },
 
-    handleSearchEnter() {
+    async handleSearchEnter() {
         if (!this.searchQuery.trim()) return;
-        const q = this.searchQuery.trim().toLowerCase();
-        // Exact barcode match first
-        const exactBarcode = this.products.find(p => p.barcode === this.searchQuery.trim());
+        const q = this.searchQuery.trim();
+
+        // 1. Try local exact barcode match
+        const exactBarcode = this.products.find(p => p.barcode === q);
         if (exactBarcode) {
             this.addToCart(exactBarcode);
             this.searchQuery = '';
             return;
         }
-        // Match single result
+
+        // 2. Instant Barcode Scanner API Lookup
+        try {
+            const res = await fetch(`/api/pos/products/barcode/${encodeURIComponent(q)}`, {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && json.data) {
+                    this.addToCart(json.data);
+                    if (!this.products.find(p => p.sku === json.data.sku)) {
+                        this.products.unshift(json.data);
+                    }
+                    this.searchQuery = '';
+                    return;
+                }
+            }
+        } catch (e) {}
+
+        // 3. Fallback matches in filtered products
         const matches = this.filteredProducts;
         if (matches.length === 1) {
             this.addToCart(matches[0]);
@@ -206,15 +342,28 @@
     },
 
     get discountSavings() {
-        if (!this.isMember) return 0;
         return this.cart.reduce((sum, it) => {
-            const diff = Math.max(0, it.price - (it.memberPrice || it.price));
-            return sum + (diff * it.qty);
+            let itemSavings = 0;
+            // Member savings
+            if (this.isMember && it.memberPrice && it.memberPrice < it.price) {
+                itemSavings += (it.price - it.memberPrice) * it.qty;
+            }
+            // Expired clearance savings
+            if (it.isNearExpired && it.originalPrice && it.originalPrice > it.price) {
+                itemSavings += (it.originalPrice - it.price) * it.qty;
+            }
+            return sum + itemSavings;
         }, 0);
     },
 
     get taxAmount() {
-        return Math.round(this.subtotal * 0.11);
+        return this.cart.reduce((sum, it) => {
+            if (it.isTaxable !== false) {
+                const price = this.isMember ? (it.memberPrice || it.price) : it.price;
+                return sum + Math.round((price * it.qty) * 0.11);
+            }
+            return sum;
+        }, 0);
     },
 
     get grandTotal() {
@@ -227,42 +376,39 @@
 
     // Held Bills State & Methods
     heldBills: [],
-    initHeldBills() {
+    async initHeldBills() {
+        try {
+            const term = this.activeSession.terminalLabel || 'POS-01';
+            const res = await fetch(`/api/pos/held-bills?terminal_code=${encodeURIComponent(term)}`, {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && Array.isArray(json.data)) {
+                    this.heldBills = json.data.map(b => ({
+                        id: b.hold_code,
+                        dbId: b.id,
+                        customerName: b.customer_name,
+                        holdTime: b.hold_time_label,
+                        totalAmount: b.grand_total,
+                        itemCount: b.total_items,
+                        items: b.items
+                    }));
+                    this.activeSession.heldBillsCount = this.heldBills.length;
+                    return;
+                }
+            }
+        } catch (e) {
+            console.warn('API held bills failed, using cache:', e);
+        }
+
         try {
             const raw = localStorage.getItem('pos_ilp_held_bills_v1');
             if (raw) {
                 this.heldBills = JSON.parse(raw);
                 this.activeSession.heldBillsCount = this.heldBills.length;
-                return;
             }
         } catch (e) {}
-        this.heldBills = [
-            {
-                id: '#HOLD-001',
-                customerName: 'Budi Santoso (Anggota)',
-                holdTime: '10:45 WIB',
-                totalAmount: 145000,
-                itemCount: 12,
-                items: [
-                    { sku: 'PRD-006', barcode: '899275321004', name: 'Indomie Goreng Spesial 85g', price: 3500, memberPrice: 3200, qty: 5, unit: 'Pcs' },
-                    { sku: 'PRD-003', barcode: '8993456789012', name: 'Ultra Milk Full Cream 1L', price: 19200, memberPrice: 18500, qty: 2, unit: 'Pcs' },
-                    { sku: 'PRD-004', barcode: '8994567890123', name: 'Beras Pandan Wangi 5kg', price: 82000, memberPrice: 79000, qty: 1, unit: 'Pack' },
-                    { sku: 'PRD-001', barcode: '8991234567890', name: 'Aqua Mineral 600ml', price: 5500, memberPrice: 5000, qty: 4, unit: 'Botol' }
-                ]
-            },
-            {
-                id: '#HOLD-002',
-                customerName: 'Walk-in Customer',
-                holdTime: '11:12 WIB',
-                totalAmount: 42500,
-                itemCount: 4,
-                items: [
-                    { sku: 'PRD-002', barcode: '8992345678901', name: 'Chitato Sapi Panggang 68g', price: 12800, memberPrice: 12000, qty: 2, unit: 'Pcs' },
-                    { sku: 'PRD-008', barcode: '8997890123456', name: 'Teh Pucuk Harum 350ml', price: 4000, memberPrice: 3800, qty: 2, unit: 'Botol' }
-                ]
-            }
-        ];
-        this.saveHeldBills();
     },
 
     saveHeldBills() {
@@ -271,17 +417,43 @@
         this.persistAllState();
     },
 
-    holdCurrentBill() {
+    async holdCurrentBill() {
         if (this.cart.length === 0) {
             this.triggerPosToast('Keranjang belanja kosong! Tidak ada transaksi yang ditahan.', 'error');
             return;
         }
 
+        const custName = this.isMember && this.selectedMember ? this.selectedMember.name + ' (Anggota)' : 'Pelanggan Walk-in';
+        const payload = {
+            terminal_code: this.activeSession.terminalLabel || 'POS-01',
+            customer_name: custName,
+            member_nik: this.isMember && this.selectedMember ? this.selectedMember.nik : null,
+            items: this.cart
+        };
+
+        try {
+            const res = await fetch('/api/pos/hold', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const json = await res.json();
+            if (json.success) {
+                this.triggerPosToast(json.message);
+                this.cart = [];
+                this.saveCart();
+                this.showHoldModal = false;
+                await this.initHeldBills();
+                return;
+            }
+        } catch (e) {
+            console.warn('API hold failed, fallback local:', e);
+        }
+
+        // Fallback local hold
         const now = new Date();
         const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':') + ' WIB';
         const holdId = '#HOLD-' + String(now.getTime()).slice(-4);
-        const custName = this.isMember && this.selectedMember ? this.selectedMember.name + ' (Anggota)' : 'Pelanggan Walk-in';
-
         const newHold = {
             id: holdId,
             customerName: custName,
@@ -290,7 +462,6 @@
             itemCount: this.totalItemsCount,
             items: JSON.parse(JSON.stringify(this.cart))
         };
-
         this.heldBills.unshift(newHold);
         this.saveHeldBills();
         this.cart = [];
@@ -299,17 +470,37 @@
         this.triggerPosToast(`Transaksi ${holdId} berhasil ditahan.`);
     },
 
-    recallBill(bill) {
-        if (!bill || !bill.items) return;
+    async recallBill(bill) {
+        if (!bill) return;
+
+        if (bill.dbId) {
+            try {
+                const res = await fetch(`/api/pos/recall/${bill.dbId}`, {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json' }
+                });
+                const json = await res.json();
+                if (json.success && json.data) {
+                    this.cart = json.data.items || [];
+                    this.saveCart();
+                    this.showHoldModal = false;
+                    this.triggerPosToast(json.message);
+                    await this.initHeldBills();
+                    return;
+                }
+            } catch (e) {
+                console.warn('API recall failed, fallback local:', e);
+            }
+        }
+
+        // Fallback local recall
         this.cart = JSON.parse(JSON.stringify(bill.items));
         this.saveCart();
-
         const idx = this.heldBills.findIndex(b => b.id === bill.id);
         if (idx !== -1) {
             this.heldBills.splice(idx, 1);
             this.saveHeldBills();
         }
-
         this.showHoldModal = false;
         this.triggerPosToast(`Bill ${bill.id} berhasil dipanggil ke keranjang.`);
     },
@@ -321,7 +512,41 @@
         uangDiterima: '',
         kembalian: 0,
         splitCash: 0,
-        splitNonCash: 0
+        splitNonCash: 0,
+        qrisRef: ''
+    },
+
+    // Member Live Validation for Kredit Anggota
+    memberValidation: {
+        nik: '',
+        loading: false,
+        isEligible: false,
+        message: '',
+        data: null
+    },
+
+    async validateMemberNik() {
+        if (!this.memberValidation.nik.trim()) return;
+        this.memberValidation.loading = true;
+        this.memberValidation.data = null;
+        try {
+            const res = await fetch(`/api/pos/members/validate/${encodeURIComponent(this.memberValidation.nik.trim())}?amount=${this.grandTotal}`, {
+                headers: { 'Accept': 'application/json' }
+            });
+            const json = await res.json();
+            this.memberValidation.data = json.data;
+            this.memberValidation.isEligible = json.is_eligible;
+            this.memberValidation.message = json.message;
+            if (json.is_eligible && json.data) {
+                this.isMember = true;
+                this.selectedMember = json.data;
+            }
+        } catch (e) {
+            this.memberValidation.message = 'Gagal memverifikasi database anggota: ' + e.message;
+            this.memberValidation.isEligible = false;
+        } finally {
+            this.memberValidation.loading = false;
+        }
     },
 
     openPaymentModal() {
@@ -332,8 +557,13 @@
         this.paymentModal.open = true;
         this.paymentModal.method = 'tunai';
         this.paymentModal.uangDiterima = String(this.grandTotal);
+        this.paymentModal.qrisRef = 'QRIS-' + Date.now().toString().slice(-6);
         this.calcKembalian();
         this.calcSplitPayment();
+        if (this.isMember && this.selectedMember) {
+            this.memberValidation.nik = this.selectedMember.nik;
+            this.validateMemberNik();
+        }
     },
 
     formatNumber(num) {
@@ -356,99 +586,93 @@
         this.calcKembalian();
     },
 
-    processPayment(method) {
+    async processPayment(method) {
         if (this.cart.length === 0) return;
         if (method === 'tunai' && this.paymentModal.kembalian < 0) {
             this.triggerPosToast('Uang diterima masih kurang dari total tagihan!', 'error');
             return;
         }
 
-        const now = new Date();
-        const dateStr = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
-        const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':') + ' WIB';
-        const trxId = '#TRX-' + now.toISOString().slice(0, 10).replace(/-/g, '') + '-' + Math.floor(1000 + Math.random() * 9000);
-
-        const trxRecord = {
-            id: trxId,
-            rawId: 'TRX-' + Math.floor(1000 + Math.random() * 9000),
-            time: timeStr,
-            date: dateStr,
-            terminal: this.activeSession.terminalLabel || 'Kasir 01',
-            cashier: (this.activeOperator && this.activeOperator.name) ? this.activeOperator.name : (this.activeSession.cashierName || 'Budi Kurniawan'),
-            operatorId: (this.activeOperator && this.activeOperator.id) ? this.activeOperator.id : (this.activeSession.cashierId || 'USR-02'),
-            operatorNik: (this.activeOperator && this.activeOperator.nik) ? this.activeOperator.nik : (this.activeSession.cashierNik || ''),
-            sessionId: this.activeSession.sessionId || 'CS-20261019-K01-003',
-            method: method.toUpperCase(),
-            methodLabel: method === 'tunai' ? 'Uang Tunai' : (method === 'qris' ? 'QRIS Dinamis' : (method === 'campuran' ? 'Tunai + QRIS' : 'Kredit Anggota')),
-            cashPortion: method === 'tunai' ? this.grandTotal : (method === 'campuran' ? this.paymentModal.splitCash : 0),
-            nonCashPortion: method === 'qris' ? this.grandTotal : (method === 'campuran' ? this.paymentModal.splitNonCash : (method === 'kredit' ? this.grandTotal : 0)),
-            subtotal: this.subtotal,
-            discount: this.discountSavings,
-            tax: this.taxAmount,
-            total: this.grandTotal,
-            cashGiven: method === 'tunai' ? (parseInt(this.paymentModal.uangDiterima.replace(/\D/g, ''), 10) || this.grandTotal) : 0,
-            change: method === 'tunai' ? Math.max(0, this.paymentModal.kembalian) : 0,
-            status: 'SELESAI',
-            syncStatus: 'SYNCED',
+        const payload = {
+            terminal_code: this.activeSession.terminalLabel || 'POS-01',
+            cashier_nik: (this.activeOperator && this.activeOperator.nik) ? this.activeOperator.nik : (this.activeSession.cashierNik || '202409821002'),
+            cashier_name: (this.activeOperator && this.activeOperator.name) ? this.activeOperator.name : (this.activeSession.cashierName || 'Budi Kurniawan'),
+            payment_method: method.toUpperCase(),
+            cash_received: method === 'tunai' ? (parseInt(this.paymentModal.uangDiterima.replace(/\D/g, ''), 10) || this.grandTotal) : 0,
+            payment_reference: method === 'qris' ? (this.paymentModal.qrisRef || ('QRIS-' + Date.now())) : null,
+            split_cash: method === 'campuran' ? this.paymentModal.splitCash : 0,
+            split_non_cash: method === 'campuran' ? this.paymentModal.splitNonCash : 0,
+            member_nik: method === 'kredit' ? (this.memberValidation.data ? this.memberValidation.data.nik : (this.selectedMember ? this.selectedMember.nik : null)) : (this.isMember && this.selectedMember ? this.selectedMember.nik : null),
             items: this.cart.map(it => ({
+                sku: it.sku,
+                barcode: it.barcode,
                 name: it.name,
                 qty: it.qty,
                 unit: it.unit || 'Pcs',
-                price: this.isMember ? (it.memberPrice || it.price) : it.price,
-                total: (this.isMember ? (it.memberPrice || it.price) : it.price) * it.qty
+                price: it.price,
+                member_price: it.memberPrice || it.price,
+                is_member: this.isMember
             }))
         };
 
-        // 1. Save to transactions history
         try {
-            let trxs = [];
-            const rawTrx = localStorage.getItem('pos_ilp_transactions_v1');
-            if (rawTrx) trxs = JSON.parse(rawTrx);
-            trxs.unshift(trxRecord);
-            localStorage.setItem('pos_ilp_transactions_v1', JSON.stringify(trxs));
-        } catch (e) {
-            console.error('Error saving transaction:', e);
-        }
-
-        // 2. Save latest receipt
-        localStorage.setItem('pos_ilp_latest_printed_receipt_v1', JSON.stringify(trxRecord));
-
-        // 3. Deduct product inventory stock
-        try {
-            this.cart.forEach(cartItem => {
-                const prod = this.products.find(p => p.sku === cartItem.sku || p.barcode === cartItem.barcode);
-                if (prod) {
-                    prod.stock = Math.max(0, prod.stock - cartItem.qty);
-                    if (prod.stock === 0) prod.status = 'HABIS';
-                    else if (prod.stock <= prod.minStock) prod.status = 'STOK_RENDAH';
-                }
+            const res = await fetch('/api/pos/checkout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify(payload)
             });
-            localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(this.products));
+
+            const json = await res.json();
+            if (!res.ok || !json.success) {
+                this.triggerPosToast(json.message || 'Transaksi gagal diproses sistem!', 'error');
+                return;
+            }
+
+            // Save printed receipt record
+            const trxRecord = {
+                id: json.data.invoice_number,
+                rawId: json.data.id,
+                time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':') + ' WIB',
+                date: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+                terminal: json.data.terminal_code,
+                cashier: json.data.cashier_name,
+                method: json.data.payment_method,
+                methodLabel: json.data.payment_method === 'TUNAI' ? 'Uang Tunai' : (json.data.payment_method === 'QRIS' ? 'QRIS Dinamis' : (json.data.payment_method === 'KREDIT' ? 'Kredit Anggota' : 'Campuran')),
+                subtotal: json.data.subtotal,
+                discount: json.data.discount_total,
+                tax: json.data.tax_total,
+                total: json.data.grand_total,
+                cashGiven: json.data.cash_received,
+                change: json.data.change_returned,
+                paymentReference: json.data.payment_reference,
+                member: json.data.member,
+                items: this.cart.map(it => ({
+                    name: it.name,
+                    qty: it.qty,
+                    unit: it.unit || 'Pcs',
+                    price: this.isMember ? (it.memberPrice || it.price) : it.price,
+                    total: (this.isMember ? (it.memberPrice || it.price) : it.price) * it.qty,
+                    isNearExpired: it.isNearExpired,
+                    clearanceDiscountPercent: it.clearanceDiscountPercent
+                }))
+            };
+
+            localStorage.setItem('pos_ilp_latest_printed_receipt_v1', JSON.stringify(trxRecord));
+
+            // Refresh products catalog stock from backend
+            this.initProducts();
+
+            // Clear Cart
+            this.cart = [];
+            this.saveCart();
+
+            // Close modal & navigate to receipt print
+            this.paymentModal.open = false;
+            window.location.href = '/cetak-struk';
         } catch (e) {
-            console.error('Error deducting inventory:', e);
+            console.error('API checkout failed:', e);
+            this.triggerPosToast('Gagal menghubung ke server kasir: ' + e.message, 'error');
         }
-
-        // 4. Update Cashier Session Figures
-        if (method === 'tunai') {
-            this.activeSession.cashSalesNet = (Number(this.activeSession.cashSalesNet) || 0) + this.grandTotal;
-        } else if (method === 'qris') {
-            this.activeSession.qrisSales = (Number(this.activeSession.qrisSales) || 0) + this.grandTotal;
-        } else if (method === 'campuran') {
-            this.activeSession.splitCashPortion = (Number(this.activeSession.splitCashPortion) || 0) + this.paymentModal.splitCash;
-            this.activeSession.splitNonCashPortion = (Number(this.activeSession.splitNonCashPortion) || 0) + this.paymentModal.splitNonCash;
-        } else if (method === 'kredit') {
-            this.activeSession.creditSales = (Number(this.activeSession.creditSales) || 0) + this.grandTotal;
-        }
-        this.activeSession.trxCount = (Number(this.activeSession.trxCount) || 0) + 1;
-        this.recalcClosingFigures();
-        this.persistAllState();
-
-        // 5. Clear Cart
-        this.cart = [];
-        this.saveCart();
-
-        // 6. Navigate to receipt print
-        window.location.href = '/cetak-struk';
     },
 
     // Toast Notification
@@ -461,7 +685,7 @@
         this.posToastType = type;
         this.showPosToast = true;
         if (this.posToastTimer) clearTimeout(this.posToastTimer);
-        this.posToastTimer = setTimeout(() => { this.showPosToast = false; }, 3000);
+        this.posToastTimer = setTimeout(() => { this.showPosToast = false; }, 3500);
     }
 }"
 x-init="initOpening(); initProducts(); initCart(); initHeldBills();"
@@ -485,20 +709,17 @@ class="flex w-full h-full relative text-gray-800">
                    class="flex items-center gap-2 bg-blue-50 hover:bg-blue-100 text-[#0052cc] border border-blue-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
                    :title="'ID Sesi: ' + (activeSession.sessionId || '-')">
                     <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                    <span class="font-extrabold text-[#0052cc]" x-text="activeSession.terminalLabel">Kasir 01</span>
+                    <span class="font-extrabold text-[#0052cc]" x-text="activeSession.terminalLabel || 'Kasir 01'">Kasir 01</span>
                     <span class="text-gray-300">•</span>
                     <span class="material-symbols-rounded text-[15px] text-[#0052cc]">badge</span>
                     <span class="text-gray-800 font-black" x-text="activeOperator ? activeOperator.name : activeSession.cashierName">Budi Kurniawan</span>
-                    <template x-if="activeOperator && activeSession && activeOperator.id !== activeSession.cashierId">
-                        <span class="text-[9px] bg-amber-100 text-amber-800 px-1 py-0.2 rounded font-extrabold tracking-tight">Sub</span>
-                    </template>
                 </a>
 
                 <!-- Ganti Operator Kasir -->
                 <button type="button"
                         @click="openOperatorSwitchModal()"
                         class="flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
-                        title="Pergantian operator kasir tanpa menutup sesi keuangan">
+                        title="Pergantian operator kasir">
                     <span class="material-symbols-rounded text-[16px]">switch_account</span>
                     <span>Ganti Operator</span>
                 </button>
@@ -523,7 +744,7 @@ class="flex w-full h-full relative text-gray-800">
                         @click="$dispatch('open-closing-wizard')"
                         class="flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer">
                     <span class="material-symbols-rounded text-[16px] text-amber-700">logout</span>
-                    <span>Tutup Sesi</span>
+                    <span>Tutup Sesi (Audit)</span>
                 </button>
             </div>
         </x-cashier-header>
@@ -536,7 +757,13 @@ class="flex w-full h-full relative text-gray-800">
                 <!-- Search Box -->
                 <div class="bg-gray-200/50 rounded-xl p-4 mb-4">
                     <div class="flex items-center justify-between mb-2">
-                        <h3 class="font-bold text-gray-800 text-base">Input Barcode / Scan Produk</h3>
+                        <div class="flex items-center gap-2">
+                            <h3 class="font-bold text-gray-800 text-base">Input Barcode Scanner / Pencarian Cepat</h3>
+                            <span class="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                Fast API PostgreSQL
+                            </span>
+                        </div>
                         <div class="flex items-center gap-2">
                             <span class="text-[10px] font-bold text-gray-500 tracking-wider bg-gray-200 px-2 py-0.5 rounded">F2: CARI</span>
                             <span class="text-[10px] font-bold text-gray-500 tracking-wider bg-gray-200 px-2 py-0.5 rounded">ENTER: TAMBAH</span>
@@ -548,7 +775,7 @@ class="flex w-full h-full relative text-gray-800">
                                x-ref="searchInput"
                                x-model="searchQuery"
                                @keydown.enter.prevent="handleSearchEnter()"
-                               placeholder="Scan barcode EAN-13 atau ketik nama produk..."
+                               placeholder="Scan barcode EAN-13 atau ketik nama/SKU produk..."
                                class="w-full pl-12 pr-4 py-3.5 rounded-xl border border-gray-300 bg-white shadow-inner focus:outline-none focus:ring-2 focus:ring-[#0052cc]/20 focus:border-[#0052cc] transition-colors text-sm font-medium placeholder-gray-400">
                     </div>
                 </div>
@@ -565,7 +792,7 @@ class="flex w-full h-full relative text-gray-800">
                     </template>
                 </div>
 
-                <!-- Product Grid (Dynamic from localStorage) -->
+                <!-- Product Grid (Dynamic from PostgreSQL API) -->
                 <div class="flex-1 overflow-y-auto mt-2 pb-4">
                     <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3.5">
                         <template x-for="p in filteredProducts" :key="p.sku || p.barcode || p.name">
@@ -577,26 +804,36 @@ class="flex w-full h-full relative text-gray-800">
                                         <span class="font-mono text-[10px] text-gray-400" x-text="p.sku"></span>
                                     </div>
                                     <h4 class="font-bold text-gray-900 text-xs leading-snug line-clamp-2 group-hover:text-[#0052cc] transition-colors" x-text="p.name"></h4>
+
+                                    <!-- Auto-Discount Expired Badge (Warning H-14) -->
+                                    <template x-if="p.is_near_expired">
+                                        <div class="mt-1.5">
+                                            <span class="inline-flex items-center gap-1 text-[10px] font-extrabold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">
+                                                <span class="material-symbols-rounded text-[13px] text-rose-600">alarm</span>
+                                                <span x-text="'H-' + p.days_until_expiration + ' • Diskon ' + p.clearance_discount_percent + '%'"></span>
+                                            </span>
+                                        </div>
+                                    </template>
                                 </div>
 
                                 <div class="mt-3 pt-2 border-t border-gray-100 flex flex-col gap-1">
                                     <div class="flex items-baseline justify-between">
-                                        <span class="text-sm font-black text-gray-900 font-mono" x-text="formatRupiah(isMember ? (p.memberPrice || p.price) : p.price)"></span>
-                                        <template x-if="isMember && p.memberPrice < p.price">
+                                        <div class="flex flex-col">
+                                            <span class="text-sm font-black text-gray-900 font-mono" x-text="formatRupiah(isMember ? (p.member_price || p.price) : p.price)"></span>
+                                            <!-- Strike-through original price if near expired discount is active -->
+                                            <template x-if="p.is_near_expired && p.original_price > p.price">
+                                                <span class="text-[10px] text-rose-500 line-through font-mono" x-text="formatRupiah(p.original_price)"></span>
+                                            </template>
+                                        </div>
+                                        <template x-if="isMember && (p.member_price || p.price) < p.price">
                                             <span class="text-[10px] text-gray-400 line-through font-mono" x-text="formatRupiah(p.price)"></span>
                                         </template>
                                     </div>
                                     <div class="flex items-center justify-between text-[10.5px]">
                                         <span class="text-gray-500 font-medium" x-text="'Stok: ' + p.stock + ' ' + (p.unit || 'Pcs')"></span>
-                                        <template x-if="p.status === 'STOK_RENDAH'">
-                                            <span class="text-amber-600 font-bold">Stok Rendah</span>
-                                        </template>
-                                        <template x-if="p.status === 'NEAR_EXPIRED'">
-                                            <span class="text-rose-600 font-bold">Hampir ED</span>
-                                        </template>
-                                        <template x-if="p.status === 'HABIS'">
-                                            <span class="text-gray-400 font-bold">Kosong</span>
-                                        </template>
+                                        <span class="text-[10px] font-bold"
+                                              :class="p.is_taxable !== false ? 'text-blue-600' : 'text-gray-400'"
+                                              x-text="p.is_taxable !== false ? 'PPN' : 'Non-PPN'"></span>
                                     </div>
                                 </div>
                             </div>
@@ -624,10 +861,11 @@ class="flex w-full h-full relative text-gray-800">
                             <p class="text-xs text-gray-500 font-medium" x-text="cart.length + ' Baris Produk'"></p>
                         </div>
                         <button type="button"
-                                @click="clearCart()"
-                                title="Kosongkan Keranjang"
-                                class="text-rose-600 hover:bg-rose-50 p-2 rounded-lg transition-colors cursor-pointer">
-                            <span class="material-symbols-rounded text-[20px]">delete_sweep</span>
+                                @click="requestVoidCart()"
+                                title="Void Seluruh Keranjang (Perlu PIN Supervisor)"
+                                class="text-rose-600 hover:bg-rose-50 p-2 rounded-lg transition-colors cursor-pointer flex items-center gap-1 text-xs font-bold">
+                            <span class="material-symbols-rounded text-[18px]">delete_sweep</span>
+                            <span>Void Cart</span>
                         </button>
                     </div>
 
@@ -656,15 +894,32 @@ class="flex w-full h-full relative text-gray-800">
                         <div class="bg-white p-3 rounded-xl shadow-2xs border border-gray-200 flex gap-2.5 relative">
                             <div class="flex-1 flex flex-col justify-between">
                                 <div class="flex justify-between items-start gap-2">
-                                    <h4 class="font-bold text-gray-900 text-xs leading-snug" x-text="item.name"></h4>
-                                    <span class="font-mono font-bold text-gray-900 text-xs shrink-0" x-text="formatRupiah((isMember ? item.memberPrice : item.price) * item.qty)"></span>
+                                    <div>
+                                        <h4 class="font-bold text-gray-900 text-xs leading-snug" x-text="item.name"></h4>
+                                        <template x-if="item.isNearExpired">
+                                            <span class="text-[10px] text-rose-600 font-extrabold flex items-center gap-0.5 mt-0.5">
+                                                <span class="material-symbols-rounded text-[12px]">alarm</span>
+                                                <span x-text="'Auto-Diskon H-' + (item.daysUntilExpiration || '14') + ' (' + item.clearanceDiscountPercent + '%)'"></span>
+                                            </span>
+                                        </template>
+                                    </div>
+                                    <div class="flex items-center gap-1.5 shrink-0">
+                                        <span class="font-mono font-bold text-gray-900 text-xs" x-text="formatRupiah((isMember ? (item.memberPrice || item.price) : item.price) * item.qty)"></span>
+                                        <!-- Void Item Button (Perlu PIN SPV) -->
+                                        <button type="button"
+                                                @click="requestVoidItem(idx)"
+                                                title="Void Item (Otorisasi Supervisor)"
+                                                class="text-gray-400 hover:text-rose-600 p-1 rounded-md hover:bg-rose-50 transition-colors cursor-pointer">
+                                            <span class="material-symbols-rounded text-[16px]">close</span>
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <div class="flex justify-between items-end mt-2 pt-1 border-t border-gray-100">
                                     <div class="flex flex-col">
-                                        <span class="text-[11px] text-gray-500 font-mono" x-text="item.qty + ' x ' + formatRupiah(isMember ? item.memberPrice : item.price)"></span>
-                                        <template x-if="isMember && item.memberPrice < item.price">
-                                            <span class="text-[10px] text-emerald-600 font-bold" x-text="'Hemat: ' + formatRupiah((item.price - item.memberPrice) * item.qty)"></span>
+                                        <span class="text-[11px] text-gray-500 font-mono" x-text="item.qty + ' x ' + formatRupiah(isMember ? (item.memberPrice || item.price) : item.price)"></span>
+                                        <template x-if="item.isTaxable !== false">
+                                            <span class="text-[9px] text-gray-400 font-bold">Termasuk PPN 11%</span>
                                         </template>
                                     </div>
                                     <div class="flex items-center bg-gray-100 rounded-lg p-0.5">
@@ -696,7 +951,7 @@ class="flex w-full h-full relative text-gray-800">
                         </div>
                         <template x-if="discountSavings > 0">
                             <div class="flex justify-between text-emerald-600 font-bold">
-                                <span>Potongan Member</span>
+                                <span>Hemat (Member / Expired Clearance)</span>
                                 <span class="font-mono" x-text="'-' + formatRupiah(discountSavings)"></span>
                             </div>
                         </template>
@@ -831,7 +1086,7 @@ class="flex w-full h-full relative text-gray-800">
                 </div>
 
                 <div class="p-4 border-t border-gray-200 bg-slate-50 flex justify-between items-center">
-                    <a href="{{ url('/kasir/transaksi/ditahan') }}" class="text-xs text-[#0052cc] font-bold hover:underline">Lihat Halaman Transaksi Ditahan &rarr;</a>
+                    <span class="text-xs text-gray-500 font-mono">Database: PostgreSQL API</span>
                     <button type="button" @click="showHoldModal = false" class="px-4 py-2 bg-white border border-gray-300 rounded-xl text-xs font-bold text-gray-700 hover:bg-gray-100 cursor-pointer">
                         Tutup
                     </button>
@@ -846,12 +1101,90 @@ class="flex w-full h-full relative text-gray-800">
     <!-- MODAL 3: KONTROL PEMBUKAAN / OPENING KASIR -->
     @include('kasir.partials._opening-modal')
 
-    <!-- MODAL 4: PERGANTIAN OPERATOR TERMINAL (OPERATOR SWITCHING) -->
+    <!-- MODAL 4: OTORISASI VOID / ANTI-FRAUD CONTROL -->
+    <template x-teleport="body">
+        <div x-show="voidModal.open"
+             x-transition.opacity
+             style="display: none;"
+             class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-70 flex items-center justify-center p-4">
+            <div @click.away="voidModal.open = false"
+                 class="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-red-200">
+                <div class="p-5 border-b border-gray-100 bg-red-50/80 flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center">
+                            <span class="material-symbols-rounded text-2xl">shield_person</span>
+                        </div>
+                        <div>
+                            <h3 class="text-base font-black text-gray-900">Otorisasi Void / Anti-Fraud</h3>
+                            <p class="text-xs text-gray-500 font-medium" x-text="voidModal.actionType === 'VOID_ITEM' ? 'Pembatalan Item Barang' : 'Pembatalan Seluruh Keranjang'"></p>
+                        </div>
+                    </div>
+                    <button type="button" @click="voidModal.open = false" class="text-gray-400 hover:text-gray-700">
+                        <span class="material-symbols-rounded">close</span>
+                    </button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <!-- Info target item -->
+                    <template x-if="voidModal.actionType === 'VOID_ITEM' && voidModal.item">
+                        <div class="p-3.5 bg-slate-50 border border-gray-200 rounded-xl text-xs space-y-1">
+                            <div class="flex justify-between font-bold text-gray-800">
+                                <span x-text="voidModal.item.name"></span>
+                                <span x-text="formatRupiah((isMember ? voidModal.item.memberPrice : voidModal.item.price) * voidModal.item.qty)"></span>
+                            </div>
+                            <div class="text-[11px] text-gray-500 font-mono" x-text="'Qty: ' + voidModal.item.qty + ' ' + (voidModal.item.unit || 'Pcs')"></div>
+                        </div>
+                    </template>
+
+                    <!-- Error Message -->
+                    <template x-if="voidModal.error">
+                        <div class="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-bold flex items-center gap-2">
+                            <span class="material-symbols-rounded text-[18px]">error</span>
+                            <span x-text="voidModal.error"></span>
+                        </div>
+                    </template>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Alasan Pembatalan (Void)</label>
+                        <select x-model="voidModal.reason" class="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-medium text-gray-800 outline-none focus:border-red-500 bg-gray-50">
+                            <option value="Pelanggan salah ambil barang">Pelanggan salah ambil barang</option>
+                            <option value="Pelanggan tidak jadi beli">Pelanggan tidak jadi beli</option>
+                            <option value="Kemasan / fisik produk cacat atau bocor">Kemasan / fisik produk cacat atau bocor</option>
+                            <option value="Salah input jumlah (qty) oleh kasir">Salah input jumlah (qty) oleh kasir</option>
+                            <option value="Harga sistem berbeda dengan label rak">Harga sistem berbeda dengan label rak</option>
+                            <option value="Uang tunai pelanggan tidak cukup">Uang tunai pelanggan tidak cukup</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">PIN Otorisasi Supervisor / Admin</label>
+                        <input type="password"
+                               x-model="voidModal.pin"
+                               @keydown.enter.prevent="submitVoid()"
+                               placeholder="Masukkan 6-digit PIN Supervisor..."
+                               autofocus
+                               class="w-full px-4 py-3 text-center tracking-widest font-mono text-lg rounded-xl border border-gray-300 text-gray-900 outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100">
+                        <p class="text-[10px] text-gray-400 mt-1">Masukkan PIN 6-digit Supervisor / Admin resmi.</p>
+                    </div>
+                </div>
+                <div class="p-4 bg-slate-50 border-t border-gray-100 flex justify-between items-center">
+                    <button type="button" @click="voidModal.open = false" class="px-4 py-2 border border-gray-300 rounded-xl text-xs font-bold text-gray-700 hover:bg-gray-100">Batal</button>
+                    <button type="button"
+                            @click="submitVoid()"
+                            :disabled="voidModal.isSubmitting || !voidModal.pin"
+                            class="px-5 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-2 cursor-pointer">
+                        <span class="material-symbols-rounded text-[18px]">verified_user</span>
+                        <span x-text="voidModal.isSubmitting ? 'Memverifikasi...' : 'Konfirmasi Otorisasi Void'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- MODAL 5: PERGANTIAN OPERATOR TERMINAL -->
     <template x-if="operatorSwitchModal.open">
         <div class="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-xs">
             <div @click.away="operatorSwitchModal.open = false"
                  class="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-gray-100 overflow-hidden flex flex-col">
-                <!-- Header -->
                 <div class="px-6 py-4.5 border-b border-gray-100 flex items-center justify-between bg-slate-50/70">
                     <div class="flex items-center gap-3">
                         <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
@@ -867,9 +1200,7 @@ class="flex w-full h-full relative text-gray-800">
                     </button>
                 </div>
 
-                <!-- Body -->
                 <div class="p-6 space-y-4">
-                    <!-- Status Sesi & Operator Saat Ini -->
                     <div class="p-3.5 rounded-xl bg-slate-50 border border-gray-200/90 text-xs space-y-2">
                         <div class="flex items-center justify-between">
                             <span class="text-gray-500 font-medium">Terminal &amp; Sesi:</span>
@@ -879,57 +1210,18 @@ class="flex w-full h-full relative text-gray-800">
                             <span class="text-gray-500 font-medium">Operator Aktif:</span>
                             <span class="font-bold text-[#0052cc]" x-text="activeOperator ? activeOperator.name : activeSession.cashierName"></span>
                         </div>
-                        <div class="flex items-center justify-between">
-                            <span class="text-gray-500 font-medium">Cabang Terminal:</span>
-                            <span class="font-mono font-bold text-gray-700" x-text="normalizeBranchName(activeSession.storeLocation || selectedLocation)"></span>
-                        </div>
                     </div>
 
-                    <!-- Cart Warning jika masih ada keranjang berjalan -->
-                    <template x-if="cart.length > 0">
-                        <div class="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-2">
-                            <div class="flex items-center gap-2 font-bold text-amber-800">
-                                <span class="material-symbols-rounded text-[18px]">warning</span>
-                                <span>Keranjang Belanja Masih Berisi Produk</span>
-                            </div>
-                            <p class="text-[11px] text-amber-700 leading-relaxed">
-                                Masih ada <strong x-text="cart.length"></strong> jenis barang di keranjang aktif. Selesaikan pembayaran atau tahan transaksi sebelum mengganti kasir.
-                            </p>
-                            <button type="button"
-                                    @click="operatorSwitchModal.open = false; holdCurrentBill();"
-                                    class="w-full py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs shadow-2xs cursor-pointer">
-                                Tahan Transaksi (Hold Bill) Sekarang
-                            </button>
-                        </div>
-                    </template>
-
-                    <!-- Alert Error -->
-                    <template x-if="operatorSwitchModal.errorMsg">
-                        <div class="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-bold flex items-center gap-2">
-                            <span class="material-symbols-rounded text-[18px]">error</span>
-                            <span x-text="operatorSwitchModal.errorMsg"></span>
-                        </div>
-                    </template>
-
-                    <!-- Form Input: Pilih Kasir Pengganti -->
                     <div>
-                        <label class="block text-xs font-bold text-gray-700 mb-1.5">Kasir Pengganti (Cabang Sama)</label>
-                        <template x-if="getEligibleCashiersForSwitch().length > 0">
-                            <select x-model="operatorSwitchModal.targetStaffId"
-                                    class="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:bg-white focus:border-[#0052cc] outline-none cursor-pointer">
-                                <template x-for="st in getEligibleCashiersForSwitch()" :key="st.id">
-                                    <option :value="st.id" x-text="st.name + (st.nik ? ' (NIK: ' + st.nik + ')' : '')"></option>
-                                </template>
-                            </select>
-                        </template>
-                        <template x-if="getEligibleCashiersForSwitch().length === 0">
-                            <div class="p-3 rounded-xl bg-gray-100 border border-gray-200 text-gray-500 text-xs font-medium">
-                                Tidak ada petugas kasir lain yang terdaftar aktif di cabang ini. Daftarkan kasir baru melalui menu <strong>Kelola Akun (Manager)</strong>.
-                            </div>
-                        </template>
+                        <label class="block text-xs font-bold text-gray-700 mb-1.5">Kasir Pengganti</label>
+                        <select x-model="operatorSwitchModal.targetStaffId"
+                                class="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:bg-white focus:border-[#0052cc] outline-none cursor-pointer">
+                            <template x-for="st in getEligibleCashiersForSwitch()" :key="st.id">
+                                <option :value="st.id" x-text="st.name + (st.nik ? ' (NIK: ' + st.nik + ')' : '')"></option>
+                            </template>
+                        </select>
                     </div>
 
-                    <!-- Alasan Pergantian -->
                     <div>
                         <label class="block text-xs font-bold text-gray-700 mb-1.5">Alasan Pergantian</label>
                         <select x-model="operatorSwitchModal.reason"
@@ -941,33 +1233,19 @@ class="flex w-full h-full relative text-gray-800">
                         </select>
                     </div>
 
-                    <!-- Input PIN Kasir Pengganti -->
                     <div>
-                        <div class="flex items-center justify-between mb-1.5">
-                            <label class="block text-xs font-bold text-gray-700">PIN Kasir Pengganti</label>
-                            <span class="text-[10px] text-gray-400">Verifikasi otorisasi kasir</span>
-                        </div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1.5">PIN Kasir Pengganti</label>
                         <input type="password"
                                x-model="operatorSwitchModal.targetPin"
                                @keydown.enter.prevent="submitOperatorSwitch()"
                                placeholder="Masukkan PIN kasir pengganti..."
                                class="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl font-mono text-xs font-bold text-gray-900 focus:bg-white focus:border-[#0052cc] outline-none">
-                        <p class="text-[10px] text-gray-500 mt-1">Demo PIN Kasir: <span class="font-mono font-bold text-amber-700">123456</span></p>
                     </div>
                 </div>
 
-                <!-- Footer Buttons -->
                 <div class="px-6 py-4 bg-slate-50 border-t border-gray-100 flex items-center justify-between">
-                    <button type="button"
-                            @click="operatorSwitchModal.open = false"
-                            class="px-4 py-2 bg-white border border-gray-300 rounded-xl text-xs font-bold text-gray-700 hover:bg-gray-100 cursor-pointer">
-                        Batal
-                    </button>
-                    <button type="button"
-                            @click="submitOperatorSwitch()"
-                            :disabled="cart.length > 0 || getEligibleCashiersForSwitch().length === 0 || operatorSwitchModal.isSubmitting"
-                            :class="(cart.length > 0 || getEligibleCashiersForSwitch().length === 0 || operatorSwitchModal.isSubmitting) ? 'opacity-50 cursor-not-allowed bg-gray-400' : 'bg-indigo-600 hover:bg-indigo-700 cursor-pointer'"
-                            class="px-5 py-2 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-2">
+                    <button type="button" @click="operatorSwitchModal.open = false" class="px-4 py-2 bg-white border border-gray-300 rounded-xl text-xs font-bold text-gray-700 hover:bg-gray-100 cursor-pointer">Batal</button>
+                    <button type="button" @click="submitOperatorSwitch()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer">
                         <span class="material-symbols-rounded text-[18px]">verified_user</span>
                         <span>Konfirmasi Ganti Kasir</span>
                     </button>
@@ -976,7 +1254,7 @@ class="flex w-full h-full relative text-gray-800">
         </div>
     </template>
 
-    <!-- MODAL 5: LAYAR KUNCI TERMINAL (TERMINAL LOCK SCREEN) -->
+    <!-- MODAL 6: LAYAR KUNCI TERMINAL -->
     <template x-if="isTerminalLocked">
         <div class="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/95 backdrop-blur-md">
             <div class="bg-white rounded-3xl max-w-sm w-full p-8 shadow-2xl text-center space-y-5 border border-slate-700/30">
@@ -989,32 +1267,13 @@ class="flex w-full h-full relative text-gray-800">
                     <p class="text-xs text-gray-500 mt-1">Terminal diamankan sementara dari akses yang tidak berwenang.</p>
                 </div>
 
-                <div class="p-3.5 rounded-2xl bg-slate-50 border border-gray-200 text-xs space-y-1">
-                    <div class="flex items-center justify-between text-gray-500">
-                        <span>Terminal:</span>
-                        <strong class="text-gray-900 font-bold" x-text="activeSession.terminalLabel || 'Kasir 01'"></strong>
-                    </div>
-                    <div class="flex items-center justify-between text-gray-500">
-                        <span>Operator Aktif:</span>
-                        <strong class="text-[#0052cc] font-bold" x-text="activeOperator ? activeOperator.name : activeSession.cashierName"></strong>
-                    </div>
-                </div>
-
-                <!-- Error Alert -->
-                <template x-if="lockErrorMsg">
-                    <div class="p-2.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-bold text-left flex items-center gap-1.5">
-                        <span class="material-symbols-rounded text-[16px] shrink-0">error</span>
-                        <span x-text="lockErrorMsg"></span>
-                    </div>
-                </template>
-
                 <div class="space-y-3">
                     <input type="password"
                            x-model="lockPinInput"
                            @keydown.enter.prevent="unlockTerminal()"
                            placeholder="Masukkan PIN Operator..."
                            autofocus
-                           class="w-full text-center tracking-widest font-mono text-xl py-3 px-4 bg-gray-50 border border-gray-300 rounded-2xl focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 outline-none">
+                           class="w-full text-center tracking-widest font-mono text-xl py-3 px-4 bg-gray-50 border border-gray-300 rounded-2xl focus:bg-white focus:border-[#0052cc] outline-none">
                     
                     <button type="button"
                             @click="unlockTerminal()"
@@ -1023,8 +1282,6 @@ class="flex w-full h-full relative text-gray-800">
                         <span>Buka Kunci Terminal</span>
                     </button>
                 </div>
-
-                <p class="text-[11px] text-gray-400">Gunakan PIN pribadi operator yang sedang aktif (Demo PIN: 123456).</p>
             </div>
         </div>
     </template>

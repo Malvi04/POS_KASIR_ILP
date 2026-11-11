@@ -1,0 +1,97 @@
+
+erDiagram
+    USERS {
+        bigint id PK
+        string name
+    }
+    SALES {
+        bigint id PK
+        string receipt_number
+    }
+    SALE_ITEMS {
+        bigint id PK
+        bigint sale_id FK
+        bigint product_id FK
+    }
+    SALES_RETURNS {
+        bigint id PK
+        string return_number UK
+        bigint sale_id FK
+        bigint processed_by FK
+        datetime returned_at
+        string reason
+        string status
+    }
+    SALES_RETURN_ITEMS {
+        bigint id PK
+        bigint sales_return_id FK
+        bigint sale_item_id FK
+        decimal qty
+        decimal refund_amount
+        string disposition
+    }
+    SUPPLIER_RETURNS {
+        bigint id PK
+        string return_number UK
+        bigint supplier_id FK
+        bigint location_id FK
+        bigint processed_by FK
+        datetime returned_at
+        string status
+    }
+    SUPPLIER_RETURN_ITEMS {
+        bigint id PK
+        bigint supplier_return_id FK
+        bigint product_id FK
+        bigint inventory_layer_id FK
+        decimal qty
+        decimal return_value
+    }
+    STORE_RETURN_HEADERS {
+        bigint id PK
+        string return_number UK
+        bigint from_location_id FK
+        bigint to_location_id FK
+        bigint created_by FK
+        datetime returned_at
+        string status
+    }
+    STORE_RETURN_ITEMS {
+        bigint id PK
+        bigint store_return_id FK
+        bigint product_id FK
+        decimal qty
+        string disposition
+    }
+    SUPPLIERS {
+        bigint id PK
+        string name
+    }
+    LOCATIONS {
+        bigint id PK
+        string name
+    }
+    PRODUCTS {
+        bigint id PK
+        string name
+    }
+    INVENTORY_LAYERS {
+        bigint id PK
+        bigint product_id FK
+    }
+
+    SALES ||--o{ SALES_RETURNS : returned_in
+    USERS ||--o{ SALES_RETURNS : processes
+    SALES_RETURNS ||--|{ SALES_RETURN_ITEMS : contains
+    SALE_ITEMS ||--o{ SALES_RETURN_ITEMS : references
+    SUPPLIERS ||--o{ SUPPLIER_RETURNS : receives_return
+    LOCATIONS ||--o{ SUPPLIER_RETURNS : return_location
+    USERS ||--o{ SUPPLIER_RETURNS : processes
+    SUPPLIER_RETURNS ||--|{ SUPPLIER_RETURN_ITEMS : contains
+    PRODUCTS ||--o{ SUPPLIER_RETURN_ITEMS : returned
+    INVENTORY_LAYERS ||--o{ SUPPLIER_RETURN_ITEMS : traced
+    LOCATIONS ||--o{ STORE_RETURN_HEADERS : source
+    LOCATIONS ||--o{ STORE_RETURN_HEADERS : destination
+    USERS ||--o{ STORE_RETURN_HEADERS : creates
+    STORE_RETURN_HEADERS ||--|{ STORE_RETURN_ITEMS : contains
+    PRODUCTS ||--o{ STORE_RETURN_ITEMS : returned

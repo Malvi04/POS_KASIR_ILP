@@ -1,0 +1,80 @@
+sequenceDiagram
+    autonumber
+
+    actor Customer as Pelanggan
+    actor Cashier as Kasir Terminal
+    participant POS_UI as Antarmuka POS (Frontend)
+    participant LocalQueue as Storage Lokal (IndexedDB / LocalStorage)
+    participant Net as Jaringan Internet
+    participant API as Backend REST API (/api/pos/checkout)
+    participant DB as Database Pusat PostgreSQL
+    actor SPV as Manager / Supervisor
+
+    %% ==========================================
+    %% 1. TRANSAKSI SAAT KONEKSI OFFLINE
+    %% ==========================================
+    rect rgb(254, 242, 242)
+        Note over Customer,DB: FASE A: Transaksi Penjualan Saat Jaringan Offline
+
+        Customer->>Cashier: Menyerahkan barang belanjaan
+        Cashier->>POS_UI: Scan barcode produk & tambah ke keranjang
+        POS_UI->>POS_UI: Hitung subtotal belanja dari cache lokal produk
+        Cashier->>POS_UI: Pilih metode pembayaran (Tunai / Voucher) & klik Bayar
+
+        POS_UI->>Net: Cek ketersediaan koneksi internet
+        Net-->>POS_UI: Offline (Koneksi Terputus)
+
+        POS_UI->>POS_UI: Generate nomor transaksi offline unik (OFFLINE-UUID)
+        POS_UI->>LocalQueue: INSERT transaksi ke antrean lokal (Status: PENDING)
+        LocalQueue-->>POS_UI: Transaksi tersimpan di antrean offline
+        POS_UI->>POS_UI: Update stok lokal sementara & tambah counter pending sync
+
+        POS_UI->>POS_UI: Cetak struk belanja thermal lokal
+        Cashier-->>Customer: Serahkan struk belanja & barang
+        Note over Customer,POS_UI: Transaksi pelanggan selesai seketika tanpa tertunda jaringan
+    end
+
+    %% ==========================================
+    %% 2. BACKGROUND SINKRONISASI SAAT ONLINE
+    %% ==========================================
+    rect rgb(240, 253, 244)
+        Note over Customer,SPV: FASE B: Sinkronisasi Otomatis Saat Jaringan Pulih (Auto-Sync Engine)
+
+        Net->>POS_UI: Event Jaringan: Online Terdeteksi / Tombol 'Sinkronkan Sekarang'
+        POS_UI->>POS_UI: Ubah indikator header menjadi 'Sinkronisasi Berjalan...'
+
+        loop Untuk setiap transaksi dalam antrean berstatus PENDING (Urutan FIFO)
+            POS_UI->>LocalQueue: Ambil 1 transaksi PENDING terlama
+            LocalQueue-->>POS_UI: Payload data transaksi (Invoice, Items, Payment, Offline-UUID)
+
+            POS_UI->>API: POST /api/pos/checkout (Payload Transaksi)
+            
+            alt Koneksi Masih Mengalami Gangguan (Timeout / RTO)
+                API--xPOS_UI: Network Timeout
+                POS_UI->>LocalQueue: Pertahankan status PENDING, catat retry count
+                Note over POS_UI,LocalQueue: Transaksi aman di antrean, sistem jadwalkan coba lagi
+            else Koneksi Stabil & Diterima Server
+                API->>DB: Cek Idempotensi: Apakah Offline-UUID / Invoice sudah ada di database?
+                alt Transaksi Sudah Pernah Tersimpan (Duplikat Pengiriman)
+                    DB-->>API: Data transaksi sudah ada
+                    API-->>POS_UI: HTTP 200 OK (Idempotent Success)
+                    POS_UI->>LocalQueue: Ubah status transaksi menjadi SYNCED & bersihkan
+                else Transaksi Baru & Valid
+                    API->>DB: Buka DB Transaction
+                    API->>DB: INSERT INTO transactions & transaction_items
+                    API->>DB: Potong stok master barang di database pusat
+                    API->>DB: INSERT INTO stock_ledger (riwayat mutasi persediaan)
+                    API->>DB: UPDATE cashier_shifts (akumulasi omzet penjualan sesi kasir)
+                    API->>DB: Commit DB Transaction
+                    DB-->>API: Transaksi sukses tersimpan di PostgreSQL
+                    
+                    API-->>POS_UI: HTTP 201 Created: { success: true, invoice_no: 'TRX-...' }
+                    POS_UI->>LocalQueue: Update status menjadi SYNCED & hapus dari antrean pending
+                    POS_UI->>POS_UI: Kurangi indikator counter Pending Sync (-1)
+                end
+            end
+        end
+
+        POS_UI->>POS_UI: Tampilkan indikator status 'Online (Semua Tersinkronkan)'
+        API->>SPV: Perbarui KPI omzet & status sinkronisasi di Dashboard Manager (/dashboard)
+    end

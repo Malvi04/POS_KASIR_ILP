@@ -17,7 +17,46 @@
 
     returnInDocuments: [],
 
-    initReturnIn() {
+    async initReturnIn() {
+        try {
+            const res = await fetch('/api/returns?direction=gudang_ke_toko', { headers: { 'Accept': 'application/json' } });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+                    this.returnInDocuments = json.data.map(d => ({
+                        id: d.id,
+                        docNo: d.docNo,
+                        type: d.conditionType === 'garansi' ? 'PENGGANTIAN_GARANSI' : 'PENGEMBALIAN_TOKO',
+                        typeLabel: d.conditionLabel || 'BARANG PENGGANTI (GARANSI)',
+                        originRef: d.ref || '#RTR-TK-001',
+                        warehouseOrigin: 'DC Cikarang (Pusat Logistik)',
+                        destinationStore: 'Minimarket ILP - Sektor A',
+                        date: d.date,
+                        driverName: d.driver || 'Supir Armada',
+                        plateNumber: d.plate || 'B 9102 UQ',
+                        status: d.statusKey === 'selesai' ? 'DITERIMA_LENGKAP' : 'MENUNGGU_VERIFIKASI',
+                        receivedAt: null,
+                        receiverName: null,
+                        generalNotes: d.conditionDesc || '',
+                        items: (d.products || []).map((p, idx) => ({
+                            sku: '899' + (idx + 1) + '0000',
+                            name: p.name,
+                            category: 'Umum',
+                            unit: 'Pcs',
+                            qtySent: parseInt(p.qty, 10) || 12,
+                            qtyReceived: parseInt(p.qty, 10) || 12,
+                            condition: 'BAIK',
+                            note: 'Sesuai'
+                        }))
+                    }));
+                    this.saveDocs();
+                    return;
+                }
+            }
+        } catch(e) {
+            console.warn('API returns fetch error:', e);
+        }
+
         const stored = localStorage.getItem('pos_ilp_return_in_docs_v1');
         if (stored) {
             try {

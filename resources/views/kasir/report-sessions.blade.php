@@ -10,19 +10,49 @@
 
     pastSessions: [],
 
-    initSessions() {
+    async initSessions() {
+        try {
+            const res = await fetch('/api/reports/cash-reconciliation', { headers: { 'Accept': 'application/json' } });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && json.data && Array.isArray(json.data.shifts) && json.data.shifts.length > 0) {
+                    this.pastSessions = json.data.shifts.map(h => ({
+                        id: h.shift_code || 'CS-SESS-01',
+                        date: new Date(h.opened_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+                        shift: 'Shift Kasir',
+                        terminal: h.terminal_code || 'Kasir 01',
+                        cashier: h.cashier_name || 'Budi Kurniawan',
+                        openingFloat: Number(h.opening_cash || 500000),
+                        cashSales: Number(h.cash_sales_total || 0),
+                        nonCashSales: Number(h.qris_sales_total || 0),
+                        cashOut: Number(h.cash_out || 0),
+                        expectedCash: Number(h.expected_cash || 0),
+                        actualCash: Number(h.actual_cash || h.expected_cash || 0),
+                        variance: Number(h.variance || 0),
+                        varianceStatus: h.variance_status || 'SESUAI',
+                        notes: h.closing_notes || 'Penutupan shift kasir.',
+                        status: 'CLOSED',
+                        verifiedBy: 'Supervisor Toko'
+                    }));
+                    return;
+                }
+            }
+        } catch (e) {
+            console.warn('API sessions report fetch error:', e);
+        }
+
         const raw = localStorage.getItem('pos_ilp_session_history_v1');
         if (raw) {
             try {
                 const hist = JSON.parse(raw);
-                if (hist && hist.length > 0) {
+                if (Array.isArray(hist)) {
                     this.pastSessions = hist.map(h => ({
                         id: h.sessionId || h.id || 'CS-SESS-01',
-                        date: h.closedAt || h.date || '24 Oktober 2026',
-                        shift: h.shift || 'Pagi (07:00 - 15:00 WIB)',
+                        date: h.closedAt || h.date || new Date().toLocaleDateString('id-ID'),
+                        shift: h.shift || 'Shift Kasir',
                         terminal: h.terminalLabel || 'Kasir 01',
-                        cashier: h.cashierName || 'Budi Kurniawan',
-                        openingFloat: Number(h.openingCash || h.openingFloat || 500000),
+                        cashier: h.cashierName || 'Kasir',
+                        openingFloat: Number(h.openingCash || h.openingFloat || 0),
                         cashSales: Number(h.cashSalesNet || h.cashSales || 0),
                         nonCashSales: Number(h.nonCashSales || 0),
                         cashOut: Number(h.cashOut || 0),

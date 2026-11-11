@@ -16,7 +16,45 @@
     heldBills: [],
     defaultHeldBills: [],
 
-    initHeldBills() {
+    async initHeldBills() {
+        try {
+            const res = await fetch('/api/pos/held-bills', { headers: { 'Accept': 'application/json' } });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && Array.isArray(json.data)) {
+                    this.heldBills = json.data.map(b => ({
+                        id: b.hold_code,
+                        rawId: b.id,
+                        customerName: b.customer_name,
+                        customerType: b.member_nik ? 'Anggota Koperasi' : 'Pelanggan Umum',
+                        holdTime: b.hold_time_label,
+                        elapsedMinutes: 5,
+                        sessionLabel: b.terminal_code || 'Kasir 01',
+                        isHandover: false,
+                        handoverFrom: null,
+                        note: b.note || '-',
+                        totalAmount: b.grand_total,
+                        itemCount: b.total_items,
+                        items: (b.items || []).map(it => ({
+                            sku: it.sku,
+                            barcode: it.barcode,
+                            name: it.name,
+                            qty: it.qty,
+                            price: it.price,
+                            memberPrice: it.member_price || it.price,
+                            total: it.price * it.qty,
+                            unit: it.unit || 'Pcs'
+                        }))
+                    }));
+                    this.activeSession.heldBillsCount = this.heldBills.length;
+                    this.saveHeldBillsToStorage();
+                    return;
+                }
+            }
+        } catch (e) {
+            console.warn('API held bills fetch error:', e);
+        }
+
         try {
             const raw = localStorage.getItem('pos_ilp_held_bills_v1');
             if (raw) {
@@ -29,6 +67,7 @@
             }
         } catch (e) {}
         this.heldBills = [];
+        this.saveHeldBillsToStorage();
     },
 
     saveHeldBillsToStorage() {
@@ -65,8 +104,19 @@
         this.showDeleteModal = true;
     },
 
-    proceedRecall() {
+    async proceedRecall() {
         if (!this.selectedBill) return;
+
+        if (this.selectedBill.rawId) {
+            try {
+                await fetch('/api/pos/recall/' + this.selectedBill.rawId, {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json' }
+                });
+            } catch (e) {
+                console.warn('API recall error:', e);
+            }
+        }
 
         // Save recalled items to active cart
         localStorage.setItem('pos_ilp_active_cart_v1', JSON.stringify(this.selectedBill.items));
@@ -83,8 +133,19 @@
         window.location.href = '/pos';
     },
 
-    proceedDelete() {
+    async proceedDelete() {
         if (!this.selectedBill) return;
+
+        if (this.selectedBill.rawId) {
+            try {
+                await fetch('/api/pos/held-bills/' + this.selectedBill.rawId, {
+                    method: 'DELETE',
+                    headers: { 'Accept': 'application/json' }
+                });
+            } catch (e) {
+                console.warn('API cancel held bill error:', e);
+            }
+        }
 
         const idx = this.heldBills.findIndex(b => b.id === this.selectedBill.id);
         if (idx !== -1) {

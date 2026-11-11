@@ -8,24 +8,21 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class StockTransfer extends Model
 {
-    public const DRAFT = 'DRAFT';
-    public const IN_TRANSIT = 'IN_TRANSIT';
-    public const RECEIVED = 'RECEIVED';
-    public const RECEIVED_DISCREPANCY = 'RECEIVED_DISCREPANCY';
-    public const CANCELLED = 'CANCELLED';
-
-    protected $guarded = [];
+    protected $fillable = [
+        'transfer_number',
+        'from_location_id',
+        'to_location_id',
+        'request_id',
+        'created_by',
+        'shipped_at',
+        'received_at',
+        'status',
+    ];
 
     protected $casts = [
-        'transfer_date' => 'date',
         'shipped_at' => 'datetime',
         'received_at' => 'datetime',
     ];
-
-    public function items(): HasMany
-    {
-        return $this->hasMany(StockTransferItem::class, 'transfer_id');
-    }
 
     public function fromLocation(): BelongsTo
     {
@@ -35,5 +32,15 @@ class StockTransfer extends Model
     public function toLocation(): BelongsTo
     {
         return $this->belongsTo(Location::class, 'to_location_id');
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function items(): HasMany
+    {
+        return $this->hasMany(StockTransferItem::class, 'transfer_id');
     }
 }

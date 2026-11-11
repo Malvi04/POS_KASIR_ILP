@@ -68,7 +68,22 @@
 
     items: [],
 
-    initReturns() {
+    async initReturns() {
+        try {
+            const res = await fetch('/api/returns', {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && json.data) {
+                    this.items = json.data;
+                    return;
+                }
+            }
+        } catch(e) {
+            console.error('Failed to load returns from API', e);
+        }
+
         const stored = localStorage.getItem('pos_ilp_manager_returns_v1');
         if (stored) {
             try {
@@ -437,6 +452,68 @@
             }
             return true;
         });
+    },
+    async approveItem(item) {
+        item.statusKey = 'disetujui';
+        item.statusLabel = 'DISETUJUI MANAGER';
+        item.statusSub = 'Siap Muat ke Gudang DC';
+        item.needsApproval = false;
+
+        try {
+            if (item.id && typeof item.id === 'number' && item.id < 1000000000000) {
+                await fetch(`/api/returns/${item.id}/status`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ status: 'disetujui' })
+                });
+            }
+        } catch(e) {
+            console.error('Failed to sync return approval to API', e);
+        }
+
+        this.saveReturns();
+        this.triggerToast('Pengajuan ' + item.docNo + ' berhasil di-Approve oleh Manager.');
+    },
+    async rejectItem(item) {
+        item.statusKey = 'ditolak';
+        item.statusLabel = 'DITOLAK MANAGER';
+        item.statusSub = 'Dikembalikan ke Staf Toko';
+        item.needsApproval = false;
+
+        try {
+            if (item.id && typeof item.id === 'number' && item.id < 1000000000000) {
+                await fetch(`/api/returns/${item.id}/status`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ status: 'ditolak' })
+                });
+            }
+        } catch(e) {
+            console.error('Failed to sync return rejection to API', e);
+        }
+
+        this.saveReturns();
+        this.triggerToast('Pengajuan ' + item.docNo + ' telah ditolak.');
+    },
+    async confirmReceive(item) {
+        item.statusKey = 'selesai';
+        item.statusLabel = 'SELESAI (BAST)';
+        item.statusSub = 'Diterima Manager Toko';
+
+        try {
+            if (item.id && typeof item.id === 'number' && item.id < 1000000000000) {
+                await fetch(`/api/returns/${item.id}/status`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ status: 'selesai' })
+                });
+            }
+        } catch(e) {
+            console.error('Failed to sync return receive to API', e);
+        }
+
+        this.saveReturns();
+        this.triggerToast('Pengiriman Gudang ' + item.docNo + ' dikonfirmasi masuk stok toko.');
     },
 
     get filteredMasukList() {
@@ -813,11 +890,43 @@
         if (!this.newDocSku.trim() || !this.newDocQty) return;
         const isTokoToGudang = this.modalMode === 'toko_ke_gudang';
         const codeNum = Math.floor(896 + Math.random() * 90);
-        const docId = isTokoToGudang ? '#RTR-TK-2024-0' + codeNum : '#REP-GD-2024-0' + codeNum;
+        let docId = isTokoToGudang ? '#RTR-TK-2024-0' + codeNum : '#REP-GD-2024-0' + codeNum;
         const prodName = this.newDocSku.includes('-') ? this.newDocSku.split('-')[1].trim() : this.newDocSku.trim();
 
+        let newDbId = Date.now();
+
+        try {
+            const res = await fetch('/api/returns', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({
+                    direction: this.modalMode || 'toko_ke_gudang',
+                    condition_type: this.newDocCondition === 'ED' ? 'kadaluarsa' : 'rusak',
+                    sku: this.newDocSku,
+                    qty: Number(this.newDocQty) || 1,
+                    unit: this.newDocUnit || 'Pcs',
+                    reason: isTokoToGudang ? 'Input cepat draft retur terverifikasi' : 'Pengiriman barang pengganti dari Gudang DC',
+                    driver_name: this.newDocDriver || (isTokoToGudang ? 'Andi Pratama' : 'Dedi Kurnia'),
+                    vehicle_plate: 'B 9481 UQ',
+                    use_fleet: true
+                })
+            });
+
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && json.data) {
+                    newDbId = json.data.id;
+                    if (json.data.return_number) {
+                        docId = json.data.return_number;
+                    }
+                }
+            }
+        } catch(e) {
+            console.error('API create return error', e);
+        }
+
         const newDoc = {
-            id: Date.now(),
+            id: newDbId,
             docNo: docId,
             date: 'Baru saja • Hari Ini',
             ref: isTokoToGudang ? 'Ref: DRAFT-' + this.newDocBranch.toUpperCase() : 'Klaim: #RTR-TK-2024-0892',

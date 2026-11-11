@@ -1,0 +1,29 @@
+erDiagram
+    SALES ||--|{ PAYMENTS : has
+    PAYMENT_METHODS ||--o{ PAYMENTS : uses
+    PAYMENTS ||--o{ PAYMENT_REFUNDS : refunded_by
+    SALES ||--o{ SALES_RETURNS : has
+
+    SALES {
+        bigint id PK
+        string invoice_number
+        decimal grand_total
+        string payment_status
+    }
+
+    PAYMENTS {
+        bigint id PK
+        bigint sale_id FK
+        bigint payment_method_id FK
+        decimal amount
+        string status
+        string reference_number
+    }
+
+    PAYMENT_REFUNDS {
+        bigint id PK
+        bigint payment_id FK
+        decimal refund_amount
+        string refund_method
+        string status
+    }

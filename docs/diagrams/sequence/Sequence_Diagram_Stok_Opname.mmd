@@ -1,0 +1,106 @@
+sequenceDiagram
+    autonumber
+
+    actor SPV as Manager / Supervisor
+    actor Kasir as Kasir / Petugas Audit
+    participant UI_Manager as Antarmuka Manager (/stock-opname)
+    participant UI_Kasir as Antarmuka Kasir (/kasir/stock-opname)
+    participant API as Backend REST API (StockOpnameController)
+    participant DB as Database PostgreSQL
+
+    %% ==========================================
+    %% 1. PEMBUATAN SESI & SNAPSHOT PERSADAAN
+    %% ==========================================
+    rect rgb(238, 246, 255)
+        Note over SPV,DB: FASE 1: Pembuatan Sesi Stock Opname & Penguncian Snapshot Stok
+
+        SPV->>UI_Manager: Akses menu Stock Opname Manajerial (/stock-opname)
+        SPV->>UI_Manager: Klik 'Buat Sesi Opname Baru' (Judul, Cabang, Kategori, Pelaksana)
+        UI_Manager->>API: POST /api/inventory/stock-opname { title, branch, category, conducted_by }
+        
+        API->>DB: Buka DB Transaction
+        API->>DB: INSERT INTO stock_opnames (opname_code='SOP-YYYYMMDD-XXXX', status='DRAFT')
+        API->>DB: SELECT id, sku, name, stock, cost_price FROM products WHERE category = ?
+        DB-->>API: Data Snapshot Stok Produk Terkini
+        
+        loop Untuk Setiap Produk Terpilih
+            API->>DB: INSERT INTO stock_opname_items (product_id, system_stock, physical_stock, variance=0)
+        end
+        API->>DB: Commit DB Transaction
+        DB-->>API: Sesi Opname Berhasil Dibuat (Status: DRAFT)
+        
+        API-->>UI_Manager: HTTP 201 Created: Sesi Siap untuk Audit Fisik
+        UI_Manager-->>SPV: Tampilkan daftar sesi aktif & kode opname
+    end
+
+    %% ==========================================
+    %% 2. PERHITUNGAN FISIK DI RAK OLEH KASIR
+    %% ==========================================
+    rect rgb(240, 253, 244)
+        Note over Kasir,DB: FASE 2: Pelaksanaan Hitung Fisik Rak oleh Kasir / Petugas
+
+        Kasir->>UI_Kasir: Buka menu Stok Opname Kasir (/kasir/stock-opname)
+        UI_Kasir->>API: GET /api/inventory/stock-opname?status=DRAFT
+        API->>DB: Query sesi opname aktif berstatus DRAFT
+        DB-->>API: Daftar sesi opname aktif
+        API-->>UI_Kasir: Tampilkan daftar sesi yang perlu diaudit
+        Kasir->>UI_Kasir: Pilih sesi opname aktif
+
+        loop Untuk Setiap Barang di Rak Toko
+            Kasir->>UI_Kasir: Scan barcode produk atau cari via nama/SKU
+            Kasir->>UI_Kasir: Input kuantitas fisik hasil hitung (atau mode increment +1)
+            UI_Kasir->>API: POST /api/inventory/stock-opname/{id}/verify-item { barcode, physical_stock }
+            
+            API->>API: Hitung Varians: physical_stock - system_stock
+            API->>API: Hitung Nilai Kerugian/Keuntungan: variance * unit_cost (HPP)
+            API->>API: Tentukan Status: Sesuai (0) / Selisih Kurang (<0) / Selisih Lebih (>0)
+            
+            API->>DB: UPDATE stock_opname_items SET physical_stock=?, variance=?, is_audited=TRUE
+            DB-->>API: Item opname terverifikasi
+            API-->>UI_Kasir: Status item terbarui (Warna Hijau/Merah/Kuning)
+        end
+
+        Kasir->>UI_Kasir: Klik 'Kirim Hasil Audit Fisik' (Submit Audit)
+        UI_Kasir-->>Kasir: Notifikasi: Audit fisik telah terkirim untuk ditinjau Manager
+    end
+
+    %% ==========================================
+    %% 3. REKONSILIASI & PENYESUAIAN STOK
+    %% ==========================================
+    rect rgb(255, 251, 235)
+        Note over SPV,DB: FASE 3: Review Varians, Approval & Eksekusi Penyesuaian Stok
+
+        SPV->>UI_Manager: Buka detail sesi opname (/stock-opname/{id})
+        UI_Manager->>API: GET /api/inventory/stock-opname/{id}
+        API->>DB: Query detail sesi & seluruh item beserta varians
+        DB-->>API: Laporan Varians Stok (System vs Fisik, Nilai Deviasi Rupiah)
+        API-->>UI_Manager: Tampilkan tabel varians deviasi persediaan
+
+        alt Terdapat Selisih Mencurigakan yang Perlu Dihitung Ulang
+            SPV->>UI_Manager: Tandai item & kirim permintaan hitung ulang (Recount)
+            UI_Manager-->>Kasir: Notifikasi penugasan hitung ulang rak tertentu
+            Kasir->>UI_Kasir: Hitung ulang fisik & perbarui kuantitas
+        else Selisih Telah Dikonfirmasi / Sesuai Toleransi
+            SPV->>UI_Manager: Input catatan evaluasi & Berita Acara Opname
+            SPV->>UI_Manager: Klik tombol 'Selesaikan & Sesuaikan Stok' (Complete)
+            
+            UI_Manager->>API: POST /api/inventory/stock-opname/{id}/complete { notes }
+            API->>DB: Buka DB Transaction
+            loop Untuk Setiap Item yang Memiliki Varians
+                API->>DB: UPDATE products SET stock = physical_stock WHERE id = product_id
+                API->>DB: INSERT INTO stock_corrections (alasan koreksi, selisih, HPP)
+            end
+            API->>DB: UPDATE stock_opnames SET status = 'COMPLETED', completed_at = NOW()
+            API->>DB: Commit DB Transaction
+            DB-->>API: Stok master berhasil diselaraskan dengan fisik
+            
+            API-->>UI_Manager: HTTP 200 OK: Stock Opname Selesai & Stok Diperbarui
+            UI_Manager-->>SPV: Tampilkan status COMPLETED
+            
+            opt Ekspor Berita Acara Audit
+                SPV->>UI_Manager: Klik 'Ekspor Laporan Audit' (CSV)
+                UI_Manager->>API: GET /api/inventory/stock-opname/{id}/export-csv
+                API-->>SPV: Unduh file CSV Berita Acara Rekonsiliasi Stok Opname
+            end
+        end
+    end

@@ -59,7 +59,40 @@
         return { unique, hasDuplicates };
     },
 
-    initProducts() {
+    async initProducts() {
+        try {
+            const res = await fetch('/api/products?per_page=100', { headers: { 'Accept': 'application/json' } });
+            if (res.ok) {
+                const json = await res.json();
+                const items = json.data || (Array.isArray(json) ? json : []);
+                if (Array.isArray(items) && items.length > 0) {
+                    const mapped = items.map(p => ({
+                        id: p.id,
+                        sku: p.sku,
+                        barcode: p.barcode,
+                        name: p.name,
+                        brand: p.supplier_name || 'Lokal',
+                        category: p.category || 'Umum',
+                        rackLocation: p.rack_location || 'Lorong Toko',
+                        stock: p.stock ?? 0,
+                        minStock: p.min_stock ?? 10,
+                        unit: p.unit || 'Pcs',
+                        price: p.price ?? p.original_price ?? 0,
+                        memberPrice: p.member_price ?? p.original_member_price ?? p.price ?? 0,
+                        status: p.stock_status || this.calculateStatus(p.stock, p.min_stock, p.expired_date),
+                        batchLot: 'LOT-' + p.sku,
+                        expiredDate: p.expired_date || ''
+                    }));
+                    const result = this.deduplicateProducts(mapped);
+                    this.products = result.unique;
+                    this.saveProductsToStorage();
+                    return;
+                }
+            }
+        } catch (e) {
+            console.warn('API products fetch fallback:', e);
+        }
+
         try {
             const raw = localStorage.getItem('pos_ilp_inventory_products_v1');
             if (raw) {

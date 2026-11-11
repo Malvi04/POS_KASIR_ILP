@@ -13,7 +13,7 @@
     toastMessage: '',
     showToast: false,
 
-    initOpname() {
+    async initOpname() {
         // Load master inventory products
         const raw = localStorage.getItem('pos_ilp_inventory_products_v1');
         let prods = [];
@@ -22,6 +22,29 @@
                 prods = JSON.parse(raw);
             } catch(e) {
                 prods = [];
+            }
+        }
+
+        if (!prods || prods.length === 0) {
+            try {
+                const res = await fetch('/api/pos/products/search?q=');
+                if (res.ok) {
+                    const json = await res.json();
+                    if (json.success && Array.isArray(json.data)) {
+                        prods = json.data.map(p => ({
+                            id: p.id,
+                            sku: p.sku,
+                            barcode: p.barcode,
+                            nama: p.name,
+                            kategori: p.category,
+                            hargaJual: p.price,
+                            stok: p.stock
+                        }));
+                        localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(prods));
+                    }
+                }
+            } catch(e) {
+                console.warn('Could not fetch products for opname', e);
             }
         }
 
@@ -36,11 +59,12 @@
         }
 
         this.items = prods.map(p => {
-            const existing = draftMap[p.sku];
+            const existing = draftMap[p.sku || p.barcode];
             if (existing) {
                 return existing;
             }
             return {
+                id: p.id,
                 sku: p.sku || p.barcode,
                 nama: p.nama,
                 kategori: p.kategori || 'Umum',
@@ -178,7 +202,21 @@
         hist.unshift(historyRecord);
         localStorage.setItem('pos_ilp_stock_opname_history_v1', JSON.stringify(hist));
 
-        // 3. Clear draft
+        // 3. Post opname record to backend API asynchronously
+        try {
+            fetch('/api/inventory/stock-opname', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({
+                    title: 'Stock Opname ' + (this.activeSession?.terminalLabel || 'Kasir 01'),
+                    branch: this.activeSession?.storeLocation || 'Cabang 1 - Mill / Pabrik',
+                    conducted_by: (this.activeSession?.cashierName || 'Kasir') + ' (Kasir)',
+                    notes: 'Audit kasir ' + historyRecord.totalAudited + ' SKU. Selisih: ' + historyRecord.totalVariance + ' unit.'
+                })
+            }).catch(e => console.warn('Opname background sync', e));
+        } catch(e) {}
+
+        // 4. Clear draft
         localStorage.removeItem('pos_ilp_active_opname_v1');
 
         this.showFinishModal = false;

@@ -1,0 +1,109 @@
+
+erDiagram
+    USERS {
+        bigint id PK
+        string name
+    }
+    LOCATIONS {
+        bigint id PK
+        string name
+    }
+    MEMBERS {
+        bigint id PK
+        string name
+    }
+    PRODUCTS {
+        bigint id PK
+        string name
+    }
+    PRODUCT_PRICES {
+        bigint id PK
+        bigint product_id FK
+        decimal selling_price
+        date effective_from
+        date effective_to
+    }
+    SALES {
+        bigint id PK
+        string receipt_number UK
+        bigint location_id FK
+        bigint cashier_id FK
+        bigint member_id FK
+        bigint cash_session_id FK
+        datetime sold_at
+        decimal subtotal
+        decimal discount_amount
+        decimal tax_amount
+        decimal grand_total
+        string status
+    }
+    SALE_ITEMS {
+        bigint id PK
+        bigint sale_id FK
+        bigint product_id FK
+        decimal qty
+        decimal unit_price
+        decimal discount_amount
+        decimal tax_amount
+        decimal line_total
+        string product_name_snapshot
+        string sku_snapshot
+    }
+    SALE_ITEM_ALLOCATIONS {
+        bigint id PK
+        bigint sale_item_id FK
+        bigint inventory_layer_id FK
+        decimal qty
+        decimal settlement_cost_snapshot
+    }
+    SALE_ITEM_TAXES {
+        bigint id PK
+        bigint sale_item_id FK
+        string tax_code
+        decimal tax_rate
+        decimal tax_amount
+    }
+    PAYMENTS {
+        bigint id PK
+        bigint sale_id FK
+        string payment_method
+        decimal amount
+        string reference_number
+        string status
+    }
+    CASH_SESSIONS {
+        bigint id PK
+        bigint cashier_id FK
+        bigint location_id FK
+        datetime opened_at
+        datetime closed_at
+        decimal opening_cash
+        decimal closing_cash
+        string status
+    }
+    CASH_MOVEMENTS {
+        bigint id PK
+        bigint cash_session_id FK
+        string movement_type
+        decimal amount
+        string description
+    }
+    INVENTORY_LAYERS {
+        bigint id PK
+        bigint product_id FK
+    }
+
+    PRODUCTS ||--o{ PRODUCT_PRICES : priced
+    LOCATIONS ||--o{ SALES : records
+    USERS ||--o{ SALES : cashier
+    MEMBERS o|--o{ SALES : member
+    CASH_SESSIONS o|--o{ SALES : contains
+    SALES ||--|{ SALE_ITEMS : contains
+    PRODUCTS ||--o{ SALE_ITEMS : sold
+    SALE_ITEMS ||--o{ SALE_ITEM_ALLOCATIONS : allocated
+    INVENTORY_LAYERS ||--o{ SALE_ITEM_ALLOCATIONS : source
+    SALE_ITEMS ||--o{ SALE_ITEM_TAXES : taxes
+    SALES ||--|{ PAYMENTS : paid_by
+    USERS ||--o{ CASH_SESSIONS : operates
+    LOCATIONS ||--o{ CASH_SESSIONS : hosts
+    CASH_SESSIONS ||--o{ CASH_MOVEMENTS : movements
