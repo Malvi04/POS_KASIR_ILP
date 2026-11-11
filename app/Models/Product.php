@@ -13,39 +13,48 @@ class Product extends Model
     use HasFactory;
 
     protected $fillable = [
+        'ilp_id',
         'sku',
         'barcode',
         'name',
         'category',
         'unit',
         'cost_price',
+        'last_cost_price',
         'price',
         'member_price',
         'stock',
         'min_stock',
+        'reorder_point',
         'is_taxable',
         'tax_rate',
         'expired_date',
         'clearance_discount_percent',
+        'markup_percent',
         'status',
         'is_consignment',
         'supplier_id',
         'commission_percent',
         'rack_location',
+        'extra_attributes',
     ];
 
     protected $casts = [
         'cost_price' => 'float',
+        'last_cost_price' => 'float',
         'price' => 'float',
         'member_price' => 'float',
         'stock' => 'integer',
         'min_stock' => 'integer',
+        'reorder_point' => 'integer',
         'is_taxable' => 'boolean',
         'tax_rate' => 'float',
         'expired_date' => 'date',
         'clearance_discount_percent' => 'float',
+        'markup_percent' => 'float',
         'is_consignment' => 'boolean',
         'commission_percent' => 'float',
+        'extra_attributes' => 'array',
     ];
 
     protected $appends = [

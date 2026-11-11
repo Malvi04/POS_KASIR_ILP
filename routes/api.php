@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\Manager\ConsolidatedReportController;
 use App\Http\Controllers\Api\Manager\ManagerDashboardController;
 use App\Http\Controllers\Api\Manager\MemberDebtReportController;
 use App\Http\Controllers\Api\Manager\MemberManagementController;
+use App\Http\Controllers\Api\Manager\ProductImportExportController;
 use App\Http\Controllers\Api\Manager\PromotionController;
 use App\Http\Controllers\Api\Manager\ReturnController;
 use App\Http\Controllers\Api\Manager\SettingsController;
@@ -143,6 +144,12 @@ Route::prefix('products')->group(function () {
     Route::delete('/{id}', [ProductController::class, 'destroy']);
     Route::post('/{id}/units', [ProductController::class, 'addUnit']);
     Route::delete('/{id}/units/{unitId}', [ProductController::class, 'removeUnit']);
+
+    // Import & Export Excel Master Produk (Standard 36 Kolom ILP)
+    Route::post('/import/validate', [ProductImportExportController::class, 'validateAndPreview']);
+    Route::post('/import/process', [ProductImportExportController::class, 'processImport']);
+    Route::get('/export/excel', [ProductImportExportController::class, 'export']);
+    Route::get('/export/template', [ProductImportExportController::class, 'downloadTemplate']);
 });
 
 // Konsinyasi UMKM (Mitra & Bagi Hasil)
