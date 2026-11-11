@@ -7,6 +7,7 @@
     ...cashierOpeningData(),
     searchQuery: '',
     statusFilter: 'all',
+    destinationFilter: 'all',
     showVerifyModal: false,
     showBastModal: false,
     selectedDoc: null,
@@ -70,17 +71,33 @@
     },
 
     get filteredDocuments() {
-        return this.documents.filter(doc => {
+        let list = this.documents.filter(doc => {
             if (this.statusFilter !== 'all' && doc.status !== this.statusFilter) return false;
+            if (this.destinationFilter !== 'all' && doc.destinationStore !== this.destinationFilter) return false;
             if (this.searchQuery.trim() !== '') {
                 const q = this.searchQuery.toLowerCase();
-                const matchNo = doc.docNo.toLowerCase().includes(q);
-                const matchWh = doc.warehouseOrigin.toLowerCase().includes(q);
-                const matchDriver = doc.driverName.toLowerCase().includes(q) || doc.plateNumber.toLowerCase().includes(q);
-                const matchProd = doc.items.some(it => it.name.toLowerCase().includes(q) || it.sku.includes(q));
-                return matchNo || matchWh || matchDriver || matchProd;
+                const matchNo = (doc.docNo || '').toLowerCase().includes(q);
+                const matchWh = (doc.warehouseOrigin || '').toLowerCase().includes(q);
+                const matchDest = (doc.destinationStore || '').toLowerCase().includes(q);
+                const matchDriver = (doc.driverName || '').toLowerCase().includes(q) || (doc.plateNumber || '').toLowerCase().includes(q);
+                const matchProd = Array.isArray(doc.items) && doc.items.some(it => (it.name || '').toLowerCase().includes(q) || (it.sku || '').toLowerCase().includes(q));
+                return matchNo || matchWh || matchDest || matchDriver || matchProd;
             }
             return true;
+        });
+
+        // Urutkan: Dokumen MENUNGGU_VERIFIKASI (Perlu Verifikasi) prioritas paling atas,
+        // lalu diurutkan dari dokumen/ID terbaru ke terlama (descending)
+        return list.sort((a, b) => {
+            const isPendingA = a.status === 'MENUNGGU_VERIFIKASI' ? 1 : 0;
+            const isPendingB = b.status === 'MENUNGGU_VERIFIKASI' ? 1 : 0;
+            if (isPendingA !== isPendingB) {
+                return isPendingB - isPendingA;
+            }
+            const idA = Number(a.id) || 0;
+            const idB = Number(b.id) || 0;
+            if (idA !== idB) return idB - idA;
+            return (b.docNo || '').localeCompare(a.docNo || '');
         });
     },
 
@@ -249,7 +266,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             <div class="w-2.5 h-2.5 rounded-full bg-emerald-500"></div>
                             <div class="flex flex-col">
                                 <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">TERMINAL PENERIMA</span>
-                                <span class="text-xs font-bold text-gray-800" x-text="activeSession.terminalLabel + ' • ' + activeSession.cashierName">Kasir 01 • Budi Kurniawan</span>
+                                <span class="text-xs font-bold text-gray-800" x-text="(activeSession && activeSession.terminalLabel) ? (activeSession.terminalLabel + ' • ' + activeSession.cashierName) : 'POS-01 • Budi Kurniawan'">Kasir 01 • Budi Kurniawan</span>
                             </div>
                         </div>
                     </div>
@@ -258,7 +275,9 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                 <!-- 4 Stats Cards -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <!-- Stat 1 -->
-                    <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs flex items-center justify-between">
+                    <div @click="statusFilter = 'all'"
+                         class="bg-white rounded-2xl border p-5 shadow-xs flex items-center justify-between cursor-pointer hover:shadow-md transition-all"
+                         :class="statusFilter === 'all' ? 'border-[#0052cc] ring-2 ring-[#0052cc]/20' : 'border-gray-200'">
                         <div>
                             <span class="text-[11px] font-bold text-gray-400 tracking-wider uppercase">TOTAL DOKUMEN</span>
                             <h3 class="text-2xl font-black text-gray-900 mt-1" x-text="totalItemsCount">4</h3>
@@ -270,7 +289,9 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
 
                     <!-- Stat 2 -->
-                    <div class="bg-white rounded-2xl border border-amber-200 p-5 shadow-xs flex items-center justify-between border-l-4 border-l-amber-500">
+                    <div @click="statusFilter = (statusFilter === 'MENUNGGU_VERIFIKASI' ? 'all' : 'MENUNGGU_VERIFIKASI')"
+                         class="bg-white rounded-2xl border p-5 shadow-xs flex items-center justify-between border-l-4 border-l-amber-500 cursor-pointer hover:shadow-md transition-all"
+                         :class="statusFilter === 'MENUNGGU_VERIFIKASI' ? 'border-amber-400 ring-2 ring-amber-400/30' : 'border-amber-200'">
                         <div>
                             <span class="text-[11px] font-bold text-amber-700 tracking-wider uppercase">PERLU VERIFIKASI</span>
                             <div class="flex items-baseline gap-2 mt-1">
@@ -285,7 +306,9 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
 
                     <!-- Stat 3 -->
-                    <div class="bg-white rounded-2xl border border-emerald-200 p-5 shadow-xs flex items-center justify-between border-l-4 border-l-emerald-500">
+                    <div @click="statusFilter = (statusFilter === 'DITERIMA_LENGKAP' ? 'all' : 'DITERIMA_LENGKAP')"
+                         class="bg-white rounded-2xl border p-5 shadow-xs flex items-center justify-between border-l-4 border-l-emerald-500 cursor-pointer hover:shadow-md transition-all"
+                         :class="statusFilter === 'DITERIMA_LENGKAP' ? 'border-emerald-400 ring-2 ring-emerald-400/30' : 'border-emerald-200'">
                         <div>
                             <span class="text-[11px] font-bold text-emerald-700 tracking-wider uppercase">DITERIMA LENGKAP</span>
                             <h3 class="text-2xl font-black text-emerald-600 mt-1" x-text="completedFullCount">1</h3>
@@ -297,7 +320,9 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
 
                     <!-- Stat 4 -->
-                    <div class="bg-white rounded-2xl border border-rose-200 p-5 shadow-xs flex items-center justify-between border-l-4 border-l-rose-500">
+                    <div @click="statusFilter = (statusFilter === 'DITERIMA_SELISIH' ? 'all' : 'DITERIMA_SELISIH')"
+                         class="bg-white rounded-2xl border p-5 shadow-xs flex items-center justify-between border-l-4 border-l-rose-500 cursor-pointer hover:shadow-md transition-all"
+                         :class="statusFilter === 'DITERIMA_SELISIH' ? 'border-rose-400 ring-2 ring-rose-400/30' : 'border-rose-200'">
                         <div>
                             <span class="text-[11px] font-bold text-rose-700 tracking-wider uppercase">DITERIMA SELISIH</span>
                             <h3 class="text-2xl font-black text-rose-600 mt-1" x-text="completedVarianceCount">1</h3>
@@ -315,14 +340,27 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <span class="material-symbols-rounded absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-[20px]">search</span>
                         <input type="text"
                                x-model="searchQuery"
-                               placeholder="Cari nomor surat jalan, DC pengirim, nama driver, atau produk..."
+                               placeholder="Cari nomor surat jalan, DC pengirim, toko tujuan, driver, atau produk..."
                                class="w-full pl-11 pr-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 text-[13px] shadow-xs transition-all font-medium bg-slate-50/50">
                     </div>
 
-                    <div class="flex items-center gap-3 w-full md:w-auto">
-                        <div class="relative w-full md:w-auto">
+                    <div class="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                        <!-- Filter Tujuan Toko -->
+                        <div class="relative">
+                            <select x-model="destinationFilter"
+                                    class="appearance-none bg-white border border-gray-200 rounded-xl px-4 py-2.5 pr-10 text-[13px] text-gray-700 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 shadow-xs font-semibold cursor-pointer">
+                                <option value="all">Semua Toko Tujuan</option>
+                                <option value="Cabang B">Cabang B</option>
+                                <option value="Cabang A">Cabang A</option>
+                                <option value="Minimarket ILP - Pusat">Minimarket ILP - Pusat</option>
+                            </select>
+                            <span class="material-symbols-rounded absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-[20px]">expand_more</span>
+                        </div>
+
+                        <!-- Filter Status Dokumen -->
+                        <div class="relative">
                             <select x-model="statusFilter"
-                                    class="appearance-none w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 pr-10 text-[13px] text-gray-700 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 shadow-xs font-semibold cursor-pointer">
+                                    class="appearance-none bg-white border border-gray-200 rounded-xl px-4 py-2.5 pr-10 text-[13px] text-gray-700 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 shadow-xs font-semibold cursor-pointer">
                                 <option value="all">Semua Status Dokumen</option>
                                 <option value="MENUNGGU_VERIFIKASI">Menunggu Verifikasi (Tiba)</option>
                                 <option value="DITERIMA_LENGKAP">Diterima Lengkap (Sesuai)</option>
@@ -526,7 +564,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         </div>
                         <div>
                             <span class="text-[10px] font-bold text-gray-400 uppercase block">PETUGAS PEMERIKSA</span>
-                            <span class="font-bold text-[#0052cc]" x-text="activeSession.cashierName">Budi Kurniawan</span>
+                            <span class="font-bold text-[#0052cc]" x-text="(activeSession && activeSession.cashierName) ? activeSession.cashierName : 'Petugas Kasir'">Budi Kurniawan</span>
                         </div>
                     </div>
 

@@ -19,9 +19,9 @@
         <div class="px-6 py-5 border-b border-gray-200/50">
             <div class="flex items-center justify-between">
                 <h1 class="text-2xl font-black text-[#0052cc] tracking-tight">ILP POS</h1>
-                <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-100 text-[#0052cc]" x-text="activeSession.terminalLabel">Kasir 01</span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-100 text-[#0052cc]" x-text="activeSession ? activeSession.terminalLabel : 'POS-01'">Kasir 01</span>
             </div>
-            <p class="text-[11px] text-gray-500 mt-0.5 font-medium" x-text="activeSession.cashierName">Budi Kurniawan</p>
+            <p class="text-[11px] text-gray-500 mt-0.5 font-medium" x-text="activeSession ? activeSession.cashierName : 'Budi Kurniawan'">Budi Kurniawan</p>
         </div>
 
         <!-- 11 Final Sidebar Navigation Items -->
