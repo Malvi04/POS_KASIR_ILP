@@ -457,6 +457,12 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
                 <div class="h-6 w-[1px] bg-gray-200"></div>
 
+                <x-notification-bell role="MANAGER" />
+
+                <x-realtime-network-badge />
+
+                <div class="h-6 w-[1px] bg-gray-200"></div>
+
                 <div class="flex items-center gap-2.5 bg-slate-50 border border-gray-200 px-3 py-1.5 rounded-xl">
                     <div class="w-7 h-7 rounded-lg bg-[#0052cc] text-white flex items-center justify-center text-xs font-black">
                         BS

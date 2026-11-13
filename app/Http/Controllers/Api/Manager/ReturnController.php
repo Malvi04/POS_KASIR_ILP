@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Manager;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Shared\NotificationController;
 use App\Models\Location;
 use App\Models\Product;
 use App\Models\StoreReturnHeader;
@@ -259,6 +260,29 @@ class ReturnController extends Controller
 
             DB::commit();
 
+            try {
+                NotificationController::notify(
+                    role: 'MANAGER',
+                    title: "Pengajuan Retur: {$header->return_number}",
+                    message: "Toko mengajukan retur barang {$product->name} ({$qty} {$product->unit}) senilai Rp " . number_format($subtotal, 0, ',', '.') . ". Alasan: {$validated['reason']}.",
+                    category: 'RETURN',
+                    link: '/manager/retur',
+                    icon: 'assignment_return',
+                    color: 'purple',
+                    referenceId: $header->return_number
+                );
+                NotificationController::notify(
+                    role: 'OWNER',
+                    title: "Pengajuan Retur Toko: {$header->return_number}",
+                    message: "Tercatat pengajuan retur barang ke gudang senilai Rp " . number_format($subtotal, 0, ',', '.') . '.',
+                    category: 'RETURN',
+                    link: '/owner/audit-log',
+                    icon: 'assignment_return',
+                    color: 'purple',
+                    referenceId: $header->return_number
+                );
+            } catch (\Throwable $e) {}
+
             return response()->json([
                 'success' => true,
                 'message' => 'Dokumen retur berhasil dibuat dan diserahkan ke DC/Supervisor',
@@ -285,6 +309,20 @@ class ReturnController extends Controller
         ]);
 
         $header->update(['status' => $validated['status']]);
+
+        try {
+            $readableStatus = strtoupper(str_replace('_', ' ', $validated['status']));
+            NotificationController::notify(
+                role: 'KASIR',
+                title: "Status Retur {$header->return_number}: {$readableStatus}",
+                message: "Pengajuan retur barang ke gudang telah diubah statusnya menjadi {$readableStatus}.",
+                category: 'RETURN',
+                link: '/kasir/retur',
+                icon: $validated['status'] === 'disetujui' || $validated['status'] === 'selesai' ? 'check_circle' : ($validated['status'] === 'ditolak' ? 'cancel' : 'pending'),
+                color: $validated['status'] === 'disetujui' || $validated['status'] === 'selesai' ? 'emerald' : ($validated['status'] === 'ditolak' ? 'rose' : 'amber'),
+                referenceId: $header->return_number
+            );
+        } catch (\Throwable $e) {}
 
         return response()->json([
             'success' => true,

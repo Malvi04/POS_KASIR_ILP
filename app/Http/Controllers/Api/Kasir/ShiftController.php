@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Kasir;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Shared\NotificationController;
 use App\Models\CashierShift;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -161,6 +162,20 @@ class ShiftController extends Controller
             'opened_at' => now(),
         ]);
 
+        try {
+            NotificationController::notify(
+                role: 'MANAGER',
+                title: "Shift Kasir Dibuka: {$shift->terminal_code}",
+                message: "Kasir {$shift->cashier_name} membuka sesi {$shift->shift_code} dengan modal awal Rp " . number_format($shift->opening_cash, 0, ',', '.') . '.',
+                category: 'CASHIER',
+                link: '/manager/dashboard',
+                icon: 'point_of_sale',
+                color: 'blue',
+                referenceId: $shift->shift_code
+            );
+            event(new \App\Events\CashierShiftEvent($shift, 'opened'));
+        } catch (\Throwable $e) {}
+
         return response()->json([
             'success' => true,
             'message' => 'Sesi shift kasir berhasil dibuka dengan modal awal Rp ' . number_format($shift->opening_cash, 0, ',', '.'),
@@ -197,6 +212,31 @@ class ShiftController extends Controller
         }
 
         $shift->closeShift((float) $validated['actual_cash'], $validated['closing_notes'] ?? null);
+
+        try {
+            $hasVariance = abs((float) $shift->variance) > 0;
+            NotificationController::notify(
+                role: 'MANAGER',
+                title: "Tutup Kasir: {$shift->shift_code}",
+                message: "Kasir {$shift->cashier_name} ({$shift->terminal_code}) menutup shift. Omset: Rp " . number_format($shift->total_sales, 0, ',', '.') . ($hasVariance ? " | Selisih kas: Rp " . number_format($shift->variance, 0, ',', '.') : " | Kas seimbang"),
+                category: 'CASHIER',
+                link: '/manager/reports',
+                icon: $hasVariance ? 'warning' : 'savings',
+                color: $hasVariance ? 'rose' : 'emerald',
+                referenceId: $shift->shift_code
+            );
+            NotificationController::notify(
+                role: 'OWNER',
+                title: "Closing Kasir: {$shift->terminal_code}",
+                message: "Shift {$shift->shift_code} ditutup. Setoran fisik: Rp " . number_format($shift->actual_cash, 0, ',', '.') . ($hasVariance ? " (Deviasi: Rp " . number_format($shift->variance, 0, ',', '.') . ")" : ""),
+                category: 'CASHIER',
+                link: '/owner/audit-log',
+                icon: $hasVariance ? 'report_problem' : 'account_balance_wallet',
+                color: $hasVariance ? 'amber' : 'emerald',
+                referenceId: $shift->shift_code
+            );
+            event(new \App\Events\CashierShiftEvent($shift, 'closed'));
+        } catch (\Throwable $e) {}
 
         return response()->json([
             'success' => true,

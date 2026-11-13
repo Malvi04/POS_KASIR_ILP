@@ -27,6 +27,13 @@
         }, 3500);
     },
 
+    formatRupiah(val) {
+        const n = Number(val) || 0;
+        const abs = Math.abs(n);
+        const formatted = new Intl.NumberFormat('id-ID').format(abs);
+        return (n < 0 ? '-Rp ' : 'Rp ') + formatted;
+    },
+
     defaultProducts: [],
 
     products: [],
@@ -121,7 +128,8 @@
 
     saveProductsToStorage() {
         try {
-            localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(this.products));
+            const sliceToSave = this.products.length > 200 ? this.products.slice(0, 200) : this.products;
+            localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(sliceToSave));
             window.dispatchEvent(new CustomEvent('pos-inventory-synced', { detail: { count: this.products.length } }));
         } catch (e) {
             console.error('Failed to save inventory products:', e);
@@ -165,6 +173,55 @@
             }
             return true;
         });
+    },
+
+    searchTimer: null,
+    onSearchInput() {
+        this.currentPage = 1;
+        const q = (this.searchQuery || '').trim();
+        if (this.searchTimer) clearTimeout(this.searchTimer);
+        if (q.length >= 2) {
+            this.searchTimer = setTimeout(() => {
+                this.fetchServerSearch(q);
+            }, 300);
+        }
+    },
+    async fetchServerSearch(q) {
+        if (!q || q.length < 2) return;
+        try {
+            const res = await fetch(`/api/products?search=${encodeURIComponent(q)}&per_page=100`, {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (res.ok) {
+                const json = await res.json();
+                const items = json.data || (Array.isArray(json) ? json : []);
+                if (Array.isArray(items) && items.length > 0) {
+                    const mapped = items.map(p => ({
+                        id: p.id,
+                        sku: p.sku,
+                        barcode: p.barcode,
+                        name: p.name,
+                        brand: p.brand || p.category,
+                        category: p.category || 'Kebutuhan Pokok',
+                        stock: Number(p.stock) || 0,
+                        minStock: Number(p.min_stock) || 10,
+                        unit: p.unit || 'Pcs',
+                        price: Number(p.price) || 0,
+                        memberPrice: Number(p.member_price || p.price) || 0,
+                        rackLocation: p.rack_location || '-',
+                        status: Number(p.stock) <= 0 ? 'HABIS' : (Number(p.stock) <= Number(p.min_stock || 10) ? 'STOK_RENDAH' : 'TERSEDIA'),
+                        isConsignment: Boolean(p.is_consignment),
+                        supplier: p.supplier || null,
+                        expiredDate: p.expired_date || null
+                    }));
+                    const existingSkus = new Set((this.products || []).map(p => p.sku));
+                    const newItems = mapped.filter(p => !existingSkus.has(p.sku));
+                    if (newItems.length > 0) {
+                        this.products = [...newItems, ...this.products];
+                    }
+                }
+            }
+        } catch (err) {}
     },
 
     get totalItems() {
@@ -319,7 +376,7 @@
         this.formData.barcode = '899' + Math.floor(1000000000 + Math.random() * 9000000000);
     },
 
-    saveProduct() {
+    async saveProduct() {
         this.formErrors = {};
         this.duplicateExistingProduct = null;
         const f = this.formData;
@@ -404,6 +461,39 @@
         };
 
         if (this.modalMode === 'create') {
+            try {
+                const res = await fetch('/api/products', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({
+                        sku: payload.sku,
+                        barcode: payload.barcode,
+                        name: payload.name,
+                        brand: payload.brand,
+                        category: payload.category || 'Kebutuhan Pokok',
+                        unit: payload.unit || 'Pcs',
+                        cost_price: Math.round(Number(payload.price) * 0.75),
+                        price: Number(payload.price),
+                        member_price: Number(payload.memberPrice || payload.price),
+                        stock: Number(payload.stock),
+                        min_stock: Number(payload.minStock),
+                        rack_location: payload.rackLocation || 'Lorong A - Rak 01'
+                    })
+                });
+                if (res.ok) {
+                    const json = await res.json();
+                    if (json.data && json.data.id) {
+                        payload.id = json.data.id;
+                    }
+                }
+            } catch (err) {
+                console.warn('API /api/products create error, storing locally', err);
+            }
+
             this.products.unshift(payload);
             this.saveProductsToStorage();
             this.showProductModal = false;
@@ -411,6 +501,35 @@
         } else {
             const idx = this.products.findIndex(p => p.sku === this.formSkuOriginal);
             if (idx !== -1) {
+                const existingProduct = this.products[idx];
+                if (existingProduct.id) {
+                    try {
+                        await fetch(`/api/products/${existingProduct.id}`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                            },
+                            body: JSON.stringify({
+                                name: payload.name,
+                                sku: payload.sku,
+                                barcode: payload.barcode,
+                                category: payload.category,
+                                unit: payload.unit,
+                                cost_price: Math.round(Number(payload.price) * 0.75),
+                                price: Number(payload.price),
+                                member_price: Number(payload.memberPrice || payload.price),
+                                stock: Number(payload.stock),
+                                min_stock: Number(payload.minStock),
+                                rack_location: payload.rackLocation
+                            })
+                        });
+                    } catch (err) {
+                        console.warn('API /api/products update error, saving locally', err);
+                    }
+                }
+                payload.id = existingProduct.id;
                 this.products[idx] = payload;
                 this.saveProductsToStorage();
                 if (this.selectedProduct && this.selectedProduct.sku === this.formSkuOriginal) {
@@ -435,7 +554,7 @@
         this.showDeleteModal = true;
     },
 
-    confirmDelete() {
+    async confirmDelete() {
         if (!this.productToDelete) return;
         if (this.deleteConfirmInput.trim().toLowerCase() !== 'hapus') {
             return;
@@ -443,6 +562,20 @@
 
         const name = this.productToDelete.name;
         const targetSku = this.productToDelete.sku;
+
+        if (this.productToDelete.id) {
+            try {
+                await fetch(`/api/products/${this.productToDelete.id}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    }
+                });
+            } catch (err) {
+                console.warn('API /api/products delete error, removing locally', err);
+            }
+        }
 
         this.products = this.products.filter(p => p.sku !== targetSku);
         this.saveProductsToStorage();
@@ -832,18 +965,13 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                 </span>
             </div>
 
-            <div class="flex items-center gap-6 text-gray-500">
-                <button class="hover:text-gray-900 transition-colors relative" title="Notifikasi">
-                    <span class="material-symbols-rounded text-[24px]">notifications</span>
-                </button>
-                <button @click="initProducts()" class="hover:text-gray-900 transition-colors" title="Sinkronkan Data">
-                    <span class="material-symbols-rounded text-[24px]">autorenew</span>
+            <div class="flex items-center gap-4 text-gray-500">
+                <x-notification-bell role="MANAGER" />
+                <button @click="window.PosRealtime?.syncNow?.(); initProducts()" class="hover:text-gray-900 transition-colors cursor-pointer" title="Sinkronkan Data">
+                    <span class="material-symbols-rounded text-[24px]" :class="$store.network?.isChecking ? 'animate-spin text-[#0052cc]' : ''">autorenew</span>
                 </button>
                 <div class="h-6 w-px bg-gray-300"></div>
-                <div class="flex items-center gap-2">
-                    <span class="material-symbols-rounded text-green-500 text-[20px]">wifi</span>
-                    <span class="text-[14px] font-semibold text-gray-600">Terhubung</span>
-                </div>
+                <x-realtime-network-badge />
             </div>
         </header>
 
@@ -851,11 +979,264 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
         <div class="flex-1 overflow-y-auto p-8 space-y-6">
 
             <!-- Tab Switcher: Master Normal vs Inventaris Stok Barang Retur (Gudang Pusat) -->
-            <div class="bg-white p-2 rounded-2xl border border-gray-200/80 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div class="flex items-center gap-2 w-full sm:w-auto">
-                    
+            <div class="bg-white p-2.5 rounded-2xl border border-gray-200/80 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                    <!-- Tab 1 Button -->
+                    <button type="button"
+                            @click="inventoryTab = 'normal'"
+                            :class="inventoryTab === 'normal' ? 'bg-[#0052cc] text-white shadow-xs' : 'bg-slate-50 hover:bg-slate-100 text-slate-600'"
+                            class="px-4 py-2.5 rounded-xl text-[12.5px] font-extrabold flex items-center gap-2.5 transition-all cursor-pointer">
+                        <span class="material-symbols-rounded text-[18px]">inventory_2</span>
+                        <span>Master Produk &amp; Stok</span>
+                        <span :class="inventoryTab === 'normal' ? 'bg-white text-[#0052cc]' : 'bg-slate-200 text-slate-700'"
+                              class="text-[10.5px] font-extrabold px-2 py-0.5 rounded-full"
+                              x-text="totalItems + ' Produk'"></span>
+                    </button>
+
+                    <!-- Tab 2 Button -->
+                    <button type="button"
+                            @click="inventoryTab = 'retur'"
+                            :class="inventoryTab === 'retur' ? 'bg-[#0052cc] text-white shadow-xs' : 'bg-slate-50 hover:bg-slate-100 text-slate-600'"
+                            class="px-4 py-2.5 rounded-xl text-[12.5px] font-extrabold flex items-center gap-2.5 transition-all cursor-pointer">
+                        <span class="material-symbols-rounded text-[18px]">assignment_return</span>
+                        <span>Inventaris Stok Barang Retur</span>
+                        <span :class="inventoryTab === 'retur' ? 'bg-white text-[#0052cc]' : 'bg-amber-100 text-amber-800'"
+                              class="text-[10.5px] font-extrabold px-2 py-0.5 rounded-full"
+                              x-text="uniqueSkuCount + ' SKU Retur'"></span>
+                    </button>
+                </div>
+
+                <!-- Right Action / Shortcut Button -->
+                <div class="flex items-center gap-2.5">
+                    <button type="button"
+                            x-show="inventoryTab === 'normal'"
+                            @click="openCreateModal()"
+                            class="bg-[#0052cc] hover:bg-[#0043a8] text-white px-4 py-2 rounded-xl text-[12px] font-extrabold flex items-center gap-2 shadow-xs transition-all cursor-pointer">
+                        <span class="material-symbols-rounded text-[18px]">add</span>
+                        <span>Tambah Produk Baru</span>
+                    </button>
+                    <a href="{{ url('/manager/retur-masuk') }}"
+                       x-show="inventoryTab === 'retur'"
+                       style="display: none;"
+                       class="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl text-[12px] font-extrabold flex items-center gap-2 shadow-xs transition-all cursor-pointer">
+                        <span class="material-symbols-rounded text-[18px]">archive</span>
+                        <span>Verifikasi Barang Masuk Retur &rarr;</span>
+                    </a>
                 </div>
             </div>
+
+            <!-- ========================================== -->
+            <!-- TAB 1: MASTER NORMAL (MASTER PRODUK & STOK) -->
+            <!-- ========================================== -->
+            <div x-show="inventoryTab === 'normal'" class="space-y-6">
+
+                <!-- Filter & Search Bar with Add Product Button -->
+                <div class="flex flex-col md:flex-row items-center gap-4">
+                    <div class="relative flex-[2] w-full">
+                        <span class="material-symbols-rounded absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">search</span>
+                        <input type="text"
+                               x-model="searchQuery"
+                               @input="onSearchInput()"
+                               placeholder="Cari nama produk, brand, barcode, SKU, atau rak..."
+                               class="w-full pl-12 pr-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 text-[13px] shadow-xs transition-all font-medium bg-white">
+                    </div>
+
+                    <div class="relative flex-1 w-full md:w-auto">
+                        <select x-model="selectedCategory"
+                                class="appearance-none w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 pr-10 text-[13px] text-gray-700 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 shadow-xs transition-all font-semibold cursor-pointer">
+                            <option value="all">Semua Kategori</option>
+                            <template x-for="cat in availableCategories" :key="cat">
+                                <option :value="cat" x-text="cat"></option>
+                            </template>
+                        </select>
+                        <span class="material-symbols-rounded absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-[20px]">expand_more</span>
+                    </div>
+
+                    <button type="button"
+                            @click="openCreateModal()"
+                            class="bg-[#0052cc] text-white px-5 py-2.5 rounded-xl font-bold text-[13px] flex items-center justify-center gap-2 shadow-xs hover:bg-[#0043a8] transition-colors shrink-0 cursor-pointer active:scale-95">
+                        <span class="material-symbols-rounded text-[20px]">add</span>
+                        Tambah Produk Baru
+                    </button>
+                </div>
+
+                <!-- Stats Cards -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <!-- Card 1 -->
+                    <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs flex flex-col justify-between">
+                        <span class="text-[11px] font-bold text-gray-500 tracking-wider uppercase">TOTAL SKU KATALOG</span>
+                        <div class="flex items-center justify-between mt-3">
+                            <span class="text-3xl font-black text-gray-800 tracking-tight" x-text="totalItems">0</span>
+                            <span class="bg-[#dbeafe] text-[#0052cc] text-[11px] font-bold px-2.5 py-1 rounded-md" x-text="totalItems + ' Aktif'"></span>
+                        </div>
+                    </div>
+
+                    <!-- Card 2 -->
+                    <div class="bg-white rounded-2xl border border-amber-200 p-5 shadow-xs flex flex-col justify-between relative overflow-hidden border-l-4 border-l-amber-500">
+                        <span class="text-[11px] font-bold text-amber-700 tracking-wider uppercase">STOK RENDAH</span>
+                        <div class="flex items-center justify-between mt-3 relative z-10">
+                            <span class="text-3xl font-black text-amber-500 tracking-tight" x-text="lowStockCount">0</span>
+                            <span class="material-symbols-rounded text-amber-500 text-[26px]">warning</span>
+                        </div>
+                    </div>
+
+                    <!-- Card 3 -->
+                    <div class="bg-white rounded-2xl border border-red-200 p-5 shadow-xs flex flex-col justify-between border-l-4 border-l-[#e11d48] relative overflow-hidden">
+                        <span class="text-[11px] font-bold text-[#e11d48] tracking-wider uppercase">MENDEKATI EXPIRED</span>
+                        <div class="flex items-center justify-between mt-3 relative z-10">
+                            <span class="text-3xl font-black text-[#e11d48] tracking-tight" x-text="nearExpiredCount">0</span>
+                            <span class="material-symbols-rounded text-[#e11d48] text-[26px]">event_busy</span>
+                        </div>
+                    </div>
+
+                    <!-- Card 4 -->
+                    <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs flex flex-col justify-between">
+                        <span class="text-[11px] font-bold text-gray-500 tracking-wider uppercase">NILAI INVENTARIS</span>
+                        <div class="flex items-center justify-between mt-3">
+                            <span class="text-[24px] font-black text-gray-800 tracking-tight font-mono" x-text="formatRupiah(totalInventoryValue)">Rp 0</span>
+                            <span class="text-[12px] font-bold text-gray-400">IDR</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Data Table -->
+                <div class="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden flex flex-col">
+                    <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-rounded text-[20px] text-[#0052cc]">inventory</span>
+                            <h2 class="text-sm font-bold text-gray-900">Tabel Master Data Barang</h2>
+                        </div>
+                        <span class="text-xs text-gray-500 font-medium" x-text="'Menampilkan ' + filteredProducts.length + ' dari ' + totalItems + ' produk'"></span>
+                    </div>
+
+                    <div class="overflow-x-auto min-w-0 w-full">
+                        <table class="w-full text-left border-collapse min-w-[950px]">
+                            <thead>
+                                <tr class="bg-gray-50/80 border-b border-gray-200 text-gray-600 font-bold tracking-wider uppercase text-[11px] whitespace-nowrap">
+                                    <th class="px-6 py-3.5 text-left w-[280px]">PRODUK & BRAND</th>
+                                    <th class="px-4 py-3.5 text-left w-[150px]">BARCODE / SKU</th>
+                                    <th class="px-4 py-3.5 text-center w-[130px]">KATEGORI</th>
+                                    <th class="px-4 py-3.5 text-center w-[110px]">STOK</th>
+                                    <th class="px-4 py-3.5 text-right w-[150px]">HARGA JUAL</th>
+                                    <th class="px-6 py-3.5 text-center w-[130px]">STATUS</th>
+                                    <th class="px-4 py-3.5 text-center w-[110px]">AKSI</th>
+                                </tr>
+                            </thead>
+                            <tbody class="text-[13px] divide-y divide-gray-100">
+                                <template x-for="p in filteredProducts" :key="p.sku">
+                                    <tr class="hover:bg-blue-50/30 transition-colors">
+                                        <td class="px-6 py-3.5">
+                                            <div class="flex flex-col">
+                                                <span class="font-bold text-gray-900 text-[14px]" x-text="p.name"></span>
+                                                <span class="text-[12px] text-gray-500 mt-0.5" x-text="p.brand || 'Lokal'"></span>
+                                            </div>
+                                        </td>
+                                        <td class="px-4 py-3.5 font-mono font-medium text-gray-700 whitespace-nowrap">
+                                            <div class="flex flex-col">
+                                                <span class="font-bold text-[12px]" x-text="p.barcode"></span>
+                                                <span class="text-[10px] text-gray-400" x-text="p.sku"></span>
+                                            </div>
+                                        </td>
+                                        <td class="px-4 py-3.5 text-center whitespace-nowrap">
+                                            <span class="bg-[#dbeafe] text-[#0052cc] text-[11px] font-bold px-3 py-1 rounded-full whitespace-nowrap" x-text="p.category"></span>
+                                        </td>
+                                        <td class="px-4 py-3.5 text-center whitespace-nowrap">
+                                            <div class="flex flex-col items-center">
+                                                <span class="font-bold text-[14px]"
+                                                      :class="p.stock === 0 ? 'text-gray-400 line-through' : (p.stock <= p.minStock ? 'text-amber-600' : 'text-gray-900')"
+                                                      x-text="p.stock"></span>
+                                                <span class="text-[11px] text-gray-500" x-text="p.unit || 'Pcs'"></span>
+                                            </div>
+                                        </td>
+                                        <td class="px-4 py-3.5 text-right whitespace-nowrap">
+                                            <div class="flex flex-col items-end">
+                                                <span class="font-mono font-bold text-gray-900 text-[14px]" x-text="formatRupiah(p.price)"></span>
+                                                <span class="text-[10.5px] text-emerald-600 font-semibold" x-text="'Mbr: ' + formatRupiah(p.memberPrice || p.price)"></span>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-3.5 text-center whitespace-nowrap">
+                                            <template x-if="p.status === 'TERSEDIA'">
+                                                <div class="inline-flex items-center gap-1.5 text-green-600 font-bold text-[12px]">
+                                                    <div class="w-2 h-2 rounded-full bg-green-500"></div>
+                                                    Tersedia
+                                                </div>
+                                            </template>
+                                            <template x-if="p.status === 'STOK_RENDAH'">
+                                                <div class="inline-flex items-center gap-1.5 bg-[#fef3c7] text-amber-700 border border-amber-200 px-2 py-1 rounded-md font-bold text-[11px]">
+                                                    <span class="material-symbols-rounded text-[14px]">warning</span>
+                                                    Stok Rendah
+                                                </div>
+                                            </template>
+                                            <template x-if="p.status === 'NEAR_EXPIRED'">
+                                                <div class="inline-flex items-center gap-1.5 bg-[#ffe4e6] text-[#e11d48] border border-red-200 px-2 py-1 rounded-md font-bold text-[11px]">
+                                                    <span class="material-symbols-rounded text-[14px]">event_busy</span>
+                                                    Near Expired
+                                                </div>
+                                            </template>
+                                            <template x-if="p.status === 'HABIS'">
+                                                <div class="inline-flex items-center gap-1.5 bg-gray-100 text-gray-600 border border-gray-200 px-2 py-1 rounded-md font-bold text-[11px]">
+                                                    Habis
+                                                </div>
+                                            </template>
+                                        </td>
+                                        <td class="px-4 py-3.5 text-center whitespace-nowrap">
+                                            <div class="inline-flex items-center justify-center gap-1.5">
+                                                <button type="button"
+                                                        @click="openDetail(p)"
+                                                        title="Lihat Detail Produk"
+                                                        class="p-1.5 text-gray-400 hover:text-[#0052cc] hover:bg-blue-50 rounded-lg transition-colors cursor-pointer">
+                                                    <span class="material-symbols-rounded text-[20px]">visibility</span>
+                                                </button>
+                                                <button type="button"
+                                                        @click="openEditModal(p)"
+                                                        title="Edit Data Produk"
+                                                        class="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer">
+                                                    <span class="material-symbols-rounded text-[20px]">edit</span>
+                                                </button>
+                                                <button type="button"
+                                                        @click="openDeleteModal(p)"
+                                                        title="Hapus Produk (Perlu Konfirmasi)"
+                                                        class="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer">
+                                                    <span class="material-symbols-rounded text-[20px]">delete</span>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
+
+                                <template x-if="filteredProducts.length === 0">
+                                    <tr>
+                                        <td colspan="7" class="px-6 py-12 text-center">
+                                            <div class="flex flex-col items-center justify-center max-w-sm mx-auto space-y-3">
+                                                <div class="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center text-gray-400">
+                                                    <span class="material-symbols-rounded text-[28px]">search_off</span>
+                                                </div>
+                                                <h4 class="text-sm font-bold text-gray-800">Tidak Ada Produk Ditemukan</h4>
+                                                <p class="text-xs text-gray-500">Tidak ada produk yang sesuai dengan filter pencarian.</p>
+                                                <button type="button"
+                                                        @click="searchQuery = ''; selectedCategory = 'all'"
+                                                        class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-gray-700 rounded-xl text-xs font-bold transition-all">
+                                                    Reset Filter
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Footer reset data helper -->
+                    <div class="border-t border-gray-200 px-6 py-4 flex items-center justify-between bg-white text-xs text-gray-500">
+                        <span x-text="'Menampilkan ' + filteredProducts.length + ' dari total ' + totalItems + ' produk katalog toko.'"></span>
+                        <button type="button"
+                                @click="resetToDefaultCatalog()"
+                                class="text-[#0052cc] hover:underline font-bold flex items-center gap-1 cursor-pointer">
+                            <span class="material-symbols-rounded text-[16px]">restart_alt</span>
+                            <span>Reset Data Default</span>
+                        </button>
+                    </div>
+                </div>
 
             </div>
             <!-- END TAB 1 -->

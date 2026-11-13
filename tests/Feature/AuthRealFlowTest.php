@@ -114,4 +114,29 @@ class AuthRealFlowTest extends TestCase
         $response->assertStatus(401)
             ->assertJsonPath('success', false);
     }
+
+    public function test_owner_login_success_with_password(): void
+    {
+        $response = $this->postJson('/api/auth/login', [
+            'role' => 'owner',
+            'identifier' => 'test_owner_flow',
+            'password' => 'ownerpass123',
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('user.username', 'test_owner_flow');
+    }
+
+    public function test_owner_login_fails_with_invalid_password(): void
+    {
+        $response = $this->postJson('/api/auth/login', [
+            'role' => 'owner',
+            'identifier' => 'test_owner_flow',
+            'password' => 'wrongpass',
+        ]);
+
+        $response->assertStatus(401)
+            ->assertJsonPath('success', false);
+    }
 }

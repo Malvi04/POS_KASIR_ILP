@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Api\Manager;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Shared\NotificationController;
 use App\Models\Product;
 use App\Models\StockOpname;
 use App\Models\StockOpnameItem;
+use App\Services\ExcelExportService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -251,6 +253,42 @@ class StockOpnameController extends Controller
                 'notes' => $request->input('notes', $opname->notes),
             ]);
 
+            try {
+                $isDiscrepancy = $varianceCount > 0;
+                NotificationController::notify(
+                    role: 'MANAGER',
+                    title: "Stock Opname Selesai: {$opname->opname_code}",
+                    message: "Audit selesai ({$opname->total_items_audited} item). " . ($isDiscrepancy ? "Ditemukan {$varianceCount} item deviasi senilai Rp " . number_format($totalVarianceValue, 0, ',', '.') : "Semua item fisik cocok 100%."),
+                    category: 'OPNAME',
+                    link: '/manager/stock-opname',
+                    icon: $isDiscrepancy ? 'warning' : 'inventory_2',
+                    color: $isDiscrepancy ? 'amber' : 'emerald',
+                    referenceId: $opname->opname_code
+                );
+
+                NotificationController::notify(
+                    role: 'OWNER',
+                    title: "Laporan Opname: {$opname->opname_code}",
+                    message: "Hasil opname persediaan: {$varianceCount} item selisih, nilai deviasi Rp " . number_format($totalVarianceValue, 0, ',', '.') . '.',
+                    category: 'OPNAME',
+                    link: '/owner/products',
+                    icon: $isDiscrepancy ? 'report_problem' : 'verified',
+                    color: $isDiscrepancy ? 'rose' : 'emerald',
+                    referenceId: $opname->opname_code
+                );
+
+                NotificationController::notify(
+                    role: 'KASIR',
+                    title: "Stok Sistem Diperbarui: {$opname->opname_code}",
+                    message: "Hasil stock opname telah disinkronkan ke master inventori kasir.",
+                    category: 'OPNAME',
+                    link: '/kasir/inventory',
+                    icon: 'sync',
+                    color: 'blue',
+                    referenceId: $opname->opname_code
+                );
+            } catch (\Throwable $e) {}
+
             return response()->json([
                 'success' => true,
                 'message' => "Sesi Stock Opname [{$opname->opname_code}] berhasil diselesaikan. Penyesuaian stok sistem telah otomatis diterapkan.",
@@ -260,7 +298,19 @@ class StockOpnameController extends Controller
     }
 
     /**
-     * Export Stock Opname Variance Report to CSV.
+     * Export Stock Opname Variance Report to professional Excel (.xlsx) format.
+     */
+    public function exportExcel(int $id, ExcelExportService $excelService): StreamedResponse
+    {
+        $opname = StockOpname::with('items')->findOrFail($id);
+        $filename = 'Variance_Report_' . $opname->opname_code . '.xlsx';
+        $spreadsheet = $excelService->createStockOpnameSpreadsheet($opname);
+
+        return $excelService->downloadSpreadsheet($spreadsheet, $filename);
+    }
+
+    /**
+     * Export Stock Opname Variance Report to CSV (Excel-compatible with sep=,).
      */
     public function exportCsv(int $id): StreamedResponse
     {
@@ -275,6 +325,7 @@ class StockOpnameController extends Controller
         return new StreamedResponse(function () use ($opname) {
             $output = fopen('php://output', 'w');
             fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF)); // UTF-8 BOM
+            fwrite($output, "sep=,\r\n"); // Excel delimiter directive to prevent column collapsing
 
             fputcsv($output, ['PT INDO LAMPUNG PERKASA - MINIMARKET KOPERASI']);
             fputcsv($output, ['LAPORAN VARIANCE STOCK OPNAME']);

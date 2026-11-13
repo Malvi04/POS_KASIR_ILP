@@ -127,10 +127,12 @@ class="flex h-screen w-full bg-[#f4f7fb] font-sans text-gray-800 overflow-hidden
             </div>
 
             <!-- Right Actions -->
-            <div class="flex items-center gap-4">
-                <button type="button" @click="initDashboard(); triggerToast('Data dashboard disinkronkan!')" class="p-2 rounded-xl bg-white hover:bg-gray-50 text-gray-600 transition-colors shadow-2xs border border-gray-200 cursor-pointer" title="Refresh Data">
-                    <span class="material-symbols-rounded text-[20px]">sync</span>
+            <div class="flex items-center gap-3">
+                <x-notification-bell role="MANAGER" />
+                <button type="button" @click="window.PosRealtime?.syncNow?.(); initDashboard();" class="p-2 rounded-xl bg-white hover:bg-gray-50 text-gray-600 transition-colors shadow-2xs border border-gray-200 cursor-pointer" title="Refresh Data Realtime">
+                    <span class="material-symbols-rounded text-[20px]" :class="$store.network?.isChecking ? 'animate-spin text-[#0052cc]' : ''">sync</span>
                 </button>
+                <x-realtime-network-badge />
                 <div class="h-6 w-px bg-gray-300"></div>
                 <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-full pl-3.5 pr-1.5 py-1 shadow-2xs">
                     <span class="text-xs font-bold text-gray-800" x-text="isOwner() ? 'Ir. Hartono Wibowo (Owner)' : 'Manager Gerai'">Manager Gerai</span>

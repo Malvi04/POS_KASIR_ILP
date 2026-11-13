@@ -454,15 +454,13 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
             </div>
 
             <div class="flex items-center gap-4 text-gray-500 shrink-0">
-                <button @click="initReports()"
+                <x-notification-bell role="MANAGER" />
+                <button @click="window.PosRealtime?.syncNow?.(); initReports()"
                         class="hover:text-gray-900 transition-colors p-1" title="Muat Ulang Semua Data">
-                    <span class="material-symbols-rounded text-[22px]" :class="(isLoadingSales || isLoadingPL || isLoadingFastMoving || isLoadingRecon) ? 'animate-spin text-[#0052cc]' : ''">autorenew</span>
+                    <span class="material-symbols-rounded text-[22px]" :class="((isLoadingSales || isLoadingPL || isLoadingFastMoving || isLoadingRecon) || $store.network?.isChecking) ? 'animate-spin text-[#0052cc]' : ''">autorenew</span>
                 </button>
                 <div class="h-6 w-px bg-gray-200"></div>
-                <div class="flex items-center gap-2 text-xs font-bold text-gray-700">
-                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span>Modul E Terhubung</span>
-                </div>
+                <x-realtime-network-badge labelOnline="Modul E Terhubung" />
             </div>
         </header>
 
@@ -1005,9 +1003,12 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
                         <div class="flex items-center gap-2">
                             <input type="month" x-model="month" @change="loadDebtReport()" class="bg-white border rounded-xl px-3 py-1.5 text-xs font-bold text-gray-700">
-                            <a :href="'/api/reports/member-debts/export-csv?month=' + month" class="px-4 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs flex items-center gap-1.5">
-                                <span class="material-symbols-rounded text-[18px]">download</span>
-                                <span>Ekspor CSV</span>
+                            <a :href="'/api/reports/member-debts/export-excel?month=' + month" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition-colors">
+                                <span class="material-symbols-rounded text-[18px]">table_chart</span>
+                                <span>Ekspor Excel (.xlsx)</span>
+                            </a>
+                            <a :href="'/api/reports/member-debts/export-csv?month=' + month" class="px-3 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-bold rounded-xl text-xs flex items-center gap-1 shadow-xs transition-colors">
+                                <span>CSV</span>
                             </a>
                         </div>
                     </div>

@@ -57,78 +57,35 @@
     <div class="flex items-center gap-3">
         <!-- System Quick Status Icons (Bell, Wifi, Sync) -->
         <div class="flex items-center gap-2 text-slate-500">
-            <!-- Notification Bell with Interactive Dropdown Popover -->
-            <div class="relative" @click.outside="showNotifications = false">
-                <button type="button" 
-                        class="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors relative cursor-pointer"
-                        title="Notifikasi Sistem"
-                        @click="showNotifications = !showNotifications">
-                    <span class="material-symbols-rounded text-[20px]">notifications</span>
-                    <template x-if="notifications.length > 0">
-                        <span class="absolute top-2 right-2 w-2 h-2 bg-blue-600 rounded-full ring-2 ring-white"></span>
-                    </template>
-                </button>
+            <!-- Notification Bell with Interactive Realtime Popover for Owner -->
+            <x-notification-bell role="OWNER" />
 
-                <!-- Notification Dropdown Menu -->
-                <div x-show="showNotifications"
-                     x-transition:enter="transition ease-out duration-150"
-                     x-transition:enter-start="opacity-0 translate-y-2 scale-95"
-                     x-transition:enter-end="opacity-100 translate-y-0 scale-100"
-                     x-transition:leave="transition ease-in duration-100"
-                     x-transition:leave-start="opacity-100 translate-y-0 scale-100"
-                     x-transition:leave-end="opacity-0 translate-y-2 scale-95"
-                     class="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 py-3 z-50 overflow-hidden"
-                     style="display: none;">
-                    <div class="px-4 pb-2 border-b border-slate-100 flex items-center justify-between">
-                        <div class="flex items-center gap-1.5">
-                            <span class="font-bold text-xs text-slate-900">Notifikasi</span>
-                            <span class="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-[#0052cc]" x-text="notifications.length"></span>
-                        </div>
-                        <template x-if="notifications.length > 0">
-                            <button type="button" @click="markAsRead()" class="text-[11px] font-bold text-[#0052cc] hover:underline">
-                                Bersihkan
-                            </button>
-                        </template>
-                    </div>
-
-                    <div class="max-h-72 overflow-y-auto divide-y divide-slate-50">
-                        <template x-for="n in notifications" :key="n.id">
-                            <a :href="n.link" 
-                               @click="showNotifications = false"
-                               class="p-3 flex items-start gap-3 hover:bg-slate-50 transition-colors block">
-                                <div class="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" :class="n.color">
-                                    <span class="material-symbols-rounded text-[16px]" x-text="n.icon"></span>
-                                </div>
-                                <div class="min-w-0 flex-1">
-                                    <div class="font-bold text-xs text-slate-800 truncate" x-text="n.title"></div>
-                                    <div class="text-[11px] text-slate-500 leading-tight mt-0.5" x-text="n.desc"></div>
-                                    <span class="text-[10px] text-slate-400 block mt-1" x-text="n.time"></span>
-                                </div>
-                            </a>
-                        </template>
-
-                        <template x-if="notifications.length === 0">
-                            <div class="py-8 text-center text-slate-400 text-xs">
-                                <span class="material-symbols-rounded text-2xl block mb-1 text-slate-300">notifications_off</span>
-                                <span>Tidak ada notifikasi aktif</span>
-                            </div>
-                        </template>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Network / Status Real-time Indicator (Non-clickable badge) -->
-            <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold border border-emerald-200" title="Koneksi Sistem POS: Online & Real-time">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>POS Online</span>
+            <!-- Network / Status Real-time Indicator -->
+            <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all select-none"
+                 :class="($store.network && $store.network.isOnline)
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-rose-50 text-rose-700 border-rose-200'"
+                 :title="($store.network && $store.network.isOnline) 
+                    ? 'Koneksi Sistem POS: Terhubung Real-time (' + ($store.network.latency || 0) + 'ms)' 
+                    : 'Koneksi Sistem POS: Terputus / Mode Offline'">
+                <span class="w-1.5 h-1.5 rounded-full" 
+                      :class="($store.network && $store.network.isOnline) ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'"></span>
+                <span class="material-symbols-rounded text-[14px]"
+                      :class="($store.network && $store.network.isOnline) ? 'text-emerald-600' : 'text-rose-600'"
+                      x-text="($store.network && $store.network.isOnline) ? 'wifi' : 'wifi_off'">wifi</span>
+                <span x-text="($store.network && $store.network.isOnline) ? 'POS Online' : 'POS Terputus'">POS Online</span>
+                <template x-if="$store.network && $store.network.isOnline && $store.network.latency">
+                    <span class="text-[10px] text-emerald-600/80 font-mono hidden sm:inline" x-text="$store.network.latency + 'ms'"></span>
+                </template>
             </div>
 
             <!-- Sync Button -->
             <button type="button" 
                     class="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
                     title="Sinkronisasi Data Realtime"
-                    @click="triggerSync()">
-                <span class="material-symbols-rounded text-[20px] active:rotate-180 transition-transform">sync</span>
+                    @click="window.PosRealtime?.syncNow?.(); triggerSync()">
+                <span class="material-symbols-rounded text-[20px] transition-transform"
+                      :class="$store.network?.isChecking ? 'animate-spin text-[#0052cc]' : ''">sync</span>
             </button>
         </div>
 

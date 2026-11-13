@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Api\Manager;
 use App\Http\Controllers\Controller;
 use App\Models\DebtMutation;
 use App\Models\Member;
+use App\Services\ExcelExportService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class MemberDebtReportController extends Controller
@@ -136,6 +138,52 @@ class MemberDebtReportController extends Controller
     }
 
     /**
+     * Export Rekapitulasi Piutang Bulanan to Professional Excel (.xlsx) format for Tim Finance/HRD PT Indo Lampung Perkasa.
+     */
+    public function exportExcel(Request $request, ExcelExportService $excelService): StreamedResponse
+    {
+        $month = $request->query('month', Carbon::now()->format('Y-m'));
+        $branch = trim($request->query('branch', ''));
+        $department = trim($request->query('department', ''));
+        $status = trim($request->query('status', ''));
+        $search = trim($request->query('search', ''));
+
+        try {
+            $startDate = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
+        } catch (\Exception $e) {
+            $startDate = Carbon::now()->startOfMonth();
+            $month = Carbon::now()->format('Y-m');
+        }
+
+        $query = Member::query();
+
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('nik', 'like', "%{$search}%")
+                  ->orWhere('member_code', 'like', "%{$search}%")
+                  ->orWhereRaw('LOWER(name) LIKE ?', ['%' . strtolower($search) . '%']);
+            });
+        }
+
+        if ($branch !== '' && $branch !== 'all' && $branch !== 'Semua') {
+            $query->where('branch', $branch);
+        }
+
+        if ($department !== '' && $department !== 'all') {
+            $query->where('department', $department);
+        }
+
+        if ($status !== '' && $status !== 'all') {
+            $query->where('status', strtoupper($status));
+        }
+
+        $filename = 'Rekapitulasi_Piutang_Kasbon_PT_ILP_' . $month . ($branch ? '_' . Str::slug($branch) : '') . '.xlsx';
+        $spreadsheet = $excelService->createMemberDebtSpreadsheet($query, $month, $startDate, $branch, $department);
+
+        return $excelService->downloadSpreadsheet($spreadsheet, $filename);
+    }
+
+    /**
      * Export Rekapitulasi Piutang Bulanan to CSV / Excel Ready format for Tim Finance/HRD PT Indo Lampung Perkasa.
      */
     public function exportCsv(Request $request): StreamedResponse
@@ -192,6 +240,7 @@ class MemberDebtReportController extends Controller
 
             // UTF-8 BOM for Microsoft Excel compatibility
             fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
+            fwrite($output, "sep=,\r\n"); // Excel delimiter directive to prevent column collapsing
 
             // PT Indo Lampung Perkasa Official Header
             fputcsv($output, ['PT INDO LAMPUNG PERKASA']);

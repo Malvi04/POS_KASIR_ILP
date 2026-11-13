@@ -30,41 +30,51 @@ class ConsolidatedReportController extends Controller
 
         $branches = ['Pusat', 'Cabang 1 - Mill / Pabrik', 'Cabang 2 - Kebun Barat'];
 
-        // 1. Transaction & Sales Query
-        $txQuery = Transaction::query()
-            ->whereDate('created_at', '>=', $startDate)
-            ->whereDate('created_at', '<=', $endDate)
-            ->whereIn('status', ['SUCCESS', 'COMPLETED']);
+        $cacheKey = "consolidated_report_{$startDate}_{$endDate}_{$branchFilter}";
+        $responseData = \Illuminate\Support\Facades\Cache::remember($cacheKey, 30, function () use ($startDate, $endDate, $branchFilter, $branches) {
+            // 1. Transaction & Sales Query
+            $txQuery = Transaction::query()
+                ->whereDate('created_at', '>=', $startDate)
+                ->whereDate('created_at', '<=', $endDate)
+                ->whereIn('status', ['SUCCESS', 'COMPLETED']);
 
-        if ($branchFilter !== 'all') {
-            $txQuery->where('terminal_code', 'LIKE', "%{$branchFilter}%");
-        }
+            if ($branchFilter !== 'all') {
+                $txQuery->where('terminal_code', 'LIKE', "%{$branchFilter}%");
+            }
 
-        $transactions = $txQuery->with('items')->get();
+            $transactions = $txQuery->with('items')->get();
 
-        $grossRevenue = (float) $transactions->sum('grand_total');
-        $totalSubtotal = (float) $transactions->sum('subtotal');
-        $totalDiscounts = (float) $transactions->sum('discount_total');
-        $totalTax = (float) $transactions->sum('tax_total');
-        $transactionCount = $transactions->count();
-        $averageBasket = $transactionCount > 0 ? round($grossRevenue / $transactionCount, 2) : 0;
+            $grossRevenue = (float) $transactions->sum('grand_total');
+            $totalSubtotal = (float) $transactions->sum('subtotal');
+            $totalDiscounts = (float) $transactions->sum('discount_total');
+            $totalTax = (float) $transactions->sum('tax_total');
+            $transactionCount = $transactions->count();
+            $averageBasket = $transactionCount > 0 ? round($grossRevenue / $transactionCount, 2) : 0;
 
         // Payment Method Breakdown
         $cashSales = (float) $transactions->where('payment_method', 'TUNAI')->sum('grand_total');
         $qrisSales = (float) $transactions->where('payment_method', 'QRIS')->sum('grand_total');
         $creditSales = (float) $transactions->where('payment_method', 'KREDIT')->sum('grand_total');
 
-        // Estimate COGS (HPP) from items
+        // Estimate COGS (HPP) in single batch query (No N+1 loop)
+        $allSkus = [];
+        foreach ($transactions as $tx) {
+            foreach ($tx->items as $item) {
+                if (empty($item->cost_price) && !empty($item->sku)) {
+                    $allSkus[$item->sku] = true;
+                }
+            }
+        }
+        $skuCosts = empty($allSkus) ? [] : Product::whereIn('sku', array_keys($allSkus))->pluck('cost_price', 'sku')->all();
+
         $totalCogs = 0.0;
         foreach ($transactions as $tx) {
             foreach ($tx->items as $item) {
-                // If item has recorded cost_price, use it, else lookup product cost_price or 75% default
                 $cost = $item->cost_price ?? null;
                 if (!$cost) {
-                    $prod = Product::where('sku', $item->sku)->first(['cost_price']);
-                    $cost = $prod ? (float) $prod->cost_price : ((float) $item->unit_price * 0.75);
+                    $cost = $skuCosts[$item->sku] ?? ((float) $item->unit_price * 0.75);
                 }
-                $totalCogs += ((float) $cost * (int) $item->quantity);
+                $totalCogs += ((float) $cost * (int) ($item->quantity ?? $item->qty ?? 1));
             }
         }
 
@@ -86,14 +96,23 @@ class ConsolidatedReportController extends Controller
         $totalRemainingCredit = (float) $members->sum('remaining_credit');
         $overallDebtUtilization = $totalCreditLimit > 0 ? round(($totalOutstandingDebt / $totalCreditLimit) * 100, 2) : 0;
 
-        // 3. Stock Valuation & Inventory Health
-        $products = Product::all();
-        $totalProductCount = $products->count();
-        $totalInventoryStockQty = (int) $products->sum('stock');
-        $totalStockAssetCost = (float) $products->sum(fn($p) => (float) $p->cost_price * (int) $p->stock);
-        $totalStockRetailValue = (float) $products->sum(fn($p) => (float) $p->price * (int) $p->stock);
-        $lowStockCount = $products->filter(fn($p) => $p->stock <= $p->min_stock)->count();
-        $criticalExpiredCount = $products->filter(fn($p) => $p->expired_date && Carbon::parse($p->expired_date)->diffInDays(now(), false) >= -14)->count();
+        // 3. Stock Valuation & Inventory Health - Single Aggregation Query
+        $stockAgg = Product::selectRaw('
+            COUNT(*) as total_count,
+            COALESCE(SUM(stock), 0) as total_qty,
+            COALESCE(SUM(stock * cost_price), 0) as total_asset_cost,
+            COALESCE(SUM(stock * price), 0) as total_retail_value,
+            COALESCE(SUM(CASE WHEN stock <= min_stock THEN 1 ELSE 0 END), 0) as low_stock_count
+        ')->first();
+
+        $totalProductCount = (int) ($stockAgg->total_count ?? 0);
+        $totalInventoryStockQty = (int) ($stockAgg->total_qty ?? 0);
+        $totalStockAssetCost = (float) ($stockAgg->total_asset_cost ?? 0);
+        $totalStockRetailValue = (float) ($stockAgg->total_retail_value ?? 0);
+        $lowStockCount = (int) ($stockAgg->low_stock_count ?? 0);
+        $criticalExpiredCount = Product::whereNotNull('expired_date')
+            ->whereDate('expired_date', '<=', Carbon::now()->addDays(14)->toDateString())
+            ->count();
 
         // 4. Branch Comparative Matrix (3 Branches Performance)
         $branchBreakdown = [];
@@ -215,6 +234,9 @@ class ConsolidatedReportController extends Controller
             'recent_stock_corrections' => $recentCorrections,
         ];
 
+        return $responseData;
+    });
+
         return response()->json(array_merge([
             'success' => true,
             'filters' => [
@@ -223,6 +245,6 @@ class ConsolidatedReportController extends Controller
                 'branch' => $branchFilter,
             ],
             'data' => $responseData,
-        ], $responseData));
+        ], $responseData))->header('Cache-Control', 'private, max-age=10, stale-while-revalidate=30');
     }
 }

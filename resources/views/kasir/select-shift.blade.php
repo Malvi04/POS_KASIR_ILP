@@ -22,10 +22,7 @@
                 <span class="text-gray-500 font-medium text-xs" x-text="businessDayDate">19 Oktober 2026</span>
                 <span class="text-[#0052cc] font-mono font-bold text-xs">OPERASIONAL OPEN</span>
             </div>
-            <div class="flex items-center gap-2">
-                <span class="material-symbols-rounded text-green-500 text-[20px]">wifi</span>
-                <span class="text-xs font-bold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-full">Online</span>
-            </div>
+            <x-realtime-network-badge />
         </div>
     </header>
 

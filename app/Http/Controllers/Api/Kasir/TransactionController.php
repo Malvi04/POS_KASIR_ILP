@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Kasir;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Shared\NotificationController;
 use App\Models\AppSetting;
 use App\Models\CashierShift;
 use App\Models\Member;
@@ -14,6 +15,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Carbon\Carbon;
 
 class TransactionController extends Controller
 {
@@ -319,6 +321,48 @@ class TransactionController extends Controller
             $shift->expected_cash = $shift->calculateExpectedCash();
             $shift->save();
 
+            try {
+                // If paid by member credit, notify manager and owner
+                if ($method === 'KREDIT' && $member) {
+                    NotificationController::notify(
+                        role: 'MANAGER',
+                        title: "Transaksi Kasbon Anggota: {$member->name}",
+                        message: "Anggota {$member->name} (NIK: {$member->nik}) bertransaksi kasbon senilai Rp " . number_format($grandTotal, 0, ',', '.') . " di kasir {$cashierName}.",
+                        category: 'MEMBER',
+                        link: '/manager/members',
+                        icon: 'credit_card',
+                        color: 'blue',
+                        referenceId: $invoiceNumber
+                    );
+                }
+
+                // If high value transaction (> Rp 1.000.000), notify Owner
+                if ($grandTotal >= 1000000) {
+                    NotificationController::notify(
+                        role: 'OWNER',
+                        title: "Penjualan Bernilai Besar: Rp " . number_format($grandTotal, 0, ',', '.'),
+                        message: "Nota {$invoiceNumber} di {$shift->terminal_code} mencatat penjualan Rp " . number_format($grandTotal, 0, ',', '.') . " ({$method}).",
+                        category: 'SALES',
+                        link: '/owner/reports',
+                        icon: 'trending_up',
+                        color: 'emerald',
+                        referenceId: $invoiceNumber
+                    );
+                }
+
+                // Invalidate real-time micro-cache
+                \Illuminate\Support\Facades\Cache::forget('owner_dashboard_summary_' . \Carbon\Carbon::today()->toDateString());
+
+                // Broadcast Realtime Events via Reverb WebSocket
+                event(new \App\Events\TransactionCreatedEvent($transaction));
+                event(new \App\Events\StockUpdatedEvent([
+                    'location_id' => $shift->location_id ?? null,
+                    'type' => 'checkout',
+                    'invoice_number' => $invoiceNumber,
+                    'items_count' => count($processedItems),
+                ]));
+            } catch (\Throwable $e) {}
+
             return response()->json([
                 'success' => true,
                 'message' => "Transaksi [{$invoiceNumber}] berhasil diselesaikan.",
@@ -345,6 +389,311 @@ class TransactionController extends Controller
                 ],
             ], 201);
         });
+    }
+
+    /**
+     * Batch Sync Offline Transactions & Cash Movements.
+     */
+    public function syncOffline(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'transactions' => 'nullable|array',
+            'transactions.*.offline_id' => 'required|string',
+            'transactions.*.invoice_number' => 'required|string',
+            'transactions.*.terminal_code' => 'required|string',
+            'transactions.*.cashier_nik' => 'nullable|string',
+            'transactions.*.cashier_name' => 'nullable|string',
+            'transactions.*.payment_method' => 'required|string',
+            'transactions.*.cash_received' => 'nullable|numeric|min:0',
+            'transactions.*.change_returned' => 'nullable|numeric|min:0',
+            'transactions.*.payment_reference' => 'nullable|string',
+            'transactions.*.split_cash' => 'nullable|numeric|min:0',
+            'transactions.*.split_non_cash' => 'nullable|numeric|min:0',
+            'transactions.*.member_nik' => 'nullable|string',
+            'transactions.*.created_at' => 'nullable|string',
+            'transactions.*.subtotal' => 'nullable|numeric|min:0',
+            'transactions.*.discount_total' => 'nullable|numeric|min:0',
+            'transactions.*.tax_total' => 'nullable|numeric|min:0',
+            'transactions.*.grand_total' => 'required|numeric|min:0',
+            'transactions.*.items' => 'required|array|min:1',
+            'cash_movements' => 'nullable|array',
+            'cash_movements.*.offline_id' => 'required|string',
+            'cash_movements.*.terminal_code' => 'required|string',
+            'cash_movements.*.type' => 'required|string',
+            'cash_movements.*.amount' => 'required|numeric|min:0',
+            'cash_movements.*.reason' => 'nullable|string',
+            'cash_movements.*.created_at' => 'nullable|string',
+        ]);
+
+        $transactionsToSync = $validated['transactions'] ?? [];
+        $movementsToSync = $validated['cash_movements'] ?? [];
+
+        $syncedTransactions = [];
+        $duplicateTransactions = [];
+        $syncedMovements = [];
+
+        DB::beginTransaction();
+        try {
+            foreach ($transactionsToSync as $trxData) {
+                $invoiceNumber = $trxData['invoice_number'];
+
+                // 1. Deduplication Guard: Check if transaction already synced
+                $existing = Transaction::where('invoice_number', $invoiceNumber)->first();
+                if ($existing) {
+                    $duplicateTransactions[] = [
+                        'offline_id' => $trxData['offline_id'],
+                        'invoice_number' => $invoiceNumber,
+                        'server_id' => $existing->id,
+                        'status' => 'ALREADY_SYNCED',
+                    ];
+                    continue;
+                }
+
+                // 2. Identify or Allocate Shift
+                $terminalCode = $trxData['terminal_code'];
+                $shift = CashierShift::where('terminal_code', $terminalCode)
+                    ->where('status', 'OPEN')
+                    ->latest('id')
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$shift) {
+                    $shift = CashierShift::where('terminal_code', $terminalCode)
+                        ->latest('id')
+                        ->lockForUpdate()
+                        ->first();
+                }
+
+                if (!$shift) {
+                    $user = User::where('nik', $trxData['cashier_nik'] ?? '')->first();
+                    $shiftCode = 'CS-' . date('Ymd') . '-' . strtoupper(Str::slug($terminalCode, '')) . '-OFFLINE';
+                    $shift = CashierShift::create([
+                        'shift_code' => $shiftCode,
+                        'terminal_code' => $terminalCode,
+                        'user_id' => $user?->id,
+                        'cashier_nik' => $trxData['cashier_nik'] ?? '202409821002',
+                        'cashier_name' => $trxData['cashier_name'] ?? 'Budi Kurniawan (Offline)',
+                        'opening_cash' => 0,
+                        'cash_sales_total' => 0,
+                        'qris_sales_total' => 0,
+                        'credit_sales_total' => 0,
+                        'total_sales' => 0,
+                        'transaction_count' => 0,
+                        'cash_in' => 0,
+                        'cash_out' => 0,
+                        'expected_cash' => 0,
+                        'status' => 'OPEN',
+                        'opened_at' => !empty($trxData['created_at']) ? Carbon::parse($trxData['created_at']) : now(),
+                    ]);
+                }
+
+                $user = User::where('nik', $trxData['cashier_nik'] ?? $shift->cashier_nik)->first();
+                $cashierName = $trxData['cashier_name'] ?? $shift->cashier_name;
+
+                // 3. Member Validation
+                $member = null;
+                if (!empty($trxData['member_nik'])) {
+                    $member = Member::where('nik', $trxData['member_nik'])->lockForUpdate()->first();
+                }
+
+                // 4. Process Items & Deduct Stock
+                $processedItems = [];
+                $subtotal = 0;
+
+                foreach ($trxData['items'] as $rawItem) {
+                    $product = null;
+                    if (!empty($rawItem['barcode'])) {
+                        $product = Product::where('barcode', $rawItem['barcode'])->lockForUpdate()->first();
+                    }
+                    if (!$product && !empty($rawItem['sku'])) {
+                        $product = Product::where('sku', $rawItem['sku'])->lockForUpdate()->first();
+                    }
+
+                    $qty = max(1, (int) ($rawItem['qty'] ?? 1));
+                    $unitPrice = (float) ($rawItem['price'] ?? 0);
+                    $itemTotal = (float) ($rawItem['total'] ?? ($unitPrice * $qty));
+
+                    // If product not in master DB, auto-register fallback product so foreign key is satisfied
+                    if (!$product) {
+                        $fallbackSku = !empty($rawItem['sku']) ? $rawItem['sku'] : ('GEN-' . Str::upper(Str::random(6)));
+                        $product = Product::firstOrCreate(
+                            ['sku' => $fallbackSku],
+                            [
+                                'barcode' => (!empty($rawItem['barcode']) && $rawItem['barcode'] !== '-') ? $rawItem['barcode'] : ('BAR-' . Str::upper(Str::random(8))),
+                                'name' => $rawItem['name'] ?? 'Item Offline',
+                                'category' => 'Umum',
+                                'unit' => $rawItem['unit'] ?? 'Pcs',
+                                'price' => $unitPrice,
+                                'cost_price' => 0,
+                                'stock' => 0,
+                                'status' => 'TERSEDIA',
+                            ]
+                        );
+                    }
+
+                    $itemUnit = $rawItem['unit'] ?? $product->unit;
+                    $baseQty = $product->convertToBaseUnits($itemUnit, $qty);
+                    $product->stock = max(0, $product->stock - $baseQty);
+                    if ($product->stock <= 0) {
+                        $product->status = 'HABIS';
+                    } elseif ($product->stock <= $product->min_stock) {
+                        $product->status = 'STOK_RENDAH';
+                    }
+                    $product->save();
+
+                    $processedItems[] = [
+                        'product_id' => $product->id,
+                        'sku' => $product->sku,
+                        'barcode' => $product->barcode,
+                        'product_name' => $product->name,
+                        'unit' => $itemUnit,
+                        'unit_price' => $unitPrice,
+                        'qty' => $qty,
+                        'is_taxable' => (bool) $product->is_taxable,
+                        'tax_amount' => (float) ($rawItem['tax_amount'] ?? 0),
+                        'is_expired_clearance' => (bool) ($rawItem['is_expired_clearance'] ?? false),
+                        'clearance_discount_percent' => (float) ($rawItem['clearance_discount_percent'] ?? 0),
+                        'discount_amount' => (float) ($rawItem['discount_amount'] ?? 0),
+                        'total_price' => $itemTotal,
+                    ];
+
+                    $subtotal += $itemTotal;
+                }
+
+                $grandTotal = (float) $trxData['grand_total'];
+                $method = strtoupper($trxData['payment_method']);
+                $createdAt = !empty($trxData['created_at']) ? Carbon::parse($trxData['created_at']) : now();
+
+                // 5. Create Transaction Record preserving offline invoice number & timestamps
+                $transaction = new Transaction([
+                    'invoice_number' => $invoiceNumber,
+                    'shift_id' => $shift->id,
+                    'user_id' => $user?->id,
+                    'cashier_name' => $cashierName,
+                    'terminal_code' => $shift->terminal_code,
+                    'member_id' => $member?->id,
+                    'member_nik' => $member?->nik,
+                    'member_name' => $member?->name,
+                    'payment_method' => $method,
+                    'subtotal' => (float) ($trxData['subtotal'] ?? $subtotal),
+                    'discount_total' => (float) ($trxData['discount_total'] ?? 0),
+                    'tax_total' => (float) ($trxData['tax_total'] ?? 0),
+                    'grand_total' => $grandTotal,
+                    'cash_received' => (float) ($trxData['cash_received'] ?? ($method === 'TUNAI' ? $grandTotal : 0)),
+                    'change_returned' => (float) ($trxData['change_returned'] ?? 0),
+                    'payment_reference' => $trxData['payment_reference'] ?? ('OFFLINE-REF-' . Str::upper(Str::random(6))),
+                    'split_cash' => (float) ($trxData['split_cash'] ?? 0),
+                    'split_non_cash' => (float) ($trxData['split_non_cash'] ?? 0),
+                    'status' => 'SUCCESS',
+                ]);
+                $transaction->created_at = $createdAt;
+                $transaction->updated_at = now();
+                $transaction->save();
+
+                // 6. Save Transaction Items
+                foreach ($processedItems as $itemData) {
+                    TransactionItem::create(array_merge($itemData, ['transaction_id' => $transaction->id]));
+                }
+
+                // 7. Member Kasbon if KREDIT
+                if ($method === 'KREDIT' && $member) {
+                    $branchName = $user?->branch ?? "Terminal {$shift->terminal_code}";
+                    $member->recordKasbon(
+                        amount: $grandTotal,
+                        invoiceNumber: $invoiceNumber,
+                        transactionId: $transaction->id,
+                        branch: $branchName,
+                        processedBy: $cashierName,
+                        notes: "Belanja Kasbon POS [Offline Sync] (Invoice: {$invoiceNumber})"
+                    );
+                }
+
+                // 8. Update Shift Financial Figures
+                if ($method === 'TUNAI') {
+                    $shift->cash_sales_total += $grandTotal;
+                } elseif ($method === 'QRIS' || $method === 'TRANSFER') {
+                    $shift->qris_sales_total += $grandTotal;
+                } elseif ($method === 'KREDIT') {
+                    $shift->credit_sales_total += $grandTotal;
+                } elseif ($method === 'CAMPURAN') {
+                    $shift->cash_sales_total += (float) ($trxData['split_cash'] ?? 0);
+                    $shift->qris_sales_total += (float) ($trxData['split_non_cash'] ?? 0);
+                }
+
+                $shift->total_sales += $grandTotal;
+                $shift->transaction_count += 1;
+                $shift->expected_cash = $shift->calculateExpectedCash();
+                $shift->save();
+
+                $syncedTransactions[] = [
+                    'offline_id' => $trxData['offline_id'],
+                    'invoice_number' => $invoiceNumber,
+                    'server_id' => $transaction->id,
+                    'status' => 'SYNCED',
+                ];
+            }
+
+            // Process Cash Movements
+            foreach ($movementsToSync as $movData) {
+                $termCode = $movData['terminal_code'];
+                $shift = CashierShift::where('terminal_code', $termCode)->where('status', 'OPEN')->latest('id')->first()
+                    ?? CashierShift::where('terminal_code', $termCode)->latest('id')->first();
+
+                if ($shift) {
+                    $isIncoming = in_array(strtoupper($movData['type']), ['IN', 'KAS_MASUK']);
+                    $amount = (float) $movData['amount'];
+                    if ($isIncoming) {
+                        $shift->cash_in += $amount;
+                    } else {
+                        $shift->cash_out += $amount;
+                    }
+                    $shift->expected_cash = $shift->calculateExpectedCash();
+                    $shift->save();
+                }
+
+                $syncedMovements[] = [
+                    'offline_id' => $movData['offline_id'],
+                    'status' => 'SYNCED'
+                ];
+            }
+
+            DB::commit();
+
+            // Notify Manager
+            $totalCount = count($syncedTransactions);
+            if ($totalCount > 0) {
+                try {
+                    NotificationController::notify(
+                        role: 'MANAGER',
+                        title: "Sinkronisasi Offline Selesai: {$totalCount} Transaksi",
+                        message: "Sistem berhasil menyinkronkan {$totalCount} transaksi kasir yang tercatat saat offline ke database server utama.",
+                        category: 'SALES',
+                        link: '/kasir/transactions',
+                        icon: 'cloud_sync',
+                        color: 'emerald',
+                        referenceId: 'SYNC-' . date('YmdHis')
+                    );
+                } catch (\Throwable $e) {}
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => "Sinkronisasi berhasil diproses ({$totalCount} transaksi disinkronkan, " . count($duplicateTransactions) . " duplikat diabaikan).",
+                'synced_count' => $totalCount,
+                'duplicate_count' => count($duplicateTransactions),
+                'results' => [
+                    'transactions' => array_merge($syncedTransactions, $duplicateTransactions),
+                    'cash_movements' => $syncedMovements,
+                ],
+            ]);
+
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal memproses sinkronisasi offline: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**

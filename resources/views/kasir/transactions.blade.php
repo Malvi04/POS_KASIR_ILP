@@ -17,6 +17,10 @@
     transactions: [],
 
     async initTransactions() {
+        const localRaw = localStorage.getItem('pos_ilp_transactions_v1');
+        let localList = [];
+        try { localList = localRaw ? JSON.parse(localRaw) : []; } catch (e) {}
+
         try {
             const params = new URLSearchParams({
                 search: this.searchQuery.trim(),
@@ -31,7 +35,12 @@
             if (res.ok) {
                 const json = await res.json();
                 if (json.success && Array.isArray(json.data)) {
-                    this.transactions = json.data;
+                    // Retain any pending unsynced offline transactions at the top of the list
+                    const pendingTrxs = localList.filter(t => t.syncStatus === 'PENDING_SYNC' || t.isOffline);
+                    const serverIds = new Set(json.data.map(d => d.invoice_number || d.id));
+                    const unsyncedOnly = pendingTrxs.filter(p => !serverIds.has(p.invoice_number || p.id));
+
+                    this.transactions = [...unsyncedOnly, ...json.data];
                     localStorage.setItem('pos_ilp_transactions_v1', JSON.stringify(this.transactions));
                     return;
                 }
@@ -40,17 +49,7 @@
             console.warn('API transactions fetch error:', e);
         }
 
-        try {
-            const raw = localStorage.getItem('pos_ilp_transactions_v1');
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                if (Array.isArray(parsed)) {
-                    this.transactions = parsed;
-                    return;
-                }
-            }
-        } catch (e) {}
-        this.transactions = [];
+        this.transactions = localList;
     },
 
     get filteredTransactions() {
@@ -97,6 +96,8 @@
 }"
 x-init="initOpening(); initTransactions();"
 @pos-session-sync.window="initOpening(); initTransactions();"
+@pos:transactions_updated.window="initTransactions()"
+@pos:sync-all.window="initOpening(); initTransactions();"
 class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden">
 
     <!-- Sidebar Kasir -->
@@ -132,6 +133,18 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
 
                     <div class="flex items-center gap-2">
+                        <!-- Manual Sync Button -->
+                        <button type="button"
+                                @click="$store.offlineSync?.openModal()"
+                                class="px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer border"
+                                :class="($store.offlineSync && $store.offlineSync.totalPending > 0)
+                                    ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600 animate-pulse'
+                                    : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-300'">
+                            <span class="material-symbols-rounded text-[18px]"
+                                  :class="($store.offlineSync && $store.offlineSync.isSyncing) ? 'animate-spin' : ''">sync</span>
+                            <span x-text="($store.offlineSync && $store.offlineSync.totalPending > 0) ? ('Sinkronkan (' + $store.offlineSync.totalPending + ' Offline)') : 'Sync Manager'">Sync Manager</span>
+                        </button>
+
                         <a href="{{ url('/pos') }}" class="px-4 py-2.5 bg-[#0052cc] hover:bg-[#0043a8] text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-2">
                             <span class="material-symbols-rounded text-[18px]">point_of_sale</span>
                             <span>Buka Terminal Kasir (F4)</span>
@@ -323,7 +336,14 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                             <!-- Parent Col 12: Status Sync -->
                                             <template x-if="iIdx === 0">
                                                 <td :rowspan="t.items && t.items.length > 0 ? t.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap text-center bg-white">
-                                                    <template x-if="t.status === 'SELESAI'">
+                                                    <template x-if="t.syncStatus === 'PENDING_SYNC' || t.isOffline">
+                                                        <span class="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-300 px-2.5 py-0.5 rounded-full whitespace-nowrap animate-pulse"
+                                                              title="Transaksi offline tersimpan lokal di browser">
+                                                            <span class="material-symbols-rounded text-[13px] text-amber-600">cloud_off</span>
+                                                            <span>Offline (Pending)</span>
+                                                        </span>
+                                                    </template>
+                                                    <template x-if="t.status === 'SELESAI' && !(t.syncStatus === 'PENDING_SYNC' || t.isOffline)">
                                                         <span class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full whitespace-nowrap">
                                                             <span class="material-symbols-rounded text-[13px]">cloud_done</span>
                                                             <span>Tersinkron</span>

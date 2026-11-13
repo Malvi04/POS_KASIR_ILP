@@ -2,7 +2,7 @@
 
 **Aplikasi:** POS Minimarket Koperasi Multi-Cabang PT Indo Lampung Perkasa  
 **Modul:** Modul E — Pelaporan & Akuntansi Dasar  
-**Arsitektur:** RESTful API Backend (Laravel 11 + PostgreSQL) & Decoupled Reactive Frontend (Blade + Tailwind CSS + Alpine.js)  
+**Arsitektur:** RESTful API Backend (Laravel 13 + PostgreSQL) & Decoupled Reactive Frontend (Blade + Tailwind CSS + Alpine.js)  
 **Tanggal Rilis:** 1 November 2026  
 **Status Uji:** 100% Passed (34 Tests, 254 Assertions)
 

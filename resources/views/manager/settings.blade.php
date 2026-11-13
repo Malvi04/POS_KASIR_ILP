@@ -211,17 +211,12 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
             </div>
 
             <div class="flex items-center gap-4 text-gray-500">
-                <button @click="triggerToast('Tidak ada notifikasi sistem baru.')" class="hover:text-gray-900 transition-colors p-1 cursor-pointer" title="Notifikasi">
-                    <span class="material-symbols-rounded text-[22px]">notifications</span>
-                </button>
+                <x-notification-bell role="MANAGER" />
                 <button @click="triggerToast('Panduan Konfigurasi Vigilant POS v2.4.1')" class="hover:text-gray-900 transition-colors p-1 cursor-pointer" title="Bantuan">
                     <span class="material-symbols-rounded text-[22px]">help_outline</span>
                 </button>
                 <div class="h-6 w-px bg-gray-200 ml-1"></div>
-                <div class="flex items-center gap-2">
-                    <span class="material-symbols-rounded text-green-500 text-[20px]">wifi</span>
-                    <span class="text-[13px] font-semibold text-gray-600">Terhubung</span>
-                </div>
+                <x-realtime-network-badge />
             </div>
         </header>
 

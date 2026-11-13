@@ -46,6 +46,11 @@ class User extends Authenticatable
         return in_array($role, ['supervisor', 'admin', 'manager', 'owner', 'superadmin', 'spv']);
     }
 
+    public function isOwner(): bool
+    {
+        return $this->isOwnerOrSuperadmin();
+    }
+
     public function isOwnerOrSuperadmin(): bool
     {
         $role = strtolower($this->role ?? '');

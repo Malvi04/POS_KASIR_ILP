@@ -29,7 +29,7 @@
 @section('admin_content')
 <div x-data="ownerProductsApp()" 
      x-init="init()"
-     @ilp-search.window="searchQuery = $event.detail"
+     @ilp-search.window="searchQuery = $event.detail; onSearchInput()"
      @open-add-product-modal.window="openCreateModal()"
      @pos-inventory-synced.window="initProducts()"
      class="space-y-6">
@@ -49,9 +49,9 @@
             </button>
             <button type="button" 
                     @click="exportProductCsv()"
-                    class="px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs inline-flex items-center gap-2 shadow-2xs transition-all cursor-pointer">
-                <span class="material-symbols-rounded text-[18px]">download</span>
-                <span>Export CSV</span>
+                    class="px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs inline-flex items-center gap-2 shadow-2xs transition-all cursor-pointer">
+                <span class="material-symbols-rounded text-[18px]">table_chart</span>
+                <span>Ekspor Excel</span>
             </button>
         </div>
     </div>
@@ -828,7 +828,41 @@ function ownerProductsApp() {
             return { unique, hasDuplicates };
         },
 
-        initProducts() {
+        async init() {
+            await this.initProducts();
+        },
+
+        async initProducts() {
+            try {
+                const res = await fetch('/api/products?per_page=100');
+                if (res.ok) {
+                    const result = await res.json();
+                    if (result.success && Array.isArray(result.data) && result.data.length > 0) {
+                        const formatted = result.data.map(p => ({
+                            id: p.id,
+                            sku: p.sku,
+                            barcode: p.barcode,
+                            name: p.name,
+                            brand: p.brand || p.category,
+                            category: p.category || 'Kebutuhan Pokok',
+                            stock: Number(p.stock) || 0,
+                            minStock: Number(p.min_stock) || 10,
+                            unit: p.unit || 'Pcs',
+                            price: Number(p.price) || 0,
+                            memberPrice: Number(p.member_price || p.price) || 0,
+                            rackLocation: p.rack_location || '-',
+                            status: Number(p.stock) <= 0 ? 'HABIS' : (Number(p.stock) <= Number(p.min_stock || 10) ? 'STOK_RENDAH' : 'TERSEDIA')
+                        }));
+                        const dedup = this.deduplicateProducts(formatted);
+                        this.products = dedup.unique.map(p => this.ensureBranchStock(p));
+                        this.saveProductsToStorage();
+                        return;
+                    }
+                }
+            } catch (err) {
+                console.warn('API /api/products error, reading local cache', err);
+            }
+
             try {
                 const raw = localStorage.getItem('pos_ilp_inventory_products_v1');
                 if (raw) {
@@ -882,11 +916,57 @@ function ownerProductsApp() {
 
         saveProductsToStorage() {
             try {
-                localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(this.products));
+                const sliceToSave = this.products.length > 200 ? this.products.slice(0, 200) : this.products;
+                localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(sliceToSave));
                 window.dispatchEvent(new CustomEvent('pos-inventory-synced', { detail: { count: this.products.length } }));
             } catch (e) {
                 console.error('Failed to save products:', e);
             }
+        },
+
+        searchTimer: null,
+        onSearchInput() {
+            this.currentPage = 1;
+            const q = (this.searchQuery || '').trim();
+            if (this.searchTimer) clearTimeout(this.searchTimer);
+            if (q.length >= 2) {
+                this.searchTimer = setTimeout(() => {
+                    this.fetchServerSearch(q);
+                }, 300);
+            }
+        },
+        async fetchServerSearch(q) {
+            if (!q || q.length < 2) return;
+            try {
+                const res = await fetch(`/api/products?search=${encodeURIComponent(q)}&per_page=100`, {
+                    headers: { 'Accept': 'application/json' }
+                });
+                if (res.ok) {
+                    const result = await res.json();
+                    if (result.success && Array.isArray(result.data) && result.data.length > 0) {
+                        const formatted = result.data.map(p => ({
+                            id: p.id,
+                            sku: p.sku,
+                            barcode: p.barcode,
+                            name: p.name,
+                            brand: p.brand || p.category,
+                            category: p.category || 'Kebutuhan Pokok',
+                            stock: Number(p.stock) || 0,
+                            minStock: Number(p.min_stock) || 10,
+                            unit: p.unit || 'Pcs',
+                            price: Number(p.price) || 0,
+                            memberPrice: Number(p.member_price || p.price) || 0,
+                            rackLocation: p.rack_location || '-',
+                            status: Number(p.stock) <= 0 ? 'HABIS' : (Number(p.stock) <= Number(p.min_stock || 10) ? 'STOK_RENDAH' : 'TERSEDIA')
+                        }));
+                        const existingSkus = new Set(this.products.map(p => p.sku));
+                        const newItems = formatted.filter(p => !existingSkus.has(p.sku)).map(p => this.ensureBranchStock(p));
+                        if (newItems.length > 0) {
+                            this.products = [...newItems, ...this.products];
+                        }
+                    }
+                }
+            } catch (err) {}
         },
 
         get availableCategories() {
@@ -968,7 +1048,7 @@ function ownerProductsApp() {
             this.showCreateModal = true;
         },
 
-        saveNewProduct() {
+        async saveNewProduct() {
             if (!this.formProduct.name.trim() || !this.formProduct.sku.trim()) return;
             const cleanSku = this.formProduct.sku.trim().toUpperCase();
             const cleanBarcode = (this.formProduct.barcode || '').trim();
@@ -984,6 +1064,39 @@ function ownerProductsApp() {
                     alert('Barcode sudah digunakan oleh produk lain.');
                     return;
                 }
+            }
+
+            try {
+                const res = await fetch('/api/products', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({
+                        sku: cleanSku,
+                        barcode: cleanBarcode,
+                        name: this.formProduct.name,
+                        brand: this.formProduct.brand,
+                        category: this.formProduct.category || 'Kebutuhan Pokok',
+                        unit: this.formProduct.unit || 'Pcs',
+                        cost_price: Math.round(Number(this.formProduct.price) * 0.75),
+                        price: Number(this.formProduct.price),
+                        member_price: Number(this.formProduct.memberPrice || this.formProduct.price),
+                        stock: Number(this.formProduct.stock),
+                        min_stock: Number(this.formProduct.minStock),
+                        rack_location: this.formProduct.rackLocation || 'Lorong A - Rak 01'
+                    })
+                });
+                if (res.ok) {
+                    if (typeof triggerToast === 'function') triggerToast(`Master SKU '${this.formProduct.name}' berhasil disimpan ke database.`, 'success');
+                    this.showCreateModal = false;
+                    await this.initProducts();
+                    return;
+                }
+            } catch (err) {
+                console.warn('API /api/products create error, storing locally', err);
             }
 
             let newP = {
@@ -1005,7 +1118,7 @@ function ownerProductsApp() {
             this.showEditModal = true;
         },
 
-        updateProduct() {
+        async updateProduct() {
             if (!this.selectedProduct) return;
             const cleanSku = (this.formEditProduct.sku || '').trim().toUpperCase();
             const cleanBarcode = (this.formEditProduct.barcode || '').trim();
@@ -1020,6 +1133,40 @@ function ownerProductsApp() {
                 if (dupBarcode) {
                     alert('Barcode sudah digunakan oleh produk lain.');
                     return;
+                }
+            }
+
+            if (this.selectedProduct.id) {
+                try {
+                    const res = await fetch(`/api/products/${this.selectedProduct.id}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        },
+                        body: JSON.stringify({
+                            name: this.formEditProduct.name,
+                            sku: cleanSku,
+                            barcode: cleanBarcode,
+                            category: this.formEditProduct.category,
+                            unit: this.formEditProduct.unit,
+                            cost_price: Math.round(Number(this.formEditProduct.price) * 0.75),
+                            price: Number(this.formEditProduct.price),
+                            member_price: Number(this.formEditProduct.memberPrice || this.formEditProduct.price),
+                            stock: Number(this.formEditProduct.stock),
+                            min_stock: Number(this.formEditProduct.minStock),
+                            rack_location: this.formEditProduct.rackLocation
+                        })
+                    });
+                    if (res.ok) {
+                        this.showEditModal = false;
+                        if (typeof triggerToast === 'function') triggerToast(`Data master SKU '${this.formEditProduct.name}' berhasil diperbarui di database.`, 'success');
+                        await this.initProducts();
+                        return;
+                    }
+                } catch (err) {
+                    console.warn('API update error, saving locally', err);
                 }
             }
 
@@ -1061,33 +1208,43 @@ function ownerProductsApp() {
         },
 
         exportProductCsv() {
-            const headers = ['SKU', 'Barcode', 'Nama Produk', 'Brand', 'Kategori', 'Total Stok Master', 'Gudang Pusat (DC)', 'Toko Pusat', 'Cabang A', 'Cabang B', 'Min Stok', 'Satuan', 'Harga Retail', 'Harga Anggota', 'Lokasi Rak'];
+            const headers = ['SKU', 'Barcode', 'Nama Produk', 'Brand', 'Kategori', 'Total Stok Master', 'Gudang Pusat (DC)', 'Toko Pusat', 'Cabang A', 'Cabang B', 'Min Stok', 'Satuan', 'Harga Retail (Rp)', 'Harga Anggota (Rp)', 'Lokasi Rak'];
             const rows = this.products.map(p => [
-                `"${p.sku}"`,
-                `"${p.barcode}"`,
-                `"${(p.name || '').replace(/"/g, '""')}"`,
-                `"${(p.brand || '').replace(/"/g, '""')}"`,
-                `"${(p.category || '').replace(/"/g, '""')}"`,
-                p.stock,
-                this.getLocationStock(p, 'GDG-001'),
-                this.getLocationStock(p, 'CAB-001'),
-                this.getLocationStock(p, 'CAB-002'),
-                this.getLocationStock(p, 'CAB-003'),
-                p.minStock,
-                `"${p.unit || 'Pcs'}"`,
-                p.price,
-                p.memberPrice || p.price,
-                `"${(p.rackLocation || '').replace(/"/g, '""')}"`
+                p.sku,
+                p.barcode,
+                p.name || '',
+                p.brand || '',
+                p.category || '',
+                Number(p.stock || 0),
+                Number(this.getLocationStock(p, 'GDG-001') || 0),
+                Number(this.getLocationStock(p, 'CAB-001') || 0),
+                Number(this.getLocationStock(p, 'CAB-002') || 0),
+                Number(this.getLocationStock(p, 'CAB-003') || 0),
+                Number(p.minStock || 0),
+                p.unit || 'Pcs',
+                Number(p.price || 0),
+                Number(p.memberPrice || p.price || 0),
+                p.rackLocation || '-'
             ]);
-            const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-            const encodedUri = encodeURI(csvContent);
-            const link = document.createElement('a');
-            link.setAttribute('href', encodedUri);
-            link.setAttribute('download', `Master_Produk_ILP_Owner_${new Date().toISOString().slice(0,10)}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            if (typeof triggerToast === 'function') triggerToast('File CSV Master Produk berhasil diunduh.', 'success');
+
+            const totalMasterStock = this.products.reduce((acc, p) => acc + Number(p.stock || 0), 0);
+            const totals = ['TOTAL', '', '', '', '', totalMasterStock, '', '', '', '', '', '', '', '', ''];
+
+            window.exportTableToExcel({
+                filename: `Master_Produk_ILP_${new Date().toISOString().slice(0,10)}.xlsx`,
+                sheetName: 'Master Produk',
+                title: 'PT INDO LAMPUNG PERKASA - MINIMARKET KOPERASI',
+                subtitle: 'LAPORAN MASTER DATA PRODUK & PERSEDIAAN MULTI-CABANG',
+                metadata: [
+                    ['Tanggal Generate', new Date().toLocaleString('id-ID')],
+                    ['Total Produk Terdaftar', this.products.length + ' SKU']
+                ],
+                headers: headers,
+                rows: rows,
+                totals: totals
+            });
+
+            if (typeof triggerToast === 'function') triggerToast('File Excel Master Produk berhasil diunduh.', 'success');
         }
     };
 }

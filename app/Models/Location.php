@@ -12,6 +12,11 @@ class Location extends Model
         'code',
         'name',
         'type', // STORE, WAREHOUSE, FACTORY, PLANTATION
+        'address',
+        'manager',
+        'manager_email',
+        'phone',
+        'status',
         'is_active',
     ];
 

@@ -18,8 +18,8 @@ class AuthController extends Controller
     {
         $role = strtolower($request->input('role', ''));
 
-        // 1. PIN-based login (Owner / Supervisor)
-        if ($request->filled('pin') || $role === 'owner') {
+        // 1. PIN-based login (Owner / Supervisor via 6-digit PIN)
+        if ($request->filled('pin') || ($role === 'owner' && !$request->filled('password') && $request->filled('pin'))) {
             $pin = trim((string) ($request->input('pin') ?? ''));
             if (strlen($pin) !== 6) {
                 return response()->json([
@@ -61,7 +61,7 @@ class AuthController extends Controller
                     'role' => $user->role,
                     'branch' => $user->branch,
                 ],
-                'redirect_url' => url('/dashboard?role=owner'),
+                'redirect_url' => url('/owner'),
             ]);
         }
 
@@ -141,8 +141,16 @@ class AuthController extends Controller
                 ], 403);
             }
             $redirectUrl = url('/dashboard');
+        } elseif ($role === 'owner') {
+            if (!$user->isOwner()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Akun {$user->name} terdaftar sebagai '{$user->role}', tidak memiliki hak akses pemilik (Owner).",
+                ], 403);
+            }
+            $redirectUrl = url('/owner');
         } else {
-            $redirectUrl = $user->isKasir() ? url('/select-shift') : url('/dashboard');
+            $redirectUrl = $user->isKasir() ? url('/select-shift') : ($user->isOwner() ? url('/owner') : url('/dashboard'));
         }
 
         Auth::login($user, true);

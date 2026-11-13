@@ -227,7 +227,50 @@
     },
 
     exportData() {
-        window.print();
+        if (!this.items || this.items.length === 0) {
+            this.triggerToast('Tidak ada data stock opname untuk diekspor.');
+            return;
+        }
+
+        const headers = ['No', 'SKU / Barcode', 'Nama Produk', 'Kategori', 'Stok Sistem', 'Stok Fisik', 'Selisih (Unit)', 'Status Audit', 'Alasan Selisih', 'Catatan'];
+        let no = 1;
+        const rows = this.items.map(item => {
+            const isAudited = item.fisik !== null && item.fisik !== undefined && item.fisik !== '';
+            const selisih = isAudited ? (Number(item.fisik) - Number(item.sistem || 0)) : 0;
+            let statusText = 'Belum Diaudit';
+            if (isAudited) {
+                statusText = selisih === 0 ? 'Sesuai' : (selisih < 0 ? 'Selisih Kurang' : 'Surplus');
+            }
+            return [
+                no++,
+                item.sku,
+                item.nama,
+                item.kategori || 'Umum',
+                Number(item.sistem || 0),
+                isAudited ? Number(item.fisik) : '-',
+                isAudited ? selisih : 0,
+                statusText,
+                item.alasan || '-',
+                item.catatan || '-'
+            ];
+        });
+
+        window.exportTableToExcel({
+            filename: `Stock_Opname_Kasir_${new Date().toISOString().slice(0, 10)}.xlsx`,
+            sheetName: 'Stock Opname',
+            title: 'PT INDO LAMPUNG PERKASA - MINIMARKET KOPERASI',
+            subtitle: 'HASIL PENCATATAN FISIK STOCK OPNAME (TERMINAL KASIR)',
+            metadata: [
+                ['Terminal / Kasir', this.activeSession.terminalLabel || 'Kasir 01'],
+                ['Petugas Operator', this.activeSession.operatorName || 'Kasir Operasional'],
+                ['Tanggal Sesi', new Date().toLocaleString('id-ID')],
+                ['Total Item', this.items.length + ' Produk']
+            ],
+            headers: headers,
+            rows: rows
+        });
+
+        this.triggerToast('File Excel Stock Opname berhasil diunduh.');
     },
 
     triggerToast(msg) {
@@ -254,6 +297,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
             </div>
 
             <div class="flex items-center gap-3 text-gray-600">
+                <x-notification-bell role="KASIR" />
+                <x-realtime-network-badge />
                 <button type="button"
                         @click="finishOpname()"
                         class="bg-[#0052cc] hover:bg-[#0043a8] text-white px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 shadow-xs transition-colors cursor-pointer">
@@ -347,9 +392,15 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <div class="flex items-center gap-2.5 shrink-0">
                             <button type="button"
                                     @click="exportData()"
+                                    class="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer">
+                                <span class="material-symbols-rounded text-[16px]">table_chart</span>
+                                <span>Ekspor Excel</span>
+                            </button>
+                            <button type="button"
+                                    @click="window.print()"
                                     class="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer">
                                 <span class="material-symbols-rounded text-[16px] text-gray-500">print</span>
-                                <span>Cetak / Export</span>
+                                <span>Cetak</span>
                             </button>
                         </div>
                     </div>

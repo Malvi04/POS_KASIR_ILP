@@ -301,7 +301,38 @@
     },
 
     exportData() {
-        window.print();
+        if (!this.filteredAttendance || this.filteredAttendance.length === 0) {
+            this.triggerToast('Tidak ada data absensi untuk diekspor.');
+            return;
+        }
+
+        const headers = ['No', 'Terminal Kasir', 'Nama Staf', 'Jam Masuk', 'Jam Pulang', 'Status Kehadiran', 'Lokasi Cabang'];
+        let no = 1;
+        const rows = this.filteredAttendance.map(row => [
+            no++,
+            row.terminal || '-',
+            row.staffName || '-',
+            row.checkIn || '-',
+            row.checkOut || '-',
+            row.status === 'TERLAMBAT' ? 'Terlambat' : 'Tepat Waktu',
+            row.branch || '-'
+        ]);
+
+        window.exportTableToExcel({
+            filename: `Rekap_Absensi_Karyawan_${this.selectedDate}.xlsx`,
+            sheetName: 'Absensi Karyawan',
+            title: 'PT INDO LAMPUNG PERKASA - MINIMARKET KOPERASI',
+            subtitle: 'REKAPITULASI ABSENSI & KEHADIRAN KARYAWAN',
+            metadata: [
+                ['Tanggal Absensi', this.selectedDate],
+                ['Total Staf Hadir', this.filteredAttendance.length + ' Orang'],
+                ['Tanggal Cetak', new Date().toLocaleString('id-ID')]
+            ],
+            headers: headers,
+            rows: rows
+        });
+
+        this.triggerToast('File Excel rekap absensi berhasil diunduh.');
     },
 
     triggerToast(msg) {
@@ -347,6 +378,9 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
             </div>
 
             <div class="flex items-center gap-3">
+                <x-realtime-network-badge />
+                <x-notification-bell role="MANAGER" />
+
                 <button type="button"
                         @click="showCheckInModal = true"
                         class="bg-[#0052cc] hover:bg-[#0043a8] text-white px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer">
@@ -440,12 +474,20 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         </div>
                     </div>
 
-                    <button type="button"
-                            @click="exportData()"
-                            class="bg-[#0052cc] hover:bg-[#0043a8] text-white px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors shrink-0 cursor-pointer">
-                        <span class="material-symbols-rounded text-[16px]">print</span>
-                        <span>Cetak / Export Absensi</span>
-                    </button>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <button type="button"
+                                @click="exportData()"
+                                class="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer">
+                            <span class="material-symbols-rounded text-[16px]">table_chart</span>
+                            <span>Ekspor Excel</span>
+                        </button>
+                        <button type="button"
+                                @click="window.print()"
+                                class="bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer">
+                            <span class="material-symbols-rounded text-[16px] text-gray-500">print</span>
+                            <span>Cetak</span>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Main Content Area (Table & Summary) -->

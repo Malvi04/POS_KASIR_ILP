@@ -562,6 +562,9 @@
 x-init="initOpening(); initProducts();"
 @pos-session-sync.window="initOpening()"
 @pos-inventory-synced.window="initProducts()"
+@pos:inventory_updated.window="initProducts()"
+@pos:goods_in_updated.window="initProducts()"
+@pos:sync-all.window="initOpening(); initProducts();"
 class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden relative">
 
     <!-- Sidebar Kasir -->

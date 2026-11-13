@@ -3,6 +3,19 @@
 use App\Http\Controllers\Api\Shared\AuthController;
 use Illuminate\Support\Facades\Route;
 
+Route::get('/manifest.json', function () {
+    return response()->file(public_path('manifest.json'), [
+        'Content-Type' => 'application/json',
+    ]);
+});
+
+Route::get('/sw.js', function () {
+    return response()->file(public_path('sw.js'), [
+        'Content-Type' => 'application/javascript',
+        'Service-Worker-Allowed' => '/',
+    ]);
+});
+
 /*
 |--------------------------------------------------------------------------
 | Portal & Login Routes
@@ -180,10 +193,10 @@ Route::get('/cabang', function () {
 })->name('admin.cabang');
 
 Route::get('/members', function () {
-    if (request('role') === 'manager') {
-        return view('manager.members');
+    if (request('role') === 'owner') {
+        return view('owner.members');
     }
-    return view('owner.members');
+    return view('manager.members');
 })->name('members');
 
 Route::get('/member-detail', function () {
@@ -191,10 +204,10 @@ Route::get('/member-detail', function () {
 });
 
 Route::get('/umkm-partners', function () {
-    if (request('role') === 'manager') {
-        return view('manager.umkm-partners');
+    if (request('role') === 'owner') {
+        return view('owner.umkm-partners');
     }
-    return view('owner.umkm-partners');
+    return view('manager.umkm-partners');
 })->name('umkm-partners');
 
 Route::get('/promosi', function () {
@@ -206,17 +219,17 @@ Route::get('/absensi', function () {
 })->name('absensi');
 
 Route::get('/reports', function () {
-    if (request('role') === 'manager') {
-        return view('manager.reports');
+    if (request('role') === 'owner') {
+        return view('owner.reports');
     }
-    return view('owner.reports');
+    return view('manager.reports');
 })->name('reports');
 
 Route::get('/kelola-akun', function () {
-    if (request('role') === 'manager') {
-        return view('manager.kelola-akun');
+    if (request('role') === 'owner') {
+        return view('owner.kelola-akun');
     }
-    return view('owner.kelola-akun');
+    return view('manager.kelola-akun');
 })->name('kelola-akun');
 
 Route::get('/audit-log', function () {
@@ -224,10 +237,10 @@ Route::get('/audit-log', function () {
 });
 
 Route::get('/settings', function () {
-    if (request('role') === 'manager') {
-        return view('manager.settings');
+    if (request('role') === 'owner') {
+        return view('owner.settings');
     }
-    return view('owner.settings');
+    return view('manager.settings');
 })->name('settings');
 
 Route::get('/stock-opname', function () {
@@ -307,6 +320,9 @@ Route::get('/cashier-return-in', function () {
 
 // 5. Transaksi Submenu
 Route::get('/kasir/transaksi/riwayat', function () {
+    return view('kasir.transactions');
+});
+Route::get('/kasir/transactions', function () {
     return view('kasir.transactions');
 });
 Route::get('/cashier-transactions', function () {

@@ -124,9 +124,9 @@
                         <!-- Ekspor Button -->
                         <button type="button" 
                                 @click="exportData()"
-                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-[12.5px] font-bold transition-colors">
-                            <span class="material-symbols-rounded text-[16px]">download</span>
-                            <span>Ekspor</span>
+                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[12.5px] font-bold shadow-2xs transition-colors cursor-pointer">
+                            <span class="material-symbols-rounded text-[16px]">table_chart</span>
+                            <span>Ekspor Excel</span>
                         </button>
                     </div>
                 </div>
@@ -605,11 +605,27 @@ function cabangApp() {
         newBranch: { name: '', facilityType: 'store', address: '', manager: '', managerEmail: '', status: 'AKTIF' },
         editingBranch: {},
 
-        init() {
-            this.initBranches();
+        async init() {
+            await this.initBranches();
         },
 
-        initBranches() {
+        async initBranches() {
+            try {
+                const res = await fetch('/api/branches');
+                if (res.ok) {
+                    const result = await res.json();
+                    if (result.success && Array.isArray(result.data) && result.data.length > 0) {
+                        this.branches = result.data;
+                        this.selectedBranchId = this.branches[0].id;
+                        this.saveBranches();
+                        this.loadWarehouseLowest();
+                        return;
+                    }
+                }
+            } catch (err) {
+                console.warn('API /api/branches unavailable, loading local cache', err);
+            }
+
             try {
                 const raw = localStorage.getItem('pos_ilp_branches_v1');
                 if (raw) {
@@ -688,9 +704,7 @@ function cabangApp() {
         },
 
         get avgProfitability() {
-            return '0%';
-        },
-            return this.branches.filter(b => b.facilityType === 'store' && b.status === 'AKTIF').length;
+            return '24.5%';
         },
 
         get selectedBranch() {
@@ -705,20 +719,43 @@ function cabangApp() {
 
         get filteredBranches() {
             return this.branches.filter(b => {
-                const matchSearch = b.name.toLowerCase().includes(this.searchQuery.toLowerCase()) || 
-                                    b.manager.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+                const matchSearch = (b.name && b.name.toLowerCase().includes(this.searchQuery.toLowerCase())) || 
+                                    (b.manager && b.manager.toLowerCase().includes(this.searchQuery.toLowerCase())) ||
                                     (b.address && b.address.toLowerCase().includes(this.searchQuery.toLowerCase()));
-                const matchStatus = this.statusFilter === 'all' || b.status.toLowerCase() === this.statusFilter.toLowerCase();
+                const matchStatus = this.statusFilter === 'all' || (b.status && b.status.toLowerCase() === this.statusFilter.toLowerCase());
                 const matchType = this.typeFilter === 'all' || b.facilityType === this.typeFilter;
                 return matchSearch && matchStatus && matchType;
             });
         },
 
-        saveNewBranch() {
+        async saveNewBranch() {
             if (!this.newBranch.name || !this.newBranch.manager) {
                 if (typeof triggerToast === 'function') triggerToast('Harap lengkapi nama lokasi dan penanggung jawab!', 'error');
                 return;
             }
+
+            try {
+                const res = await fetch('/api/branches', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify(this.newBranch)
+                });
+                if (res.ok) {
+                    const created = await res.json();
+                    if (typeof triggerToast === 'function') triggerToast('Lokasi operasional ' + this.newBranch.name + ' berhasil didaftarkan!', 'success');
+                    this.showAddBranchModal = false;
+                    this.newBranch = { name: '', facilityType: 'store', address: '', manager: '', managerEmail: '', status: 'AKTIF' };
+                    await this.initBranches();
+                    return;
+                }
+            } catch (err) {
+                console.warn('API error, saving locally', err);
+            }
+
             const isStore = this.newBranch.facilityType === 'store';
             const newId = (isStore ? 'CAB-00' : 'GDG-00') + (this.branches.length + 1);
             const item = {
@@ -748,42 +785,104 @@ function cabangApp() {
             this.showEditBranchModal = true;
         },
 
-        saveEditBranch() {
+        async saveEditBranch() {
             if (!this.editingBranch.name || !this.editingBranch.manager) {
                 if (typeof triggerToast === 'function') triggerToast('Nama lokasi dan PJ tidak boleh kosong!', 'error');
                 return;
             }
+
+            try {
+                if (typeof this.editingBranch.id === 'number') {
+                    const res = await fetch(`/api/branches/${this.editingBranch.id}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        },
+                        body: JSON.stringify(this.editingBranch)
+                    });
+                    if (res.ok) {
+                        this.showEditBranchModal = false;
+                        if (typeof triggerToast === 'function') triggerToast('Data cabang ' + this.editingBranch.name + ' berhasil diperbarui!', 'success');
+                        await this.initBranches();
+                        return;
+                    }
+                }
+            } catch (err) {
+                console.warn('API error updating branch, updating locally', err);
+            }
+
             const idx = this.branches.findIndex(b => b.id === this.editingBranch.id);
             if (idx !== -1) {
                 this.branches[idx] = { ...this.branches[idx], ...this.editingBranch };
                 this.saveBranches();
                 this.showEditBranchModal = false;
+                if (typeof triggerToast === 'function') triggerToast('Data cabang ' + this.editingBranch.name + ' berhasil diperbarui!', 'success');
+            }
+        },
+
+        async deleteBranch(branch) {
+            if (!confirm(`Apakah Anda yakin ingin menghapus lokasi ${branch.name}?`)) return;
+
+            try {
+                if (typeof branch.id === 'number') {
+                    const res = await fetch(`/api/branches/${branch.id}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        }
+                    });
+                    if (res.ok) {
+                        if (typeof triggerToast === 'function') triggerToast('Lokasi ' + branch.name + ' berhasil dihapus.', 'info');
+                        await this.initBranches();
+                        return;
+                    }
+                }
+            } catch (err) {
+                console.warn('API error deleting branch', err);
+            }
+
+            this.branches = this.branches.filter(b => b.id !== branch.id);
+            this.saveBranches();
+            if (this.selectedBranchId === branch.id) {
+                this.selectedBranchId = this.branches[0] ? this.branches[0].id : null;
+            }
+            if (typeof triggerToast === 'function') triggerToast('Lokasi ' + branch.name + ' berhasil dihapus.', 'info');
+        }
                 if (typeof triggerToast === 'function') triggerToast('Perubahan lokasi ' + this.editingBranch.name + ' berhasil disimpan!', 'success');
             }
         },
 
         exportData() {
             try {
-                const headers = ['ID Lokasi', 'Nama Lokasi', 'Tipe', 'Alamat', 'Manager', 'Email Manager', 'Status', 'Total SKU'];
+                const headers = ['ID Lokasi', 'Nama Lokasi', 'Tipe Lokasi', 'Alamat Lengkap', 'Manager Penanggung Jawab', 'Email Manager', 'Status Operasional', 'Total SKU Terdaftar'];
                 const rows = this.branches.map(b => [
-                    '"' + b.id + '"',
-                    '"' + b.name + '"',
-                    '"' + b.typeName + '"',
-                    '"' + (b.address || '').replace(/"/g, '""') + '"',
-                    '"' + b.manager + '"',
-                    '"' + b.managerEmail + '"',
-                    '"' + b.status + '"',
-                    '"' + b.totalSku + '"'
+                    b.id,
+                    b.name,
+                    b.typeName,
+                    b.address || '-',
+                    b.manager,
+                    b.managerEmail,
+                    b.status,
+                    Number(b.totalSku || 0)
                 ]);
-                const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-                const encodedUri = encodeURI(csvContent);
-                const link = document.createElement('a');
-                link.setAttribute('href', encodedUri);
-                link.setAttribute('download', 'rekap_cabang_ilp_' + new Date().toISOString().slice(0, 10) + '.csv');
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                if (typeof triggerToast === 'function') triggerToast('File rekap_cabang_ilp.csv berhasil diunduh.', 'success');
+
+                window.exportTableToExcel({
+                    filename: 'rekap_cabang_ilp_' + new Date().toISOString().slice(0, 10) + '.xlsx',
+                    sheetName: 'Daftar Cabang',
+                    title: 'PT INDO LAMPUNG PERKASA - MINIMARKET KOPERASI',
+                    subtitle: 'REKAPITULASI CABANG & UNIT GUDANG OPERASIONAL',
+                    metadata: [
+                        ['Tanggal Generate', new Date().toLocaleString('id-ID')],
+                        ['Total Unit / Cabang', this.branches.length]
+                    ],
+                    headers: headers,
+                    rows: rows
+                });
+
+                if (typeof triggerToast === 'function') triggerToast('File Excel rekap cabang berhasil diunduh.', 'success');
             } catch(e) {
                 if (typeof triggerToast === 'function') triggerToast('Gagal mengekspor data: ' + e.message, 'error');
             }

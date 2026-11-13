@@ -167,6 +167,13 @@ class="flex flex-col min-h-screen w-full bg-[#f8f9fa] font-sans">
             <!-- Separator -->
             <div class="border-t border-dashed border-gray-300 my-3"></div>
 
+            <!-- Offline Mode Tag on Receipt -->
+            <template x-if="receipt?.isOffline || receipt?.syncStatus === 'PENDING_SYNC'">
+                <div class="mb-2 py-1 px-2 border border-dashed border-amber-400 bg-amber-50 rounded text-center text-[10px] font-mono font-bold text-amber-800">
+                    *** STRUK PENJUALAN OFFLINE (TERSIMPAN LOKAL) ***
+                </div>
+            </template>
+
             <!-- Transaction Meta -->
             <div class="flex flex-col gap-1 text-xs font-mono mb-2">
                 <div class="flex justify-between">

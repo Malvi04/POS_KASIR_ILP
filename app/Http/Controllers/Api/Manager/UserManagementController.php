@@ -230,6 +230,25 @@ class UserManagementController extends Controller
     }
 
     /**
+     * Reset password for a user.
+     */
+    public function resetPassword(Request $request, int $id): JsonResponse
+    {
+        $user = User::findOrFail($id);
+
+        $validated = $request->validate([
+            'password' => 'required|string|min:6',
+        ]);
+
+        $user->update(['password' => Hash::make($validated['password'])]);
+
+        return response()->json([
+            'success' => true,
+            'message' => "Password portal untuk {$user->name} berhasil direset.",
+        ]);
+    }
+
+    /**
      * Toggle active status of a user (Nonaktifkan / Aktifkan).
      */
     public function toggleStatus(int $id): JsonResponse

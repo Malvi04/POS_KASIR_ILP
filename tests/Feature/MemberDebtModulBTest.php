@@ -274,4 +274,17 @@ class MemberDebtModulBTest extends TestCase
         $this->assertStringContainsString('LAPORAN REKAPITULASI PIUTANG KASBON BULANAN KARYAWAN', $content);
         $this->assertStringContainsString('HRD / Finance PT Indo Lampung Perkasa', $content);
     }
+
+    /**
+     * Test Export Excel (.xlsx) format for Tim Finance / HRD PT Indo Lampung Perkasa.
+     */
+    public function test_can_export_rekapitulasi_piutang_excel_for_hrd_finance(): void
+    {
+        $month = now()->format('Y-m');
+        $response = $this->get("/api/reports/member-debts/export-excel?month={$month}");
+
+        $response->assertStatus(200);
+        $this->assertTrue(str_contains($response->headers->get('content-type'), 'spreadsheetml.sheet'));
+        $this->assertTrue(str_contains($response->headers->get('content-disposition'), '.xlsx'));
+    }
 }

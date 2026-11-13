@@ -178,10 +178,7 @@ class="flex flex-col h-screen w-full bg-white font-sans text-gray-800">
                 <span class="text-[10px] font-bold text-gray-500 tracking-wider">TOTAL TAGIHAN</span>
                 <span class="text-[#0052cc] font-mono font-bold text-[15px]" x-text="formatRupiah(grandTotal)">Rp 0</span>
             </div>
-            <div class="bg-green-100/60 text-green-700 border border-green-200 px-3.5 py-1.5 rounded-full flex items-center gap-1.5 font-bold text-xs">
-                <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                <span>ONLINE</span>
-            </div>
+            <x-realtime-network-badge />
         </div>
     </header>
 

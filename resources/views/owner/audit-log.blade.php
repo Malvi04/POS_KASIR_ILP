@@ -23,9 +23,9 @@
     <div class="flex items-center gap-2">
         <button type="button" 
                 @click="exportCsv()"
-                class="px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold shadow-2xs inline-flex items-center gap-1.5 transition-colors cursor-pointer">
-            <span class="material-symbols-rounded text-[16px]">download</span>
-            <span class="hidden sm:inline">Export CSV Log</span>
+                class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-2xs inline-flex items-center gap-1.5 transition-colors cursor-pointer">
+            <span class="material-symbols-rounded text-[16px]">table_chart</span>
+            <span class="hidden sm:inline">Ekspor Excel Log</span>
         </button>
 
         <button type="button" 
@@ -548,10 +548,25 @@ function auditLogApp() {
         selectedLog: null,
 
         logs: [],
-
         defaultLogs: [],
+        apiSummary: null,
 
-        initLogs() {
+        async initLogs() {
+            try {
+                const res = await fetch('/api/owner/audit-logs');
+                if (res.ok) {
+                    const result = await res.json();
+                    if (result.success && Array.isArray(result.data) && result.data.length > 0) {
+                        this.logs = result.data;
+                        this.apiSummary = result.summary || null;
+                        this.saveLogs();
+                        return;
+                    }
+                }
+            } catch(e) {
+                console.warn('API /api/owner/audit-logs error, reading local cache', e);
+            }
+
             try {
                 const raw = localStorage.getItem('pos_ilp_audit_logs_v1');
                 if (raw) {
@@ -741,61 +756,55 @@ function auditLogApp() {
                     return;
                 }
 
-                const sanitizeCell = (text) => {
-                    if (text === null || text === undefined) return '""';
-                    let str = String(text).replace(/"/g, '""');
-                    // Prevent CSV injection: if starts with =, +, -, @, prepend single quote
-                    if (/^[=+\-@]/.test(str)) {
-                        str = "'" + str;
-                    }
-                    return `"${str}"`;
-                };
-
                 const headers = [
                     'ID Log',
                     'Waktu (WIB)',
                     'User ID',
                     'Nama Pengguna',
-                    'Role',
-                    'Lokasi',
+                    'Role Akses',
+                    'Lokasi Cabang',
                     'Kategori',
                     'Nama Tindakan',
-                    'Deskripsi',
+                    'Deskripsi Aktivitas',
                     'Referensi Dokumen',
                     'Status',
-                    'Sumber Terminal/IP'
+                    'Sumber Terminal / IP'
                 ];
 
                 const rows = list.map(item => [
-                    sanitizeCell(item.id),
-                    sanitizeCell(item.timestamp),
-                    sanitizeCell(item.userId),
-                    sanitizeCell(item.userName),
-                    sanitizeCell(item.userRole),
-                    sanitizeCell(item.location),
-                    sanitizeCell(item.category),
-                    sanitizeCell(item.actionName),
-                    sanitizeCell(item.description),
-                    sanitizeCell(item.reference || '-'),
-                    sanitizeCell(item.status),
-                    sanitizeCell(item.source || '-')
+                    item.id,
+                    item.timestamp,
+                    item.userId,
+                    item.userName,
+                    item.userRole,
+                    item.location,
+                    item.category,
+                    item.actionName,
+                    item.description,
+                    item.reference || '-',
+                    item.status,
+                    item.source || '-'
                 ]);
 
-                const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
-                const encodedUri = encodeURI(csvContent);
-                const link = document.createElement('a');
-                link.setAttribute('href', encodedUri);
-                link.setAttribute('download', `audit_log_kopkar_ilp_${this.todayString}.csv`);
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
+                window.exportTableToExcel({
+                    filename: `Audit_Log_Sistem_ILP_${this.todayString}.xlsx`,
+                    sheetName: 'Audit Trail',
+                    title: 'PT INDO LAMPUNG PERKASA - MINIMARKET KOPERASI',
+                    subtitle: 'LAPORAN AUDIT LOG & REKAM JEJAK AKTIVITAS SISTEM',
+                    metadata: [
+                        ['Tanggal Generate', new Date().toLocaleString('id-ID')],
+                        ['Total Aktivitas Terekam', list.length + ' Log']
+                    ],
+                    headers: headers,
+                    rows: rows
+                });
 
                 if (typeof triggerToast === 'function') {
-                    triggerToast(`Audit log berhasil diekspor (${list.length} entri).`, 'success');
+                    triggerToast(`Audit log berhasil diekspor ke Excel (${list.length} entri).`, 'success');
                 }
             } catch (e) {
-                console.error('Failed to export CSV', e);
-                if (typeof triggerToast === 'function') triggerToast('Gagal mengekspor CSV: ' + e.message, 'error');
+                console.error('Failed to export Excel', e);
+                if (typeof triggerToast === 'function') triggerToast('Gagal mengekspor data: ' + e.message, 'error');
             }
         }
     };

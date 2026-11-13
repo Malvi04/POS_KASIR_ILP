@@ -250,4 +250,23 @@ class InventoryConsignmentModulCTest extends TestCase
         $response->assertStatus(200);
         $this->assertTrue(str_contains($response->headers->get('content-type'), 'text/csv'));
     }
+
+    /**
+     * Test Stock Opname Variance Report Export to Excel (.xlsx).
+     */
+    public function test_stock_opname_export_excel(): void
+    {
+        $opname = StockOpname::create([
+            'opname_code' => 'SOP-XLSX-' . time(),
+            'title' => 'Audit Excel Test',
+            'conducted_by' => 'Auditor',
+            'status' => 'COMPLETED',
+            'completed_at' => now(),
+        ]);
+
+        $response = $this->get("/api/inventory/stock-opname/{$opname->id}/export-excel");
+        $response->assertStatus(200);
+        $this->assertTrue(str_contains($response->headers->get('content-type'), 'spreadsheetml.sheet'));
+        $this->assertTrue(str_contains($response->headers->get('content-disposition'), '.xlsx'));
+    }
 }

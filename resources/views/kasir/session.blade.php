@@ -9,6 +9,9 @@
 }"
 x-init="initOpening()"
 @pos-session-sync.window="initOpening()"
+@pos:session_updated.window="initOpening()"
+@pos:transactions_updated.window="initOpening()"
+@pos:sync-all.window="initOpening()"
 class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden">
 
     <!-- Sidebar -->

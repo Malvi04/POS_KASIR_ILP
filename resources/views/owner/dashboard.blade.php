@@ -417,18 +417,53 @@ function ownerDashboardApp() {
         criticalItems: [],
         branchSalesData: [],
 
-        init() {
+        async init() {
             const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
             const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
             const now = new Date();
             this.todayDateStr = days[now.getDay()] + ', ' + now.getDate() + ' ' + months[now.getMonth()] + ' ' + now.getFullYear();
 
-            this.loadBranches();
-            this.loadCriticalItems();
-            this.loadSalesData();
+            await this.loadDashboardSummary();
         },
 
-        loadBranches() {
+        async loadDashboardSummary() {
+            try {
+                const res = await fetch('/api/owner/dashboard-summary');
+                if (res.ok) {
+                    const result = await res.json();
+                    if (result.success && result.data) {
+                        const d = result.data;
+                        this.totalSalesToday = d.total_sales_today || 0;
+                        this.totalTrxToday = d.total_trx_today || 0;
+                        this.totalLabaYtd = d.total_profit_today || 0;
+                        this.branches = d.branches || [];
+                        if (d.warehouse) {
+                            this.warehouse = {
+                                id: d.warehouse.id || 'gudang-pusat',
+                                name: d.warehouse.name || 'Gudang Pusat (DC)',
+                                type: d.warehouse.type || 'Gudang Logistik',
+                                manager: d.warehouse.manager || 'Kepala Gudang',
+                                status: d.warehouse.status || 'OPERASIONAL DC',
+                                statusColor: d.warehouse.statusColor || 'bg-blue-50 text-blue-700 border-blue-200'
+                            };
+                        }
+                        this.criticalItems = d.critical_items || [];
+                        this.branchSalesData = d.branches || [];
+                        this.isRealtimeSource = true;
+                        return;
+                    }
+                }
+            } catch (err) {
+                console.warn('API error, falling back to local cache', err);
+            }
+
+            // Fallback to local storage if offline
+            this.loadBranchesFallback();
+            this.loadCriticalItemsFallback();
+            this.loadSalesDataFallback();
+        },
+
+        loadBranchesFallback() {
             try {
                 const stored = localStorage.getItem('pos_ilp_branches_v1');
                 if (stored) {
@@ -455,7 +490,7 @@ function ownerDashboardApp() {
             ];
         },
 
-        loadCriticalItems() {
+        loadCriticalItemsFallback() {
             try {
                 const rawProds = localStorage.getItem('pos_ilp_inventory_products_v1');
                 if (rawProds) {
@@ -480,7 +515,7 @@ function ownerDashboardApp() {
             this.criticalItems = [];
         },
 
-        loadSalesData() {
+        loadSalesDataFallback() {
             try {
                 const storedTrx = localStorage.getItem('pos_ilp_transactions_v1');
                 if (storedTrx) {
@@ -543,24 +578,8 @@ function ownerDashboardApp() {
             if (!this.searchQuery.trim()) return this.branches;
             const q = this.searchQuery.toLowerCase();
             return this.branches.filter(b => 
-                b.name.toLowerCase().includes(q) || 
-                b.manager.toLowerCase().includes(q)
-            );
-        },
-
-        formatRupiah(val) {
-            return 'Rp ' + Number(val || 0).toLocaleString('id-ID');
-        }
-    };
-}
-</script>
-
-        get filteredBranches() {
-            if (!this.searchQuery.trim()) return this.branches;
-            const q = this.searchQuery.toLowerCase();
-            return this.branches.filter(b => 
-                b.name.toLowerCase().includes(q) || 
-                b.manager.toLowerCase().includes(q)
+                (b.name && b.name.toLowerCase().includes(q)) || 
+                (b.manager && b.manager.toLowerCase().includes(q))
             );
         },
 

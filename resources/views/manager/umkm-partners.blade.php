@@ -286,6 +286,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
             </div>
 
             <div class="flex items-center gap-4 text-gray-500">
+                <x-notification-bell role="MANAGER" />
+                <x-realtime-network-badge />
                 <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
                     Konsinyasi UMKM Lokal
                 </span>

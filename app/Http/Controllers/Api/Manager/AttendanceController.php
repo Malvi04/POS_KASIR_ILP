@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Manager;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Shared\NotificationController;
 use App\Models\Attendance;
 use App\Models\LeaveRequest;
 use App\Models\User;
@@ -206,6 +207,19 @@ class AttendanceController extends Controller
             'status' => 'MENUNGGU',
         ]);
 
+        try {
+            NotificationController::notify(
+                role: 'MANAGER',
+                title: "Pengajuan {$validated['type']}: {$validated['staffName']}",
+                message: "Staf {$validated['staffName']} mengajukan {$validated['type']} ({$validated['date']}). Alasan: {$validated['reason']}.",
+                category: 'HR',
+                link: '/manager/absensi',
+                icon: 'event_busy',
+                color: 'amber',
+                referenceId: (string)$leave->id
+            );
+        } catch (\Throwable $e) {}
+
         return response()->json([
             'success' => true,
             'message' => 'Pengajuan izin berhasil dikirim ke Supervisor/Manager',
@@ -236,6 +250,20 @@ class AttendanceController extends Controller
             'status' => $validated['status'],
             'approved_by' => $validated['approved_by'] ?? 'Supervisor Bertugas',
         ]);
+
+        try {
+            $isApproved = $validated['status'] === 'DISETUJUI';
+            NotificationController::notify(
+                role: 'KASIR',
+                title: "Pengajuan {$leave->type} {$validated['status']}",
+                message: "Permohonan {$leave->type} ({$leave->date_range}) untuk staf {$leave->staff_name} telah {$validated['status']}.",
+                category: 'HR',
+                link: '/kasir/session',
+                icon: $isApproved ? 'check_circle' : 'cancel',
+                color: $isApproved ? 'emerald' : 'rose',
+                referenceId: (string)$leave->id
+            );
+        } catch (\Throwable $e) {}
 
         return response()->json([
             'success' => true,

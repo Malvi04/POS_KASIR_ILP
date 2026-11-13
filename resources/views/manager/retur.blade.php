@@ -981,15 +981,13 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
                 <span class="material-symbols-rounded absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">search</span>
                 <input type="text" x-model="searchQuery" placeholder="Cari dokumen, kasir, SKU, produk, driver..." class="w-full bg-[#f1f5f9] border border-transparent focus:border-blue-500 focus:bg-white rounded-xl pl-10 pr-4 py-2 text-[13px] font-medium text-slate-700 placeholder-slate-400 focus:outline-none transition-all">
             </div>
-            <div class="flex items-center gap-4">
+            <div class="flex items-center gap-3">
                 <a href="{{ url('/manager/inventory?tab=retur') }}" class="px-3 py-1.5 rounded-lg text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 flex items-center gap-1.5 transition-colors">
                     <span class="material-symbols-rounded text-[16px]">warehouse</span>
                     <span>Monitoring Stok Retur Gudang</span>
                 </a>
-                <button class="relative w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-600 transition-colors cursor-pointer" title="Notifikasi">
-                    <span class="material-symbols-rounded text-[21px]">notifications</span>
-                    <span class="absolute top-1.5 right-2 w-2 h-2 rounded-full bg-orange-500 ring-2 ring-white"></span>
-                </button>
+                <x-realtime-network-badge />
+                <x-notification-bell role="MANAGER" />
             </div>
         </header>
 

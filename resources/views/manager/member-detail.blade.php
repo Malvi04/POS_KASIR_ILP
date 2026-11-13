@@ -238,6 +238,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
             </div>
 
             <div class="flex items-center gap-4 text-gray-500">
+                <x-notification-bell role="MANAGER" />
                 <a href="{{ url('/members') }}" class="px-4 py-2 border border-gray-300 rounded-xl text-xs font-bold text-gray-700 hover:bg-gray-50">
                     Kembali ke Database
                 </a>

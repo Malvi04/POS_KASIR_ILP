@@ -20,8 +20,13 @@ use App\Http\Controllers\Api\Manager\SettingsController;
 use App\Http\Controllers\Api\Manager\StockCorrectionController;
 use App\Http\Controllers\Api\Manager\StockOpnameController;
 use App\Http\Controllers\Api\Manager\UserManagementController;
+use App\Http\Controllers\Api\Owner\AuditLogController;
+use App\Http\Controllers\Api\Owner\BranchController;
+use App\Http\Controllers\Api\Owner\OwnerDashboardController;
+use App\Http\Controllers\Api\Owner\OwnerProfileController;
 use App\Http\Controllers\Api\Shared\AuthController;
 use App\Http\Controllers\Api\Shared\MemberController;
+use App\Http\Controllers\Api\Shared\NotificationController;
 use App\Http\Controllers\Api\Shared\ProductController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -84,6 +89,7 @@ Route::prefix('pos')->group(function () {
 Route::prefix('pos')->group(function () {
     Route::get('/transactions', [TransactionController::class, 'index']);
     Route::post('/checkout', [TransactionController::class, 'checkout']);
+    Route::post('/sync-offline', [TransactionController::class, 'syncOffline']);
     Route::get('/transactions/{idOrInvoice}', [TransactionController::class, 'show']);
 });
 
@@ -121,6 +127,7 @@ Route::prefix('members')->group(function () {
 Route::prefix('reports/member-debts')->group(function () {
     Route::get('/', [MemberDebtReportController::class, 'index']);
     Route::get('/export-csv', [MemberDebtReportController::class, 'exportCsv']);
+    Route::get('/export-excel', [MemberDebtReportController::class, 'exportExcel']);
     Route::post('/payroll-cutoff', [MemberDebtReportController::class, 'processPayrollCutoff']);
 });
 
@@ -163,6 +170,7 @@ Route::prefix('inventory/stock-opname')->group(function () {
     Route::post('/{id}/verify-item', [StockOpnameController::class, 'verifyItem']);
     Route::post('/{id}/complete', [StockOpnameController::class, 'complete']);
     Route::get('/{id}/export-csv', [StockOpnameController::class, 'exportCsv']);
+    Route::get('/{id}/export-excel', [StockOpnameController::class, 'exportExcel']);
 });
 
 /*
@@ -182,6 +190,7 @@ Route::prefix('users')->group(function () {
     Route::put('/{id}', [UserManagementController::class, 'update']);
     Route::delete('/{id}', [UserManagementController::class, 'destroy']);
     Route::put('/{id}/pin', [UserManagementController::class, 'resetPin']);
+    Route::put('/{id}/password', [UserManagementController::class, 'resetPassword']);
     Route::post('/{id}/toggle-status', [UserManagementController::class, 'toggleStatus']);
 });
 
@@ -192,6 +201,18 @@ Route::prefix('settings')->group(function () {
     Route::put('/tax', [SettingsController::class, 'updateTax']);
     Route::put('/security', [SettingsController::class, 'updateSecurity']);
 });
+
+// Owner Executive API Endpoints
+Route::prefix('owner')->group(function () {
+    Route::get('/dashboard-summary', [OwnerDashboardController::class, 'summary']);
+    Route::get('/audit-logs', [AuditLogController::class, 'index']);
+    Route::post('/audit-logs', [AuditLogController::class, 'store']);
+    Route::get('/profile', [OwnerProfileController::class, 'show']);
+    Route::put('/profile', [OwnerProfileController::class, 'update']);
+});
+
+// Branch & Warehouse Management API
+Route::apiResource('branches', BranchController::class);
 
 // Konsolidasi Laporan 3 Cabang & Real-time P&L (Owner / Superadmin)
 Route::prefix('reports')->group(function () {
@@ -288,5 +309,14 @@ Route::prefix('goods-receipts')->group(function () {
     Route::post('/', [GoodsReceiptController::class, 'store']);
     Route::post('/{id}/verify', [GoodsReceiptController::class, 'verify']);
     Route::put('/{id}/status', [GoodsReceiptController::class, 'updateStatus']);
+});
+
+// Sistem Notifikasi Realtime Berdasarkan Role
+Route::prefix('notifications')->group(function () {
+    Route::get('/', [NotificationController::class, 'index']);
+    Route::post('/', [NotificationController::class, 'store']);
+    Route::post('/mark-read/{id?}', [NotificationController::class, 'markAsRead']);
+    Route::post('/clear-all', [NotificationController::class, 'clearAll']);
+    Route::delete('/{id}', [NotificationController::class, 'destroy']);
 });
 

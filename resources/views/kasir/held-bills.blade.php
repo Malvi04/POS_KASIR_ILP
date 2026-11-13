@@ -165,6 +165,8 @@
 }"
 x-init="initOpening(); initHeldBills();"
 @pos-session-sync.window="initOpening(); initHeldBills();"
+@pos:held_bills_updated.window="initHeldBills()"
+@pos:sync-all.window="initOpening(); initHeldBills();"
 class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden">
 
     <!-- Sidebar Kasir -->

@@ -233,6 +233,10 @@
     get totalVarianceUnits() { return this.items.reduce((sum, i) => sum + (i.is_audited ? i.variance : 0), 0); },
     get totalVarianceValue() { return this.items.reduce((sum, i) => sum + (i.is_audited ? (i.variance_value || 0) : 0), 0); },
 
+    exportExcelUrl() {
+        return this.activeSessionId ? `/api/inventory/stock-opname/${this.activeSessionId}/export-excel` : '#';
+    },
+
     exportCsvUrl() {
         return this.activeSessionId ? `/api/inventory/stock-opname/${this.activeSessionId}/export-csv` : '#';
     },
@@ -264,6 +268,9 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
             </div>
 
             <div class="flex items-center gap-3">
+                <x-realtime-network-badge />
+                <x-notification-bell role="MANAGER" />
+
                 <template x-if="currentSession && currentSession.status === 'DRAFT'">
                     <button type="button"
                             @click="finishNotes = ''; showFinishModal = true;"
@@ -307,11 +314,16 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                               x-text="'STATUS: ' + currentSession.status">
                         </span>
                     </template>
+                    <a :href="exportExcelUrl()"
+                       class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors">
+                        <span class="material-symbols-rounded text-[17px]">table_chart</span>
+                        <span>Ekspor Excel (.xlsx)</span>
+                    </a>
                     <a :href="exportCsvUrl()"
                        download
                        class="px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 rounded-xl text-xs font-bold text-gray-700 flex items-center gap-1.5 shadow-xs transition-colors">
-                        <span class="material-symbols-rounded text-[16px] text-emerald-600">table_view</span>
-                        <span>Ekspor Variance Report (CSV)</span>
+                        <span class="material-symbols-rounded text-[16px] text-gray-500">csv</span>
+                        <span>CSV</span>
                     </a>
                 </div>
             </div>

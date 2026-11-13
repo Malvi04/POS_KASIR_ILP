@@ -73,34 +73,51 @@ class ProductController extends Controller
             $query->where('supplier_id', $supplierId);
         }
 
-        // Summary KPI Metrics (single aggregate query instead of 8 separate table scans)
-        $kpi = Product::selectRaw(
-            'COUNT(*) as total_products,'
-            . ' COALESCE(SUM(CASE WHEN stock <= min_stock AND stock > 0 THEN 1 ELSE 0 END), 0) as low_stock_count,'
-            . ' COALESCE(SUM(CASE WHEN stock <= 0 THEN 1 ELSE 0 END), 0) as out_of_stock_count,'
-            . ' COALESCE(SUM(CASE WHEN expired_date IS NOT NULL AND expired_date BETWEEN ? AND ? THEN 1 ELSE 0 END), 0) as critical_expired_count,'
-            . ' COALESCE(SUM(CASE WHEN expired_date IS NOT NULL AND expired_date BETWEEN ? AND ? THEN 1 ELSE 0 END), 0) as warning_expired_count,'
-            . ' COALESCE(SUM(CASE WHEN is_consignment THEN 1 ELSE 0 END), 0) as consignment_count,'
-            . ' COALESCE(SUM(stock), 0) as total_stock_units,'
-            . ' COALESCE(SUM(stock * cost_price), 0) as total_inventory_value',
-            [
-                $today->toDateString(),
-                $today->copy()->addDays(14)->toDateString(),
-                $today->copy()->addDays(15)->toDateString(),
-                $today->copy()->addDays(30)->toDateString(),
-            ]
-        )->first();
+        // Summary KPI Metrics with 60-second micro-cache for 18,000+ products scale
+        $kpi = \Illuminate\Support\Facades\Cache::remember('products_kpi_summary_' . $today->toDateString(), 60, function () use ($today) {
+            $raw = Product::selectRaw(
+                'COUNT(*) as total_products,'
+                . ' COALESCE(SUM(CASE WHEN stock <= min_stock AND stock > 0 THEN 1 ELSE 0 END), 0) as low_stock_count,'
+                . ' COALESCE(SUM(CASE WHEN stock <= 0 THEN 1 ELSE 0 END), 0) as out_of_stock_count,'
+                . ' COALESCE(SUM(CASE WHEN expired_date IS NOT NULL AND expired_date BETWEEN ? AND ? THEN 1 ELSE 0 END), 0) as critical_expired_count,'
+                . ' COALESCE(SUM(CASE WHEN expired_date IS NOT NULL AND expired_date BETWEEN ? AND ? THEN 1 ELSE 0 END), 0) as warning_expired_count,'
+                . ' COALESCE(SUM(CASE WHEN is_consignment THEN 1 ELSE 0 END), 0) as consignment_count,'
+                . ' COALESCE(SUM(stock), 0) as total_stock_units,'
+                . ' COALESCE(SUM(stock * cost_price), 0) as total_inventory_value',
+                [
+                    $today->toDateString(),
+                    $today->copy()->addDays(14)->toDateString(),
+                    $today->copy()->addDays(15)->toDateString(),
+                    $today->copy()->addDays(30)->toDateString(),
+                ]
+            )->first();
 
-        $totalProducts = (int) $kpi->total_products;
-        $lowStockCount = (int) $kpi->low_stock_count;
-        $outOfStockCount = (int) $kpi->out_of_stock_count;
-        $criticalExpiredCount = (int) $kpi->critical_expired_count;
-        $warningExpiredCount = (int) $kpi->warning_expired_count;
-        $consignmentCount = (int) $kpi->consignment_count;
-        $totalStockUnits = (int) $kpi->total_stock_units;
-        $totalInventoryValue = (float) $kpi->total_inventory_value;
+            return $raw ? [
+                'total_products' => (int) $raw->total_products,
+                'low_stock_count' => (int) $raw->low_stock_count,
+                'out_of_stock_count' => (int) $raw->out_of_stock_count,
+                'critical_expired_count' => (int) $raw->critical_expired_count,
+                'warning_expired_count' => (int) $raw->warning_expired_count,
+                'consignment_count' => (int) $raw->consignment_count,
+                'total_stock_units' => (int) $raw->total_stock_units,
+                'total_inventory_value' => (float) $raw->total_inventory_value,
+            ] : [];
+        });
+
+        $totalProducts = (int) ($kpi['total_products'] ?? 0);
+        $lowStockCount = (int) ($kpi['low_stock_count'] ?? 0);
+        $outOfStockCount = (int) ($kpi['out_of_stock_count'] ?? 0);
+        $criticalExpiredCount = (int) ($kpi['critical_expired_count'] ?? 0);
+        $warningExpiredCount = (int) ($kpi['warning_expired_count'] ?? 0);
+        $consignmentCount = (int) ($kpi['consignment_count'] ?? 0);
+        $totalStockUnits = (int) ($kpi['total_stock_units'] ?? 0);
+        $totalInventoryValue = (float) ($kpi['total_inventory_value'] ?? 0.0);
 
         $paginated = $query->orderBy('name', 'asc')->paginate($perPage);
+
+        $categories = \Illuminate\Support\Facades\Cache::remember('products_categories_distinct', 300, function () {
+            return array_merge(['Semua'], Product::distinct()->whereNotNull('category')->orderBy('category')->pluck('category')->toArray());
+        });
 
         return response()->json([
             'success' => true,
@@ -114,7 +131,7 @@ class ProductController extends Controller
                 'total_stock_units' => $totalStockUnits,
                 'total_inventory_value' => $totalInventoryValue,
             ],
-            'categories' => array_merge(['Semua'], Product::distinct()->whereNotNull('category')->orderBy('category')->pluck('category')->toArray()),
+            'categories' => $categories,
             'data' => collect($paginated->items())->map(fn($p) => $this->formatProductPayload($p)),
             'meta' => [
                 'current_page' => $paginated->currentPage(),
@@ -132,7 +149,7 @@ class ProductController extends Controller
     {
         $q = trim($request->query('q', ''));
         $category = $request->query('category');
-        $limit = min((int) $request->query('limit', 30), 100);
+        $limit = min((int) $request->query('limit', 30), 500);
 
         $query = Product::with(['supplier', 'units']);
 
@@ -140,26 +157,48 @@ class ProductController extends Controller
             $query->where('category', $category);
         }
 
-        if ($q !== '') {
-            // First check if input looks like an exact barcode
-            if (is_numeric($q) && strlen($q) >= 6) {
-                $exactBarcode = (clone $query)->where('barcode', $q)->first();
-                if ($exactBarcode) {
-                    return response()->json([
-                        'success' => true,
-                        'is_exact_barcode' => true,
-                        'count' => 1,
-                        'data' => [$this->formatProductPayload($exactBarcode)],
-                    ]);
-                }
-            }
-
-            $query->where(function ($sub) use ($q) {
-                $sub->where('barcode', 'like', "%{$q}%")
-                    ->orWhere('sku', 'like', "%{$q}%")
-                    ->orWhereRaw('LOWER(name) LIKE ?', ['%' . strtolower($search = $q) . '%']);
+        if ($q === '') {
+            $catKey = $category ? preg_replace('/[^a-zA-Z0-9_]/', '', $category) : 'all';
+            $cacheKey = "pos_products_default_{$catKey}_{$limit}";
+            $cachedPayload = \Illuminate\Support\Facades\Cache::remember($cacheKey, 30, function () use ($query, $limit) {
+                return $query->orderBy('name', 'asc')
+                    ->limit($limit)
+                    ->get()
+                    ->map(fn($p) => $this->formatProductPayload($p))
+                    ->values()
+                    ->all();
             });
+
+            return response()->json([
+                'success' => true,
+                'is_exact_barcode' => false,
+                'count' => count($cachedPayload),
+                'data' => $cachedPayload,
+            ])->header('Cache-Control', 'private, max-age=10, stale-while-revalidate=30');
         }
+
+        // First check if input looks like an exact barcode
+        if (is_numeric($q) && strlen($q) >= 6) {
+            $exactBarcode = (clone $query)->where('barcode', $q)->first();
+            if ($exactBarcode) {
+                return response()->json([
+                    'success' => true,
+                    'is_exact_barcode' => true,
+                    'count' => 1,
+                    'data' => [$this->formatProductPayload($exactBarcode)],
+                ])->header('Cache-Control', 'private, max-age=10, stale-while-revalidate=20');
+            }
+        }
+
+        $lowerQ = strtolower($q);
+        $query->where(function ($sub) use ($q, $lowerQ) {
+            $sub->where('barcode', 'like', "{$q}%")
+                ->orWhere('sku', 'like', "{$q}%")
+                ->orWhereRaw('LOWER(name) LIKE ?', ["{$lowerQ}%"])
+                ->orWhere('barcode', 'like', "%{$q}%")
+                ->orWhere('sku', 'like', "%{$q}%")
+                ->orWhereRaw('LOWER(name) LIKE ?', ["%{$lowerQ}%"]);
+        });
 
         $products = $query->orderBy('name', 'asc')
             ->limit($limit)
@@ -170,7 +209,7 @@ class ProductController extends Controller
             'is_exact_barcode' => false,
             'count' => $products->count(),
             'data' => $products->map(fn($p) => $this->formatProductPayload($p)),
-        ]);
+        ])->header('Cache-Control', 'private, max-age=5, stale-while-revalidate=10');
     }
 
     /**
@@ -179,17 +218,23 @@ class ProductController extends Controller
     public function lookupBarcode(string $barcode): JsonResponse
     {
         $barcode = trim($barcode);
-        $product = Product::with(['supplier', 'units'])->where('barcode', $barcode)->first();
+        $cacheKey = 'pos_barcode_lookup_' . md5($barcode);
 
-        // Also check if barcode matches a product unit (e.g. barcode for 1 Dus)
-        if (!$product) {
-            $unit = ProductUnit::with('product')->where('barcode', $barcode)->first();
-            if ($unit && $unit->product) {
-                $product = $unit->product;
+        $payload = \Illuminate\Support\Facades\Cache::remember($cacheKey, 60, function () use ($barcode) {
+            $product = Product::with(['supplier', 'units'])->where('barcode', $barcode)->first();
+
+            // Also check if barcode matches a product unit (e.g. barcode for 1 Dus)
+            if (!$product) {
+                $unit = ProductUnit::with('product')->where('barcode', $barcode)->first();
+                if ($unit && $unit->product) {
+                    $product = $unit->product;
+                }
             }
-        }
 
-        if (!$product) {
+            return $product ? $this->formatProductPayload($product) : null;
+        });
+
+        if (!$payload) {
             return response()->json([
                 'success' => false,
                 'message' => "Produk dengan barcode [{$barcode}] tidak ditemukan dalam sistem katalog.",
@@ -200,8 +245,8 @@ class ProductController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Produk berhasil dipindai.',
-            'data' => $this->formatProductPayload($product),
-        ]);
+            'data' => $payload,
+        ])->header('Cache-Control', 'private, max-age=30, stale-while-revalidate=60');
     }
 
     /**

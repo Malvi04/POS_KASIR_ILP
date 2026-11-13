@@ -1,6 +1,6 @@
 # 🛒 POS Minimarket ILP (Point of Sale & Retail Management System)
 
-[![Laravel](https://img.shields.io/badge/Laravel-11.x-FF2D20?style=for-the-badge&logo=laravel&logoColor=white)](https://laravel.com)
+[![Laravel](https://img.shields.io/badge/Laravel-13.x-FF2D20?style=for-the-badge&logo=laravel&logoColor=white)](https://laravel.com)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.x-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com)
 [![Alpine.js](https://img.shields.io/badge/Alpine.js-3.x-8BC0D0?style=for-the-badge&logo=alpinedotjs&logoColor=white)](https://alpinejs.dev)
 [![SQLite](https://img.shields.io/badge/SQLite-003B57?style=for-the-badge&logo=sqlite&logoColor=white)](https://sqlite.org)
@@ -11,6 +11,7 @@ Sistem Kasir (Point of Sale) dan Manajemen Retail Koperasi Minimarket ILP berbas
 ---
 
 ## 📑 Daftar Isi
+- [📚 Dokumentasi Komprehensif Backend & Sistem](docs/DOKUMENTASI_LENGKAP_BACKEND_DAN_SISTEM_POS.md)
 - [Ringkasan Pembaruan Terkini](#-ringkasan-pembaruan-terkini)
 - [Fitur Utama Sistem](#-fitur-utama-sistem)
   - [1. Modul Kasir (Cashier POS Frontline)](#1-modul-kasir-cashier-pos-frontline)
@@ -174,7 +175,7 @@ Untuk mempermudah pengujian dan demonstrasi sistem, gunakan kredensial bawaan be
 ## 💻 Panduan Instalasi & Menjalankan
 
 ### Prasyarat Sistem
-- **PHP**: Versi `>= 8.2` (dengan ekstensi `pdo_sqlite`, `mbstring`, `openssl`, `curl`)
+- **PHP**: Versi `>= 8.3` (dengan ekstensi `pdo_sqlite`, `pdo_pgsql`, `mbstring`, `openssl`, `curl`)
 - **Composer**: Versi `>= 2.0`
 - **Node.js**: Versi `>= 18.x` & **NPM**: Versi `>= 9.x`
 
@@ -266,7 +267,7 @@ POS_KASIR_ILP/
 
 ## 🛠️ Teknologi yang Digunakan
 
-* **Backend Framework**: [Laravel 11](https://laravel.com/)
+* **Backend Framework**: [Laravel 13](https://laravel.com/) (v13.17.0)
 * **CSS Framework**: [Tailwind CSS 3](https://tailwindcss.com/)
 * **Reactivity & Client State**: [Alpine.js 3](https://alpinejs.dev/)
 * **Icons & Typografi**: [Google Material Symbols Rounded](https://fonts.google.com/icons) & [Instrument Sans Font](https://fonts.google.com/specimen/Instrument+Sans)

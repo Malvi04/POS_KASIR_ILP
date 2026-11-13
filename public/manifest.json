@@ -1,0 +1,17 @@
+{
+  "name": "POS Kasir Minimarket ILP",
+  "short_name": "POS ILP",
+  "description": "Sistem Kasir & Retail Minimarket PT Indo Lampung Perkasa dengan Fitur Offline Resiliency 100%",
+  "start_url": "/pos",
+  "display": "standalone",
+  "background_color": "#0052cc",
+  "theme_color": "#0052cc",
+  "orientation": "landscape",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}

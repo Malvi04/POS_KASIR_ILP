@@ -258,7 +258,34 @@ function ownerSettingsApp() {
             masterPin: '882910'
         },
 
-        init() {
+        async init() {
+            try {
+                const res = await fetch('/api/settings');
+                if (res.ok) {
+                    const result = await res.json();
+                    if (result.success && result.data) {
+                        const st = result.data.store || {};
+                        const sec = result.data.security || {};
+                        this.settings.storeName = st.store_name || this.settings.storeName;
+                        this.settings.coopLicense = st.coop_license || this.settings.coopLicense;
+                        this.settings.taxId = st.store_tax_id || this.settings.taxId;
+                        this.settings.phone = st.store_phone || this.settings.phone;
+                        this.settings.address = st.store_address || this.settings.address;
+                        this.settings.openTime = st.open_time || this.settings.openTime;
+                        this.settings.closeTime = st.close_time || this.settings.closeTime;
+
+                        if (sec.pin_for_void !== undefined) this.settings.pinForVoid = sec.pin_for_void;
+                        if (sec.pin_for_refund !== undefined) this.settings.pinForRefund = sec.pin_for_refund;
+                        if (sec.pin_for_drawer !== undefined) this.settings.pinForDrawer = sec.pin_for_drawer;
+                        if (sec.pin_for_credit_override !== undefined) this.settings.pinForCreditOverride = sec.pin_for_credit_override;
+                        if (sec.master_pin) this.settings.masterPin = sec.master_pin;
+                        return;
+                    }
+                }
+            } catch(e) {
+                console.warn('API /api/settings error, reading local cache', e);
+            }
+
             try {
                 const stored = localStorage.getItem('pos_ilp_store_settings_v1') || localStorage.getItem('pos_ilp_manager_settings_v1');
                 if (stored) {
@@ -269,7 +296,7 @@ function ownerSettingsApp() {
             } catch(e) {}
         },
 
-        saveAllSettings() {
+        async saveAllSettings() {
             const now = new Date();
             const hh = String(now.getHours()).padStart(2, '0');
             const mm = String(now.getMinutes()).padStart(2, '0');
@@ -277,10 +304,40 @@ function ownerSettingsApp() {
             this.settings.savedAt = this.lastSaved;
 
             try {
+                await fetch('/api/settings/store', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                    body: JSON.stringify({
+                        storeName: this.settings.storeName,
+                        coopLicense: this.settings.coopLicense,
+                        taxId: this.settings.taxId,
+                        phone: this.settings.phone,
+                        address: this.settings.address,
+                        openTime: this.settings.openTime,
+                        closeTime: this.settings.closeTime
+                    })
+                });
+
+                await fetch('/api/settings/security', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                    body: JSON.stringify({
+                        pinForVoid: this.settings.pinForVoid,
+                        pinForRefund: this.settings.pinForRefund,
+                        pinForDrawer: this.settings.pinForDrawer,
+                        pinForCreditOverride: this.settings.pinForCreditOverride,
+                        masterPin: this.settings.masterPin
+                    })
+                });
+            } catch(e) {
+                console.warn('API save settings error', e);
+            }
+
+            try {
                 localStorage.setItem('pos_ilp_store_settings_v1', JSON.stringify(this.settings));
                 localStorage.setItem('pos_ilp_manager_settings_v1', JSON.stringify(this.settings));
                 if (window.triggerToast) {
-                    window.triggerToast('Pengaturan Toko & Kebijakan Owner berhasil disimpan!', 'success');
+                    window.triggerToast('Pengaturan Toko & Kebijakan Owner berhasil disimpan ke database!', 'success');
                 }
             } catch(e) {
                 if (window.triggerToast) window.triggerToast('Gagal menyimpan pengaturan: ' + e.message, 'error');

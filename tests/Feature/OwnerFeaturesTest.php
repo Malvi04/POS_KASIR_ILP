@@ -183,4 +183,145 @@ class OwnerFeaturesTest extends TestCase
         $cutoffRes->assertStatus(200);
         $cutoffRes->assertJsonPath('success', true);
     }
+
+    /**
+     * 6. Test Owner Dashboard Summary API.
+     */
+    public function test_owner_dashboard_summary_api(): void
+    {
+        $response = $this->getJson('/api/owner/dashboard-summary');
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('success', true);
+        $response->assertJsonStructure([
+            'success',
+            'data' => [
+                'total_sales_today',
+                'total_trx_today',
+                'total_profit_today',
+                'branches',
+                'warehouse',
+                'critical_items',
+                'low_stock_count',
+                'total_products',
+                'total_branches',
+            ],
+        ]);
+    }
+
+    /**
+     * 7. Test Owner Branch Management CRUD API.
+     */
+    public function test_owner_branch_management_crud_api(): void
+    {
+        // 1. List branches
+        $listRes = $this->getJson('/api/branches');
+        $listRes->assertStatus(200);
+        $listRes->assertJsonPath('success', true);
+
+        // 2. Create branch
+        $createRes = $this->postJson('/api/branches', [
+            'name' => 'Cabang Baru Test Unit',
+            'facilityType' => 'store',
+            'address' => 'Jl. Perkebunan Sawit No. 10',
+            'manager' => 'Manager Baru Test',
+            'managerEmail' => 'manager_baru@ilp.com',
+            'status' => 'AKTIF',
+        ]);
+        $createRes->assertStatus(201);
+        $branchId = $createRes->json('data.id');
+        $this->assertNotNull($branchId);
+
+        // 3. Update branch
+        $updateRes = $this->putJson("/api/branches/{$branchId}", [
+            'name' => 'Cabang Baru Test Unit Updated',
+            'facilityType' => 'store',
+            'manager' => 'Manager Baru Senior',
+            'status' => 'AKTIF',
+        ]);
+        $updateRes->assertStatus(200);
+        $this->assertEquals('Cabang Baru Test Unit Updated', $updateRes->json('data.name'));
+
+        // 4. Delete branch
+        $deleteRes = $this->deleteJson("/api/branches/{$branchId}");
+        $deleteRes->assertStatus(200);
+    }
+
+    /**
+     * 8. Test Owner Audit Logs API.
+     */
+    public function test_owner_audit_logs_api(): void
+    {
+        // 1. Record log
+        $postRes = $this->postJson('/api/owner/audit-logs', [
+            'user_name' => 'Ir. Hartono Wibowo (Owner)',
+            'user_role' => 'Owner',
+            'location' => 'Pusat',
+            'category' => 'User & Hak Akses',
+            'action_name' => 'Otorisasi PIN Khusus',
+            'description' => 'Test event otorisasi audit log owner',
+        ]);
+        $postRes->assertStatus(201);
+
+        // 2. Query logs
+        $getRes = $this->getJson('/api/owner/audit-logs');
+        $getRes->assertStatus(200);
+        $getRes->assertJsonPath('success', true);
+        $this->assertNotEmpty($getRes->json('data'));
+    }
+
+    /**
+     * 9. Test Owner Profile API.
+     */
+    public function test_owner_profile_api(): void
+    {
+        // 1. Get profile
+        $getRes = $this->getJson('/api/owner/profile');
+        $getRes->assertStatus(200);
+        $getRes->assertJsonPath('success', true);
+
+        // 2. Update profile
+        $putRes = $this->putJson('/api/owner/profile', [
+            'name' => 'Ir. Hartono Wibowo, M.M.',
+            'title' => 'Pemilik Utama & Dewan Pengawas',
+            'email' => 'hartono.owner@ilp-pos.co.id',
+            'phone' => '0812-9988-7766',
+            'nik' => '3275010009990001',
+            'avatar' => 'https://ui-avatars.com/api/?name=Hartono+Wibowo',
+            'defaultBranch' => 'all',
+            'alertLowStock' => true,
+            'compactTable' => false,
+        ]);
+        $putRes->assertStatus(200);
+        $this->assertEquals('Ir. Hartono Wibowo, M.M.', $putRes->json('data.name'));
+    }
+
+    /**
+     * 10. Test Owner Staff Password Reset API.
+     */
+    public function test_owner_staff_password_reset_api(): void
+    {
+        $user = User::firstOrCreate(
+            ['username' => 'staff_pwd_test'],
+            [
+                'name' => 'Staff Reset Test',
+                'nik' => 'NIK-STAFF-PWD-01',
+                'email' => 'staff_pwd@ilp.com',
+                'role' => 'Kasir',
+                'pin' => '123456',
+                'password' => bcrypt('oldpassword'),
+                'is_active' => true,
+            ]
+        );
+        if (empty($user->nik)) {
+            $user->update(['nik' => 'NIK-STAFF-PWD-01']);
+        }
+
+        $res = $this->putJson("/api/users/{$user->id}/password", [
+            'password' => 'newsecretpassword123',
+        ]);
+
+        $res->assertStatus(200);
+        $res->assertJsonPath('success', true);
+    }
 }

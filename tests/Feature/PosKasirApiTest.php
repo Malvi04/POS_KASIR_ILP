@@ -46,6 +46,13 @@ class PosKasirApiTest extends TestCase
 
         // Ensure test product has enough stock for checkout & barcode tests
         Product::where('barcode', '8991234567890')->update(['stock' => 100]);
+
+        // Ensure near-expired test product has dynamic near-expired date (H-6)
+        Product::where('barcode', '8993456789012')->update([
+            'stock' => 50,
+            'expired_date' => Carbon::today()->addDays(6)->toDateString(),
+            'clearance_discount_percent' => 20.0,
+        ]);
     }
 
     /**
@@ -162,7 +169,7 @@ class PosKasirApiTest extends TestCase
     {
         // 1. Prepare open shift
         $shift = CashierShift::create([
-            'shift_code' => 'CS-TEST-' . rand(100, 999),
+            'shift_code' => 'CS-TEST-' . uniqid() . '-' . rand(1000, 9999),
             'terminal_code' => 'POS-02',
             'cashier_nik' => '202409821002',
             'cashier_name' => 'Budi Kurniawan',

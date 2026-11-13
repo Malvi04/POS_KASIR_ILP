@@ -237,7 +237,20 @@ function ownerProfileApp() {
             compactTable: false
         },
 
-        init() {
+        async init() {
+            try {
+                const res = await fetch('/api/owner/profile');
+                if (res.ok) {
+                    const result = await res.json();
+                    if (result.success && result.data) {
+                        this.profile = { ...this.profile, ...result.data };
+                        return;
+                    }
+                }
+            } catch(e) {
+                console.warn('API /api/owner/profile error, reading local cache', e);
+            }
+
             try {
                 const raw = localStorage.getItem('pos_ilp_owner_profile_v1');
                 if (raw) {
@@ -251,7 +264,26 @@ function ownerProfileApp() {
             }
         },
 
-        saveProfile() {
+        async saveProfile() {
+            try {
+                const res = await fetch('/api/owner/profile', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify(this.profile)
+                });
+                if (res.ok) {
+                    if (typeof triggerToast === 'function') {
+                        triggerToast('Profil dan preferensi Owner berhasil disimpan ke database!', 'success');
+                    }
+                }
+            } catch(e) {
+                console.warn('API save profile error', e);
+            }
+
             try {
                 localStorage.setItem('pos_ilp_owner_profile_v1', JSON.stringify(this.profile));
                 if (typeof triggerToast === 'function') {

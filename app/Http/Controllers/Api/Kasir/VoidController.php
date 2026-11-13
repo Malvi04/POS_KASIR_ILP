@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Kasir;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Shared\NotificationController;
 use App\Models\CashierShift;
 use App\Models\Product;
 use App\Models\Transaction;
@@ -118,6 +119,19 @@ class VoidController extends Controller
             'reason' => $validated['reason'],
             'ip_address' => $request->ip(),
         ]);
+
+        try {
+            NotificationController::notify(
+                role: 'MANAGER',
+                title: "Void Item: {$validated['item_name']}",
+                message: "Kasir {$validated['cashier_name']} membatalkan {$validated['item_qty']}x {$validated['item_name']} (Rp " . number_format($validated['amount_voided'], 0, ',', '.') . ") di terminal {$validated['terminal_code']}.",
+                category: 'VOID',
+                link: '/manager/dashboard',
+                icon: 'remove_shopping_cart',
+                color: 'rose',
+                referenceId: $validated['item_sku']
+            );
+        } catch (\Throwable $e) {}
 
         return response()->json([
             'success' => true,
@@ -244,6 +258,39 @@ class VoidController extends Controller
                 'reason' => $validated['reason'],
                 'ip_address' => $request->ip(),
             ]);
+
+            try {
+                NotificationController::notify(
+                    role: 'MANAGER',
+                    title: "Otorisasi Void: {$transaction->invoice_number}",
+                    message: "Supervisor {$supervisor->name} menyetujui pembatalan nota {$transaction->invoice_number} senilai Rp " . number_format($transaction->grand_total, 0, ',', '.') . ". Alasan: {$validated['reason']}.",
+                    category: 'VOID',
+                    link: '/manager/dashboard',
+                    icon: 'cancel',
+                    color: 'rose',
+                    referenceId: $transaction->invoice_number
+                );
+                NotificationController::notify(
+                    role: 'OWNER',
+                    title: "Audit Void Nota: {$transaction->invoice_number}",
+                    message: "Transaksi dibatalkan (VOID) senilai Rp " . number_format($transaction->grand_total, 0, ',', '.') . " di terminal kasir {$transaction->cashier_name}.",
+                    category: 'VOID',
+                    link: '/owner/audit-log',
+                    icon: 'security',
+                    color: 'rose',
+                    referenceId: $transaction->invoice_number
+                );
+                NotificationController::notify(
+                    role: 'KASIR',
+                    title: "Approval Void Disetujui",
+                    message: "Pembatalan nota {$transaction->invoice_number} berhasil diotorisasi oleh {$supervisor->name}.",
+                    category: 'VOID',
+                    link: '/pos',
+                    icon: 'verified',
+                    color: 'emerald',
+                    referenceId: $transaction->invoice_number
+                );
+            } catch (\Throwable $e) {}
 
             return response()->json([
                 'success' => true,

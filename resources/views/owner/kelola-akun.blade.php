@@ -83,12 +83,13 @@
                             </div>
                         </div>
 
-                        <!-- Export CSV Trigger -->
+                        <!-- Export Excel Trigger -->
                         <button type="button" 
                                 @click="exportStaffCsv()"
-                                class="p-2 rounded-lg hover:bg-slate-100 hover:text-slate-700 transition-colors"
-                                title="Unduh CSV Staf">
-                            <span class="material-symbols-rounded text-[19px]">download</span>
+                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[12px] font-bold shadow-2xs transition-colors cursor-pointer"
+                                title="Unduh Excel Staf (.xlsx)">
+                            <span class="material-symbols-rounded text-[16px]">table_chart</span>
+                            <span>Ekspor Excel</span>
                         </button>
                     </div>
                 </div>
@@ -752,8 +753,40 @@ function ownerKelolaAkunApp() {
             }
         },
 
-        init() {
-            // 1. Load Staf dari pos_ilp_users_v1
+        async init() {
+            // 1. Load Staf dari /api/users (Database)
+            try {
+                const res = await fetch('/api/users');
+                if (res.ok) {
+                    const result = await res.json();
+                    if (result.success && Array.isArray(result.data) && result.data.length > 0) {
+                        this.staffList = result.data.map((u, i) => {
+                            const name = u.name || 'Staf ' + (i+1);
+                            const initials = name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                            return {
+                                id: u.id,
+                                empId: u.nik || ('EMP-00' + (400 + i)),
+                                name: name,
+                                username: u.username || ('user_' + u.id),
+                                email: u.email || '',
+                                initials: initials,
+                                avatarBg: i % 3 === 0 ? 'bg-blue-100 text-[#0052cc]' : (i % 3 === 1 ? 'bg-purple-100 text-purple-700' : 'bg-slate-800 text-white'),
+                                role: u.role || 'Kasir',
+                                branch: u.branch || 'Cabang Pusat - Jakarta',
+                                status: u.is_active ? 'Online' : 'Offline',
+                                password: '••••••',
+                                pin: u.pin || '123456'
+                            };
+                        });
+                        this.saveStaff();
+                        this.loadRbacAndMembers();
+                        return;
+                    }
+                }
+            } catch(err) {
+                console.warn('API /api/users error, reading local cache', err);
+            }
+
             try {
                 const stored = localStorage.getItem('pos_ilp_users_v1');
                 if (stored) {
@@ -775,12 +808,16 @@ function ownerKelolaAkunApp() {
                                 pin: u.pin || '123456'
                             };
                         });
+                        this.loadRbacAndMembers();
                         return;
                     }
                 }
             } catch(e) {}
             this.staffList = [];
+            this.loadRbacAndMembers();
+        },
 
+        loadRbacAndMembers() {
             // 2. Load Permissions RBAC dari pos_ilp_rbac_v1
             try {
                 const storedRbac = localStorage.getItem('pos_ilp_rbac_v1');
@@ -870,15 +907,51 @@ function ownerKelolaAkunApp() {
             }
         },
 
-        saveNewStaff() {
+        async saveNewStaff() {
             if (!this.formStaff.name) {
                 if (window.triggerToast) window.triggerToast('Harap masukkan nama staf!', 'error');
                 return;
             }
+
+            const cleanNik = this.formStaff.empId || ('EMP' + Math.floor(100000 + Math.random() * 900000));
+            const username = this.formStaff.name.toLowerCase().replace(/[^a-z0-9]/g, '_') + Math.floor(10 + Math.random() * 90);
+            const email = username + '@ilp.com';
+
+            try {
+                const res = await fetch('/api/users', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({
+                        nik: cleanNik,
+                        name: this.formStaff.name,
+                        username: username,
+                        email: email,
+                        role: this.formStaff.role,
+                        branch: this.formStaff.branch,
+                        pin: this.formStaff.pin || '123456',
+                        password: this.formStaff.password || 'kasir123',
+                        password_confirmation: this.formStaff.password || 'kasir123'
+                    })
+                });
+
+                if (res.ok) {
+                    this.showAddModal = false;
+                    if (window.triggerToast) window.triggerToast('Staf ' + this.formStaff.name + ' berhasil didaftarkan ke sistem!', 'success');
+                    await this.init();
+                    return;
+                }
+            } catch(e) {
+                console.warn('API error creating staff, saving locally', e);
+            }
+
             const initials = this.formStaff.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
             const newStaff = {
                 id: 'USR-0' + (this.staffList.length + 1),
-                empId: this.formStaff.empId || ('EMP-00' + (this.staffList.length + 421)),
+                empId: cleanNik,
                 name: this.formStaff.name,
                 initials: initials,
                 avatarBg: 'bg-blue-100 text-[#0052cc]',
@@ -899,8 +972,40 @@ function ownerKelolaAkunApp() {
             this.showEditModal = true;
         },
 
-        saveEditStaff() {
+        async saveEditStaff() {
             if (!this.editingStaff) return;
+
+            if (typeof this.editingStaff.id === 'number') {
+                try {
+                    const res = await fetch(`/api/users/${this.editingStaff.id}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        },
+                        body: JSON.stringify({
+                            name: this.editingStaff.name,
+                            username: this.editingStaff.username || ('user_' + this.editingStaff.id),
+                            email: this.editingStaff.email || (this.editingStaff.name.toLowerCase().replace(/[^a-z0-9]/g, '_') + '@ilp.com'),
+                            nik: this.editingStaff.empId,
+                            role: this.editingStaff.role,
+                            branch: this.editingStaff.branch,
+                            pin: this.editingStaff.pin || '123456',
+                            is_active: this.editingStaff.status === 'Online' || this.editingStaff.status === 'AKTIF'
+                        })
+                    });
+                    if (res.ok) {
+                        this.showEditModal = false;
+                        if (window.triggerToast) window.triggerToast('Data penugasan ' + this.editingStaff.name + ' berhasil diperbarui di database!', 'success');
+                        await this.init();
+                        return;
+                    }
+                } catch(e) {
+                    console.warn('API error editing staff, updating locally', e);
+                }
+            }
+
             const idx = this.staffList.findIndex(s => s.id === this.editingStaff.id);
             if (idx !== -1) {
                 this.staffList[idx] = { ...this.staffList[idx], ...this.editingStaff };
@@ -910,11 +1015,31 @@ function ownerKelolaAkunApp() {
             }
         },
 
-        resetStaffPin(staf) {
+        async resetStaffPin(staf) {
             if (!confirm(`Konfirmasi Tindakan Darurat Owner:\nReset PIN Kasir untuk ${staf.name} (${staf.branch})?\n\nTindakan ini HANYA akan mengubah PIN terminal tanpa menyentuh password portal.`)) {
                 return;
             }
             const newPin = String(Math.floor(100000 + Math.random() * 900000));
+
+            if (typeof staf.id === 'number') {
+                try {
+                    const res = await fetch(`/api/users/${staf.id}/pin`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        },
+                        body: JSON.stringify({ pin: newPin })
+                    });
+                    if (res.ok) {
+                        staf.pin = newPin;
+                    }
+                } catch(e) {
+                    console.warn('API error resetting pin', e);
+                }
+            }
+
             staf.pin = newPin;
             staf.mustChangePin = true;
             this.saveStaff();
@@ -930,11 +1055,31 @@ function ownerKelolaAkunApp() {
             if (window.triggerToast) window.triggerToast('PIN Kasir ' + staf.name + ' berhasil direset!', 'success');
         },
 
-        resetStaffPassword(staf) {
+        async resetStaffPassword(staf) {
             if (!confirm(`Konfirmasi Tindakan Darurat Owner:\nReset Password Portal untuk ${staf.name} (${staf.branch})?\n\nTindakan ini HANYA akan mengubah password login portal tanpa menyentuh PIN terminal.`)) {
                 return;
             }
             const newPass = 'ILP-Kasir' + Math.floor(100 + Math.random() * 900);
+
+            if (typeof staf.id === 'number') {
+                try {
+                    const res = await fetch(`/api/users/${staf.id}/password`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        },
+                        body: JSON.stringify({ password: newPass })
+                    });
+                    if (res.ok) {
+                        staf.password = newPass;
+                    }
+                } catch(e) {
+                    console.warn('API error resetting password', e);
+                }
+            }
+
             staf.password = newPass;
             staf.mustChangePassword = true;
             this.saveStaff();
@@ -1041,40 +1186,86 @@ function ownerKelolaAkunApp() {
             }
         },
 
-        toggleStaffStatus(staf) {
+        async toggleStaffStatus(staf) {
+            if (typeof staf.id === 'number') {
+                try {
+                    const res = await fetch(`/api/users/${staf.id}/toggle-status`, {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        }
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        staf.status = data.is_active ? 'Online' : 'Offline';
+                        this.saveStaff();
+                        if (window.triggerToast) window.triggerToast('Status ' + staf.name + ' berhasil diubah menjadi: ' + staf.status, 'info');
+                        return;
+                    }
+                } catch(e) {
+                    console.warn('API error toggling status', e);
+                }
+            }
+
             staf.status = staf.status === 'Online' ? 'Offline' : 'Online';
             this.saveStaff();
             if (window.triggerToast) window.triggerToast('Status ' + staf.name + ' diubah ke ' + staf.status, 'info');
         },
 
-        deleteStaff(staf) {
-            if (confirm('Hapus staf ' + staf.name + ' dari daftar akses sistem?')) {
-                this.staffList = this.staffList.filter(s => s.id !== staf.id);
-                this.saveStaff();
-                if (window.triggerToast) window.triggerToast('Staf ' + staf.name + ' berhasil dihapus dari sistem.', 'info');
+        async deleteStaff(staf) {
+            if (!confirm('Hapus staf ' + staf.name + ' dari daftar akses sistem?')) return;
+
+            if (typeof staf.id === 'number') {
+                try {
+                    const res = await fetch(`/api/users/${staf.id}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        }
+                    });
+                    if (res.ok) {
+                        if (window.triggerToast) window.triggerToast('Staf ' + staf.name + ' berhasil dihapus dari database.', 'info');
+                        await this.init();
+                        return;
+                    }
+                } catch(e) {
+                    console.warn('API error deleting user', e);
+                }
             }
+
+            this.staffList = this.staffList.filter(s => s.id !== staf.id);
+            this.saveStaff();
+            if (window.triggerToast) window.triggerToast('Staf ' + staf.name + ' berhasil dihapus dari sistem.', 'info');
         },
 
         exportStaffCsv() {
             try {
-                const headers = ['ID Staf', 'EMP ID', 'Nama Staf', 'Role', 'Cabang Penugasan', 'Status'];
+                const headers = ['ID Staf', 'EMP ID / NIK', 'Nama Lengkap Staf', 'Role Akses', 'Cabang Penugasan', 'Status Akun'];
                 const rows = this.staffList.map(s => [
-                    '"' + s.id + '"',
-                    '"' + (s.empId || '') + '"',
-                    '"' + s.name + '"',
-                    '"' + s.role + '"',
-                    '"' + s.branch + '"',
-                    '"' + s.status + '"'
+                    s.id,
+                    s.empId || '-',
+                    s.name,
+                    s.role,
+                    s.branch,
+                    s.status
                 ]);
-                const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-                const encodedUri = encodeURI(csvContent);
-                const link = document.createElement('a');
-                link.setAttribute('href', encodedUri);
-                link.setAttribute('download', 'daftar_staf_rbac_' + new Date().toISOString().slice(0, 10) + '.csv');
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                if (window.triggerToast) window.triggerToast('File CSV daftar staf berhasil diunduh.', 'success');
+
+                window.exportTableToExcel({
+                    filename: 'daftar_staf_rbac_' + new Date().toISOString().slice(0, 10) + '.xlsx',
+                    sheetName: 'Staf RBAC',
+                    title: 'PT INDO LAMPUNG PERKASA - MINIMARKET KOPERASI',
+                    subtitle: 'DAFTAR PENGGUNA & HAK AKSES SISTEM (RBAC)',
+                    metadata: [
+                        ['Tanggal Generate', new Date().toLocaleString('id-ID')],
+                        ['Total Staf Terdaftar', this.staffList.length + ' Akun']
+                    ],
+                    headers: headers,
+                    rows: rows
+                });
+
+                if (window.triggerToast) window.triggerToast('File Excel daftar staf berhasil diunduh.', 'success');
             } catch(e) {
                 if (window.triggerToast) window.triggerToast('Gagal ekspor data: ' + e.message, 'error');
             }

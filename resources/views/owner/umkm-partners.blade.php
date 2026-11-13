@@ -122,12 +122,12 @@
                 <option value="non-aktif">Non-Aktif</option>
             </select>
 
-            <!-- Ekspor CSV -->
+            <!-- Ekspor Excel -->
             <button type="button" 
                     @click="exportCsv()"
-                    class="px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold shadow-2xs inline-flex items-center gap-1.5 transition-colors">
-                <span class="material-symbols-rounded text-[16px]">download</span>
-                <span>Ekspor CSV</span>
+                    class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-2xs inline-flex items-center gap-1.5 transition-colors cursor-pointer">
+                <span class="material-symbols-rounded text-[16px]">table_chart</span>
+                <span>Ekspor Excel</span>
             </button>
 
             <!-- Refresh Button -->
@@ -555,7 +555,35 @@ function umkmPartnersApp() {
             commission: 15
         },
 
-        initUmkm() {
+        async initUmkm() {
+            try {
+                const res = await fetch('/api/consignment/partners');
+                if (res.ok) {
+                    const result = await res.json();
+                    if (result.success && Array.isArray(result.data) && result.data.length > 0) {
+                        this.partners = result.data.map(p => ({
+                            id: p.id,
+                            initial: (p.name || 'U').charAt(0).toUpperCase(),
+                            initialColor: 'bg-blue-100 text-[#0052cc]',
+                            name: p.name,
+                            location: p.address || 'Bandung',
+                            category: p.category || 'Snack',
+                            skuCount: p.products_count || 1,
+                            stockStatus: 'Aman',
+                            salesTotal: (p.products_count || 0) * 250000,
+                            status: p.status || 'AKTIF',
+                            phone: p.phone || '0812-0000-0000',
+                            commission: Number(p.commission_percent) || 15,
+                            products: []
+                        }));
+                        this.saveUmkm();
+                        return;
+                    }
+                }
+            } catch (err) {
+                console.warn('API error, reading local cache', err);
+            }
+
             try {
                 const stored = localStorage.getItem('pos_ilp_umkm_partners_v1');
                 if (stored) {
@@ -617,11 +645,42 @@ function umkmPartnersApp() {
             this.showEditModal = true;
         },
 
-        saveEditPartner() {
+        async saveEditPartner() {
             if (!this.editingPartner.name) {
                 if (window.triggerToast) window.triggerToast('Harap isi nama mitra usaha!', 'error');
                 return;
             }
+
+            if (typeof this.editingPartner.id === 'number') {
+                try {
+                    const res = await fetch(`/api/consignment/partners/${this.editingPartner.id}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        },
+                        body: JSON.stringify({
+                            name: this.editingPartner.name,
+                            address: this.editingPartner.location,
+                            category: this.editingPartner.category,
+                            phone: this.editingPartner.phone,
+                            commission_percent: this.editingPartner.commission || 15,
+                            settlement_period: 'BULANAN',
+                            status: this.editingPartner.status || 'AKTIF'
+                        })
+                    });
+                    if (res.ok) {
+                        this.showEditModal = false;
+                        if (window.triggerToast) window.triggerToast('Data mitra ' + this.editingPartner.name + ' berhasil diperbarui di database!', 'success');
+                        await this.initUmkm();
+                        return;
+                    }
+                } catch(e) {
+                    console.warn('API error, updating locally', e);
+                }
+            }
+
             const idx = this.partners.findIndex(p => p.id === this.editingPartner.id);
             if (idx !== -1) {
                 this.partners[idx] = { ...this.partners[idx], ...this.editingPartner };
@@ -631,11 +690,40 @@ function umkmPartnersApp() {
             }
         },
 
-        saveNewPartner() {
+        async saveNewPartner() {
             if (!this.newPartner.name) {
                 if (window.triggerToast) window.triggerToast('Harap isi nama mitra produsen!', 'error');
                 return;
             }
+
+            try {
+                const res = await fetch('/api/consignment/partners', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({
+                        name: this.newPartner.name,
+                        address: this.newPartner.location || 'Bandung',
+                        category: this.newPartner.category,
+                        phone: this.newPartner.phone || '0812-0000-0000',
+                        commission_percent: this.newPartner.commission || 15,
+                        settlement_period: 'BULANAN'
+                    })
+                });
+                if (res.ok) {
+                    this.showAddModal = false;
+                    if (window.triggerToast) window.triggerToast('Mitra konsinyasi baru berhasil disimpan ke database!', 'success');
+                    this.newPartner = { name: '', location: '', category: 'Snack', phone: '', commission: 15 };
+                    await this.initUmkm();
+                    return;
+                }
+            } catch(e) {
+                console.warn('API error, saving locally', e);
+            }
+
             const initial = this.newPartner.name.charAt(0).toUpperCase();
             this.partners.unshift({
                 id: 'UMKM-0' + (this.partners.length + 1),
@@ -653,16 +741,35 @@ function umkmPartnersApp() {
             });
             this.saveUmkm();
             this.showAddModal = false;
-            if (window.triggerToast) window.triggerToast('Mitra konsinyasi baru berhasil didaftarkan dan tersimpan di pos_ilp_umkm_partners_v1!', 'success');
+            if (window.triggerToast) window.triggerToast('Mitra konsinyasi baru berhasil didaftarkan!', 'success');
             this.newPartner = { name: '', location: '', category: 'Snack', phone: '', commission: 15 };
         },
 
-        deletePartner(partner) {
-            if (confirm('Hapus mitra ' + partner.name + ' dari daftar konsinyasi?')) {
-                this.partners = this.partners.filter(p => p.id !== partner.id);
-                this.saveUmkm();
-                if (window.triggerToast) window.triggerToast('Mitra konsinyasi berhasil dihapus.', 'info');
+        async deletePartner(partner) {
+            if (!confirm('Hapus mitra ' + partner.name + ' dari daftar konsinyasi?')) return;
+
+            if (typeof partner.id === 'number') {
+                try {
+                    const res = await fetch(`/api/consignment/partners/${partner.id}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        }
+                    });
+                    if (res.ok) {
+                        if (window.triggerToast) window.triggerToast('Mitra konsinyasi berhasil dihapus dari database.', 'info');
+                        await this.initUmkm();
+                        return;
+                    }
+                } catch(e) {
+                    console.warn('API error, removing locally', e);
+                }
             }
+
+            this.partners = this.partners.filter(p => p.id !== partner.id);
+            this.saveUmkm();
+            if (window.triggerToast) window.triggerToast('Mitra konsinyasi berhasil dihapus.', 'info');
         },
 
         openContact(partnerName, productName, stockLeft) {
@@ -680,29 +787,39 @@ function umkmPartnersApp() {
 
         exportCsv() {
             try {
-                const headers = ['ID Mitra', 'Nama Produsen', 'Lokasi', 'Kategori', 'SKU Count', 'Status Stok', 'Total Penjualan (IDR)', 'Status Kemitraan', 'No Telepon'];
+                const headers = ['ID Mitra', 'Nama Produsen UMKM', 'Lokasi Sentra', 'Kategori Produk', 'Total SKU Konsinyasi', 'Status Stok', 'Total Omset Penjualan (Rp)', 'Status Kemitraan', 'No Telepon'];
                 const rows = this.partners.map(p => [
-                    '"' + p.id + '"',
-                    '"' + p.name + '"',
-                    '"' + p.location + '"',
-                    '"' + p.category + '"',
-                    '"' + p.skuCount + '"',
-                    '"' + p.stockStatus + '"',
-                    '"' + p.salesTotal + '"',
-                    '"' + p.status + '"',
-                    '"' + (p.phone || '') + '"'
+                    p.id,
+                    p.name,
+                    p.location,
+                    p.category,
+                    Number(p.skuCount || 0),
+                    p.stockStatus,
+                    Number(p.salesTotal || 0),
+                    p.status,
+                    p.phone || '-'
                 ]);
-                const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-                const encodedUri = encodeURI(csvContent);
-                const link = document.createElement('a');
-                link.setAttribute('href', encodedUri);
-                link.setAttribute('download', 'rekap_mitra_umkm_ilp_' + new Date().toISOString().slice(0, 10) + '.csv');
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                if (window.triggerToast) window.triggerToast('File CSV rekap mitra UMKM berhasil diunduh.', 'success');
+
+                const totalOmset = this.partners.reduce((sum, p) => sum + Number(p.salesTotal || 0), 0);
+                const totals = ['TOTAL', '', '', '', '', '', totalOmset, '', ''];
+
+                window.exportTableToExcel({
+                    filename: 'rekap_mitra_umkm_ilp_' + new Date().toISOString().slice(0, 10) + '.xlsx',
+                    sheetName: 'Mitra UMKM',
+                    title: 'PT INDO LAMPUNG PERKASA - MINIMARKET KOPERASI',
+                    subtitle: 'REKAPITULASI MITRA UMKM & PRODUK KONSINYASI',
+                    metadata: [
+                        ['Tanggal Generate', new Date().toLocaleString('id-ID')],
+                        ['Total Mitra', this.partners.length + ' Produsen']
+                    ],
+                    headers: headers,
+                    rows: rows,
+                    totals: totals
+                });
+
+                if (window.triggerToast) window.triggerToast('File Excel rekap mitra UMKM berhasil diunduh.', 'success');
             } catch(e) {
-                if (window.triggerToast) window.triggerToast('Gagal ekspor CSV: ' + e.message, 'error');
+                if (window.triggerToast) window.triggerToast('Gagal ekspor Excel: ' + e.message, 'error');
             }
         }
     };

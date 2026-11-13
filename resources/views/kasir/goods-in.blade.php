@@ -52,18 +52,56 @@
             console.warn('API goods-receipts fetch error:', e);
         }
 
-        // Sinkronisasi real-time antar tab (Manager Kirim Barang -> Kasir Barang Masuk)
-        window.addEventListener('storage', (e) => {
-            if (e.key === 'pos_ilp_goods_in_docs_v1' && e.newValue) {
+        // Sinkronisasi real-time antar tab & perangkat (Manager Kirim Barang <-> Kasir Barang Masuk)
+        const updateFromStorage = () => {
+            const stored = localStorage.getItem('pos_ilp_goods_in_docs_v1');
+            if (stored) {
                 try {
-                    this.documents = JSON.parse(e.newValue);
+                    const parsed = JSON.parse(stored);
+                    if (Array.isArray(parsed)) this.documents = parsed;
                 } catch(err) {}
             }
+        };
+
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'pos_ilp_goods_in_docs_v1' && e.newValue) {
+                updateFromStorage();
+            }
         });
+
+        window.addEventListener('pos:goods_in_updated', (e) => {
+            updateFromStorage();
+        });
+
+        window.addEventListener('pos:sync-all', () => {
+            this.refreshDocsFromServer();
+        });
+    },
+
+    async refreshDocsFromServer() {
+        try {
+            const res = await fetch('/api/goods-receipts', { headers: { 'Accept': 'application/json' } });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && Array.isArray(json.data)) {
+                    const apiDocs = json.data;
+                    const merged = [...apiDocs];
+                    for (const loc of this.documents) {
+                        const exists = merged.some(m => (m.id && m.id === loc.id) || (m.docNo && m.docNo === loc.docNo));
+                        if (!exists) merged.push(loc);
+                    }
+                    this.documents = merged;
+                    this.saveDocs();
+                }
+            }
+        } catch(e) {}
     },
 
     saveDocs() {
         localStorage.setItem('pos_ilp_goods_in_docs_v1', JSON.stringify(this.documents));
+        if (window.PosRealtime) {
+            window.PosRealtime.broadcast('goods_in_updated', { documents: this.documents });
+        }
     },
 
     getDefaultDocs() {
@@ -263,9 +301,15 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <!-- Online Status Badge -->
                     <div class="flex items-center gap-3">
                         <div class="bg-white border border-gray-200 rounded-xl px-4 py-2.5 flex items-center gap-3 shadow-xs">
-                            <div class="w-2.5 h-2.5 rounded-full bg-emerald-500"></div>
+                            <div class="w-2.5 h-2.5 rounded-full transition-colors"
+                                 :class="($store.network && $store.network.isOnline) ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'"></div>
                             <div class="flex flex-col">
-                                <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">TERMINAL PENERIMA</span>
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">TERMINAL PENERIMA</span>
+                                    <span class="text-[9px] font-bold px-1.5 py-0.2 rounded-full"
+                                          :class="($store.network && $store.network.isOnline) ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'"
+                                          x-text="($store.network && $store.network.isOnline) ? 'ONLINE' : 'OFFLINE'">ONLINE</span>
+                                </div>
                                 <span class="text-xs font-bold text-gray-800" x-text="(activeSession && activeSession.terminalLabel) ? (activeSession.terminalLabel + ' • ' + activeSession.cashierName) : 'POS-01 • Budi Kurniawan'">Kasir 01 • Budi Kurniawan</span>
                             </div>
                         </div>

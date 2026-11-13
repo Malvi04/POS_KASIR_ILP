@@ -82,16 +82,37 @@
         // 3. Load referensi produk katalog master
         await this.loadAvailableProducts();
 
-        // 4. Sinkronisasi real-time antar tab browser
+        // 4. Sinkronisasi real-time antar tab & server
+        const updateFromStorage = () => {
+            const stored = localStorage.getItem('pos_ilp_goods_in_docs_v1');
+            if (stored) {
+                try {
+                    const parsed = JSON.parse(stored);
+                    if (Array.isArray(parsed)) this.documents = parsed;
+                } catch(err) {}
+            }
+        };
+
         window.addEventListener('storage', (e) => {
             if (e.key === 'pos_ilp_goods_in_docs_v1' && e.newValue) {
-                try {
-                    this.documents = JSON.parse(e.newValue);
-                } catch(err) {}
+                updateFromStorage();
             }
             if (e.key === 'pos_ilp_inventory_products_v1') {
                 this.loadAvailableProducts();
             }
+        });
+
+        window.addEventListener('pos:goods_in_updated', () => {
+            updateFromStorage();
+        });
+
+        window.addEventListener('pos:inventory_updated', () => {
+            this.loadAvailableProducts();
+        });
+
+        window.addEventListener('pos:sync-all', () => {
+            updateFromStorage();
+            this.loadAvailableProducts();
         });
     },
 
@@ -145,6 +166,9 @@
     saveDocuments() {
         try {
             localStorage.setItem('pos_ilp_goods_in_docs_v1', JSON.stringify(this.documents));
+            if (window.PosRealtime) {
+                window.PosRealtime.broadcast('goods_in_updated', { documents: this.documents });
+            }
         } catch(e) {
             console.error('Failed to save shipments storage:', e);
         }
@@ -533,20 +557,32 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
     <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
 
         <!-- Top Header Navigation -->
-        <header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 z-10 shrink-0">
+        <header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 z-10 shrink-0 select-none">
             <div class="flex items-center gap-2">
                 <span class="text-xs font-bold text-gray-400 uppercase tracking-wider">Persediaan</span>
                 <span class="material-symbols-rounded text-gray-400 text-sm">chevron_right</span>
                 <h1 class="text-base font-bold text-gray-800">Kirim Barang</h1>
             </div>
 
-            <!-- Header Action Button -->
-            <button type="button"
-                    @click.stop="openCreateModal()"
-                    class="px-4 py-2 bg-[#0052cc] hover:bg-[#0043a8] text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-2 cursor-pointer transition-colors">
-                <span class="material-symbols-rounded text-[18px]">add</span>
-                <span>Buat Pengiriman</span>
-            </button>
+            <!-- Header Right Actions & Realtime Status -->
+            <div class="flex items-center gap-3">
+                <x-notification-bell role="MANAGER" />
+                <button type="button" 
+                        @click="window.PosRealtime?.syncNow?.(); initKirimBarang();" 
+                        class="p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer" 
+                        title="Sinkronisasi Data Realtime">
+                    <span class="material-symbols-rounded text-[20px]" :class="$store.network?.isChecking ? 'animate-spin text-[#0052cc]' : ''">sync</span>
+                </button>
+                <x-realtime-network-badge />
+                <div class="h-6 w-px bg-gray-200 mx-1"></div>
+                <!-- Header Action Button -->
+                <button type="button"
+                        @click.stop="openCreateModal()"
+                        class="px-4 py-2 bg-[#0052cc] hover:bg-[#0043a8] text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-2 cursor-pointer transition-colors">
+                    <span class="material-symbols-rounded text-[18px]">add</span>
+                    <span>Buat Pengiriman</span>
+                </button>
+            </div>
         </header>
 
         <!-- Main Scrollable Area -->

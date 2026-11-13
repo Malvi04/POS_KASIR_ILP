@@ -412,18 +412,16 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
             </div>
 
             <div class="flex items-center gap-4 text-gray-500">
+                <x-notification-bell role="MANAGER" />
                 <a href="{{ url('/reports') }}" class="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-200 transition-colors">
                     <span class="material-symbols-rounded text-[18px] text-[#0052cc]">assessment</span>
                     Laporan Piutang
                 </a>
-                <button @click="fetchMembers(currentPage)" class="p-2 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="Refresh Data API">
-                    <span class="material-symbols-rounded text-[22px]" :class="isLoading ? 'animate-spin text-[#0052cc]' : ''">autorenew</span>
+                <button @click="window.PosRealtime?.syncNow?.(); fetchMembers(currentPage)" class="p-2 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="Refresh Data API">
+                    <span class="material-symbols-rounded text-[22px]" :class="(isLoading || $store.network?.isChecking) ? 'animate-spin text-[#0052cc]' : ''">autorenew</span>
                 </button>
                 <div class="h-6 w-px bg-gray-200"></div>
-                <div class="flex items-center gap-2">
-                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span class="text-[13px] font-bold text-gray-700">API Terhubung</span>
-                </div>
+                <x-realtime-network-badge labelOnline="API Terhubung" />
             </div>
         </header>
 

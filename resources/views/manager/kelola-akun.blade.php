@@ -962,15 +962,13 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                 </div>
             </div>
 
-            <div class="flex items-center gap-5 text-gray-600">
-                <button type="button" @click="initUsers(); triggerToast('Data pengguna & penugasan disinkronkan!')" class="hover:text-gray-900 transition-colors p-1.5 rounded-lg hover:bg-gray-100 cursor-pointer" title="Sinkronisasi Data">
-                    <span class="material-symbols-rounded text-[22px]">sync</span>
+            <div class="flex items-center gap-4 text-gray-600">
+                <x-notification-bell role="MANAGER" />
+                <button type="button" @click="window.PosRealtime?.syncNow?.(); initUsers();" class="hover:text-gray-900 transition-colors p-1.5 rounded-lg hover:bg-gray-100 cursor-pointer" title="Sinkronisasi Data Realtime">
+                    <span class="material-symbols-rounded text-[22px]" :class="$store.network?.isChecking ? 'animate-spin text-[#0052cc]' : ''">sync</span>
                 </button>
                 <div class="h-6 w-px bg-gray-200"></div>
-                <div class="flex items-center gap-2">
-                    <span class="material-symbols-rounded text-green-600 text-[20px]">verified_user</span>
-                    <span class="text-[13px] font-semibold text-gray-700">Aman Terenkripsi</span>
-                </div>
+                <x-realtime-network-badge />
             </div>
         </header>
 

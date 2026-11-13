@@ -366,6 +366,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
             </div>
 
             <div class="flex items-center gap-4">
+                <x-notification-bell role="MANAGER" />
+                <x-realtime-network-badge />
                 <button type="button"
                         @click="showAddModal = true"
                         class="bg-[#0052cc] hover:bg-[#0043a8] text-white px-4 py-2 rounded-xl font-bold text-[12.5px] shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer">

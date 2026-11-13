@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Kasir;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Shared\NotificationController;
 use App\Models\GoodsReceipt;
 use App\Models\GoodsReceiptItem;
 use App\Models\Product;
@@ -158,6 +159,23 @@ class GoodsReceiptController extends Controller
 
             $receipt->load(['items.product', 'receiver']);
 
+            // Realtime notification to Kasir: new incoming transfer to store
+            try {
+                $totalUnits = $receipt->items->sum('qty_sent');
+                NotificationController::notify(
+                    role: 'KASIR',
+                    title: "Surat Jalan {$receipt->receipt_number} Tiba",
+                    message: "Gudang mengirimkan {$totalUnits} unit barang ke {$dest}. Siap diverifikasi kasir di terminal.",
+                    category: 'TRANSFER',
+                    link: '/kasir/produk/masuk',
+                    icon: 'local_shipping',
+                    color: 'amber',
+                    referenceId: $receipt->receipt_number
+                );
+            } catch (\Throwable $e) {
+                // Silently prevent notification errors from failing transaction
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Pengiriman barang ' . $receipt->receipt_number . ' berhasil disimpan dan dikirim ke toko.',
@@ -246,6 +264,45 @@ class GoodsReceiptController extends Controller
             $receipt->received_by = $user?->id;
             $receipt->notes = $validated['notes'] ?? $receipt->notes;
             $receipt->save();
+
+            // Realtime role-based notification for verification result
+            try {
+                if ($hasDiscrepancy) {
+                    NotificationController::notify(
+                        role: 'MANAGER',
+                        title: "Selisih Penerimaan Barang: {$receipt->receipt_number}",
+                        message: "Kasir melaporkan selisih / kerusakan fisik saat penerimaan barang di {$receipt->destination_store}.",
+                        category: 'TRANSFER',
+                        link: '/manager/kirim-barang',
+                        icon: 'warning',
+                        color: 'rose',
+                        referenceId: $receipt->receipt_number
+                    );
+                    NotificationController::notify(
+                        role: 'OWNER',
+                        title: "Deviasi Stok Masuk: {$receipt->receipt_number}",
+                        message: "Tercatat selisih fisik pada barang masuk di {$receipt->destination_store}. Cek berita acara serah terima.",
+                        category: 'TRANSFER',
+                        link: '/owner/audit-log',
+                        icon: 'report_problem',
+                        color: 'rose',
+                        referenceId: $receipt->receipt_number
+                    );
+                } else {
+                    NotificationController::notify(
+                        role: 'MANAGER',
+                        title: "Penerimaan Barang Selesai: {$receipt->receipt_number}",
+                        message: "Surat jalan {$receipt->receipt_number} telah diverifikasi lengkap 100% oleh kasir di {$receipt->destination_store}.",
+                        category: 'TRANSFER',
+                        link: '/manager/kirim-barang',
+                        icon: 'check_circle',
+                        color: 'emerald',
+                        referenceId: $receipt->receipt_number
+                    );
+                }
+            } catch (\Throwable $e) {
+                // Ignore notification failure
+            }
 
             return response()->json([
                 'success' => true,
