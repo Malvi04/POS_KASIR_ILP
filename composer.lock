@@ -4,7 +4,11 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
+<<<<<<< HEAD
     "content-hash": "28e738443c6d824ac38da120cd7f2e6d",
+=======
+    "content-hash": "8b14889b3f0b866ff7ebaccd8aeed838",
+>>>>>>> bc80a7efe1ec86b2134b8d9fbb5c117ef2ed2e85
     "packages": [
         {
             "name": "brick/math",
@@ -135,6 +139,7 @@
             "time": "2024-02-09T16:56:22+00:00"
         },
         {
+<<<<<<< HEAD
             "name": "clue/redis-protocol",
             "version": "v0.3.2",
             "source": {
@@ -265,6 +270,8 @@
             "time": "2025-01-03T16:18:33+00:00"
         },
         {
+=======
+>>>>>>> bc80a7efe1ec86b2134b8d9fbb5c117ef2ed2e85
             "name": "composer/pcre",
             "version": "3.4.0",
             "source": {

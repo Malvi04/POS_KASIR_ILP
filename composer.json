@@ -11,9 +11,14 @@
     "require": {
         "php": "^8.3",
         "laravel/framework": "^13.8",
+<<<<<<< HEAD
         "laravel/reverb": "*",
         "laravel/tinker": "^3.0",
         "phpoffice/phpspreadsheet": "^5.11"
+=======
+        "laravel/tinker": "^3.0",
+        "phpoffice/phpspreadsheet": "*"
+>>>>>>> bc80a7efe1ec86b2134b8d9fbb5c117ef2ed2e85
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
@@ -79,7 +84,7 @@
         }
     },
     "config": {
-        "optimize-autoloader": true,
+        "optimize-autoloader": false,
         "preferred-install": "dist",
         "sort-packages": true,
         "allow-plugins": {

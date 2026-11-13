@@ -114,6 +114,9 @@ Route::get('/manager/inventory', function () {
     return view('manager.inventory');
 })->name('manager.inventory');
 
+Route::get('/manager/products/export', [App\Http\Controllers\Api\Manager\ProductImportExportController::class, 'export'])->name('manager.products.export');
+Route::get('/manager/products/template', [App\Http\Controllers\Api\Manager\ProductImportExportController::class, 'downloadTemplate'])->name('manager.products.template');
+
 Route::get('/manager/kirim-barang', function () {
     return view('manager.kirim-barang', [
         'activeNav' => 'kirim_barang'
