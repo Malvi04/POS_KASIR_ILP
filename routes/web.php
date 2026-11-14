@@ -436,3 +436,23 @@ Route::get('/kasir/login', function () {
 Route::get('/kasir/placeholder', function () {
     return redirect('/kasir/pos');
 });
+
+/*
+|--------------------------------------------------------------------------
+| Dedicated Error Page & Fallback Handling
+|--------------------------------------------------------------------------
+*/
+Route::get('/error', function (\Illuminate\Http\Request $request) {
+    $code = (int) $request->query('code', 500);
+    $validCodes = [403, 404, 419, 500, 503];
+    $viewCode = in_array($code, $validCodes) ? $code : 500;
+
+    return response()->view("errors.{$viewCode}", [
+        'customMessage' => $request->query('message'),
+        'customCode' => $code,
+    ], $viewCode);
+})->name('error.page');
+
+Route::fallback(function () {
+    return response()->view('errors.404', [], 404);
+});

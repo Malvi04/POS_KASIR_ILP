@@ -20,4 +20,31 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*'),
         );
+
+        // Custom 404 / Page Not Found handling for web requests
+        $exceptions->render(function (\Symfony\Component\HttpKernel\Exception\NotFoundHttpException $e, Request $request) {
+            if (! $request->is('api/*') && ! $request->wantsJson()) {
+                return response()->view('errors.404', [
+                    'exception' => $e,
+                    'statusCode' => 404,
+                ], 404);
+            }
+        });
+
+        // Custom unhandled exception handling for web requests
+        $exceptions->render(function (\Throwable $e, Request $request) {
+            if ($request->is('api/*') || $request->wantsJson()) {
+                return null;
+            }
+
+            if (! config('app.debug') || env('FORCE_ERROR_PAGE', false) || $request->has('preview_error')) {
+                $statusCode = method_exists($e, 'getStatusCode') ? $e->getStatusCode() : 500;
+                $view = view()->exists("errors.{$statusCode}") ? "errors.{$statusCode}" : 'errors.500';
+
+                return response()->view($view, [
+                    'exception' => $e,
+                    'statusCode' => $statusCode,
+                ], $statusCode);
+            }
+        });
     })->create();

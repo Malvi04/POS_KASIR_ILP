@@ -190,6 +190,14 @@
                 pageCache.delete(window.location.href);
                 navigateTo(window.location.href, false);
             });
+
+            // Global error redirection helper
+            window.redirectToError = function(message, code = 500) {
+                const params = new URLSearchParams();
+                if (code) params.set('code', code);
+                if (message) params.set('message', message);
+                window.location.href = '/error?' + params.toString();
+            };
         })();
 
         // Register Offline PWA Service Worker

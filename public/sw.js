@@ -22,6 +22,7 @@ const PRECACHE_ASSETS = [
     '/kasir/inventory',
     '/kasir/members',
     '/kasir/reports',
+    '/error',
     '/js/alpine.min.js',
     '/js/cashier-core.js',
     '/js/pos-realtime.js',
