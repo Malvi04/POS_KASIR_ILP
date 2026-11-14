@@ -12,6 +12,7 @@ Sistem Kasir (Point of Sale) dan Manajemen Retail Koperasi Minimarket ILP berbas
 
 ## 📑 Daftar Isi
 - [📚 Dokumentasi Komprehensif Backend & Sistem](docs/DOKUMENTASI_LENGKAP_BACKEND_DAN_SISTEM_POS.md)
+- [🗄️ Dokumentasi Lengkap Skema Database & Relasi Tabel](docs/DOKUMENTASI_DATABASE_DAN_RELASI_TABEL.md)
 - [Ringkasan Pembaruan Terkini](#-ringkasan-pembaruan-terkini)
 - [Fitur Utama Sistem](#-fitur-utama-sistem)
   - [1. Modul Kasir (Cashier POS Frontline)](#1-modul-kasir-cashier-pos-frontline)

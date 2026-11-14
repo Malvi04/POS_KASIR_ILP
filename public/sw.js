@@ -3,8 +3,8 @@
  * Ensures 100% cashier uptime & offline access when LAN or central server is down.
  */
 
-const CACHE_NAME = 'pos-ilp-cache-v2.2';
-const PAGES_CACHE = 'pos-ilp-pages-v2.2';
+const CACHE_NAME = 'pos-ilp-cache-v2.3';
+const PAGES_CACHE = 'pos-ilp-pages-v2.3';
 
 const PRECACHE_ASSETS = [
     '/',

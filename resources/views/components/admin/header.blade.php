@@ -64,16 +64,24 @@
             <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all select-none"
                  :class="($store.network && $store.network.isOnline)
                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    : 'bg-rose-50 text-rose-700 border-rose-200'"
+                    : (($store.network && $store.network.isReconnecting)
+                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                        : 'bg-rose-50 text-rose-700 border-rose-200')"
                  :title="($store.network && $store.network.isOnline) 
                     ? 'Koneksi Sistem POS: Terhubung Real-time (' + ($store.network.latency || 0) + 'ms)' 
-                    : 'Koneksi Sistem POS: Terputus / Mode Offline'">
+                    : (($store.network && $store.network.isReconnecting)
+                        ? 'Koneksi Sistem POS: Menghubungkan...'
+                        : 'Koneksi Sistem POS: Terputus / Mode Offline')">
                 <span class="w-1.5 h-1.5 rounded-full" 
-                      :class="($store.network && $store.network.isOnline) ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'"></span>
+                      :class="($store.network && $store.network.isOnline) 
+                        ? 'bg-emerald-500 animate-pulse' 
+                        : (($store.network && $store.network.isReconnecting) ? 'bg-amber-500 animate-ping' : 'bg-rose-500')"></span>
                 <span class="material-symbols-rounded text-[14px]"
-                      :class="($store.network && $store.network.isOnline) ? 'text-emerald-600' : 'text-rose-600'"
-                      x-text="($store.network && $store.network.isOnline) ? 'wifi' : 'wifi_off'">wifi</span>
-                <span x-text="($store.network && $store.network.isOnline) ? 'POS Online' : 'POS Terputus'">POS Online</span>
+                      :class="($store.network && $store.network.isOnline) 
+                        ? 'text-emerald-600' 
+                        : (($store.network && $store.network.isReconnecting) ? 'text-amber-600 animate-spin' : 'text-rose-600')"
+                      x-text="($store.network && $store.network.isOnline) ? 'wifi' : (($store.network && $store.network.isReconnecting) ? 'sync' : 'wifi_off')">wifi</span>
+                <span x-text="($store.network && $store.network.isOnline) ? 'POS Online' : (($store.network && $store.network.isReconnecting) ? 'Menghubungkan...' : 'POS Terputus')">POS Online</span>
                 <template x-if="$store.network && $store.network.isOnline && $store.network.latency">
                     <span class="text-[10px] text-emerald-600/80 font-mono hidden sm:inline" x-text="$store.network.latency + 'ms'"></span>
                 </template>

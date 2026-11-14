@@ -312,10 +312,35 @@
 
             // 1. Check Connectivity
             if (!this.isOnline()) {
-                if (isManual) {
-                    this.showToast('Koneksi server utama / LAN masih terputus. Data Anda aman tersimpan di penyimpanan lokal kasir.', 'error');
+                // If device has Wi-Fi / LAN, do an active probe to /api/health before giving up!
+                if (typeof navigator !== 'undefined' && navigator.onLine) {
+                    try {
+                        const probe = await fetch('/api/health?_t=' + Date.now(), {
+                            method: 'GET',
+                            headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache' }
+                        });
+                        if (probe.ok) {
+                            if (window.PosRealtime && typeof window.PosRealtime.markOnline === 'function') {
+                                window.PosRealtime.markOnline('sync_probe_success');
+                            }
+                        } else {
+                            if (isManual) {
+                                this.showToast('Server utama belum merespons (Wi-Fi aktif). Data kasir tetap aman di laci lokal.', 'warning');
+                            }
+                            return { success: false, reason: 'SERVER_UNAVAILABLE' };
+                        }
+                    } catch (e) {
+                        if (isManual) {
+                            this.showToast('Server utama belum merespons (Wi-Fi aktif). Data kasir tetap aman di laci lokal.', 'warning');
+                        }
+                        return { success: false, reason: 'SERVER_UNAVAILABLE' };
+                    }
+                } else {
+                    if (isManual) {
+                        this.showToast('Perangkat tidak terhubung ke jaringan (Wi-Fi / LAN mati). Data transaksi aman di laci lokal.', 'warning');
+                    }
+                    return { success: false, reason: 'OFFLINE' };
                 }
-                return { success: false, reason: 'OFFLINE' };
             }
 
             const pendingTrxs = safeGetJson(STORAGE_KEYS.OFFLINE_TRANSACTIONS, []);
@@ -535,6 +560,13 @@
 
     // Initial count calculation
     refreshCounts();
+
+    // D. Initial auto-sync check on page load if pending transactions exist
+    setTimeout(() => {
+        if (PosOfflineSync.getPendingCount() > 0 && !state.isSyncing) {
+            PosOfflineSync.syncAll({ isManual: false });
+        }
+    }, 2000);
 
     // 5. Register Alpine Store
     function initOfflineAlpineStore() {

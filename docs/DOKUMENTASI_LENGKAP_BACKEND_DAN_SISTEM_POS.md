@@ -400,7 +400,10 @@ Berikut adalah katalog lengkap endpoint backend yang aktif dan terdaftar pada `r
 
 ## 4. Skema Database, Model Eloquent & Relasi (ERD)
 
-Database terdiri dari 35+ tabel dan model Eloquent yang saling terhubung untuk menjamin integritas data transaksi dan pembukuan:
+> 📘 **Dokumentasi Spesifik & Lengkap Per Tabel**: Rincian mendalam mengenai struktur seluruh 55 tabel, tipe data kolom, constraint, dan matriks relasi foreign key cross-reference dapat dilihat pada dokumen:  
+> 👉 [**DOKUMENTASI_DATABASE_DAN_RELASI_TABEL.md**](DOKUMENTASI_DATABASE_DAN_RELASI_TABEL.md)
+
+Database terdiri dari 55 tabel (47 domain + 8 framework) dan 42 model Eloquent yang saling terhubung untuk menjamin integritas data transaksi dan pembukuan:
 
 ### 1. Kluster Master Data & Hak Akses
 - `users`: ID, nama, NIK, username, password, pin_code, role (`Kasir`, `Supervisor`, `Manager`, `Owner`), branch_id, status aktif.

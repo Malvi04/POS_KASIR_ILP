@@ -10,12 +10,17 @@
     'use strict';
 
     // 1. Core State
+    let consecutiveFailures = 0;
+    const MAX_CONSECUTIVE_FAILURES = 3;
+
     const state = {
         isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
         status: (typeof navigator !== 'undefined' && navigator.onLine) ? 'online' : 'offline',
-        latency: null,
+        latency: 2,
         lastChecked: new Date(),
         isChecking: false,
+        isReconnecting: false,
+        offlineReason: null, // 'wifi_offline' | 'server_offline' | null
         pendingSyncCount: 0,
         subscribers: new Map()
     };
@@ -106,14 +111,21 @@
 
     // 4. Real-time Network Monitoring & Heartbeat Ping
     async function checkNetworkHealth() {
+        // Physical client connectivity check
         if (!navigator.onLine) {
-            updateNetworkState(false, null, 'offline');
+            consecutiveFailures = MAX_CONSECUTIVE_FAILURES;
+            updateNetworkState(false, null, 'offline', 'wifi_offline');
             return;
         }
 
+        // Avoid overlapping health checks
+        if (state.isChecking) return;
+        state.isChecking = true;
+
         const startTime = performance.now();
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2500);
+        // Generous 6000ms timeout to avoid false alarms on loaded or single-threaded servers
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
 
         try {
             const res = await fetch('/api/health?_t=' + Date.now(), {
@@ -124,53 +136,95 @@
             clearTimeout(timeoutId);
 
             if (res.ok) {
+                consecutiveFailures = 0;
                 const latency = Math.max(1, Math.round(performance.now() - startTime));
-                updateNetworkState(true, latency, 'online');
+                updateNetworkState(true, latency, 'online', null);
             } else {
-                updateNetworkState(false, null, 'offline');
+                handlePingFailure('server_offline');
             }
         } catch (err) {
             clearTimeout(timeoutId);
-            // If offline or network error
-            updateNetworkState(false, null, 'offline');
+            handlePingFailure(navigator.onLine ? 'server_offline' : 'wifi_offline');
+        } finally {
+            state.isChecking = false;
         }
     }
 
-    function updateNetworkState(isOnline, latency, status) {
+    function handlePingFailure(reason) {
+        if (!navigator.onLine) {
+            consecutiveFailures = MAX_CONSECUTIVE_FAILURES;
+            updateNetworkState(false, null, 'offline', 'wifi_offline');
+            return;
+        }
+
+        consecutiveFailures++;
+
+        // If WebSocket is connected, we know client-server communication is alive!
+        const isWsActive = window.Alpine && window.Alpine.store && window.Alpine.store('network') && window.Alpine.store('network').wsConnected;
+        if (isWsActive) {
+            consecutiveFailures = 0;
+            updateNetworkState(true, 5, 'online', null);
+            return;
+        }
+
+        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+            updateNetworkState(false, null, 'offline', reason);
+        } else {
+            // Grace period: keep online, indicate reconnecting, retry quickly
+            if (state.isOnline) {
+                state.isReconnecting = true;
+                if (window.Alpine && window.Alpine.store && window.Alpine.store('network')) {
+                    window.Alpine.store('network').isReconnecting = true;
+                }
+                setTimeout(checkNetworkHealth, 2000);
+            }
+        }
+    }
+
+    function updateNetworkState(isOnline, latency, status, reason = null) {
         const changed = state.isOnline !== isOnline || state.status !== status;
         state.isOnline = isOnline;
         state.latency = latency;
         state.status = status;
+        state.isReconnecting = false;
+        state.offlineReason = reason;
         state.lastChecked = new Date();
 
         // Update Alpine Store if available
         if (window.Alpine && window.Alpine.store && window.Alpine.store('network')) {
             const store = window.Alpine.store('network');
             store.isOnline = isOnline;
+            store.isReconnecting = false;
             store.latency = latency;
             store.status = status;
+            store.offlineReason = reason;
+            store.wifiOnline = (typeof navigator !== 'undefined' ? navigator.onLine : true);
             store.lastChecked = state.lastChecked;
         }
 
         if (changed) {
             window.dispatchEvent(new CustomEvent('pos:network-status', {
-                detail: { isOnline, latency, status }
+                detail: { isOnline, latency, status, reason }
             }));
 
             // If connection restored, auto-sync pending offline queue
             if (isOnline && window.PosOfflineSync && typeof window.PosOfflineSync.syncAll === 'function') {
-                window.PosOfflineSync.syncAll({ isManual: false });
+                setTimeout(() => {
+                    window.PosOfflineSync.syncAll({ isManual: false });
+                }, 800);
             }
         }
     }
 
     // Browser Online / Offline Event Handlers
     window.addEventListener('online', () => {
+        consecutiveFailures = 0;
         checkNetworkHealth();
     });
 
     window.addEventListener('offline', () => {
-        updateNetworkState(false, null, 'offline');
+        consecutiveFailures = MAX_CONSECUTIVE_FAILURES;
+        updateNetworkState(false, null, 'offline', 'wifi_offline');
     });
 
     // When user returns to tab, check network & server updates (throttled to min 15s)
@@ -184,19 +238,15 @@
         }
     });
 
-    // Throttled Heartbeat Ping (Gentle 30s interval instead of 4.5s)
+    // Heartbeat Ping every 20s
     setInterval(() => {
-        // Skip frequent HTTP pings if WebSocket is already active and healthy
-        const isWsActive = window.Alpine && window.Alpine.store && window.Alpine.store('network') && window.Alpine.store('network').wsConnected;
-        if (!isWsActive) {
-            checkNetworkHealth();
-        }
-    }, 30000);
+        checkNetworkHealth();
+    }, 20000);
 
-    // Initial check after short delay
+    // Initial check after short delay (let initial page load finish)
     setTimeout(() => {
         checkNetworkHealth();
-    }, 500);
+    }, 1200);
 
     // 5. Multi-Device Background Server Sync Poller
     // Silently checks server APIs for latest changes so different devices stay realtime
@@ -305,6 +355,14 @@
         },
 
         /**
+         * Mark system online immediately (e.g. from Reverb WS connected or successful probe)
+         */
+        markOnline(reason = 'external_signal') {
+            consecutiveFailures = 0;
+            updateNetworkState(true, state.latency || 2, 'online', null);
+        },
+
+        /**
          * Trigger manual instantaneous synchronization
          */
         async syncNow() {
@@ -352,6 +410,9 @@
         if (!window.Alpine.store('network')) {
             window.Alpine.store('network', {
                 isOnline: state.isOnline,
+                isReconnecting: state.isReconnecting,
+                offlineReason: state.offlineReason,
+                wifiOnline: (typeof navigator !== 'undefined' ? navigator.onLine : true),
                 latency: state.latency,
                 status: state.status,
                 lastChecked: state.lastChecked,

@@ -55,13 +55,21 @@
                 <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">STATUS KONEKSI</span>
                 <div class="flex items-center gap-2">
                     <span class="w-2.5 h-2.5 rounded-full"
-                          :class="($store.network && $store.network.isOnline) ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'"></span>
+                          :class="($store.network && $store.network.isOnline) 
+                            ? 'bg-emerald-500 animate-pulse' 
+                            : (($store.network && $store.network.isReconnecting) ? 'bg-amber-500 animate-ping' : 'bg-rose-500')"></span>
                     <span class="text-sm font-black"
-                          :class="($store.network && $store.network.isOnline) ? 'text-emerald-700' : 'text-rose-700'"
-                          x-text="($store.network && $store.network.isOnline) ? 'ONLINE (Terhubung)' : 'OFFLINE (Terputus)'"></span>
+                          :class="($store.network && $store.network.isOnline) 
+                            ? 'text-emerald-700' 
+                            : (($store.network && $store.network.isReconnecting) ? 'text-amber-700' : 'text-rose-700')"
+                          x-text="($store.network && $store.network.isOnline) 
+                            ? 'ONLINE (Terhubung)' 
+                            : (($store.network && $store.network.isReconnecting) ? 'MENGHUBUNGKAN...' : 'OFFLINE (Terputus)')"></span>
                 </div>
                 <span class="text-[11px] text-gray-500 mt-0.5 block font-mono"
-                      x-text="($store.network && $store.network.isOnline) ? ('Ping: ' + ($store.network.latency || 1) + 'ms') : 'Kabel LAN / Wi-Fi terputus'"></span>
+                      x-text="($store.network && $store.network.isOnline) 
+                        ? ('Ping: ' + ($store.network.latency || 1) + 'ms') 
+                        : (($store.network && $store.network.offlineReason === 'server_offline') ? 'Wi-Fi Aktif / Server Tidak Merespons' : 'Kabel LAN / Wi-Fi Terputus')"></span>
             </div>
 
             <!-- Card 2: Pending Count -->

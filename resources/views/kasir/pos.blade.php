@@ -913,7 +913,12 @@ class="flex w-full h-full relative text-gray-800">
                     <span class="material-symbols-rounded text-[20px] animate-pulse text-rose-200">wifi_off</span>
                     <div>
                         <span class="font-black tracking-wide uppercase text-rose-100">Mode Offline Aktif:</span>
-                        <span class="text-white ml-1">Koneksi server utama/LAN terputus. Transaksi kasir tetap berjalan 100% tanpa gangguan & disimpan di laci lokal.</span>
+                        <span class="text-white ml-1"
+                              x-text="($store.network.offlineReason === 'wifi_offline' || !navigator.onLine)
+                                ? 'Koneksi Wi-Fi / Kabel LAN terputus. Transaksi kasir tetap berjalan 100% tanpa gangguan & disimpan di laci lokal.'
+                                : 'Server utama tidak merespons (Wi-Fi aktif). Transaksi kasir tetap berjalan 100% tanpa gangguan & disimpan di laci lokal.'">
+                            Koneksi server utama/LAN terputus. Transaksi kasir tetap berjalan 100% tanpa gangguan & disimpan di laci lokal.
+                        </span>
                     </div>
                 </div>
                 <button type="button"

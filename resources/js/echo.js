@@ -37,6 +37,10 @@ try {
             if (window.Alpine && window.Alpine.store && window.Alpine.store('network')) {
                 window.Alpine.store('network').wsConnected = true;
                 window.Alpine.store('network').wsStatus = 'connected';
+                window.Alpine.store('network').isOnline = true;
+            }
+            if (window.PosRealtime && typeof window.PosRealtime.markOnline === 'function') {
+                window.PosRealtime.markOnline('reverb_ws_connected');
             }
             window.dispatchEvent(new CustomEvent('pos:ws-connected'));
         });
