@@ -241,11 +241,22 @@ if (typeof window.ilpNotificationBell === 'undefined') {
             },
 
             async fetchNotifications(showLoading = false) {
+                // If network/server is offline, skip network fetch to prevent lag
+                if (window.Alpine && window.Alpine.store && window.Alpine.store('network') && !window.Alpine.store('network').isOnline) {
+                    if (showLoading) this.isLoading = false;
+                    return;
+                }
+
                 if (showLoading) this.isLoading = true;
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 1500);
+
                 try {
                     const res = await fetch(`/api/notifications?role=${encodeURIComponent(this.role)}`, {
-                        headers: { 'Accept': 'application/json' }
+                        headers: { 'Accept': 'application/json' },
+                        signal: controller.signal
                     });
+                    clearTimeout(timeoutId);
                     if (res.ok) {
                         const json = await res.json();
                         if (json.success && Array.isArray(json.data)) {
@@ -268,7 +279,8 @@ if (typeof window.ilpNotificationBell === 'undefined') {
                         }
                     }
                 } catch(e) {
-                    console.warn('Gagal memuat notifikasi:', e);
+                    clearTimeout(timeoutId);
+                    // Silent offline fallback
                 } finally {
                     if (showLoading) this.isLoading = false;
                 }

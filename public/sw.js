@@ -3,8 +3,8 @@
  * Ensures 100% cashier uptime & offline access when LAN or central server is down.
  */
 
-const CACHE_NAME = 'pos-ilp-cache-v2.3';
-const PAGES_CACHE = 'pos-ilp-pages-v2.3';
+const CACHE_NAME = 'pos-ilp-cache-v2.4';
+const PAGES_CACHE = 'pos-ilp-pages-v2.4';
 
 const PRECACHE_ASSETS = [
     '/',
@@ -116,9 +116,13 @@ self.addEventListener('fetch', (event) => {
 
     // A. Page Navigation Requests
     if (isNavigation && url.origin === self.location.origin) {
+        const navCtrl = new AbortController();
+        const navTimeout = setTimeout(() => navCtrl.abort(), 1800);
+
         event.respondWith(
-            fetch(request)
+            fetch(request, { signal: navCtrl.signal })
                 .then((networkRes) => {
+                    clearTimeout(navTimeout);
                     if (networkRes && networkRes.status === 200) {
                         const copy = networkRes.clone();
                         caches.open(PAGES_CACHE).then((cache) => {
@@ -129,6 +133,7 @@ self.addEventListener('fetch', (event) => {
                     return networkRes;
                 })
                 .catch(async () => {
+                    clearTimeout(navTimeout);
                     // SERVER DOWN / OFFLINE FALLBACK: Serve cached page
                     const pageCache = await caches.open(PAGES_CACHE);
                     const appCache = await caches.open(CACHE_NAME);

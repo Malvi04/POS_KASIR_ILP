@@ -7,29 +7,21 @@
 <div class="flex items-center gap-2 px-3 py-1.5 rounded-full border text-[11px] font-bold tracking-wide transition-all shadow-2xs select-none"
      :class="($store.network && $store.network.isOnline)
         ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
-        : (($store.network && $store.network.isReconnecting)
-            ? 'text-amber-700 bg-amber-50 border-amber-200'
-            : 'text-rose-700 bg-rose-50 border-rose-200')"
+        : 'text-rose-700 bg-rose-50 border-rose-200'"
      :title="($store.network && $store.network.isOnline) 
         ? 'Status Jaringan: Terhubung Real-time (' + ($store.network.latency || 0) + 'ms)' 
-        : (($store.network && $store.network.isReconnecting)
-            ? 'Status Jaringan: Menghubungkan...'
-            : 'Status Jaringan: Terputus / Mode Offline Aktif')">
+        : 'Status Jaringan: Terputus / Mode Offline Aktif'">
     <!-- Pulsing Indicator Dot -->
     <span class="w-2 h-2 rounded-full shrink-0"
-          :class="($store.network && $store.network.isOnline) 
-            ? 'bg-emerald-500 animate-pulse' 
-            : (($store.network && $store.network.isReconnecting) ? 'bg-amber-500 animate-ping' : 'bg-rose-500')"></span>
+          :class="($store.network && $store.network.isOnline) ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'"></span>
 
     <!-- Wifi Icon -->
     <span class="material-symbols-rounded text-[18px] shrink-0"
-          :class="($store.network && $store.network.isOnline) 
-            ? 'text-emerald-600' 
-            : (($store.network && $store.network.isReconnecting) ? 'text-amber-600 animate-spin' : 'text-rose-600')"
-          x-text="($store.network && $store.network.isOnline) ? 'wifi' : (($store.network && $store.network.isReconnecting) ? 'sync' : 'wifi_off')">wifi</span>
+          :class="($store.network && $store.network.isOnline) ? 'text-emerald-600' : 'text-rose-600'"
+          x-text="($store.network && $store.network.isOnline) ? 'wifi' : 'wifi_off'">wifi</span>
 
     <!-- Text Status -->
-    <span x-text="($store.network && $store.network.isOnline) ? '{{ $labelOnline }}' : (($store.network && $store.network.isReconnecting) ? 'Menghubungkan...' : '{{ $labelOffline }}')">{{ $labelOnline }}</span>
+    <span x-text="($store.network && $store.network.isOnline) ? '{{ $labelOnline }}' : '{{ $labelOffline }}'">{{ $labelOnline }}</span>
 
     @if($showLatency)
         <!-- Latency Display -->

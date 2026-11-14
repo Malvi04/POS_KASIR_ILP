@@ -57,13 +57,13 @@
 
         // 2. Background Revalidate: Fetch fresh catalog silently without blocking UI
         const isOffline = (window.Alpine && window.Alpine.store && window.Alpine.store('network') && !window.Alpine.store('network').isOnline)
-            || (window.PosOfflineSync && !window.PosOfflineSync.isOnline())
+            || (window.PosOfflineSync && typeof window.PosOfflineSync.isOnline === 'function' && !window.PosOfflineSync.isOnline())
             || !navigator.onLine;
 
         if (!isOffline) {
             try {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 3500);
+                const timeoutId = setTimeout(() => controller.abort(), 1800);
 
                 const res = await fetch('/api/pos/products/search?limit=500', {
                     headers: { 'Accept': 'application/json' },
@@ -147,11 +147,21 @@
     },
     async searchServerProducts(q) {
         if (!q || q.length < 2) return;
+        // Skip server search if offline to prevent lag; local filteredProducts handles it
+        if ((window.Alpine && window.Alpine.store && window.Alpine.store('network') && !window.Alpine.store('network').isOnline) || !navigator.onLine) {
+            return;
+        }
+
         this.isSearchingServer = true;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 1500);
+
         try {
             const res = await fetch(`/api/pos/products/search?q=${encodeURIComponent(q)}&limit=100`, {
-                headers: { 'Accept': 'application/json' }
+                headers: { 'Accept': 'application/json' },
+                signal: controller.signal
             });
+            clearTimeout(timeoutId);
             if (res.ok) {
                 const json = await res.json();
                 if (json.success && Array.isArray(json.data) && json.data.length > 0) {
@@ -163,6 +173,7 @@
                 }
             }
         } catch (e) {
+            clearTimeout(timeoutId);
         } finally {
             this.isSearchingServer = false;
         }

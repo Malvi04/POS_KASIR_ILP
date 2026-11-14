@@ -314,11 +314,15 @@
             if (!this.isOnline()) {
                 // If device has Wi-Fi / LAN, do an active probe to /api/health before giving up!
                 if (typeof navigator !== 'undefined' && navigator.onLine) {
+                    const probeCtrl = new AbortController();
+                    const probeTimeout = setTimeout(() => probeCtrl.abort(), 1500);
                     try {
                         const probe = await fetch('/api/health?_t=' + Date.now(), {
                             method: 'GET',
-                            headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache' }
+                            headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache' },
+                            signal: probeCtrl.signal
                         });
+                        clearTimeout(probeTimeout);
                         if (probe.ok) {
                             if (window.PosRealtime && typeof window.PosRealtime.markOnline === 'function') {
                                 window.PosRealtime.markOnline('sync_probe_success');
@@ -330,6 +334,7 @@
                             return { success: false, reason: 'SERVER_UNAVAILABLE' };
                         }
                     } catch (e) {
+                        clearTimeout(probeTimeout);
                         if (isManual) {
                             this.showToast('Server utama belum merespons (Wi-Fi aktif). Data kasir tetap aman di laci lokal.', 'warning');
                         }
@@ -358,6 +363,9 @@
                 window.Alpine.store('offlineSync').isSyncing = true;
             }
 
+            const syncCtrl = new AbortController();
+            const syncTimeout = setTimeout(() => syncCtrl.abort(), 6000);
+
             try {
                 // 2. Perform Batch Sync Request
                 const res = await fetch('/api/pos/sync-offline', {
@@ -366,11 +374,13 @@
                         'Content-Type': 'application/json',
                         'Accept': 'application/json'
                     },
+                    signal: syncCtrl.signal,
                     body: JSON.stringify({
                         transactions: pendingTrxs,
                         cash_movements: pendingMovs
                     })
                 });
+                clearTimeout(syncTimeout);
 
                 const json = await res.json();
 
@@ -467,12 +477,16 @@
             if (!target) return;
 
             state.isSyncing = true;
+            const singleCtrl = new AbortController();
+            const singleTimeout = setTimeout(() => singleCtrl.abort(), 5000);
             try {
                 const res = await fetch('/api/pos/sync-offline', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    signal: singleCtrl.signal,
                     body: JSON.stringify({ transactions: [target], cash_movements: [] })
                 });
+                clearTimeout(singleTimeout);
                 const json = await res.json();
                 if (json.success) {
                     const remaining = pendingTrxs.filter(t => t.offline_id !== offlineId);

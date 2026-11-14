@@ -110,11 +110,13 @@
     });
 
     // 4. Real-time Network Monitoring & Heartbeat Ping
+    let healthPollTimer = null;
+
     async function checkNetworkHealth() {
         // Physical client connectivity check
         if (!navigator.onLine) {
-            consecutiveFailures = MAX_CONSECUTIVE_FAILURES;
             updateNetworkState(false, null, 'offline', 'wifi_offline');
+            scheduleNextHealthCheck(3000); // Check frequently for reconnection
             return;
         }
 
@@ -124,8 +126,8 @@
 
         const startTime = performance.now();
         const controller = new AbortController();
-        // Generous 6000ms timeout to avoid false alarms on loaded or single-threaded servers
-        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        // Snappy 3000ms timeout for health checks
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
 
         try {
             const res = await fetch('/api/health?_t=' + Date.now(), {
@@ -136,55 +138,35 @@
             clearTimeout(timeoutId);
 
             if (res.ok) {
-                consecutiveFailures = 0;
                 const latency = Math.max(1, Math.round(performance.now() - startTime));
                 updateNetworkState(true, latency, 'online', null);
+                scheduleNextHealthCheck(15000); // Normal 15s interval when online
             } else {
-                handlePingFailure('server_offline');
+                updateNetworkState(false, null, 'offline', 'server_offline');
+                scheduleNextHealthCheck(3000); // Fast 3s retry when server down
             }
         } catch (err) {
             clearTimeout(timeoutId);
-            handlePingFailure(navigator.onLine ? 'server_offline' : 'wifi_offline');
+            // Server down or connection refused
+            const reason = navigator.onLine ? 'server_offline' : 'wifi_offline';
+            updateNetworkState(false, null, 'offline', reason);
+            scheduleNextHealthCheck(3000); // Fast 3s retry to auto-recover when server restarts
         } finally {
             state.isChecking = false;
         }
     }
 
-    function handlePingFailure(reason) {
-        if (!navigator.onLine) {
-            consecutiveFailures = MAX_CONSECUTIVE_FAILURES;
-            updateNetworkState(false, null, 'offline', 'wifi_offline');
-            return;
-        }
-
-        consecutiveFailures++;
-
-        // If WebSocket is connected, we know client-server communication is alive!
-        const isWsActive = window.Alpine && window.Alpine.store && window.Alpine.store('network') && window.Alpine.store('network').wsConnected;
-        if (isWsActive) {
-            consecutiveFailures = 0;
-            updateNetworkState(true, 5, 'online', null);
-            return;
-        }
-
-        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-            updateNetworkState(false, null, 'offline', reason);
-        } else {
-            // Grace period: keep online, indicate reconnecting, retry quickly
-            if (state.isOnline) {
-                state.isReconnecting = true;
-                if (window.Alpine && window.Alpine.store && window.Alpine.store('network')) {
-                    window.Alpine.store('network').isReconnecting = true;
-                }
-                setTimeout(checkNetworkHealth, 2000);
-            }
-        }
+    function scheduleNextHealthCheck(delayMs) {
+        if (healthPollTimer) clearTimeout(healthPollTimer);
+        healthPollTimer = setTimeout(() => {
+            checkNetworkHealth();
+        }, delayMs);
     }
 
     function updateNetworkState(isOnline, latency, status, reason = null) {
         const changed = state.isOnline !== isOnline || state.status !== status;
         state.isOnline = isOnline;
-        state.latency = latency;
+        state.latency = isOnline ? latency : null; // Clear latency if offline
         state.status = status;
         state.isReconnecting = false;
         state.offlineReason = reason;
@@ -195,7 +177,7 @@
             const store = window.Alpine.store('network');
             store.isOnline = isOnline;
             store.isReconnecting = false;
-            store.latency = latency;
+            store.latency = isOnline ? latency : null;
             store.status = status;
             store.offlineReason = reason;
             store.wifiOnline = (typeof navigator !== 'undefined' ? navigator.onLine : true);
@@ -204,7 +186,7 @@
 
         if (changed) {
             window.dispatchEvent(new CustomEvent('pos:network-status', {
-                detail: { isOnline, latency, status, reason }
+                detail: { isOnline, latency: state.latency, status, reason }
             }));
 
             // If connection restored, auto-sync pending offline queue
@@ -218,35 +200,28 @@
 
     // Browser Online / Offline Event Handlers
     window.addEventListener('online', () => {
-        consecutiveFailures = 0;
         checkNetworkHealth();
     });
 
     window.addEventListener('offline', () => {
-        consecutiveFailures = MAX_CONSECUTIVE_FAILURES;
         updateNetworkState(false, null, 'offline', 'wifi_offline');
+        scheduleNextHealthCheck(3000);
     });
 
-    // When user returns to tab, check network & server updates (throttled to min 15s)
+    // When user returns to tab, check network & server updates
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
-            const now = Date.now();
-            if (!state.lastChecked || (now - new Date(state.lastChecked).getTime() > 15000)) {
-                checkNetworkHealth();
+            checkNetworkHealth();
+            if (state.isOnline) {
                 pollServerUpdates();
             }
         }
     });
 
-    // Heartbeat Ping every 20s
-    setInterval(() => {
-        checkNetworkHealth();
-    }, 20000);
-
-    // Initial check after short delay (let initial page load finish)
+    // Initial check immediately on script execution
     setTimeout(() => {
         checkNetworkHealth();
-    }, 1200);
+    }, 150);
 
     // 5. Multi-Device Background Server Sync Poller
     // Silently checks server APIs for latest changes so different devices stay realtime
@@ -258,7 +233,10 @@
         // A. If on Barang Masuk (Kasir) or Kirim Barang (Manager)
         if (path.includes('goods-in') || path.includes('kirim-barang') || path.includes('/kasir/produk/masuk')) {
             try {
-                const res = await fetch('/api/goods-receipts', { headers: { 'Accept': 'application/json' } });
+                const c = new AbortController();
+                const t = setTimeout(() => c.abort(), 2000);
+                const res = await fetch('/api/goods-receipts', { headers: { 'Accept': 'application/json' }, signal: c.signal });
+                clearTimeout(t);
                 if (res.ok) {
                     const json = await res.json();
                     if (json.success && Array.isArray(json.data)) {
@@ -289,7 +267,10 @@
         // B. If on POS or Inventory, check product updates
         if (path.includes('/pos') || path.includes('/inventory')) {
             try {
-                const res = await fetch('/api/pos/products/search?limit=10', { headers: { 'Accept': 'application/json' } });
+                const c = new AbortController();
+                const t = setTimeout(() => c.abort(), 2000);
+                const res = await fetch('/api/pos/products/search?limit=10', { headers: { 'Accept': 'application/json' }, signal: c.signal });
+                clearTimeout(t);
                 if (res.ok) {
                     // Just verify connection, individual actions push updates directly
                 }

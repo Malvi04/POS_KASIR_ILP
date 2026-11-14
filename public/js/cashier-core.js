@@ -682,10 +682,32 @@
                 },
 
                 async fetchLiveShiftData() {
+                    // Skip immediately if client is offline or server unreachable to avoid browser freeze
+                    if (!navigator.onLine || (window.PosOfflineSync && typeof window.PosOfflineSync.isOnline === 'function' && !window.PosOfflineSync.isOnline())) {
+                        return;
+                    }
+
+                    // Strict 1500ms timeout helper: never hangs UI if server is slow or down
+                    const fetchWithTimeout = async (url) => {
+                        const controller = new AbortController();
+                        const tId = setTimeout(() => controller.abort(), 1500);
+                        try {
+                            const res = await fetch(url, {
+                                headers: { 'Accept': 'application/json' },
+                                signal: controller.signal
+                            });
+                            clearTimeout(tId);
+                            return res;
+                        } catch (e) {
+                            clearTimeout(tId);
+                            return null;
+                        }
+                    };
+
                     // 1. Fetch live cashier staff from PostgreSQL DB
                     try {
-                        const userRes = await fetch('/api/users?role=kasir', { headers: { 'Accept': 'application/json' } });
-                        if (userRes.ok) {
+                        const userRes = await fetchWithTimeout('/api/users?role=kasir');
+                        if (userRes && userRes.ok) {
                             const userJson = await userRes.json();
                             const users = userJson.data || [];
                             if (Array.isArray(users) && users.length > 0) {
@@ -722,8 +744,8 @@
 
                     // 2. Fetch live active shifts across terminals from PostgreSQL DB
                     try {
-                        const shiftRes = await fetch('/api/shift/active-shifts', { headers: { 'Accept': 'application/json' } });
-                        if (shiftRes.ok) {
+                        const shiftRes = await fetchWithTimeout('/api/shift/active-shifts');
+                        if (shiftRes && shiftRes.ok) {
                             const shiftJson = await shiftRes.json();
                             if (shiftJson.success && Array.isArray(shiftJson.data)) {
                                 const activeList = shiftJson.data;
@@ -753,8 +775,8 @@
                     // 3. Fetch current terminal active shift status
                     try {
                         const curTerm = this.formatShiftLabel(this.selectedShift);
-                        const curRes = await fetch(`/api/shift/current?terminal_code=${encodeURIComponent(curTerm)}`, { headers: { 'Accept': 'application/json' } });
-                        if (curRes.ok) {
+                        const curRes = await fetchWithTimeout(`/api/shift/current?terminal_code=${encodeURIComponent(curTerm)}`);
+                        if (curRes && curRes.ok) {
                             const curJson = await curRes.json();
                             if (curJson.has_active_shift && curJson.data) {
                                 const d = curJson.data;
