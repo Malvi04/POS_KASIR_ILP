@@ -7,6 +7,7 @@ use App\Models\AppSetting;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class OwnerProfileController extends Controller
 {
@@ -15,7 +16,10 @@ class OwnerProfileController extends Controller
      */
     public function show(): JsonResponse
     {
-        $ownerUser = User::whereRaw('LOWER(role) IN (?, ?, ?)', ['owner', 'superadmin', 'admin'])->first();
+        $authUser = Auth::user();
+        $ownerUser = ($authUser && $authUser->isOwnerOrSuperadmin())
+            ? $authUser
+            : User::whereRaw('LOWER(role) IN (?, ?, ?)', ['owner', 'superadmin', 'admin'])->first();
 
         $defaults = [
             'name' => $ownerUser ? $ownerUser->name : 'Dewi Sartika',
@@ -63,7 +67,10 @@ class OwnerProfileController extends Controller
         AppSetting::set('owner_profile_data', json_encode($validated), 'profile');
 
         // Also update Owner User model if exists
-        $ownerUser = User::whereRaw('LOWER(role) IN (?, ?, ?)', ['owner', 'superadmin', 'admin'])->first();
+        $authUser = Auth::user();
+        $ownerUser = ($authUser && $authUser->isOwnerOrSuperadmin())
+            ? $authUser
+            : User::whereRaw('LOWER(role) IN (?, ?, ?)', ['owner', 'superadmin', 'admin'])->first();
         if ($ownerUser) {
             $userUpdate = [
                 'name' => $validated['name'],

@@ -33,4 +33,9 @@ class CouponRedemption extends Model
     {
         return $this->belongsTo(User::class, 'redeemed_by');
     }
+
+    public function redeemedByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'redeemed_by');
+    }
 }

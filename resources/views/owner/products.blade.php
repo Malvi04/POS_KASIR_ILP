@@ -28,7 +28,6 @@
 
 @section('admin_content')
 <div x-data="ownerProductsApp()" 
-     x-init="init()"
      @ilp-search.window="searchQuery = $event.detail; onSearchInput()"
      @open-add-product-modal.window="openCreateModal()"
      @pos-inventory-synced.window="initProducts()"
@@ -826,10 +825,6 @@ function ownerProductsApp() {
             });
 
             return { unique, hasDuplicates };
-        },
-
-        async init() {
-            await this.initProducts();
         },
 
         async initProducts() {

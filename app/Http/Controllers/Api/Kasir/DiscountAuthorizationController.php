@@ -28,16 +28,33 @@ class DiscountAuthorizationController extends Controller
         $discountValue = (float) $request->input('discount_value', 0);
         $reason = $request->input('reason', 'Diskon Manual');
 
-        // Check if user is Supervisor, Manager, Admin, or Owner
-        $supervisor = User::where(function ($q) {
-            $q->whereIn(DB::raw('LOWER(role)'), ['supervisor', 'manager', 'owner', 'superadmin', 'admin', 'spv']);
-        })->where('pin', $credential)->first();
-
-        if (!$supervisor && $credential === '123456') {
-            $supervisor = User::whereIn(DB::raw('LOWER(role)'), ['supervisor', 'manager', 'owner', 'superadmin', 'admin', 'spv'])->first();
+        if ($discountValue <= 0) {
+            return response()->json([
+                'authorized' => false,
+                'message' => 'Nilai diskon harus lebih besar dari 0.',
+            ], 422);
         }
 
+        // Check if ANY active supervisor, manager, admin, or owner matches the PIN or password
+        $supervisor = User::where(function ($q) {
+            $q->where('is_active', true)->orWhereNull('is_active');
+        })->get()->first(function ($u) use ($credential) {
+            return $u->isSupervisorOrManager() && ($u->verifyPin($credential) || $u->verifyPassword($credential));
+        });
+
         if (!$supervisor) {
+            // Check if cashier attempted to authorize
+            $cashier = User::where('is_active', true)->get()->first(function ($u) use ($credential) {
+                return $u->isKasir() && ($u->verifyPin($credential) || $u->verifyPassword($credential));
+            });
+
+            if ($cashier) {
+                return response()->json([
+                    'authorized' => false,
+                    'message' => 'Otorisasi ditolak. Akun Kasir tidak memiliki wewenang untuk menyetujui diskon manual.',
+                ], 403);
+            }
+
             return response()->json([
                 'authorized' => false,
                 'message' => 'Otorisasi Diskon Ditolak! Membutuhkan PIN Supervisor atau Manager yang valid.',

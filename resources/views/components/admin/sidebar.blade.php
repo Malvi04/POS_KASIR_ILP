@@ -89,19 +89,25 @@
         </nav>
     </div>
 
+    @php
+        $sidebarOwner = auth()->user();
+        $sidebarOwnerName = $sidebarOwner?->name ?? 'Owner';
+        $sidebarOwnerEmail = strtoupper($sidebarOwner?->email ?? 'OWNER@COOP.ID');
+        $sidebarOwnerNik = $sidebarOwner?->nik ?? '-';
+        $sidebarOwnerAvatar = 'https://ui-avatars.com/api/?name=' . urlencode($sidebarOwnerName) . '&background=0052cc&color=fff&bold=true';
+    @endphp
     <!-- Bottom: Owner Profile & Quick Portal Navigation -->
     <div class="p-3 mb-2 flex flex-col gap-2 border-t border-slate-100" 
          x-data="{ 
              showProfileModal: false, 
-             ownerName: 'Dewi Sartika', 
-             ownerEmail: 'OWNER@COOP.ID', 
-             ownerAvatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
+             ownerName: @js($sidebarOwnerName), 
+             ownerEmail: @js($sidebarOwnerEmail),
+             ownerNik: @js($sidebarOwnerNik),
+             ownerAvatar: @js($sidebarOwnerAvatar),
              initProfile() {
                  try {
                      const p = JSON.parse(localStorage.getItem('pos_ilp_owner_profile_v1'));
                      if (p) {
-                         if (p.name) this.ownerName = p.name;
-                         if (p.email) this.ownerEmail = p.email.toUpperCase();
                          if (p.avatar) this.ownerAvatar = p.avatar;
                      }
                  } catch(e){}
@@ -116,18 +122,18 @@
                 <img :src="ownerAvatar" 
                      alt="Owner Avatar" 
                      class="w-9 h-9 rounded-full object-cover border-2 border-white shadow-2xs group-hover:scale-105 transition-transform"
-                     onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=Dewi+Sartika&background=0052cc&color=fff&bold=true'">
+                     onerror="this.onerror=null; this.src=@js($sidebarOwnerAvatar)">
                 <span class="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-white"></span>
             </div>
             <div class="flex flex-col min-w-0 flex-1">
-                <span class="text-[12.5px] font-bold text-slate-800 leading-tight truncate" x-text="ownerName">Dewi Sartika</span>
-                <span class="text-[10px] font-semibold text-slate-500 tracking-wider uppercase truncate" x-text="ownerEmail">OWNER@COOP.ID</span>
+                <span class="text-[12.5px] font-bold text-slate-800 leading-tight truncate" x-text="ownerName">{{ $sidebarOwnerName }}</span>
+                <span class="text-[10px] font-semibold text-slate-500 tracking-wider uppercase truncate" x-text="ownerEmail">{{ $sidebarOwnerEmail }}</span>
             </div>
             <span class="material-symbols-rounded text-[18px] text-slate-400 group-hover:text-slate-600">expand_less</span>
         </div>
 
         <!-- Exit to Portal / Switch Role Button -->
-        <a href="{{ url('/') }}" data-no-spa class="flex items-center justify-center gap-2 px-3 py-1.5 rounded-xl text-slate-500 hover:text-red-600 hover:bg-red-50 text-[11.5px] font-medium transition-colors">
+        <a href="{{ url('/logout') }}" data-no-spa class="flex items-center justify-center gap-2 px-3 py-1.5 rounded-xl text-slate-500 hover:text-red-600 hover:bg-red-50 text-[11.5px] font-medium transition-colors">
             <span class="material-symbols-rounded text-[16px]">logout</span>
             <span>Keluar ke Portal</span>
         </a>
@@ -144,11 +150,11 @@
                         <img :src="ownerAvatar"
                              :alt="ownerName"
                              class="w-20 h-20 rounded-full mx-auto object-cover border-4 border-blue-50 shadow-md">
-                        <h3 class="text-lg font-black text-slate-900 mt-3" x-text="ownerName">Dewi Sartika</h3>
+                        <h3 class="text-lg font-black text-slate-900 mt-3" x-text="ownerName">{{ $sidebarOwnerName }}</h3>
                         <span class="inline-block px-3 py-0.5 rounded-full text-[11px] font-extrabold bg-blue-100 text-[#0052cc] mt-1">
                             Pemilik Usaha (Owner)
                         </span>
-                        <p class="text-xs text-slate-500 mt-1" x-text="ownerEmail + ' • NIK: 327501550230056'"></p>
+                        <p class="text-xs text-slate-500 mt-1" x-text="ownerEmail + ' • NIK: ' + ownerNik"></p>
                     </div>
 
                     <div class="bg-slate-50 rounded-2xl p-3.5 space-y-2 text-xs border border-slate-100">

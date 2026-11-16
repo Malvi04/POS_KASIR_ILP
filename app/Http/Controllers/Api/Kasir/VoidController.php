@@ -28,15 +28,12 @@ class VoidController extends Controller
             ], 422);
         }
 
-        // Check if supervisor or admin with matching PIN exists
+        // Check if ANY active supervisor/manager matches the PIN or password
         $supervisor = User::where(function ($q) {
-            $q->whereIn(DB::raw('LOWER(role)'), ['supervisor', 'admin', 'manager', 'owner', 'superadmin', 'spv']);
-        })->where('pin', $credential)->first();
-
-        // Fallback for default PIN 123456 if supervisor role exists
-        if (!$supervisor && $credential === '123456') {
-            $supervisor = User::whereIn(DB::raw('LOWER(role)'), ['supervisor', 'admin', 'manager', 'owner', 'superadmin', 'spv'])->first();
-        }
+            $q->where('is_active', true)->orWhereNull('is_active');
+        })->get()->first(function ($u) use ($credential) {
+            return $u->isSupervisorOrManager() && ($u->verifyPin($credential) || $u->verifyPassword($credential));
+        });
 
         if ($supervisor) {
             return response()->json([
@@ -52,8 +49,11 @@ class VoidController extends Controller
         }
 
         // If no supervisor matched, check if it was a cashier attempting self-void
-        $cashierUser = User::where('pin', $credential)->first();
-        if ($cashierUser && $cashierUser->isKasir()) {
+        $cashier = User::where('is_active', true)->get()->first(function ($u) use ($credential) {
+            return $u->isKasir() && ($u->verifyPin($credential) || $u->verifyPassword($credential));
+        });
+
+        if ($cashier) {
             return response()->json([
                 'authorized' => false,
                 'message' => 'Otorisasi ditolak. Akun Kasir tidak memiliki wewenang untuk Void transaksi tanpa persetujuan Supervisor atau Manager.',
@@ -86,16 +86,19 @@ class VoidController extends Controller
         $credential = trim($validated['pin_or_password']);
 
         $supervisor = User::where(function ($q) {
-            $q->whereIn(DB::raw('LOWER(role)'), ['supervisor', 'admin', 'manager', 'owner', 'superadmin', 'spv']);
-        })->where('pin', $credential)->first();
-
-        if (!$supervisor && $credential === '123456') {
-            $supervisor = User::whereIn(DB::raw('LOWER(role)'), ['supervisor', 'admin', 'manager', 'owner', 'superadmin', 'spv'])->first();
-        }
+            $q->where('is_active', true)->orWhereNull('is_active');
+        })->get()->first(function ($u) use ($credential) {
+            return $u->isSupervisorOrManager() && ($u->verifyPin($credential) || $u->verifyPassword($credential));
+        });
 
         if (!$supervisor) {
-            $cashierUser = User::where('pin', $credential)->first();
-            $msg = ($cashierUser && $cashierUser->isKasir())
+            $cashier = User::where(function ($q) {
+                $q->where('is_active', true)->orWhereNull('is_active');
+            })->get()->first(function ($u) use ($credential) {
+                return $u->isKasir() && ($u->verifyPin($credential) || $u->verifyPassword($credential));
+            });
+
+            $msg = $cashier
                 ? 'Otorisasi ditolak. Akun Kasir tidak memiliki wewenang untuk Void transaksi tanpa persetujuan Supervisor atau Manager.'
                 : 'Otorisasi gagal! Pembatalan item membutuhkan PIN/Password Supervisor atau Admin.';
 
@@ -155,16 +158,19 @@ class VoidController extends Controller
         $credential = trim($validated['pin_or_password']);
 
         $supervisor = User::where(function ($q) {
-            $q->whereIn(DB::raw('LOWER(role)'), ['supervisor', 'admin', 'manager', 'owner', 'superadmin', 'spv']);
-        })->where('pin', $credential)->first();
-
-        if (!$supervisor && $credential === '123456') {
-            $supervisor = User::whereIn(DB::raw('LOWER(role)'), ['supervisor', 'admin', 'manager', 'owner', 'superadmin', 'spv'])->first();
-        }
+            $q->where('is_active', true)->orWhereNull('is_active');
+        })->get()->first(function ($u) use ($credential) {
+            return $u->isSupervisorOrManager() && ($u->verifyPin($credential) || $u->verifyPassword($credential));
+        });
 
         if (!$supervisor) {
-            $cashierUser = User::where('pin', $credential)->first();
-            $msg = ($cashierUser && $cashierUser->isKasir())
+            $cashier = User::where(function ($q) {
+                $q->where('is_active', true)->orWhereNull('is_active');
+            })->get()->first(function ($u) use ($credential) {
+                return $u->isKasir() && ($u->verifyPin($credential) || $u->verifyPassword($credential));
+            });
+
+            $msg = $cashier
                 ? 'Otorisasi ditolak. Akun Kasir tidak memiliki wewenang untuk Void transaksi tanpa persetujuan Supervisor atau Manager.'
                 : 'Otorisasi gagal! Pembatalan nota wajib memasukkan PIN otorisasi Supervisor atau Admin.';
 

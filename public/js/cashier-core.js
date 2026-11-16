@@ -706,7 +706,7 @@
 
                     // 1. Fetch live cashier staff from PostgreSQL DB
                     try {
-                        const userRes = await fetchWithTimeout('/api/users?role=kasir');
+                        const userRes = await fetchWithTimeout('/api/auth/cashiers');
                         if (userRes && userRes.ok) {
                             const userJson = await userRes.json();
                             const users = userJson.data || [];

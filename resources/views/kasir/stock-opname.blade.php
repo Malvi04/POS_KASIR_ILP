@@ -13,69 +13,96 @@
     toastMessage: '',
     showToast: false,
 
-    async initOpname() {
-        // Load master inventory products
-        const raw = localStorage.getItem('pos_ilp_inventory_products_v1');
+    async initOpname(forceFresh = false) {
+        // 1. Ambil data produk terbaru langsung dari API master inventori
         let prods = [];
-        if (raw) {
-            try {
-                prods = JSON.parse(raw);
-            } catch(e) {
-                prods = [];
-            }
-        }
-
-        if (!prods || prods.length === 0) {
-            try {
-                const res = await fetch('/api/pos/products/search?q=');
-                if (res.ok) {
-                    const json = await res.json();
-                    if (json.success && Array.isArray(json.data)) {
-                        prods = json.data.map(p => ({
-                            id: p.id,
-                            sku: p.sku,
-                            barcode: p.barcode,
-                            nama: p.name,
-                            kategori: p.category,
-                            hargaJual: p.price,
-                            stok: p.stock
-                        }));
-                        localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(prods));
-                    }
+        try {
+            const res = await fetch('/api/pos/products/search?limit=500', {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+                    prods = json.data;
+                    localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(prods));
                 }
-            } catch(e) {
-                console.warn('Could not fetch products for opname', e);
+            }
+        } catch(e) {
+            console.warn('Could not fetch fresh products for opname, checking cache', e);
+        }
+
+        // 2. Fallback ke localStorage jika request jaringan gagal
+        if (!prods || prods.length === 0) {
+            const raw = localStorage.getItem('pos_ilp_inventory_products_v1');
+            if (raw) {
+                try {
+                    prods = JSON.parse(raw);
+                } catch(e) {
+                    prods = [];
+                }
             }
         }
 
-        // Check if there is an in-progress opname draft
+        // 3. Muat draft opname aktif jika ada
         const draft = localStorage.getItem('pos_ilp_active_opname_v1');
         let draftMap = {};
-        if (draft) {
+        if (draft && !forceFresh) {
             try {
                 const parsedDraft = JSON.parse(draft);
-                parsedDraft.forEach(d => { draftMap[d.sku] = d; });
+                parsedDraft.forEach(d => {
+                    const key = d.sku || d.barcode;
+                    if (key) draftMap[key] = d;
+                });
             } catch(e) {}
         }
 
-        this.items = prods.map(p => {
-            const existing = draftMap[p.sku || p.barcode];
+        this.items = (prods || []).map(p => {
+            const sku = p.sku || p.barcode || '';
+            const nama = p.name || p.nama || '-';
+            const kategori = p.category || p.kategori || 'Umum';
+            const harga = Number(p.price !== undefined ? p.price : (p.hargaJual || 0)) || 0;
+            const realSysStock = Number(p.stock !== undefined ? p.stock : (p.stok !== undefined ? p.stok : 0)) || 0;
+
+            const existing = draftMap[sku];
             if (existing) {
+                // Self-healing: jika draft sebelumnya bernilai 0 / nama kosong karena bug nama properti, perbaiki nilainya
+                existing.nama = nama;
+                existing.kategori = kategori;
+                existing.harga = harga;
+                existing.stokSistem = realSysStock;
+                if (!existing.isAudited) {
+                    existing.stokFisik = realSysStock;
+                    existing.selisih = 0;
+                    existing.keterangan = 'Sesuai';
+                } else {
+                    existing.selisih = (Number(existing.stokFisik) || 0) - realSysStock;
+                }
                 return existing;
             }
+
             return {
                 id: p.id,
-                sku: p.sku || p.barcode,
-                nama: p.nama,
-                kategori: p.kategori || 'Umum',
-                harga: Number(p.hargaJual) || 0,
-                stokSistem: Number(p.stok) || 0,
-                stokFisik: Number(p.stok) || 0,
+                sku: sku,
+                nama: nama,
+                kategori: kategori,
+                harga: harga,
+                stokSistem: realSysStock,
+                stokFisik: realSysStock,
                 selisih: 0,
                 keterangan: 'Sesuai',
                 isAudited: false
             };
         });
+
+        this.saveDraft();
+    },
+
+    resetDraftAndSync() {
+        if (confirm('Sinkron ulang stok sistem dari database? Draft audit yang belum diverifikasi akan disesuaikan dengan data sistem terbaru.')) {
+            localStorage.removeItem('pos_ilp_active_opname_v1');
+            this.initOpname(true);
+            this.triggerToast('Stok sistem berhasil disinkronkan langsung dari database.');
+        }
     },
 
     saveDraft() {
@@ -172,6 +199,7 @@
                         const target = prods.find(p => p.sku === it.sku || p.barcode === it.sku);
                         if (target) {
                             target.stok = it.stokFisik;
+                            target.stock = it.stokFisik;
                         }
                     }
                 });
@@ -232,11 +260,11 @@
             return;
         }
 
-        const headers = ['No', 'SKU / Barcode', 'Nama Produk', 'Kategori', 'Stok Sistem', 'Stok Fisik', 'Selisih (Unit)', 'Status Audit', 'Alasan Selisih', 'Catatan'];
+        const headers = ['No', 'SKU / Barcode', 'Nama Produk', 'Kategori', 'Stok Sistem', 'Stok Fisik', 'Selisih (Unit)', 'Status Audit', 'Keterangan'];
         let no = 1;
         const rows = this.items.map(item => {
-            const isAudited = item.fisik !== null && item.fisik !== undefined && item.fisik !== '';
-            const selisih = isAudited ? (Number(item.fisik) - Number(item.sistem || 0)) : 0;
+            const isAudited = !!item.isAudited;
+            const selisih = Number(item.selisih) || 0;
             let statusText = 'Belum Diaudit';
             if (isAudited) {
                 statusText = selisih === 0 ? 'Sesuai' : (selisih < 0 ? 'Selisih Kurang' : 'Surplus');
@@ -246,12 +274,11 @@
                 item.sku,
                 item.nama,
                 item.kategori || 'Umum',
-                Number(item.sistem || 0),
-                isAudited ? Number(item.fisik) : '-',
+                Number(item.stokSistem || 0),
+                isAudited ? Number(item.stokFisik) : '-',
                 isAudited ? selisih : 0,
                 statusText,
-                item.alasan || '-',
-                item.catatan || '-'
+                item.keterangan || '-'
             ];
         });
 
@@ -390,6 +417,13 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         </div>
 
                         <div class="flex items-center gap-2.5 shrink-0">
+                            <button type="button"
+                                    @click="resetDraftAndSync()"
+                                    class="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 hover:border-[#0052cc] hover:text-[#0052cc] rounded-lg text-xs font-semibold text-gray-700 hover:bg-blue-50 transition-colors cursor-pointer"
+                                    title="Sinkronkan ulang stok sistem dari database">
+                                <span class="material-symbols-rounded text-[16px] text-[#0052cc]">sync</span>
+                                <span>Sinkron Ulang</span>
+                            </button>
                             <button type="button"
                                     @click="exportData()"
                                     class="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer">

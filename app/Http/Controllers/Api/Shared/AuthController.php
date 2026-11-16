@@ -28,27 +28,26 @@ class AuthController extends Controller
                 ], 422);
             }
 
-            // Find user matching PIN with owner/superadmin or supervisor/manager privileges
-            $user = User::where('pin', $pin)
-                ->where('is_active', true)
+            // Find active user matching PIN with owner/superadmin or supervisor/manager privileges
+            $candidates = User::where('is_active', true)
                 ->where(function ($q) {
                     $q->whereRaw('LOWER(role) IN (?, ?, ?, ?, ?)', ['owner', 'superadmin', 'admin', 'manager', 'supervisor']);
                 })
-                ->first();
+                ->get();
 
-            // Fallback for default system master PIN
-            if (!$user && ($pin === '999888' || $pin === '123456')) {
-                $user = User::whereRaw('LOWER(role) IN (?, ?)', ['owner', 'superadmin'])->first();
-            }
+            $user = $candidates->first(fn($u) => $u->verifyPin($pin));
 
             if (!$user) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'PIN Otorisasi Owner tidak valid! Silakan masukkan PIN 6 digit yang terdaftar.',
+                    'message' => 'PIN Otorisasi tidak valid! Silakan masukkan PIN 6 digit yang terdaftar.',
                 ], 401);
             }
 
             Auth::login($user, true);
+            if ($request->hasSession()) {
+                $request->session()->regenerate();
+            }
 
             return response()->json([
                 'success' => true,
@@ -154,6 +153,9 @@ class AuthController extends Controller
         }
 
         Auth::login($user, true);
+        if ($request->hasSession()) {
+            $request->session()->regenerate();
+        }
 
         return response()->json([
             'success' => true,
@@ -211,6 +213,25 @@ class AuthController extends Controller
             'success' => true,
             'message' => 'Berhasil keluar dari sesi.',
             'redirect_url' => url('/'),
+        ]);
+    }
+
+    /**
+     * Public roster of active cashiers for portal login autocomplete.
+     */
+    public function cashiers(): JsonResponse
+    {
+        $cashiers = User::where('is_active', true)
+            ->where(function ($q) {
+                $q->whereRaw('LOWER(role) LIKE ?', ['%kasir%'])
+                  ->orWhereRaw('LOWER(role) = ?', ['cashier']);
+            })
+            ->orderBy('name')
+            ->get(['id', 'name', 'username', 'nik', 'role', 'branch', 'is_active']);
+
+        return response()->json([
+            'success' => true,
+            'data' => $cashiers,
         ]);
     }
 }

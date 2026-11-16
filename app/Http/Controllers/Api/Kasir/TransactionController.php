@@ -259,8 +259,16 @@ class TransactionController extends Controller
                 }
             }
 
-            // 5. Generate Invoice Number & Save Transaction
-            $invoiceNumber = 'TRX-' . date('Ymd') . '-' . Str::padLeft((string) (Transaction::whereDate('created_at', today())->count() + 1), 4, '0');
+            // 5. Generate Collision-Resistant Unique Invoice Number
+            $datePrefix = date('Ymd');
+            $maxId = (int) (Transaction::max('id') ?? 0);
+            $randomSuffix = Str::upper(Str::random(3));
+            $invoiceNumber = "TRX-{$datePrefix}-" . Str::padLeft((string) ($maxId + 1), 4, '0') . "-{$randomSuffix}";
+            while (Transaction::where('invoice_number', $invoiceNumber)->exists()) {
+                $maxId++;
+                $randomSuffix = Str::upper(Str::random(4));
+                $invoiceNumber = "TRX-{$datePrefix}-" . Str::padLeft((string) $maxId, 4, '0') . "-{$randomSuffix}";
+            }
 
             $transaction = Transaction::create([
                 'invoice_number' => $invoiceNumber,

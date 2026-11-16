@@ -16,7 +16,7 @@
 @endsection
 
 @section('admin_content')
-<div x-data="ownerKelolaAkunApp()" x-init="init()" @ilp-search.window="searchQuery = $event.detail" class="space-y-6">
+<div x-data="ownerKelolaAkunApp()" @ilp-search.window="searchQuery = $event.detail" class="space-y-6">
 
     <!-- Subheader: Page Title & Action Button -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -817,7 +817,7 @@ function ownerKelolaAkunApp() {
             this.loadRbacAndMembers();
         },
 
-        loadRbacAndMembers() {
+        async loadRbacAndMembers() {
             // 2. Load Permissions RBAC dari pos_ilp_rbac_v1
             try {
                 const storedRbac = localStorage.getItem('pos_ilp_rbac_v1');
@@ -826,7 +826,19 @@ function ownerKelolaAkunApp() {
                 }
             } catch(e) {}
 
-            // 3. Load Members List untuk integrasi pemilihan karyawan
+            // 3. Load Members List dari API database terlebih dahulu (fallback localStorage)
+            try {
+                const mRes = await fetch('/api/members?per_page=100', { headers: { 'Accept': 'application/json' } });
+                if (mRes.ok) {
+                    const mJson = await mRes.json();
+                    const rows = mJson.data?.data || mJson.data || [];
+                    if (Array.isArray(rows) && rows.length > 0) {
+                        this.membersList = rows;
+                        return;
+                    }
+                }
+            } catch(e) {}
+
             try {
                 const storedMembers = localStorage.getItem('pos_ilp_members_v1');
                 if (storedMembers) {
@@ -938,12 +950,17 @@ function ownerKelolaAkunApp() {
                     })
                 });
 
+                const json = await res.json().catch(() => ({}));
                 if (res.ok) {
                     this.showAddModal = false;
                     if (window.triggerToast) window.triggerToast('Staf ' + this.formStaff.name + ' berhasil didaftarkan ke sistem!', 'success');
                     await this.init();
                     return;
                 }
+
+                const errMsg = json.message || (json.errors ? Object.values(json.errors).flat().join(', ') : ('HTTP ' + res.status));
+                if (window.triggerToast) window.triggerToast('Gagal menambahkan staf: ' + errMsg, 'error');
+                return;
             } catch(e) {
                 console.warn('API error creating staff, saving locally', e);
             }
@@ -995,12 +1012,16 @@ function ownerKelolaAkunApp() {
                             is_active: this.editingStaff.status === 'Online' || this.editingStaff.status === 'AKTIF'
                         })
                     });
+                    const json = await res.json().catch(() => ({}));
                     if (res.ok) {
                         this.showEditModal = false;
                         if (window.triggerToast) window.triggerToast('Data penugasan ' + this.editingStaff.name + ' berhasil diperbarui di database!', 'success');
                         await this.init();
                         return;
                     }
+                    const errMsg = json.message || (json.errors ? Object.values(json.errors).flat().join(', ') : ('HTTP ' + res.status));
+                    if (window.triggerToast) window.triggerToast('Gagal memperbarui staf: ' + errMsg, 'error');
+                    return;
                 } catch(e) {
                     console.warn('API error editing staff, updating locally', e);
                 }

@@ -886,7 +886,7 @@
     },
 
     // Quick Draft Submission
-    submitQuickDraft() {
+    async submitQuickDraft() {
         if (!this.newDocSku.trim() || !this.newDocQty) return;
         const isTokoToGudang = this.modalMode === 'toko_ke_gudang';
         const codeNum = Math.floor(896 + Math.random() * 90);

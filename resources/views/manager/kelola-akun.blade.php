@@ -2,6 +2,23 @@
 
 @section('title', 'Kelola Akun & Penugasan Kasir - ILP POS')
 
+@php
+    $mgrAuthUser = auth()->user();
+    $mgrBranchRaw = trim((string) ($mgrAuthUser?->branch ?? ''));
+    $mgrInitialBranch = 'Pusat';
+    if ($mgrBranchRaw !== '') {
+        if (stripos($mgrBranchRaw, 'Cabang B') !== false) {
+            $mgrInitialBranch = 'Cabang B';
+        } elseif (stripos($mgrBranchRaw, 'Cabang A') !== false) {
+            $mgrInitialBranch = 'Cabang A';
+        } elseif (stripos($mgrBranchRaw, 'Pusat') !== false) {
+            $mgrInitialBranch = 'Pusat';
+        } else {
+            $mgrInitialBranch = $mgrBranchRaw;
+        }
+    }
+@endphp
+
 @section('content')
 <div x-data="{
     users: [],
@@ -27,10 +44,22 @@
     showPasswordList: {},
     showPinList: {},
 
+    // Helper identifikasi role kasir secara case-insensitive
+    isKasirRole(role) {
+        const r = (role || '').toString().toUpperCase().trim();
+        return r === 'KASIR' || r.includes('KASIR') || r === 'CASHIER';
+    },
+
     // State Pemulihan Akun / Reset Password & PIN Kasir
     activeTab: 'penugasan', // 'penugasan' | 'pemulihan'
-    currentManager: { id: 'usr_04', name: 'Diana Putri', username: 'manager_diana', role: 'MANAGER', branch: 'Cabang A' },
-    currentManagerBranch: 'Cabang A',
+    currentManager: {
+        id: @js($mgrAuthUser?->id ?? 'mgr_01'),
+        name: @js($mgrAuthUser?->name ?? 'Manager Gerai'),
+        username: @js($mgrAuthUser?->username ?? 'manager'),
+        role: @js(strtoupper($mgrAuthUser?->role ?? 'MANAGER')),
+        branch: @js($mgrAuthUser?->branch ?? $mgrInitialBranch)
+    },
+    currentManagerBranch: @js($mgrInitialBranch),
     resetSearchQuery: '',
     resetBranchFilter: 'all', // 'all' | 'my_branch' | 'other'
     resetCredentialStatusFilter: 'all', // 'all' | 'must_change' | 'normal'
@@ -58,6 +87,7 @@
     formManager: {
         name: '',
         email: '',
+        role: 'Manager',
         accessLevel: 'full', // full | reporting
         branch: 'Cabang Pusat',
         pin: '123456'
@@ -85,16 +115,18 @@
             this.loadMembersFromApi()
         ]);
 
-        // 2. Inisialisasi Data Users
-        const stored = localStorage.getItem('pos_ilp_users_v1');
-        if (stored) {
-            try {
-                this.users = JSON.parse(stored);
-            } catch(e) {
+        // 2. Fallback Data Users ke localStorage HANYA jika API kosong/gagal
+        if (!Array.isArray(this.users) || this.users.length === 0) {
+            const stored = localStorage.getItem('pos_ilp_users_v1');
+            if (stored) {
+                try {
+                    this.users = JSON.parse(stored);
+                } catch(e) {
+                    this.users = [];
+                }
+            } else {
                 this.users = [];
             }
-        } else if (!this.users || this.users.length === 0) {
-            this.users = [];
         }
 
         // 3. Normalisasi Struktur Penugasan Cabang (Migrasi Idempotent Backwards-Compatible)
@@ -114,7 +146,7 @@
                     u.nik = foundMember.nik;
                     u.dept = foundMember.dept;
                     needsSave = true;
-                } else if (u.role === 'KASIR') {
+                } else if (this.isKasirRole(u.role)) {
                     u.nik = '3275' + Math.floor(100000000000 + Math.random() * 900000000000);
                     needsSave = true;
                 }
@@ -144,13 +176,24 @@
         this.loadResetHistory();
 
         // 6. Sinkronisasi Manager Aktif dari Sesi Login
-        const savedMgrUsername = localStorage.getItem('pos_portal_logged_in_username');
-        if (savedMgrUsername) {
-            const foundMgr = this.users.find(u => u.username === savedMgrUsername);
-            if (foundMgr) {
-                this.currentManager = foundMgr;
-                if (foundMgr.branch) {
-                    this.currentManagerBranch = foundMgr.branch.includes('Cabang B') ? 'Cabang B' : (foundMgr.branch.includes('Pusat') ? 'Pusat' : 'Cabang A');
+        const matchedAuth = this.users.find(u =>
+            (this.currentManager.id && u.id === this.currentManager.id) ||
+            (this.currentManager.username && u.username === this.currentManager.username)
+        );
+        if (matchedAuth) {
+            this.currentManager = matchedAuth;
+            if (matchedAuth.branch) {
+                this.currentManagerBranch = matchedAuth.branch.includes('Cabang B') ? 'Cabang B' : (matchedAuth.branch.includes('Cabang A') ? 'Cabang A' : 'Pusat');
+            }
+        } else {
+            const savedMgrUsername = localStorage.getItem('pos_portal_logged_in_username');
+            if (savedMgrUsername && (!this.currentManager || this.currentManager.username === 'manager')) {
+                const foundMgr = this.users.find(u => u.username === savedMgrUsername);
+                if (foundMgr) {
+                    this.currentManager = foundMgr;
+                    if (foundMgr.branch) {
+                        this.currentManagerBranch = foundMgr.branch.includes('Cabang B') ? 'Cabang B' : (foundMgr.branch.includes('Pusat') ? 'Pusat' : 'Cabang A');
+                    }
                 }
             }
         }
@@ -237,7 +280,7 @@
         return this.users.find(u => 
             (u.memberId && u.memberId === member.id) ||
             (u.nik && u.nik === member.nik) ||
-            (u.role === 'KASIR' && (u.name || '').toLowerCase() === (member.name || '').toLowerCase())
+            (this.isKasirRole(u.role) && (u.name || '').toLowerCase() === (member.name || '').toLowerCase())
         ) || null;
     },
 
@@ -413,8 +456,9 @@
             return;
         }
 
-        const roleTarget = this.formManager.role || 'Supervisor';
-        const cleanUsername = (this.formManager.username && this.formManager.username.trim()) ? this.formManager.username.trim() : this.formManager.name.toLowerCase().replace(/\s+/g, '_');
+        const roleTarget = this.formManager.role || (this.formManager.accessLevel === 'reporting' ? 'Supervisor' : 'Manager');
+        const cleanUsername = (this.formManager.username && this.formManager.username.trim()) ? this.formManager.username.trim() : this.formManager.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        const pwd = this.formManager.password || 'password123';
 
         try {
             const res = await fetch('/api/users', {
@@ -430,7 +474,8 @@
                     email: this.formManager.email,
                     role: roleTarget,
                     branch: this.formManager.branch || 'Pusat',
-                    password: this.formManager.password || 'password123',
+                    password: pwd,
+                    password_confirmation: pwd,
                     pin: this.formManager.pin || '123456',
                     is_active: true
                 })
@@ -454,7 +499,7 @@
     // Filter Daftar Akun Kasir
     get filteredCashiers() {
         return this.users.filter(u => {
-            if (u.role !== 'KASIR') return false;
+            if (!this.isKasirRole(u.role)) return false;
             
             // Filter Cabang
             if (this.branchFilter !== 'all') {
@@ -682,7 +727,7 @@
     // ==========================================
     canManagerManageUser(u) {
         if (!u) return false;
-        if (u.role !== 'KASIR') return false;
+        if (!this.isKasirRole(u.role)) return false;
 
         const mgrBranch = (this.currentManagerBranch || 'Cabang A').trim().toLowerCase();
         
@@ -702,7 +747,7 @@
     },
 
     filteredResetUsers() {
-        let list = this.users.filter(u => u.role === 'KASIR');
+        let list = this.users.filter(u => this.isKasirRole(u.role));
 
         // Pencarian Nama, NIK, Username, atau Dept
         if (this.resetSearchQuery && this.resetSearchQuery.trim()) {
@@ -751,7 +796,7 @@
         return Boolean(this.resetChecklist.inPerson && this.resetChecklist.idCard && this.resetChecklist.branchVerified);
     },
 
-    executeResetCredential() {
+    async executeResetCredential() {
         if (!this.canConfirmReset()) {
             alert('Seluruh butir verifikasi SOP fisik wajib diceklis sebelum kredensial dapat diterbitkan!');
             return;
@@ -775,6 +820,36 @@
             u.pin = tempCredential;
             u.mustChangePin = true;
             // CATATAN KEAMANAN: Password portal akun TIDAK disentuh / tidak diubah sama sekali!
+        }
+
+        // Persist ke backend database terlebih dahulu jika user memiliki numeric ID dari DB
+        if (typeof u.id === 'number') {
+            try {
+                const endpoint = type === 'password'
+                    ? `/api/users/${u.id}/password`
+                    : `/api/users/${u.id}/pin`;
+                const payload = type === 'password'
+                    ? { password: tempCredential }
+                    : { pin: tempCredential };
+                const res = await fetch(endpoint, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                if (!res.ok) {
+                    const errJson = await res.json().catch(() => ({}));
+                    alert('Gagal memperbarui kredensial di server: ' + (errJson.message || 'HTTP ' + res.status));
+                    return;
+                }
+            } catch (e) {
+                console.error('Failed to persist reset credential to API:', e);
+                alert('Gagal menghubungi server saat mereset kredensial.');
+                return;
+            }
         }
 
         // Simpan perubahan ke pos_ilp_users_v1
@@ -992,21 +1067,22 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 class="flex-1 sm:flex-none px-4 py-2.5 rounded-lg inline-flex items-center justify-center gap-2 transition-all cursor-pointer">
                             <span class="material-symbols-rounded text-[18px]">lock_reset</span>
                             <span>Pemulihan Akun / Reset Password &amp; PIN</span>
-                            <span x-show="users.filter(u => u.role === 'KASIR' && (u.mustChangePassword || u.mustChangePin)).length > 0"
+                            <span x-show="users.filter(u => isKasirRole(u.role) && (u.mustChangePassword || u.mustChangePin)).length > 0"
                                   class="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-black"
-                                  x-text="users.filter(u => u.role === 'KASIR' && (u.mustChangePassword || u.mustChangePin)).length">
+                                  x-text="users.filter(u => isKasirRole(u.role) && (u.mustChangePassword || u.mustChangePin)).length">
                             </span>
                         </button>
                     </div>
 
                     <!-- Manager Branch Identity Badge & Switcher for Simulation -->
                     <div class="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-blue-50/70 border border-blue-200/60 text-xs">
-                        <div class="w-7 h-7 rounded-lg bg-[#0052cc] text-white flex items-center justify-center font-bold text-xs shrink-0">
-                            DP
+                        <div class="w-7 h-7 rounded-lg bg-[#0052cc] text-white flex items-center justify-center font-bold text-xs shrink-0"
+                             x-text="(currentManager.name || 'M').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase()">
+                            M
                         </div>
                         <div class="leading-tight">
                             <div class="font-bold text-gray-900 flex items-center gap-1.5">
-                                <span x-text="currentManager.name || 'Diana Putri'">Diana Putri</span>
+                                <span x-text="currentManager.name || 'Manager'">Manager</span>
                                 <span class="text-[10px] bg-blue-100 text-[#0052cc] px-1.5 py-0.2 rounded font-extrabold uppercase">Manager</span>
                             </div>
                             <div class="text-[11px] text-gray-500 font-medium flex items-center gap-1">

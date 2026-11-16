@@ -13,7 +13,7 @@
     ],
     searchQuery: '',
     statusFilter: 'all',
-    selectedBranch: 'all',
+    branchFilter: 'all',
     showDetailModal: false,
     selectedMember: null,
     isLoading: false,
@@ -191,7 +191,7 @@
             const params = new URLSearchParams({
                 search: (this.searchQuery || '').trim(),
                 status: this.statusFilter || 'all',
-                branch: this.selectedBranch || 'all',
+                branch: this.branchFilter || 'all',
                 per_page: 50
             });
             const res = await fetch(`/api/members?${params.toString()}`, {
@@ -296,7 +296,7 @@ class="flex flex-col h-screen w-full font-sans">
 
                     <!-- Branch Filter -->
                     <div class="w-full sm:w-auto">
-                        <select x-model="selectedBranch"
+                        <select x-model="branchFilter"
                                 @change="fetchMembers()"
                                 class="w-full sm:w-auto px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 shadow-xs cursor-pointer focus:outline-none">
                             <option value="all">Semua 3 Cabang</option>

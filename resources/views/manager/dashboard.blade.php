@@ -4,8 +4,8 @@
 
 @section('content')
 <div x-data="{
-    currentRole: (new URLSearchParams(window.location.search).get('role') || localStorage.getItem('pos_user_role') || 'Manager'),
-    userName: (localStorage.getItem('pos_user_name') || 'Admin Manager'),
+    currentRole: @js(auth()->user()?->isOwnerOrSuperadmin() ? 'Owner' : (auth()->check() ? 'Manager' : null)) || (new URLSearchParams(window.location.search).get('role') || localStorage.getItem('pos_user_role') || 'Manager'),
+    userName: @js(auth()->user()?->name) || (localStorage.getItem('pos_user_name') || 'Admin Manager'),
     isOwner() {
         return (this.currentRole || '').toLowerCase() === 'owner' || (this.currentRole || '').toLowerCase() === 'superadmin';
     },
@@ -135,7 +135,7 @@ class="flex h-screen w-full bg-[#f4f7fb] font-sans text-gray-800 overflow-hidden
                 <x-realtime-network-badge />
                 <div class="h-6 w-px bg-gray-300"></div>
                 <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-full pl-3.5 pr-1.5 py-1 shadow-2xs">
-                    <span class="text-xs font-bold text-gray-800" x-text="isOwner() ? 'Ir. Hartono Wibowo (Owner)' : 'Manager Gerai'">Manager Gerai</span>
+                    <span class="text-xs font-bold text-gray-800" x-text="isOwner() ? (userName + ' (Owner)') : userName">Manager Gerai</span>
                     <div class="w-6 h-6 rounded-full text-white flex items-center justify-center text-xs font-bold shadow-2xs"
                          :class="isOwner() ? 'bg-purple-900 ring-2 ring-purple-300' : 'bg-[#0052cc]'"
                          x-text="isOwner() ? 'HW' : 'M'">
@@ -159,7 +159,7 @@ class="flex h-screen w-full bg-[#f4f7fb] font-sans text-gray-800 overflow-hidden
                             <span class="px-2.5 py-0.5 rounded-full bg-yellow-400 text-purple-950 text-[10px] font-black uppercase tracking-wider">Superadmin</span>
                         </div>
                         <p class="text-xs text-purple-200 mt-1 max-w-2xl leading-relaxed">
-                            Selamat datang, <strong class="text-white">Ir. Hartono Wibowo</strong>. Anda memiliki otorisasi penuh atas data keuangan multi-cabang (Pusat, Utara, Selatan), audit P&amp;L konsolidasi, plafon kasbon anggota, dan tarif pajak PPN.
+                            Selamat datang, <strong class="text-white" x-text="userName">Owner</strong>. Anda memiliki otorisasi penuh atas data keuangan multi-cabang (Pusat, Utara, Selatan), audit P&amp;L konsolidasi, plafon kasbon anggota, dan tarif pajak PPN.
                         </p>
                     </div>
                 </div>

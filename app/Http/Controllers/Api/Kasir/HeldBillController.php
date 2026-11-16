@@ -64,7 +64,7 @@ class HeldBillController extends Controller
             'member_nik' => 'nullable|string|max:50',
             'items' => 'required|array|min:1',
             'items.*.name' => 'required|string',
-            'items.*.price' => 'required|numeric',
+            'items.*.price' => 'required|numeric|min:0',
             'items.*.qty' => 'required|integer|min:1',
             'note' => 'nullable|string|max:255',
         ]);

@@ -71,6 +71,12 @@ class User extends Authenticatable
 
     public function verifyPin(string $pin): bool
     {
+        if (empty($this->pin)) {
+            return false;
+        }
+        if (str_starts_with($this->pin, '$2y$') || str_starts_with($this->pin, '$2a$')) {
+            return Hash::check($pin, $this->pin);
+        }
         return (string) $this->pin === (string) $pin;
     }
 

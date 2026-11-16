@@ -850,9 +850,6 @@ function cabangApp() {
                 this.selectedBranchId = this.branches[0] ? this.branches[0].id : null;
             }
             if (typeof triggerToast === 'function') triggerToast('Lokasi ' + branch.name + ' berhasil dihapus.', 'info');
-        }
-                if (typeof triggerToast === 'function') triggerToast('Perubahan lokasi ' + this.editingBranch.name + ' berhasil disimpan!', 'success');
-            }
         },
 
         exportData() {

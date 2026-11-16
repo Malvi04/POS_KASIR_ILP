@@ -51,9 +51,10 @@ Route::get('/health', function () {
 
 // Authentication (Kasir, Manager, Owner)
 Route::prefix('auth')->group(function () {
-    Route::post('/login', [AuthController::class, 'login']);
-    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
+    Route::match(['get', 'post'], '/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
+    Route::get('/cashiers', [AuthController::class, 'cashiers']);
 });
 
 // 1. Shift & Modal Kasir (Opening Cash & Audit Closing)
@@ -96,7 +97,7 @@ Route::prefix('pos')->group(function () {
 
 // 6. Otorisasi Void / Pembatalan Transaction (Anti-Fraud Control)
 Route::prefix('pos/void')->group(function () {
-    Route::post('/authorize', [VoidController::class, 'authorizeSupervisor']);
+    Route::post('/authorize', [VoidController::class, 'authorizeSupervisor'])->middleware('throttle:pin-auth');
     Route::post('/item', [VoidController::class, 'voidItem']);
     Route::post('/transaction', [VoidController::class, 'voidTransaction']);
     Route::get('/logs', [VoidController::class, 'logs']);
@@ -190,7 +191,7 @@ Route::prefix('inventory/stock-opname')->group(function () {
 */
 
 // User Management (Kelola Akun Kasir, SPV, Manager, Owner)
-Route::prefix('users')->group(function () {
+Route::prefix('users')->middleware('auth.api:manager')->group(function () {
     Route::get('/', [UserManagementController::class, 'index']);
     Route::post('/', [UserManagementController::class, 'store']);
     Route::get('/{id}', [UserManagementController::class, 'show']);
@@ -201,16 +202,19 @@ Route::prefix('users')->group(function () {
     Route::post('/{id}/toggle-status', [UserManagementController::class, 'toggleStatus']);
 });
 
-// System & Tax Settings (Pengaturan Pajak PPN & Keamanan Toko)
-Route::prefix('settings')->group(function () {
+// System & Store Settings (Manager & Owner untuk Store/Security; Khusus Owner untuk Tax PPN)
+Route::prefix('settings')->middleware('auth.api:manager')->group(function () {
     Route::get('/', [SettingsController::class, 'index']);
     Route::put('/store', [SettingsController::class, 'updateStore']);
-    Route::put('/tax', [SettingsController::class, 'updateTax']);
     Route::put('/security', [SettingsController::class, 'updateSecurity']);
 });
 
+Route::prefix('settings')->middleware('auth.api:owner')->group(function () {
+    Route::put('/tax', [SettingsController::class, 'updateTax']);
+});
+
 // Owner Executive API Endpoints
-Route::prefix('owner')->group(function () {
+Route::prefix('owner')->middleware('auth.api:owner')->group(function () {
     Route::get('/dashboard-summary', [OwnerDashboardController::class, 'summary']);
     Route::get('/audit-logs', [AuditLogController::class, 'index']);
     Route::post('/audit-logs', [AuditLogController::class, 'store']);
@@ -219,22 +223,22 @@ Route::prefix('owner')->group(function () {
 });
 
 // Branch & Warehouse Management API
-Route::apiResource('branches', BranchController::class);
+Route::apiResource('branches', BranchController::class)->middleware('auth.api:owner');
 
 // Konsolidasi Laporan 3 Cabang & Real-time P&L (Owner / Superadmin)
-Route::prefix('reports')->group(function () {
+Route::prefix('reports')->middleware('auth.api:manager')->group(function () {
     Route::get('/consolidated-branches', [ConsolidatedReportController::class, 'index']);
 });
 
 // Koreksi Stok Harian Cabang (Supervisor / Manager)
-Route::prefix('inventory/stock-corrections')->group(function () {
+Route::prefix('inventory/stock-corrections')->middleware('auth.api:manager')->group(function () {
     Route::get('/', [StockCorrectionController::class, 'index']);
     Route::post('/', [StockCorrectionController::class, 'store']);
 });
 
 // Otorisasi Diskon Manual Kasir (Supervisor / Manager)
 Route::prefix('pos/discount')->group(function () {
-    Route::post('/authorize', [DiscountAuthorizationController::class, 'authorizeDiscount']);
+    Route::post('/authorize', [DiscountAuthorizationController::class, 'authorizeDiscount'])->middleware('throttle:pin-auth');
 });
 
 /*

@@ -1,28 +1,20 @@
 /**
- * POS Kasir ILP - Offline Resiliency Service Worker
- * Ensures 100% cashier uptime & offline access when LAN or central server is down.
+ * POS Kasir ILP - Offline Resiliency Service Worker (v3)
+ *
+ * Perbaikan:
+ *  - Tidak lagi membatalkan navigasi setelah 1.8 detik (penyebab halaman menu
+ *    manajerial/owner "terlempar" ke portal login / logout).
+ *  - Tidak menyimpan respons hasil redirect (mis. redirect ke halaman login)
+ *    ke cache, sehingga cache tidak lagi "teracuni" oleh halaman portal.
+ *  - Fallback offline hanya untuk halaman kasir; halaman lain menampilkan
+ *    pesan offline, bukan halaman portal login.
+ *  - Versi cache dinaikkan agar cache lama yang rusak otomatis dihapus.
  */
 
-const CACHE_NAME = 'pos-ilp-cache-v2.4';
-const PAGES_CACHE = 'pos-ilp-pages-v2.4';
+const CACHE_NAME = 'pos-ilp-cache-v3.0';
+const PAGES_CACHE = 'pos-ilp-pages-v3.0';
 
-const PRECACHE_ASSETS = [
-    '/',
-    '/login-kasir',
-    '/select-shift',
-    '/kasir/select-shift',
-    '/pos',
-    '/kasir/pos',
-    '/cetak-struk',
-    '/kasir/cetak-struk',
-    '/kasir/transactions',
-    '/kasir/transaksi/riwayat',
-    '/kasir/transaksi/ditahan',
-    '/kasir/sesi',
-    '/kasir/inventory',
-    '/kasir/members',
-    '/kasir/reports',
-    '/error',
+const PRECACHE_STATIC = [
     '/js/alpine.min.js',
     '/js/cashier-core.js',
     '/js/pos-realtime.js',
@@ -32,195 +24,131 @@ const PRECACHE_ASSETS = [
     '/favicon.ico'
 ];
 
-// 1. Install Event: Cache Core Pages & Automatically Read Vite Build Manifest
+// Halaman kasir yang boleh disajikan dari cache saat server mati
+const OFFLINE_CASHIER_PATHS = ['/pos', '/kasir/pos', '/select-shift', '/kasir/select-shift', '/cetak-struk', '/kasir/cetak-struk'];
+
+function isCacheableResponse(res) {
+    return res && res.status === 200 && !res.redirected && res.type !== 'opaqueredirect';
+}
+
 self.addEventListener('install', (event) => {
     self.skipWaiting();
     event.waitUntil(
         caches.open(CACHE_NAME).then(async (cache) => {
-            // A. Pre-cache core static scripts & pages
             await Promise.allSettled(
-                PRECACHE_ASSETS.map((url) => {
-                    return fetch(url, { cache: 'no-cache' })
-                        .then((res) => {
-                            if (res && res.status === 200) {
-                                // Put pages in PAGES_CACHE as well
-                                if (!url.includes('.')) {
-                                    caches.open(PAGES_CACHE).then((pCache) => pCache.put(url, res.clone()));
-                                }
-                                return cache.put(url, res);
-                            }
-                        })
-                        .catch((err) => {
-                            console.warn('[SW] Pre-cache item failed for ' + url, err);
-                        });
-                })
+                PRECACHE_STATIC.map((url) =>
+                    fetch(url, { cache: 'no-cache' })
+                        .then((res) => { if (isCacheableResponse(res)) return cache.put(url, res); })
+                        .catch(() => {})
+                )
             );
-
-            // B. Dynamically Pre-cache Vite Build Assets (CSS, JS, Fonts)
             try {
                 const manifestRes = await fetch('/build/manifest.json', { cache: 'no-cache' });
                 if (manifestRes && manifestRes.ok) {
                     const manifest = await manifestRes.json();
-                    const assetUrls = Object.values(manifest)
-                        .filter(entry => entry.file)
-                        .map(entry => '/build/' + entry.file);
-
+                    const assetUrls = Object.values(manifest).filter(e => e.file).map(e => '/build/' + e.file);
                     await Promise.allSettled(
-                        assetUrls.map(u => fetch(u, { cache: 'no-cache' }).then(r => r.ok && cache.put(u, r)))
+                        assetUrls.map(u => fetch(u, { cache: 'no-cache' }).then(r => isCacheableResponse(r) && cache.put(u, r)))
                     );
                 }
-            } catch (err) {
-                console.warn('[SW] Build manifest caching warning:', err);
-            }
+            } catch (err) { /* abaikan */ }
         })
     );
 });
 
-// 2. Activate Event: Clean up old caches & take control immediately
 self.addEventListener('activate', (event) => {
     event.waitUntil(
         Promise.all([
-            caches.keys().then((keys) => {
-                return Promise.all(
-                    keys.map((key) => {
-                        if (key !== CACHE_NAME && key !== PAGES_CACHE) {
-                            return caches.delete(key);
-                        }
-                    })
-                );
-            }),
+            caches.keys().then((keys) => Promise.all(
+                keys.map((key) => (key !== CACHE_NAME && key !== PAGES_CACHE) ? caches.delete(key) : null)
+            )),
             self.clients.claim()
         ])
     );
 });
 
-// 3. Fetch Event: Handle Navigation, Static Assets & APIs
+const OFFLINE_HTML = '<html><head><meta charset="utf-8"><title>Offline</title></head><body style="font-family:sans-serif;text-align:center;padding:50px;"><h2>POS Minimarket ILP (Mode Offline)</h2><p>Server sedang tidak dapat dihubungi. Silakan coba lagi beberapa saat.</p><p><a href="">Muat Ulang</a></p></body></html>';
+
 self.addEventListener('fetch', (event) => {
     const request = event.request;
     const url = new URL(request.url);
 
-    // Only intercept GET requests
-    if (request.method !== 'GET') {
+    if (request.method !== 'GET') return;
+    if (url.origin !== self.location.origin) {
+        // Google Fonts: cache-first
+        if (url.hostname.includes('fonts.googleapis.com') || url.hostname.includes('fonts.gstatic.com')) {
+            event.respondWith(
+                caches.match(request).then((cached) => cached || fetch(request).then((res) => {
+                    if (res && res.status === 200) {
+                        const copy = res.clone();
+                        caches.open(CACHE_NAME).then((c) => c.put(request, copy));
+                    }
+                    return res;
+                }).catch(() => new Response('', { status: 408 })))
+            );
+        }
         return;
     }
 
-    // Bypass API calls so client-side JavaScript handles offline fallback locally
-    if (url.pathname.startsWith('/api/')) {
+    // Jangan pernah intersep API, login/logout, dan export file
+    if (url.pathname.startsWith('/api/') ||
+        url.pathname.includes('login') ||
+        url.pathname.includes('logout') ||
+        url.pathname.includes('/export') ||
+        url.pathname.includes('/template')) {
         return;
     }
 
-    // Determine if request is a page navigation / HTML view
     const isNavigation = request.mode === 'navigate' ||
-        (request.headers.get('accept') && request.headers.get('accept').includes('text/html')) ||
-        (url.origin === self.location.origin && !url.pathname.startsWith('/api/') && !url.pathname.match(/\.[a-zA-Z0-9]+$/));
+        (request.headers.get('accept') || '').includes('text/html');
 
-    // A. Page Navigation Requests
-    if (isNavigation && url.origin === self.location.origin) {
-        const navCtrl = new AbortController();
-        const navTimeout = setTimeout(() => navCtrl.abort(), 1800);
-
+    // A. Navigasi halaman: network-first TANPA timeout paksa
+    if (isNavigation) {
         event.respondWith(
-            fetch(request, { signal: navCtrl.signal })
+            fetch(request)
                 .then((networkRes) => {
-                    clearTimeout(navTimeout);
-                    if (networkRes && networkRes.status === 200) {
+                    const isCashierPage = OFFLINE_CASHIER_PATHS.includes(url.pathname);
+                    if (isCashierPage && isCacheableResponse(networkRes)) {
                         const copy = networkRes.clone();
-                        caches.open(PAGES_CACHE).then((cache) => {
-                            cache.put(request, copy);
-                            cache.put(url.pathname, copy.clone()); // Also index by pathname without queries
-                        });
+                        caches.open(PAGES_CACHE).then((cache) => cache.put(url.pathname, copy));
                     }
                     return networkRes;
                 })
                 .catch(async () => {
-                    clearTimeout(navTimeout);
-                    // SERVER DOWN / OFFLINE FALLBACK: Serve cached page
+                    // Hanya jika jaringan/server benar-benar mati
                     const pageCache = await caches.open(PAGES_CACHE);
-                    const appCache = await caches.open(CACHE_NAME);
-
-                    // 1. Try exact matching URL
-                    let matched = await pageCache.match(request) || await pageCache.match(url.pathname);
+                    let matched = await pageCache.match(url.pathname);
                     if (matched) return matched;
 
-                    // 2. Try appCache
-                    matched = await appCache.match(url.pathname) || await appCache.match(request);
-                    if (matched) return matched;
-
-                    // 3. Contextual fallbacks based on target route
                     if (url.pathname.startsWith('/kasir') || url.pathname === '/pos') {
-                        const fallbackPos = await pageCache.match('/kasir/pos') || await pageCache.match('/pos') || await appCache.match('/pos');
-                        if (fallbackPos) return fallbackPos;
+                        matched = await pageCache.match('/pos') || await pageCache.match('/kasir/pos');
+                        if (matched) return matched;
                     }
-
-                    if (url.pathname.includes('cetak-struk')) {
-                        const fallbackStruk = await pageCache.match('/cetak-struk') || await appCache.match('/cetak-struk');
-                        if (fallbackStruk) return fallbackStruk;
-                    }
-
-                    if (url.pathname.includes('shift')) {
-                        const fallbackShift = await pageCache.match('/select-shift') || await appCache.match('/select-shift');
-                        if (fallbackShift) return fallbackShift;
-                    }
-
-                    // 4. Global root fallback
-                    return await pageCache.match('/') || await appCache.match('/') || new Response(
-                        '<html><body style="font-family:sans-serif;text-align:center;padding:50px;"><h2>POS Minimarket ILP (Mode Offline)</h2><p>Server sedang tidak dapat dihubungi. <a href="/pos">Buka Terminal Kasir</a></p></body></html>',
-                        { headers: { 'Content-Type': 'text/html' } }
-                    );
+                    return new Response(OFFLINE_HTML, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
                 })
         );
         return;
     }
 
-    // B. Static Assets (CSS, JS, Fonts, Images, Manifest)
-    const isStaticAsset = url.pathname.endsWith('.js') ||
-        url.pathname.endsWith('.css') ||
-        url.pathname.endsWith('.woff') ||
-        url.pathname.endsWith('.woff2') ||
-        url.pathname.endsWith('.ttf') ||
-        url.pathname.endsWith('.ico') ||
-        url.pathname.endsWith('.png') ||
-        url.pathname.endsWith('.jpg') ||
-        url.pathname.endsWith('.json') ||
-        url.pathname.startsWith('/build/') ||
-        url.hostname.includes('fonts.googleapis.com') ||
-        url.hostname.includes('fonts.gstatic.com');
+    // B. Aset statis: stale-while-revalidate
+    const isStaticAsset = /\.(js|css|woff2?|ttf|ico|png|jpg|jpeg|svg|webp|json)$/.test(url.pathname) ||
+        url.pathname.startsWith('/build/');
 
     if (isStaticAsset) {
         event.respondWith(
             caches.match(request).then((cachedRes) => {
-                if (cachedRes) {
-                    // Update cache in background if network is available
-                    fetch(request)
-                        .then((freshRes) => {
-                            if (freshRes && freshRes.status === 200) {
-                                caches.open(CACHE_NAME).then((cache) => cache.put(request, freshRes));
-                            }
-                        })
-                        .catch(() => {});
-                    return cachedRes;
-                }
-
-                // If not in cache, fetch and store
-                return fetch(request)
-                    .then((networkRes) => {
-                        if (networkRes && networkRes.status === 200) {
-                            const copy = networkRes.clone();
+                const networkFetch = fetch(request)
+                    .then((freshRes) => {
+                        if (isCacheableResponse(freshRes)) {
+                            const copy = freshRes.clone();
                             caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
                         }
-                        return networkRes;
+                        return freshRes;
                     })
-                    .catch(() => {
-                        // Return empty response rather than breaking the UI
-                        return new Response('', { status: 408, statusText: 'Offline Fallback' });
-                    });
+                    .catch(() => cachedRes || new Response('', { status: 408, statusText: 'Offline Fallback' }));
+                return cachedRes || networkFetch;
             })
         );
-        return;
     }
-
-    // Default: try cache then network
-    event.respondWith(
-        caches.match(request).then((cached) => cached || fetch(request))
-    );
+    // Selain itu: biarkan browser menangani secara normal
 });

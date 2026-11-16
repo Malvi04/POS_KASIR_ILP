@@ -91,8 +91,7 @@
                         <p class="text-[13px] text-gray-500 mt-1">Masukkan NIK atau username &amp; password akun portal</p>
                     </div>
 
-                    <form action="{{ url('/select-shift') }}" method="GET"
-                          @submit="if (!handleSubmit($event)) return false;"
+                    <form @submit.prevent="handleSubmit($event)"
                           class="space-y-4">
 
                         <!-- Hidden fields for automated tests & backwards compatibility -->
@@ -437,7 +436,7 @@
                             </div>
 
                             <!-- Form -->
-                            <form action="{{ url('/owner') }}" method="GET" onsubmit="submitOwnerLogin(event);" class="space-y-4 mt-6">
+                            <form onsubmit="submitOwnerLogin(event);" class="space-y-4 mt-6">
                                 <!-- Input 1: Nama Owner -->
                                 <div>
                                     <label class="block text-[12.5px] font-bold text-gray-700 mb-1.5">Nama Owner</label>
@@ -573,9 +572,14 @@
 
                 async loadStaff() {
                     try {
-                        const res = await fetch('/api/users?role=kasir', {
+                        let res = await fetch('/api/auth/cashiers', {
                             headers: { 'Accept': 'application/json' }
                         });
+                        if (!res.ok) {
+                            res = await fetch('/api/users?role=kasir', {
+                                headers: { 'Accept': 'application/json' }
+                            });
+                        }
                         if (res.ok) {
                             const json = await res.json();
                             const users = json.data || (Array.isArray(json) ? json : []);
@@ -885,9 +889,19 @@
             'Owner': 'Silakan masukkan PIN otorisasi Owner untuk akses strategis'
         };
 
+        function getNormalizedRole(role) {
+            if (!role) return '';
+            const r = role.toString().trim().toLowerCase();
+            if (r === 'kasir' || r === 'cashier') return 'Kasir';
+            if (r === 'manager' || r === 'manajerial' || r === 'supervisor' || r === 'spv') return 'Manager';
+            if (r === 'owner' || r === 'admin' || r === 'superadmin') return 'Owner';
+            return role.charAt(0).toUpperCase() + role.slice(1).toLowerCase();
+        }
+
         function selectRole(role, instant = false) {
+            const normalized = getNormalizedRole(role);
             const roleSelector = document.getElementById('role-selector');
-            const targetForm = roleForms[role];
+            const targetForm = roleForms[normalized] || roleForms[role];
             const subtitle = document.getElementById('portal-subtitle');
             const header = document.getElementById('portal-header');
             const mainEl = document.querySelector('main');
@@ -895,11 +909,11 @@
 
             currentActiveForm = targetForm;
 
-            if (subtitle && roleSubtitles[role]) {
-                subtitle.innerText = roleSubtitles[role];
+            if (subtitle && (roleSubtitles[normalized] || roleSubtitles[role])) {
+                subtitle.innerText = roleSubtitles[normalized] || roleSubtitles[role];
             }
 
-            if (role === 'Owner') {
+            if (normalized === 'Owner') {
                 if (header) header.classList.add('hidden');
                 if (mainEl) {
                     mainEl.classList.remove('max-w-4xl');
@@ -919,7 +933,7 @@
                 targetForm.classList.remove('hidden');
                 targetForm.offsetHeight;
                 targetForm.classList.remove('opacity-0', 'translate-y-4');
-                focusFirstInput(role);
+                focusFirstInput(normalized);
                 return;
             }
 
@@ -942,7 +956,7 @@
 
                 setTimeout(() => {
                     targetForm.classList.remove('opacity-0', 'translate-y-4');
-                    focusFirstInput(role);
+                    focusFirstInput(normalized);
                 }, 50);
             }, 250);
         }
@@ -981,13 +995,14 @@
         }
 
         function focusFirstInput(role) {
-            if (role === 'Kasir') {
+            const normalized = getNormalizedRole(role);
+            if (normalized === 'Kasir') {
                 const el = document.getElementById('kasir-identifier') || document.getElementById('kasir-username');
                 if (el) el.focus();
-            } else if (role === 'Manager') {
+            } else if (normalized === 'Manager') {
                 const el = document.getElementById('manager-username');
                 if (el) el.focus();
-            } else if (role === 'Owner') {
+            } else if (normalized === 'Owner') {
                 const el = document.getElementById('owner-username');
                 if (el) el.focus();
             }

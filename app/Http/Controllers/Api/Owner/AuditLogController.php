@@ -134,6 +134,15 @@ class AuditLogController extends Controller
             'changes' => 'nullable|array',
         ]);
 
+        // If authenticated, automatically bind genuine user identity to prevent spoofing
+        if ($user = \Illuminate\Support\Facades\Auth::user()) {
+            $validated['user_name'] = $user->name;
+            $validated['user_role'] = $user->role;
+            if (empty($validated['location'])) {
+                $validated['location'] = $user->branch ?? 'Pusat';
+            }
+        }
+
         $log = AuditLog::record($validated);
 
         return response()->json([

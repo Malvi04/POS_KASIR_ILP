@@ -230,16 +230,22 @@ class CouponController extends Controller
      */
     public function redeem(Request $request, int $id): JsonResponse
     {
-        $coupon = CouponUnit::findOrFail($id);
+        return DB::transaction(function () use ($id, $request) {
+            $coupon = CouponUnit::lockForUpdate()->find($id);
+            if (!$coupon) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Kupon tidak ditemukan.',
+                ], 404);
+            }
 
-        if ($coupon->status === 'REDEEMED') {
-            return response()->json([
-                'success' => false,
-                'message' => "Kupon [{$coupon->serial_number}] sudah pernah ditukarkan sebelumnya.",
-            ], 422);
-        }
+            if ($coupon->status === 'REDEEMED') {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Kupon [{$coupon->serial_number}] sudah pernah ditukarkan sebelumnya.",
+                ], 422);
+            }
 
-        return DB::transaction(function () use ($coupon, $request) {
             $coupon->update(['status' => 'REDEEMED']);
 
             $redemption = CouponRedemption::create([

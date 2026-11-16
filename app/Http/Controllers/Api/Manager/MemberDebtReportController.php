@@ -292,11 +292,11 @@ class MemberDebtReportController extends Controller
 
                     fputcsv($output, [
                         $no++,
-                        $m->member_code,
-                        "'" . $m->nik, // apostrophe prefix prevents scientific notation in Excel
-                        $m->name,
-                        $m->department,
-                        $m->branch ?? 'Cabang 1 - Mill / Pabrik',
+                        $this->sanitizeCsvField($m->member_code),
+                        "'" . $this->sanitizeCsvField($m->nik), // apostrophe prefix prevents scientific notation in Excel
+                        $this->sanitizeCsvField($m->name),
+                        $this->sanitizeCsvField($m->department),
+                        $this->sanitizeCsvField($m->branch ?? 'Cabang 1 - Mill / Pabrik'),
                         number_format($m->credit_limit, 2, '.', ''),
                         number_format($m->current_debt, 2, '.', ''),
                         number_format($remaining, 2, '.', ''),
@@ -394,5 +394,20 @@ class MemberDebtReportController extends Controller
             'processed_count' => $processedCount,
             'total_deducted' => $totalDeducted,
         ]);
+    }
+
+    /**
+     * Sanitize fields to prevent CSV / Spreadsheet Formula Injection (CWE-1236).
+     */
+    protected function sanitizeCsvField(?string $value): string
+    {
+        if ($value === null || $value === '') {
+            return '';
+        }
+        $firstChar = substr($value, 0, 1);
+        if (in_array($firstChar, ['=', '+', '-', '@', "\t", "\r"])) {
+            return "'" . $value;
+        }
+        return $value;
     }
 }

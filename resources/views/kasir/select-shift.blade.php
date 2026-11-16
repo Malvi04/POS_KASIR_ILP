@@ -94,7 +94,7 @@
                     </div>
 
                     <!-- Logout / Kembali ke Portal -->
-                    <a href="{{ url('/login-kasir') }}" data-no-spa
+                    <a href="{{ url('/logout') }}" data-no-spa
                        class="mt-1 text-center py-2 px-3 text-xs font-bold text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl border border-gray-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer">
                         <span class="material-symbols-rounded text-[16px]">logout</span>
                         <span>Keluar / Ganti Akun Portal</span>

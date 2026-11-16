@@ -224,15 +224,21 @@
                         <div><span class="text-slate-400">METHOD      :</span> <span class="text-amber-300">{{ request()->method() }}</span></div>
                         <div><span class="text-slate-400">TIMESTAMP   :</span> <span class="text-slate-300">{{ now()->toIso8601String() }}</span></div>
                         <div><span class="text-slate-400">CLIENT_IP   :</span> <span class="text-slate-300">{{ request()->ip() }}</span></div>
-                        @if(isset($exception) && $exception && method_exists($exception, 'getMessage') && $exception->getMessage())
-                            <div class="pt-2 border-t border-slate-800">
-                                <span class="text-rose-400">MESSAGE:</span>
-                                <div class="text-slate-300 mt-1 whitespace-pre-wrap">{{ $exception->getMessage() }}</div>
-                            </div>
-                        @elseif(!empty($customMessage))
-                            <div class="pt-2 border-t border-slate-800">
-                                <span class="text-rose-400">MESSAGE:</span>
-                                <div class="text-slate-300 mt-1 whitespace-pre-wrap">{{ $customMessage }}</div>
+                        @if(config('app.debug'))
+                            @if(isset($exception) && $exception && method_exists($exception, 'getMessage') && $exception->getMessage())
+                                <div class="pt-2 border-t border-slate-800">
+                                    <span class="text-rose-400">DEBUG_MESSAGE:</span>
+                                    <div class="text-slate-300 mt-1 whitespace-pre-wrap">{{ $exception->getMessage() }}</div>
+                                </div>
+                            @elseif(!empty($customMessage))
+                                <div class="pt-2 border-t border-slate-800">
+                                    <span class="text-rose-400">DEBUG_MESSAGE:</span>
+                                    <div class="text-slate-300 mt-1 whitespace-pre-wrap">{{ $customMessage }}</div>
+                                </div>
+                            @endif
+                        @else
+                            <div class="pt-2 border-t border-slate-800 text-slate-400">
+                                Detail error internal disembunyikan dalam mode produksi demi keamanan.
                             </div>
                         @endif
                     </div>

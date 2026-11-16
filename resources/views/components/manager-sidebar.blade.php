@@ -1,9 +1,13 @@
 @props(['active' => ''])
+@php
+    $authUser = auth()->user();
+    $serverRole = $authUser ? ($authUser->isOwnerOrSuperadmin() ? 'Owner' : 'Manager') : null;
+@endphp
 
 <aside x-data="{
-           currentRole: (new URLSearchParams(window.location.search).get('role') || localStorage.getItem('pos_user_role') || 'Manager'),
-           userName: (localStorage.getItem('pos_user_name') || 'Admin Manager'),
-           userBranch: (localStorage.getItem('pos_user_branch') || 'Minimarket Pusat'),
+           currentRole: @js($serverRole) || (new URLSearchParams(window.location.search).get('role') || localStorage.getItem('pos_user_role') || 'Manager'),
+           userName: @js($authUser?->name) || (localStorage.getItem('pos_user_name') || 'Admin Manager'),
+           userBranch: @js($authUser?->branch) || (localStorage.getItem('pos_user_branch') || 'Minimarket Pusat'),
            openMenus: {
                persediaan: {{ in_array($active, ['inventory', 'stock_opname', 'kirim_barang']) ? 'true' : 'false' }},
                retur: {{ in_array($active, ['retur', 'retur_masuk']) ? 'true' : 'false' }},
@@ -176,19 +180,19 @@
         <div class="px-3.5 py-2 flex items-center gap-3 rounded-xl bg-white/70 border border-gray-200/70 mt-1 shadow-2xs">
             <div class="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-2xs"
                  :class="isOwner() ? 'bg-purple-900 ring-2 ring-purple-300' : 'bg-[#0052cc]'"
-                 x-text="isOwner() ? 'HW' : 'AD'">
+                 x-text="(userName || 'AD').split(' ').filter(Boolean).map(w => w[0]).join('').substring(0, 2).toUpperCase()">
                 AD
             </div>
             <div class="flex flex-col overflow-hidden flex-1">
                 <span class="text-[13px] font-bold text-gray-900 truncate leading-tight"
-                      x-text="isOwner() ? 'Ir. Hartono Wibowo' : userName">Admin Manager</span>
+                      x-text="userName">Admin Manager</span>
                 <span class="text-[11px] text-gray-500 truncate"
                       x-text="isOwner() ? 'Pemilik / Superadmin' : userBranch">Minimarket Pusat</span>
             </div>
         </div>
 
         <!-- Keluar ke Portal -->
-        <a href="{{ url('/') }}" data-no-spa @click="localStorage.removeItem('pos_user_role'); localStorage.removeItem('pos_user_name');" class="flex w-full items-center justify-center gap-2 px-3.5 py-2 text-red-600 hover:bg-red-50 rounded-xl transition-colors font-bold text-[12.5px] cursor-pointer mt-1">
+        <a href="{{ url('/logout') }}" data-no-spa @click="localStorage.removeItem('pos_user_role'); localStorage.removeItem('pos_user_name');" class="flex w-full items-center justify-center gap-2 px-3.5 py-2 text-red-600 hover:bg-red-50 rounded-xl transition-colors font-bold text-[12.5px] cursor-pointer mt-1">
             <span class="material-symbols-rounded text-[18px]">logout</span>
             <span>Keluar ke Portal</span>
         </a>

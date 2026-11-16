@@ -131,9 +131,11 @@
             items.forEach(it => {
                 const receivedQty = parseInt(it.qtyReceived, 10) || 0;
                 if (receivedQty > 0 && it.condition === 'BAIK') {
-                    const p = prods.find(pr => pr.sku === it.sku || pr.barcode === it.sku || (pr.nama && pr.nama.toLowerCase().includes(it.name.toLowerCase())));
+                    const p = prods.find(pr => pr.sku === it.sku || pr.barcode === it.sku || ((pr.name || pr.nama) && (pr.name || pr.nama).toLowerCase().includes(it.name.toLowerCase())));
                     if (p) {
-                        p.stok = (parseInt(p.stok, 10) || 0) + receivedQty;
+                        const cur = parseInt(p.stock !== undefined ? p.stock : (p.stok || 0), 10) || 0;
+                        p.stock = cur + receivedQty;
+                        p.stok = p.stock;
                     }
                 }
             });

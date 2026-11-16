@@ -112,7 +112,7 @@ class ShiftController extends Controller
             $user = User::where('nik', $validated['cashier_nik'])
                 ->orWhere('username', $validated['cashier_nik'])
                 ->first();
-            if ($user && !empty($user->pin) && $user->pin !== $validated['pin'] && $validated['pin'] !== '123456') {
+            if ($user && !empty($user->pin) && !$user->verifyPin($validated['pin'])) {
                 return response()->json([
                     'success' => false,
                     'message' => "PIN kasir tidak cocok untuk {$user->name}. Silakan periksa kembali PIN Anda.",

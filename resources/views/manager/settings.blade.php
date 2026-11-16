@@ -2,6 +2,16 @@
 
 @section('title', 'Pengaturan Sistem - ILP POS')
 
+@php
+    $settingsUser = auth()->user();
+    $settingsName = $settingsUser?->name ?? 'Manager Gerai';
+    $settingsInitials = collect(explode(' ', trim($settingsName)))
+        ->filter()
+        ->take(2)
+        ->map(fn ($part) => strtoupper(substr($part, 0, 1)))
+        ->implode('') ?: 'MG';
+@endphp
+
 @section('content')
 <div x-data="{
     activeTab: 'profil',
@@ -10,13 +20,13 @@
     showToast: false,
     lastSaved: 'Hari ini, 09:15 WIB',
 
-    profileName: 'Andi Darmawan, S.E.',
-    profileNik: 'MGR-ILP-2024-004',
-    profileEmail: 'andi.darmawan@ilp-pos.co.id',
+    profileName: @js($settingsName),
+    profileNik: @js($settingsUser?->nik ?? 'MGR-ILP-001'),
+    profileEmail: @js($settingsUser?->email ?? ''),
     profilePhone: '81299887766',
-    profileRole: 'Account & Store Manager',
-    profileBranch: 'Cabang Pusat - Minimarket ILP',
-    avatarInitials: 'AD',
+    profileRole: @js(ucfirst(strtolower($settingsUser?->role ?? 'Manager'))),
+    profileBranch: @js($settingsUser?->branch_name ?? 'Cabang Pusat - Minimarket ILP'),
+    avatarInitials: @js($settingsInitials),
     avatarFileName: '',
 
     storeName: 'ILP Mart - Koperasi Pekerja Pusat',
@@ -56,8 +66,8 @@
 
     resetForm() {
         if (this.activeTab === 'profil') {
-            this.profileName = 'Andi Darmawan, S.E.';
-            this.profileEmail = 'andi.darmawan@ilp-pos.co.id';
+            this.profileName = @js($settingsName);
+            this.profileEmail = @js($settingsUser?->email ?? '');
             this.profilePhone = '81299887766';
             this.storeName = 'ILP Mart - Koperasi Pekerja Pusat';
             this.storePhone = '(021) 5589-2210';
@@ -127,15 +137,17 @@
                     tax_calculation_method: this.taxMethod
                 })
             });
-            const json = await res.json();
+            const json = await res.json().catch(() => ({}));
             if (res.ok && json.success) {
                 this.triggerToast(json.message);
+            } else if (res.status === 403) {
+                this.triggerToast('Hanya Owner yang memiliki wewenang mengubah tarif pajak PPN.');
             } else {
-                alert('Gagal menyimpan pajak: ' + (json.message || 'Error'));
+                this.triggerToast('Gagal menyimpan pajak: ' + (json.message || 'Error'));
             }
         } catch (e) {
             console.error('Error saving tax:', e);
-            alert('Gagal menghubungi server.');
+            this.triggerToast('Gagal menghubungi server.');
         } finally {
             this.isSavingTax = false;
         }
@@ -149,7 +161,7 @@
 
         try {
             // Save store profile
-            await fetch('/api/settings/store', {
+            const storeRes = await fetch('/api/settings/store', {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -164,8 +176,14 @@
                 })
             });
 
+            if (!storeRes.ok) {
+                const errJson = await storeRes.json().catch(() => ({}));
+                this.triggerToast('Gagal menyimpan profil toko: ' + (errJson.message || 'HTTP ' + storeRes.status));
+                return;
+            }
+
             // Save security settings
-            await fetch('/api/settings/security', {
+            const secRes = await fetch('/api/settings/security', {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -177,6 +195,12 @@
                     manual_discount_require_pin: true
                 })
             });
+
+            if (!secRes.ok) {
+                const errJson = await secRes.json().catch(() => ({}));
+                this.triggerToast('Gagal menyimpan keamanan: ' + (errJson.message || 'HTTP ' + secRes.status));
+                return;
+            }
 
             this.currentPassword = '';
             this.newPassword = '';
@@ -589,7 +613,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 </div>
 
                                 <div class="pt-4 border-t border-gray-100">
-                                    <a href="{{ url('/') }}" data-no-spa
+                                    <a href="{{ url('/logout') }}" data-no-spa
                                        class="w-full py-2.5 px-4 bg-red-50 hover:bg-red-100 text-red-600 font-bold text-[12.5px] rounded-xl transition-colors flex items-center justify-center gap-2">
                                         <span class="material-symbols-rounded text-[18px]">logout</span>
                                         <span>Keluar ke Portal Login</span>

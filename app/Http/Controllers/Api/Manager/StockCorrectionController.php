@@ -55,17 +55,13 @@ class StockCorrectionController extends Controller
             'notes' => 'nullable|string|max:255',
         ]);
 
-        // Validate Supervisor / Manager / Owner PIN
-        $supervisor = User::where(function ($q) {
-            $q->whereIn(DB::raw('LOWER(role)'), ['supervisor', 'manager', 'owner', 'superadmin', 'admin', 'spv']);
-        })->where('pin', $validated['pin'])->first();
+        // Validate Supervisor / Manager / Owner PIN securely
+        $pin = $validated['pin'];
+        $supervisor = User::where('is_active', true)->get()->first(function ($u) use ($pin) {
+            return $u->verifyPin($pin) || $u->verifyPassword($pin);
+        });
 
-        // Fallback for default PIN 123456
-        if (!$supervisor && $validated['pin'] === '123456') {
-            $supervisor = User::whereIn(DB::raw('LOWER(role)'), ['supervisor', 'manager', 'owner', 'superadmin', 'admin', 'spv'])->first();
-        }
-
-        if (!$supervisor) {
+        if (!$supervisor || !$supervisor->isSupervisorOrManager()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Otorisasi ditolak. Koreksi stok harian membutuhkan PIN Supervisor atau Manager yang valid.',
