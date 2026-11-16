@@ -44,7 +44,7 @@ class="flex h-screen w-full overflow-hidden">
 <x-cashier-sidebar active="settings" />
 
 <!-- Main Content -->
-<main class="flex-1 flex flex-col bg-white relative h-full">
+<main class="flex-1 flex flex-col min-w-0 bg-white relative h-full">
     <!-- Header -->
     <x-cashier-header title="Pengaturan" />
 
@@ -59,20 +59,20 @@ class="flex h-screen w-full overflow-hidden">
                     <div class="flex items-start justify-between gap-5">
                         <div>
                             <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-50 text-[#0052cc] border border-blue-200 uppercase">PETUGAS AKTIF</span>
-                            <h3 class="text-xl font-black text-gray-900 mt-1.5" x-text="activeSession.cashierName">Budi Kurniawan</h3>
-                            <p class="text-gray-500 text-xs font-mono mt-0.5" x-text="'NIK: ' + activeSession.cashierNik">NIK: 202409821002</p>
+                            <h3 class="text-xl font-black text-gray-900 mt-1.5" x-text="activeSession?.cashierName || 'Kasir'">Budi Kurniawan</h3>
+                            <p class="text-gray-500 text-xs font-mono mt-0.5" x-text="'NIK: ' + (activeSession?.cashierNik || '-')">NIK: 202409821002</p>
                         </div>
-                        <span class="px-3 py-1 rounded-full text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200" x-text="activeSession.terminalLabel">Kasir 01</span>
+                        <span class="px-3 py-1 rounded-full text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200" x-text="activeSession?.terminalLabel || 'POS-01'">Kasir 01</span>
                     </div>
 
                     <div class="grid grid-cols-2 gap-4 mt-5">
                         <div class="bg-blue-50 rounded-lg p-3 border border-blue-100">
                             <p class="text-[10px] font-bold text-gray-500 uppercase mb-0.5">ID SESI</p>
-                            <p class="text-blue-700 font-mono font-bold text-xs" x-text="activeSession.sessionId">CS-20261019-K01-003</p>
+                            <p class="text-blue-700 font-mono font-bold text-xs" x-text="activeSession?.sessionId || '-'">-</p>
                         </div>
                         <div class="bg-green-50 rounded-lg p-3 border border-green-100">
                             <p class="text-[10px] font-bold text-gray-500 uppercase mb-0.5">UANG AWAL</p>
-                            <p class="text-green-700 font-mono font-bold text-sm" x-text="formatRupiah(activeSession.openingCash)">Rp 1.740.000</p>
+                            <p class="text-green-700 font-mono font-bold text-sm" x-text="formatRupiah(activeSession?.openingCash || 0)">Rp 0</p>
                         </div>
                     </div>
 
@@ -99,15 +99,15 @@ class="flex h-screen w-full overflow-hidden">
                         <div class="mt-5 space-y-3 text-sm">
                             <div class="flex justify-between items-center border-b border-blue-500/50 pb-2">
                                 <span class="text-blue-100">Lokasi</span>
-                                <span class="font-bold" x-text="activeSession.storeLocation">Minimarket - Sektor A</span>
+                                <span class="font-bold" x-text="activeSession?.storeLocation || 'Minimarket Pusat'">Minimarket - Sektor A</span>
                             </div>
                             <div class="flex justify-between items-center border-b border-blue-500/50 pb-2">
                                 <span class="text-blue-100">Terminal</span>
-                                <span class="font-bold font-mono" x-text="activeSession.terminalLabel">Kasir 01</span>
+                                <span class="font-bold font-mono" x-text="activeSession?.terminalLabel || 'POS-01'">Kasir 01</span>
                             </div>
                             <div class="flex justify-between items-center">
                                 <span class="text-blue-100">Tanggal</span>
-                                <span class="font-bold" x-text="activeSession.businessDayDate">19 Oktober 2026</span>
+                                <span class="font-bold" x-text="activeSession?.businessDayDate || businessDayDate">19 Oktober 2026</span>
                             </div>
                         </div>
                     </div>

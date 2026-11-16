@@ -11,9 +11,15 @@ return new class extends Migration
     public function up(): void
     {
         // High performance indexes for scale (18,000+ products and large datasets)
-        DB::statement('CREATE INDEX IF NOT EXISTS products_name_pattern_idx ON products (LOWER(name) varchar_pattern_ops);');
-        DB::statement('CREATE INDEX IF NOT EXISTS products_sku_pattern_idx ON products (sku varchar_pattern_ops);');
-        DB::statement('CREATE INDEX IF NOT EXISTS products_barcode_pattern_idx ON products (barcode varchar_pattern_ops);');
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement('CREATE INDEX IF NOT EXISTS products_name_pattern_idx ON products (LOWER(name) varchar_pattern_ops);');
+            DB::statement('CREATE INDEX IF NOT EXISTS products_sku_pattern_idx ON products (sku varchar_pattern_ops);');
+            DB::statement('CREATE INDEX IF NOT EXISTS products_barcode_pattern_idx ON products (barcode varchar_pattern_ops);');
+        } else {
+            DB::statement('CREATE INDEX IF NOT EXISTS products_name_pattern_idx ON products (name);');
+            DB::statement('CREATE INDEX IF NOT EXISTS products_sku_pattern_idx ON products (sku);');
+            DB::statement('CREATE INDEX IF NOT EXISTS products_barcode_pattern_idx ON products (barcode);');
+        }
         DB::statement('CREATE INDEX IF NOT EXISTS products_cat_stock_idx ON products (category, stock);');
         DB::statement('CREATE INDEX IF NOT EXISTS products_stock_min_idx ON products (stock, min_stock);');
         DB::statement('CREATE INDEX IF NOT EXISTS transactions_created_status_idx ON transactions (created_at, status);');

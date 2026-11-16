@@ -145,13 +145,17 @@
     showToast: false,
 
     async initReports() {
-        await Promise.all([
-            this.loadSalesReport(),
-            this.loadProfitLossReport(),
-            this.loadFastMoving(),
-            this.loadCashReconciliation(),
-            this.loadConsolidatedReport()
-        ]);
+        const loaders = {
+            sales_accounting: () => this.loadSalesReport(),
+            profit_loss: () => this.loadProfitLossReport(),
+            fast_moving: () => this.loadFastMoving(),
+            cash_reconciliation: () => this.loadCashReconciliation(),
+            product_taxes: () => this.loadTaxProducts(),
+            payroll_debt: () => this.loadDebtReport(),
+            consolidated_3branches: () => this.loadConsolidatedReport()
+        };
+        const activeLoader = loaders[this.activeTab] || loaders.sales_accounting;
+        await activeLoader();
     },
 
     // 1. Load Sales Report API
@@ -382,7 +386,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
     <x-manager-sidebar active="reports" />
 
     <!-- Main Content -->
-    <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
+    <main class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
         
         <!-- Top Header Navigation Tabs for Modul E & Accounting -->
         <header class="h-[68px] bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0">

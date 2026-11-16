@@ -269,7 +269,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
     <x-cashier-sidebar active="produk_masuk" />
 
     <!-- Main Content -->
-    <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
+    <main class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
         <!-- Top Header -->
         <x-cashier-header title="Barang Masuk (Transfer Gudang)">
             <div class="flex items-center gap-2 ml-2">

@@ -51,14 +51,24 @@ class MemberManagementController extends Controller
             $query->where('status', strtoupper($status));
         }
 
-        // Summary Aggregations across whole database or filtered branch
+        // Summary Aggregations across whole database in a single aggregate query
+        $agg = Member::selectRaw(
+            "COUNT(*) as total_members,"
+            . " COALESCE(SUM(CASE WHEN status = 'AKTIF' THEN 1 ELSE 0 END), 0) as active_members,"
+            . " COALESCE(SUM(CASE WHEN status = 'DIBLOKIR' THEN 1 ELSE 0 END), 0) as blocked_members,"
+            . " COALESCE(SUM(credit_limit), 0) as total_credit_limit,"
+            . " COALESCE(SUM(current_debt), 0) as total_current_debt"
+        )->first();
+        $totalLimit = (float) ($agg->total_credit_limit ?? 0);
+        $totalDebt = (float) ($agg->total_current_debt ?? 0);
+
         $summary = [
-            'total_members' => Member::count(),
-            'active_members' => Member::where('status', 'AKTIF')->count(),
-            'blocked_members' => Member::where('status', 'DIBLOKIR')->count(),
-            'total_credit_limit' => (float) Member::sum('credit_limit'),
-            'total_current_debt' => (float) Member::sum('current_debt'),
-            'total_remaining_credit' => (float) max(0, Member::sum('credit_limit') - Member::sum('current_debt')),
+            'total_members' => (int) ($agg->total_members ?? 0),
+            'active_members' => (int) ($agg->active_members ?? 0),
+            'blocked_members' => (int) ($agg->blocked_members ?? 0),
+            'total_credit_limit' => $totalLimit,
+            'total_current_debt' => $totalDebt,
+            'total_remaining_credit' => (float) max(0, $totalLimit - $totalDebt),
             'branch_distribution' => Member::select('branch', DB::raw('count(*) as count'), DB::raw('sum(current_debt) as total_debt'))
                 ->groupBy('branch')
                 ->get(),

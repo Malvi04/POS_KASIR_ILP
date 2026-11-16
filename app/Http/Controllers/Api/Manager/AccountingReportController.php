@@ -79,11 +79,13 @@ class AccountingReportController extends Controller
         $creditSales = (float) $transactions->where('payment_method', 'KREDIT')->sum('grand_total');
         $mixedSales = (float) $transactions->where('payment_method', 'CAMPURAN')->sum('grand_total');
 
-        // 2. Breakdown Per-Shift Kasir
+        // 2. Breakdown Per-Shift Kasir (Batch load shifts to eliminate N+1 queries)
         $shiftsData = [];
         $shiftsGroup = $transactions->groupBy('shift_id');
+        $shiftIds = $shiftsGroup->keys()->filter()->values()->all();
+        $shiftsMap = empty($shiftIds) ? collect() : CashierShift::whereIn('id', $shiftIds)->get()->keyBy('id');
         foreach ($shiftsGroup as $sId => $txs) {
-            $shiftRecord = CashierShift::find($sId);
+            $shiftRecord = $shiftsMap->get($sId);
             $shiftsData[] = [
                 'shift_id' => $sId,
                 'shift_code' => $shiftRecord?->shift_code ?? ('SHIFT-' . $sId),

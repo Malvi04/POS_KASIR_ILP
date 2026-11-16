@@ -310,8 +310,8 @@
                         item_name: this.voidModal.item.name,
                         item_qty: this.voidModal.item.qty,
                         amount_voided: (this.isMember ? this.voidModal.item.memberPrice : this.voidModal.item.price) * this.voidModal.item.qty,
-                        cashier_name: (this.activeOperator && this.activeOperator.name) ? this.activeOperator.name : (this.activeSession.cashierName || 'Kasir'),
-                        terminal_code: this.activeSession.terminalLabel || 'POS-01',
+                        cashier_name: (this.activeOperator && this.activeOperator.name) ? this.activeOperator.name : (this.activeSession?.cashierName || 'Kasir'),
+                        terminal_code: this.activeSession?.terminalLabel || 'POS-01',
                         reason: this.voidModal.reason
                     })
                 });
@@ -482,7 +482,7 @@
     heldBills: [],
     async initHeldBills() {
         try {
-            const term = this.activeSession.terminalLabel || 'POS-01';
+            const term = this.activeSession?.terminalLabel || 'POS-01';
             const res = await fetch(`/api/pos/held-bills?terminal_code=${encodeURIComponent(term)}`, {
                 headers: { 'Accept': 'application/json' }
             });
@@ -498,7 +498,7 @@
                         itemCount: b.total_items,
                         items: b.items
                     }));
-                    this.activeSession.heldBillsCount = this.heldBills.length;
+                    if (this.activeSession) this.activeSession.heldBillsCount = this.heldBills.length;
                     return;
                 }
             }
@@ -510,14 +510,14 @@
             const raw = localStorage.getItem('pos_ilp_held_bills_v1');
             if (raw) {
                 this.heldBills = JSON.parse(raw);
-                this.activeSession.heldBillsCount = this.heldBills.length;
+                if (this.activeSession) this.activeSession.heldBillsCount = this.heldBills.length;
             }
         } catch (e) {}
     },
 
     saveHeldBills() {
         localStorage.setItem('pos_ilp_held_bills_v1', JSON.stringify(this.heldBills));
-        this.activeSession.heldBillsCount = this.heldBills.length;
+        if (this.activeSession) this.activeSession.heldBillsCount = this.heldBills.length;
         this.persistAllState();
     },
 
@@ -529,7 +529,7 @@
 
         const custName = this.isMember && this.selectedMember ? this.selectedMember.name + ' (Anggota)' : 'Pelanggan Walk-in';
         const payload = {
-            terminal_code: this.activeSession.terminalLabel || 'POS-01',
+            terminal_code: this.activeSession?.terminalLabel || 'POS-01',
             customer_name: custName,
             member_nik: this.isMember && this.selectedMember ? this.selectedMember.nik : null,
             items: this.cart
@@ -735,9 +735,9 @@
         }
 
         const payload = {
-            terminal_code: this.activeSession.terminalLabel || 'POS-01',
-            cashier_nik: (this.activeOperator && this.activeOperator.nik) ? this.activeOperator.nik : (this.activeSession.cashierNik || '202409821002'),
-            cashier_name: (this.activeOperator && this.activeOperator.name) ? this.activeOperator.name : (this.activeSession.cashierName || 'Budi Kurniawan'),
+            terminal_code: this.activeSession?.terminalLabel || 'POS-01',
+            cashier_nik: (this.activeOperator && this.activeOperator.nik) ? this.activeOperator.nik : (this.activeSession?.cashierNik || '202409821002'),
+            cashier_name: (this.activeOperator && this.activeOperator.name) ? this.activeOperator.name : (this.activeSession?.cashierName || 'Budi Kurniawan'),
             payment_method: method.toUpperCase(),
             cash_received: method === 'tunai' ? (parseInt(this.paymentModal.uangDiterima.replace(/\D/g, ''), 10) || this.grandTotal) : 0,
             payment_reference: method === 'qris' ? (this.paymentModal.qrisRef || ('QRIS-' + Date.now())) : null,
@@ -875,12 +875,12 @@ class="flex w-full h-full relative text-gray-800">
                 <!-- Terminal & Active Operator Pill -->
                 <a href="{{ url('/kasir/sesi') }}"
                    class="flex items-center gap-2 bg-blue-50 hover:bg-blue-100 text-[#0052cc] border border-blue-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
-                   :title="'ID Sesi: ' + (activeSession.sessionId || '-')">
+                   :title="'ID Sesi: ' + (activeSession?.sessionId || '-')">
                     <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                    <span class="font-extrabold text-[#0052cc]" x-text="activeSession.terminalLabel || 'Kasir 01'">Kasir 01</span>
+                    <span class="font-extrabold text-[#0052cc]" x-text="activeSession?.terminalLabel || 'Kasir 01'">Kasir 01</span>
                     <span class="text-gray-300">•</span>
                     <span class="material-symbols-rounded text-[15px] text-[#0052cc]">badge</span>
-                    <span class="text-gray-800 font-black" x-text="activeOperator ? activeOperator.name : activeSession.cashierName">Budi Kurniawan</span>
+                    <span class="text-gray-800 font-black" x-text="activeOperator ? activeOperator.name : (activeSession?.cashierName || 'Budi Kurniawan')">Budi Kurniawan</span>
                 </a>
 
                 <!-- Ganti Operator Kasir -->

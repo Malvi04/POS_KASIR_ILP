@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Manager;
 
+use App\Events\AttendanceRecordedEvent;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Shared\NotificationController;
 use App\Models\Attendance;
@@ -39,23 +40,6 @@ class AttendanceController extends Controller
         }
 
         $list = $query->orderBy('check_in', 'asc')->get();
-
-        // Seed initial attendance records if table is empty
-        if ($list->isEmpty() && Attendance::count() === 0) {
-            $initials = [
-                ['terminal' => 'Kasir 1', 'staff_name' => 'Andi Setiawan', 'check_in' => '06:55', 'check_out' => '15:05', 'branch' => 'Cabang Pusat', 'status' => 'TEPAT_WAKTU', 'date' => $date],
-                ['terminal' => 'Kasir 2', 'staff_name' => 'Bambang Pamungkas', 'check_in' => '07:15', 'check_out' => '-', 'branch' => 'Cabang A', 'status' => 'TERLAMBAT', 'date' => $date],
-                ['terminal' => 'Kasir 3', 'staff_name' => 'Citra Dewi', 'check_in' => '06:50', 'check_out' => '-', 'branch' => 'Cabang Pusat', 'status' => 'TEPAT_WAKTU', 'date' => $date],
-                ['terminal' => 'Kasir 4', 'staff_name' => 'Dedi Nurcahyo', 'check_in' => '06:45', 'check_out' => '-', 'branch' => 'Cabang Pusat', 'status' => 'TEPAT_WAKTU', 'date' => $date],
-                ['terminal' => 'Kasir 5', 'staff_name' => 'Eka Ramadhan', 'check_in' => '07:02', 'check_out' => '-', 'branch' => 'Cabang A', 'status' => 'TEPAT_WAKTU', 'date' => $date],
-            ];
-
-            foreach ($initials as $item) {
-                Attendance::create($item);
-            }
-
-            $list = Attendance::whereDate('date', $date)->orderBy('check_in', 'asc')->get();
-        }
 
         return response()->json([
             'success' => true,
@@ -136,6 +120,10 @@ class AttendanceController extends Controller
         }
 
         $statusCode = $validated['type'] === 'MASUK' ? 201 : 200;
+
+        try {
+            event(new AttendanceRecordedEvent($attendance, $validated['type']));
+        } catch (\Throwable $e) {}
 
         return response()->json([
             'success' => true,

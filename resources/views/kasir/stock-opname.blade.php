@@ -314,13 +314,13 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
     <x-cashier-sidebar active="stock_opname" />
 
     <!-- Main Content -->
-    <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
+    <main class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
 
         <!-- Top Header -->
         <header class="h-[68px] bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
             <div class="flex items-center gap-3">
                 <h1 class="text-[16px] font-black text-gray-900 tracking-tight">Stock Opname</h1>
-                <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200" x-text="activeSession.terminalLabel || 'Kasir 01'"></span>
+                <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200" x-text="activeSession?.terminalLabel || 'Kasir 01'"></span>
             </div>
 
             <div class="flex items-center gap-3 text-gray-600">
@@ -496,15 +496,6 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                     Verifikasi
                                                 </button>
                                             </template>
-                                            <template x-if="item.isAudited">
-                                                <div class="inline-flex items-center gap-1 bg-green-100 text-green-700 px-2.5 py-1 rounded-md font-bold text-[11px]">
-                                                    <span class="material-symbols-rounded text-[14px]">check</span>
-                                                    <span>Verified</span>
-                                                </div>
-                                            </template>
-                                        </td>
-                                    </tr>
-                                </template>
                                             <template x-if="item.isAudited">
                                                 <div class="inline-flex items-center gap-1 bg-green-100 text-green-700 px-2.5 py-1 rounded-md font-bold text-[11px]">
                                                     <span class="material-symbols-rounded text-[14px]">check</span>

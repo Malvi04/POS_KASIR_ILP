@@ -6,14 +6,14 @@
 <div x-data="{
     ...cashierOpeningData(),
     activeCashierProfile: {
-        id: 'USR-02',
-        name: 'Budi Kurniawan',
-        username: 'budi_kasir01',
-        nik: '202409821002',
-        role: 'Kasir Utama',
-        terminal: 'Kasir 01 (TERM-01)',
-        shift: 'Pagi (07:00 - 15:00 WIB)',
-        activeSince: '07:00 WIB'
+        id: localStorage.getItem('pos_portal_logged_in_staff_id') || '',
+        name: localStorage.getItem('pos_portal_logged_in_staff_name') || localStorage.getItem('pos_user_name') || 'Kasir',
+        username: localStorage.getItem('pos_portal_logged_in_username') || '',
+        nik: localStorage.getItem('pos_portal_logged_in_nik') || '-',
+        role: localStorage.getItem('pos_user_role') || 'Kasir Operasional',
+        terminal: localStorage.getItem('pos_active_terminal_label') || 'Terminal Kasir',
+        shift: 'Shift Aktif',
+        activeSince: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':') + ' WIB'
     },
 
     myTransactions: [],

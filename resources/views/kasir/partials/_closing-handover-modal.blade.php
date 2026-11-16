@@ -99,9 +99,9 @@
             <div>
                 <h2 class="text-base font-black text-gray-900">Tutup Sesi Kasir</h2>
                 <p class="text-xs text-gray-500 mt-0.5">
-                    <span class="font-bold text-gray-700" x-text="activeSession.terminalLabel"></span> •
-                    <span class="font-bold text-gray-700" x-text="activeSession.cashierName"></span> •
-                    <span class="font-mono text-[#0052cc]" x-text="activeSession.sessionId"></span>
+                    <span class="font-bold text-gray-700" x-text="activeSession?.terminalLabel || 'POS-01'"></span> •
+                    <span class="font-bold text-gray-700" x-text="activeSession?.cashierName || 'Kasir'"></span> •
+                    <span class="font-mono text-[#0052cc]" x-text="activeSession?.sessionId || '-'"></span>
                 </p>
             </div>
             <button type="button" @click="closingWizard.open = false" class="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-200/60 cursor-pointer">
@@ -136,9 +136,9 @@
             <!-- STEP 1: INPUT KAS FISIK -->
             <div x-show="closingWizard.step === 1" class="space-y-4">
                 <!-- Pending / Hold Cart Check -->
-                <div x-show="activeSession.heldBillsCount > 0" class="p-3.5 rounded-xl bg-amber-50 border border-amber-200 space-y-2">
+                <div x-show="(activeSession?.heldBillsCount || 0) > 0" class="p-3.5 rounded-xl bg-amber-50 border border-amber-200 space-y-2">
                     <div class="text-amber-800 font-bold text-xs">
-                        Keranjang Tunda (<span x-text="activeSession.heldBillsCount"></span>):
+                        Keranjang Tunda (<span x-text="activeSession?.heldBillsCount || 0"></span>):
                     </div>
                     <div class="grid grid-cols-2 gap-2">
                         <label class="flex items-center gap-2 p-2 rounded-lg border cursor-pointer text-xs font-bold"
@@ -201,23 +201,23 @@
                 <div class="bg-slate-50 border border-gray-200 rounded-2xl p-4 space-y-2 text-xs">
                     <div class="flex justify-between text-gray-600">
                         <span>Uang Awal</span>
-                        <span class="font-mono font-bold text-gray-900" x-text="formatRupiah(activeSession.openingCash)"></span>
+                        <span class="font-mono font-bold text-gray-900" x-text="formatRupiah(activeSession?.openingCash || 0)"></span>
                     </div>
                     <div class="flex justify-between text-emerald-700">
                         <span>(+) Penjualan Tunai</span>
-                        <span class="font-mono font-bold" x-text="'+ ' + formatRupiah((Number(activeSession.cashSalesNet)||0) + (Number(activeSession.splitCashPortion)||0))"></span>
+                        <span class="font-mono font-bold" x-text="'+ ' + formatRupiah((Number(activeSession?.cashSalesNet)||0) + (Number(activeSession?.splitCashPortion)||0))"></span>
                     </div>
                     <div class="flex justify-between text-emerald-700">
                         <span>(+) Kas Masuk</span>
-                        <span class="font-mono font-bold" x-text="'+ ' + formatRupiah(Number(activeSession.cashIn)||0)"></span>
+                        <span class="font-mono font-bold" x-text="'+ ' + formatRupiah(Number(activeSession?.cashIn)||0)"></span>
                     </div>
                     <div class="flex justify-between text-red-600">
                         <span>(-) Retur &amp; Kas Keluar</span>
-                        <span class="font-mono font-bold" x-text="'- ' + formatRupiah((Number(activeSession.cashReturn)||0) + (Number(activeSession.cashOut)||0))"></span>
+                        <span class="font-mono font-bold" x-text="'- ' + formatRupiah((Number(activeSession?.cashReturn)||0) + (Number(activeSession?.cashOut)||0))"></span>
                     </div>
                     <div class="flex justify-between text-amber-700">
                         <span>(-) Setor Brankas</span>
-                        <span class="font-mono font-bold" x-text="'- ' + formatRupiah(Number(activeSession.cashDrop)||0)"></span>
+                        <span class="font-mono font-bold" x-text="'- ' + formatRupiah(Number(activeSession?.cashDrop)||0)"></span>
                     </div>
 
                     <div class="pt-2 border-t border-gray-300 flex justify-between items-center text-sm">

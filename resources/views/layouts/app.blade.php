@@ -6,15 +6,56 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'POS System - PT Indo Lampung Perkasa')</title>
 
-    <!-- Preconnect & Asynchronous Web Fonts (Zero render-blocking for instantaneous initial paint) -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" media="print" onload="this.media='all'">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..24,400..700,0..1,0" media="print" onload="this.media='all'">
-    <noscript>
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..24,400..700,0..1,0">
-    </noscript>
+    <!-- Preload Self-Hosted Critical Fonts (Zero external latency, zero text-icon flash) -->
+    <link rel="preload" href="/fonts/material-symbols-rounded.woff2" as="font" type="font/woff2" crossorigin>
+
+    <!-- Critical First-Paint Rules (Active before external CSS/JS finishes) -->
+    <style>
+        @font-face {
+            font-family: 'Material Symbols Rounded';
+            font-style: normal;
+            font-weight: 400;
+            font-display: block;
+            src: url('/fonts/material-symbols-rounded.woff2') format('woff2');
+        }
+        [x-cloak] {
+            display: none !important;
+        }
+        body {
+            background-color: #f8fafc; /* Slate-50 */
+            text-rendering: optimizeLegibility;
+            -webkit-font-smoothing: antialiased;
+        }
+        .material-symbols-rounded {
+            font-family: 'Material Symbols Rounded';
+            font-weight: normal;
+            font-style: normal;
+            font-size: 24px;
+            line-height: 1;
+            letter-spacing: normal;
+            text-transform: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            height: 1em;
+            overflow: hidden;
+            white-space: nowrap;
+            word-wrap: normal;
+            direction: ltr;
+            flex-shrink: 0;
+            -webkit-font-feature-settings: 'liga';
+            font-feature-settings: 'liga';
+            -webkit-font-smoothing: antialiased;
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            user-select: none;
+        }
+        .material-symbols-rounded:not(.block) {
+            width: 1em;
+        }
+        .material-symbols-rounded.filled {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
 
     <!-- Application CSS & Realtime Echo/Reverb JS -->
     @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -27,33 +68,14 @@
 
     <!-- Modular Cacheable Scripts (Non-blocking & Defer) -->
     <script src="/js/excel-export.js" defer></script>
-    <script src="/js/pos-realtime.js?v=2.0" defer></script>
+    <script src="/js/pos-realtime.js?v=2.1" defer></script>
     <script src="/js/pos-offline-sync.js?v=2.1" defer></script>
-    <script src="/js/cashier-core.js?v=2.0" defer></script>
+    <script src="/js/cashier-core.js?v=2.1" defer></script>
 
-    <!-- Local Alpine.js with CDN Fallback -->
+    <!-- Local Alpine.js -->
     <script defer src="/js/alpine.min.js"></script>
 
     <style>
-        [x-cloak] {
-            display: none !important;
-        }
-        body {
-            background-color: #f8fafc; /* Slate-50 */
-            text-rendering: optimizeLegibility;
-            -webkit-font-smoothing: antialiased;
-        }
-        .material-symbols-rounded {
-            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-            user-select: none;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .material-symbols-rounded.filled {
-            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-        }
-        
         /* Fast Thin Scrollbar */
         ::-webkit-scrollbar {
             width: 6px;
@@ -69,7 +91,6 @@
         ::-webkit-scrollbar-thumb:hover {
             background: #94a3b8;
         }
-
     </style>
 
     <script>

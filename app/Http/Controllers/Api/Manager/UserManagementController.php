@@ -59,15 +59,16 @@ class UserManagementController extends Controller
 
         $users = $query->orderBy('role')->orderBy('name')->get();
 
-        // Calculate role counts for quick UI badges
-        $allUsers = User::all();
+        // Calculate role counts in a single SQL aggregate (or reuse $users when unfiltered)
+        $isUnfiltered = !$request->filled('role') && !$request->filled('branch') && !$request->filled('status') && !$request->filled('search');
+        $countSource = $isUnfiltered ? $users : User::select(['role', 'is_active'])->get();
         $counts = [
-            'total' => $allUsers->count(),
-            'active' => $allUsers->where('is_active', true)->count(),
-            'kasir' => $allUsers->filter(fn($u) => $u->isKasir())->count(),
-            'supervisor' => $allUsers->filter(fn($u) => in_array(strtolower($u->role), ['supervisor', 'spv']))->count(),
-            'manager' => $allUsers->filter(fn($u) => strtolower($u->role) === 'manager')->count(),
-            'owner' => $allUsers->filter(fn($u) => $u->isOwnerOrSuperadmin())->count(),
+            'total' => $countSource->count(),
+            'active' => $countSource->where('is_active', true)->count(),
+            'kasir' => $countSource->filter(fn($u) => $u->isKasir())->count(),
+            'supervisor' => $countSource->filter(fn($u) => in_array(strtolower($u->role), ['supervisor', 'spv']))->count(),
+            'manager' => $countSource->filter(fn($u) => strtolower($u->role) === 'manager')->count(),
+            'owner' => $countSource->filter(fn($u) => $u->isOwnerOrSuperadmin())->count(),
         ];
 
         $formatted = $users->map(function ($u) {

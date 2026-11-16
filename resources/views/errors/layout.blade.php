@@ -5,11 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>@yield('title', 'Terjadi Kesalahan') - POS PT Indo Lampung Perkasa</title>
 
-    <!-- Preconnect & Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
+    <!-- Self-Hosted Critical Fonts -->
+    <link rel="preload" href="/fonts/material-symbols-rounded.woff2" as="font" type="font/woff2" crossorigin>
 
     <!-- Tailwind / Application Styles with robust inline fallbacks -->
     @if(file_exists(public_path('build/manifest.json')) || file_exists(public_path('hot')))
@@ -17,6 +14,13 @@
     @endif
 
     <style>
+        @font-face {
+            font-family: 'Material Symbols Rounded';
+            font-style: normal;
+            font-weight: 400;
+            font-display: block;
+            src: url('/fonts/material-symbols-rounded.woff2') format('woff2');
+        }
         :root {
             --primary-blue: #0052cc;
             --primary-hover: #0043a8;
@@ -37,10 +41,21 @@
             -webkit-font-smoothing: antialiased;
         }
         .material-symbols-rounded {
-            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-            display: inline-flex;
-            vertical-align: middle;
+            font-family: 'Material Symbols Rounded';
+            font-weight: normal;
+            font-style: normal;
+            font-size: 24px;
             line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            vertical-align: middle;
+            height: 1em;
+            overflow: hidden;
+            white-space: nowrap;
+            -webkit-font-feature-settings: 'liga';
+            font-feature-settings: 'liga';
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
         }
         .material-symbols-rounded.filled {
             font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;

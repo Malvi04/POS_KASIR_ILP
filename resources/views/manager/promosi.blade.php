@@ -352,7 +352,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
     <x-manager-sidebar active="promosi" />
 
     <!-- Main Content -->
-    <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
+    <main class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
         
         <!-- Top Header -->
         <header class="h-[68px] bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0">

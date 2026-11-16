@@ -3,6 +3,123 @@ import Pusher from 'pusher-js';
 
 window.Pusher = Pusher;
 
+// Global state container for immediate zero-delay status lookup
+window.posReverbState = {
+    status: 'connecting',
+    wsConnected: false,
+    wsConnecting: true,
+    latency: null,
+    wsSpeedQuality: null,
+    lastPingAt: null,
+};
+
+// -------------------------------------------------------------------------
+// Real-Time Reverb WebSocket Latency / Ping Monitor (1-second interval)
+// -------------------------------------------------------------------------
+let pingTimer = null;
+let pingStartTime = null;
+let isPinging = false;
+
+function getSpeedQuality(latencyMs) {
+    if (latencyMs < 50) return 'optimal';
+    if (latencyMs < 150) return 'good';
+    if (latencyMs <= 300) return 'fair';
+    return 'slow';
+}
+
+function recordLatency(latencyMs) {
+    const quality = getSpeedQuality(latencyMs);
+    window.posReverbState.latency = latencyMs;
+    window.posReverbState.wsSpeedQuality = quality;
+    window.posReverbState.lastPingAt = Date.now();
+
+    if (window.Alpine && window.Alpine.store && window.Alpine.store('network')) {
+        const net = window.Alpine.store('network');
+        net.latency = latencyMs;
+        net.wsLatency = latencyMs;
+        net.wsSpeedQuality = quality;
+        net.lastPingAt = window.posReverbState.lastPingAt;
+    }
+
+    window.dispatchEvent(new CustomEvent('pos:ws-ping', {
+        detail: { latency: latencyMs, quality, timestamp: window.posReverbState.lastPingAt }
+    }));
+}
+
+function sendReverbPing() {
+    if (!window.Echo || !window.Echo.connector || !window.Echo.connector.pusher) return;
+    const pusher = window.Echo.connector.pusher;
+    if (!pusher.connection || pusher.connection.state !== 'connected') return;
+
+    // Reset hung ping if previous pong exceeded 2.5s
+    if (isPinging && pingStartTime && performance.now() - pingStartTime > 2500) {
+        isPinging = false;
+    }
+
+    if (isPinging) return;
+
+    isPinging = true;
+    pingStartTime = performance.now();
+
+    try {
+        pusher.send_event('pusher:ping', {});
+    } catch (err) {
+        isPinging = false;
+    }
+}
+
+function startReverbPingMonitor() {
+    stopReverbPingMonitor();
+    sendReverbPing();
+    pingTimer = setInterval(() => {
+        sendReverbPing();
+    }, 1000);
+}
+
+function stopReverbPingMonitor() {
+    if (pingTimer) {
+        clearInterval(pingTimer);
+        pingTimer = null;
+    }
+    isPinging = false;
+    pingStartTime = null;
+}
+
+function updateReverbStatus(state) {
+    const isConnected = state === 'connected';
+    const isConnecting = state === 'connecting';
+    const isDisconnected = !isConnected && !isConnecting;
+
+    window.posReverbState.status = state;
+    window.posReverbState.wsConnected = isConnected;
+    window.posReverbState.wsConnecting = isConnecting;
+    window.posReverbState.wsDisconnected = isDisconnected;
+
+    if (window.Alpine && window.Alpine.store && window.Alpine.store('network')) {
+        const net = window.Alpine.store('network');
+        net.wsConnected = isConnected;
+        net.wsStatus = state;
+        net.wsConnecting = isConnecting;
+        if (isDisconnected) {
+            net.latency = null;
+            net.wsLatency = null;
+        }
+    }
+
+    window.dispatchEvent(new CustomEvent('pos:ws-status-changed', {
+        detail: { state, isConnected, isConnecting, isDisconnected }
+    }));
+
+    if (isConnected) {
+        startReverbPingMonitor();
+        window.dispatchEvent(new CustomEvent('pos:ws-connected'));
+    } else if (isDisconnected) {
+        stopReverbPingMonitor();
+        window.posReverbState.latency = null;
+        window.dispatchEvent(new CustomEvent('pos:ws-disconnected'));
+    }
+}
+
 try {
     const reverbKey = import.meta.env.VITE_REVERB_APP_KEY || 'poskasirilpkey123';
     const rawHost = import.meta.env.VITE_REVERB_HOST || (typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1');
@@ -30,33 +147,66 @@ try {
         scheme: reverbScheme,
     });
 
-    // Connection event listeners
+    // Real-time connection lifecycle event listeners
     if (window.Echo.connector && window.Echo.connector.pusher) {
-        window.Echo.connector.pusher.connection.bind('connected', () => {
+        const connection = window.Echo.connector.pusher.connection;
+
+        // 1. Precise state transition handling
+        connection.bind('state_change', (states) => {
+            console.log('[Reverb/WebSocket] State change:', states.previous, '->', states.current);
+            updateReverbStatus(states.current);
+        });
+
+        connection.bind('connected', () => {
             console.log('[Reverb/WebSocket] Connected successfully to Reverb server.');
-            if (window.Alpine && window.Alpine.store && window.Alpine.store('network')) {
-                window.Alpine.store('network').wsConnected = true;
-                window.Alpine.store('network').wsStatus = 'connected';
-            }
-            window.dispatchEvent(new CustomEvent('pos:ws-connected'));
+            updateReverbStatus('connected');
         });
 
-        window.Echo.connector.pusher.connection.bind('disconnected', () => {
+        connection.bind('connecting', () => {
+            console.log('[Reverb/WebSocket] Connecting to Reverb server...');
+            updateReverbStatus('connecting');
+        });
+
+        connection.bind('disconnected', () => {
             console.warn('[Reverb/WebSocket] Disconnected from Reverb server.');
-            if (window.Alpine && window.Alpine.store && window.Alpine.store('network')) {
-                window.Alpine.store('network').wsConnected = false;
-                window.Alpine.store('network').wsStatus = 'disconnected';
-            }
-            window.dispatchEvent(new CustomEvent('pos:ws-disconnected'));
+            updateReverbStatus('disconnected');
         });
 
-        window.Echo.connector.pusher.connection.bind('unavailable', () => {
-            console.warn('[Reverb/WebSocket] Reverb server is unavailable. Will fallback to HTTP polling.');
-            if (window.Alpine && window.Alpine.store && window.Alpine.store('network')) {
-                window.Alpine.store('network').wsConnected = false;
-                window.Alpine.store('network').wsStatus = 'unavailable';
+        connection.bind('unavailable', () => {
+            console.warn('[Reverb/WebSocket] Reverb server is unavailable.');
+            updateReverbStatus('unavailable');
+        });
+
+        connection.bind('failed', () => {
+            console.error('[Reverb/WebSocket] Connection to Reverb failed.');
+            updateReverbStatus('failed');
+        });
+
+        // 2. Real-time WebSocket ping/pong latency listener
+        connection.bind('message', (msg) => {
+            if (msg && (msg.event === 'pusher:pong' || msg.event === 'pong')) {
+                if (isPinging && pingStartTime) {
+                    const rtt = Math.max(1, Math.round(performance.now() - pingStartTime));
+                    isPinging = false;
+                    pingStartTime = null;
+                    recordLatency(rtt);
+                }
             }
         });
+
+        connection.bind('pong', () => {
+            if (isPinging && pingStartTime) {
+                const rtt = Math.max(1, Math.round(performance.now() - pingStartTime));
+                isPinging = false;
+                pingStartTime = null;
+                recordLatency(rtt);
+            }
+        });
+
+        // Initialize immediately with current state if already active
+        if (connection.state) {
+            updateReverbStatus(connection.state);
+        }
     }
 
     // 1. Notifications Channel
@@ -106,6 +256,18 @@ try {
             window.dispatchEvent(new CustomEvent('pos:realtime', {
                 detail: { type: 'session_updated', entity: 'session', data: e.shift }
             }));
+        });
+
+    // 5. Real-time Attendance Channel
+    window.Echo.channel('attendance')
+        .listen('.attendance.recorded', (e) => {
+            console.log('[Reverb/WebSocket] Attendance recorded event:', e);
+            if (e && e.attendance) {
+                window.dispatchEvent(new CustomEvent('pos:attendance-recorded', { detail: e.attendance }));
+                window.dispatchEvent(new CustomEvent('pos:realtime', {
+                    detail: { type: 'attendance_updated', entity: 'attendance', data: e.attendance }
+                }));
+            }
         });
 
 } catch (err) {

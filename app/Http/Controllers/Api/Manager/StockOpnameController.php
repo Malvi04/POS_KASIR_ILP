@@ -31,10 +31,16 @@ class StockOpnameController extends Controller
 
         $sessions = $query->orderBy('id', 'desc')->paginate(15);
 
+        $agg = StockOpname::selectRaw(
+            "COUNT(*) as total_sessions,"
+            . " COALESCE(SUM(CASE WHEN status = 'DRAFT' THEN 1 ELSE 0 END), 0) as active_drafts,"
+            . " COALESCE(SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END), 0) as completed_sessions"
+        )->first();
+
         $summary = [
-            'total_sessions' => StockOpname::count(),
-            'active_drafts' => StockOpname::where('status', 'DRAFT')->count(),
-            'completed_sessions' => StockOpname::where('status', 'COMPLETED')->count(),
+            'total_sessions' => (int) ($agg->total_sessions ?? 0),
+            'active_drafts' => (int) ($agg->active_drafts ?? 0),
+            'completed_sessions' => (int) ($agg->completed_sessions ?? 0),
         ];
 
         return response()->json([
@@ -79,10 +85,11 @@ class StockOpnameController extends Controller
             if (!empty($validated['category']) && $validated['category'] !== 'Semua') {
                 $productQuery->where('category', $validated['category']);
             }
-            $products = $productQuery->orderBy('name')->get();
-
+            $products = $productQuery->orderBy('name')->get(['id', 'sku', 'name', 'stock', 'cost_price']);
+            $now = now();
+            $rows = [];
             foreach ($products as $p) {
-                StockOpnameItem::create([
+                $rows[] = [
                     'stock_opname_id' => $opname->id,
                     'product_id' => $p->id,
                     'product_sku' => $p->sku,
@@ -94,7 +101,13 @@ class StockOpnameController extends Controller
                     'variance_value' => 0,
                     'variance_reason' => 'Sesuai',
                     'is_audited' => false,
-                ]);
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+            }
+
+            foreach (array_chunk($rows, 250) as $chunk) {
+                StockOpnameItem::insert($chunk);
             }
 
             return response()->json([

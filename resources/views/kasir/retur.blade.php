@@ -369,7 +369,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
     <x-cashier-sidebar active="retur" />
 
     <!-- Main Content Area -->
-    <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
+    <main class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
         <!-- Top Header -->
         <x-cashier-header title="Ajukan Retur Barang (Toko ke Gudang)">
             <div class="flex items-center gap-2 ml-2">
@@ -731,7 +731,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                 </div>
 
                 <!-- VIEW 2: RIWAYAT DOKUMEN PENGAJUAN RETUR -->
-                <div x-show="activeTab === 'history'" class="space-y-4">
+                <div x-cloak x-show="activeTab === 'history'" class="space-y-4">
 
                     <!-- Search & Filter Bar -->
                     <div class="bg-white rounded-2xl border border-gray-200 p-4 shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">

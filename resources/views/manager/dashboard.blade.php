@@ -109,7 +109,7 @@ class="flex h-screen w-full bg-[#f4f7fb] font-sans text-gray-800 overflow-hidden
     <x-manager-sidebar active="dashboard" />
 
     <!-- Main Workspace -->
-    <main class="flex-1 flex flex-col h-screen overflow-y-auto relative">
+    <main class="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto relative">
         
         <!-- Top Navigation -->
         <header class="h-20 bg-[#f4f7fb] flex items-center justify-between px-8 shrink-0 sticky top-0 z-10">

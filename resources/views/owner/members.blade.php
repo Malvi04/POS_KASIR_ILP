@@ -460,7 +460,7 @@
     <!-- ========================================== -->
     <!-- TAB 2: PERMINTAAN KENAIKAN PLAFON (FULL PANEL) -->
     <!-- ========================================== -->
-    <div x-show="activeTab === 'permintaan'" class="space-y-4">
+    <div x-cloak x-show="activeTab === 'permintaan'" class="space-y-4">
         <div class="flex items-center justify-between">
             <div>
                 <h3 class="text-lg font-black text-slate-900 tracking-tight">Otorisasi Permintaan Kenaikan Plafon Anggota</h3>
@@ -541,7 +541,7 @@
     <!-- ========================================== -->
     <!-- TAB 3: ANALISIS BELANJA PER DEPARTEMEN -->
     <!-- ========================================== -->
-    <div x-show="activeTab === 'analisis'" class="space-y-4">
+    <div x-cloak x-show="activeTab === 'analisis'" class="space-y-4">
         <div class="flex items-center justify-between">
             <div>
                 <h3 class="text-lg font-black text-slate-900 tracking-tight">Analisis Belanja per Departemen</h3>

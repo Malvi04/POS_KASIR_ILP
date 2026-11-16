@@ -46,7 +46,7 @@
                             unit: it.unit || 'Pcs'
                         }))
                     }));
-                    this.activeSession.heldBillsCount = this.heldBills.length;
+                    if (this.activeSession) this.activeSession.heldBillsCount = this.heldBills.length;
                     this.saveHeldBillsToStorage();
                     return;
                 }
@@ -61,7 +61,7 @@
                 const parsed = JSON.parse(raw);
                 if (Array.isArray(parsed)) {
                     this.heldBills = parsed;
-                    this.activeSession.heldBillsCount = this.heldBills.length;
+                    if (this.activeSession) this.activeSession.heldBillsCount = this.heldBills.length;
                     return;
                 }
             }
@@ -72,7 +72,7 @@
 
     saveHeldBillsToStorage() {
         localStorage.setItem('pos_ilp_held_bills_v1', JSON.stringify(this.heldBills));
-        this.activeSession.heldBillsCount = this.heldBills.length;
+        if (this.activeSession) this.activeSession.heldBillsCount = this.heldBills.length;
         this.persistAllState();
     },
 
@@ -173,7 +173,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
     <x-cashier-sidebar active="transaksi_ditahan" />
 
     <!-- Main Content -->
-    <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
+    <main class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
         <!-- Top Header -->
         <x-cashier-header title="Transaksi Ditahan (Held Bills)">
             <div class="flex items-center gap-2 ml-2">

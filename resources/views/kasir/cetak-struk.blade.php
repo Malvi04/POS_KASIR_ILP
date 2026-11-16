@@ -159,7 +159,7 @@ class="flex flex-col min-h-screen w-full bg-[#f8f9fa] font-sans">
             <!-- Receipt Header -->
             <div class="text-center mb-4">
                 <h2 class="text-2xl font-black text-[#0052cc] tracking-tight mb-0.5">MINIMARKET ILP</h2>
-                <p class="text-[13px] font-bold text-gray-700" x-text="activeSession.storeLocation || 'Minimarket Kopkar - Sektor A'"></p>
+                <p class="text-[13px] font-bold text-gray-700" x-text="activeSession?.storeLocation || 'Minimarket Kopkar - Sektor A'"></p>
                 <p class="text-[11px] font-medium text-gray-400">Koperasi Karyawan ILP • Gedung Utama</p>
                 <p class="text-[10px] text-gray-400 font-mono">NPWP: 01.345.678.9-412.000</p>
             </div>
@@ -182,15 +182,15 @@ class="flex flex-col min-h-screen w-full bg-[#f8f9fa] font-sans">
                 </div>
                 <div class="flex justify-between">
                     <span class="text-gray-500">Sesi Kasir:</span>
-                    <span class="text-gray-800 font-bold" x-text="activeSession.sessionId"></span>
+                    <span class="text-gray-800 font-bold" x-text="activeSession?.sessionId || '-'"></span>
                 </div>
                 <div class="flex justify-between">
                     <span class="text-gray-500">Terminal:</span>
-                    <span class="text-gray-800 font-bold" x-text="receipt?.terminal || activeSession.terminalLabel"></span>
+                    <span class="text-gray-800 font-bold" x-text="receipt?.terminal || activeSession?.terminalLabel || 'POS-01'"></span>
                 </div>
                 <div class="flex justify-between">
                     <span class="text-gray-500">Kasir:</span>
-                    <span class="text-gray-800 font-bold" x-text="receipt?.cashier || activeSession.cashierName"></span>
+                    <span class="text-gray-800 font-bold" x-text="receipt?.cashier || activeSession?.cashierName || 'Kasir'"></span>
                 </div>
                 <div class="flex justify-between">
                     <span class="text-gray-500">Waktu:</span>

@@ -59,7 +59,7 @@
                     <span class="material-symbols-rounded text-[18px] transition-transform duration-200 text-gray-400"
                           :class="openMenus.persediaan ? 'rotate-180 text-[#0052cc]' : ''">expand_more</span>
                 </button>
-                <div id="submenu-persediaan" x-show="openMenus.persediaan" x-transition.origin.top class="flex flex-col gap-1 pl-8 pr-1 py-1">
+                <div id="submenu-persediaan" @if(!in_array($active, ['inventory', 'stock_opname', 'kirim_barang'])) x-cloak @endif x-show="openMenus.persediaan" x-transition.origin.top class="flex flex-col gap-1 pl-8 pr-1 py-1">
                     <a :href="getNavUrl('{{ url('/inventory') }}')" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12.5px] transition-colors {{ $active === 'inventory' ? 'bg-[#0052cc] text-white font-bold' : 'text-gray-600 hover:bg-gray-200 font-medium' }}">
                         <span class="w-1.5 h-1.5 rounded-full {{ $active === 'inventory' ? 'bg-white' : 'bg-gray-400' }}"></span>
                         <span>Master Produk &amp; Stok</span>
@@ -89,7 +89,7 @@
                     <span class="material-symbols-rounded text-[18px] transition-transform duration-200 text-gray-400"
                           :class="openMenus.retur ? 'rotate-180 text-[#0052cc]' : ''">expand_more</span>
                 </button>
-                <div id="submenu-retur" x-show="openMenus.retur" x-transition.origin.top class="flex flex-col gap-1 pl-8 pr-1 py-1">
+                <div id="submenu-retur" @if(!in_array($active, ['retur', 'retur_masuk'])) x-cloak @endif x-show="openMenus.retur" x-transition.origin.top class="flex flex-col gap-1 pl-8 pr-1 py-1">
                     <a :href="getNavUrl('{{ url('/retur') }}')" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12.5px] transition-colors {{ $active === 'retur' ? 'bg-[#0052cc] text-white font-bold' : 'text-gray-600 hover:bg-gray-200 font-medium' }}">
                         <span class="w-1.5 h-1.5 rounded-full {{ $active === 'retur' ? 'bg-white' : 'bg-gray-400' }}"></span>
                         <span>Persetujuan Retur</span>
@@ -115,7 +115,7 @@
                     <span class="material-symbols-rounded text-[18px] transition-transform duration-200 text-gray-400"
                           :class="openMenus.anggota ? 'rotate-180 text-[#0052cc]' : ''">expand_more</span>
                 </button>
-                <div id="submenu-anggota" x-show="openMenus.anggota" x-transition.origin.top class="flex flex-col gap-1 pl-8 pr-1 py-1">
+                <div id="submenu-anggota" @if(!in_array($active, ['members', 'member_detail'])) x-cloak @endif x-show="openMenus.anggota" x-transition.origin.top class="flex flex-col gap-1 pl-8 pr-1 py-1">
                     <a :href="getNavUrl('{{ url('/members') }}')" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12.5px] transition-colors {{ $active === 'members' ? 'bg-[#0052cc] text-white font-bold' : 'text-gray-600 hover:bg-gray-200 font-medium' }}">
                         <span class="w-1.5 h-1.5 rounded-full {{ $active === 'members' ? 'bg-white' : 'bg-gray-400' }}"></span>
                         <span>Daftar Anggota</span>
@@ -152,7 +152,7 @@
             </a>
 
             <!-- 8b. Shortcut Owner: Konsolidasi 3 Cabang & P&L -->
-            <a x-show="isOwner()" :href="getNavUrl('{{ url('/reports') }}?tab=consolidated_3branches')" class="flex items-center justify-between px-3.5 py-2 rounded-xl transition-all text-[12.5px] bg-purple-50 hover:bg-purple-100 text-purple-900 font-bold border border-purple-200 shadow-2xs">
+            <a @if(!$authUser?->isOwnerOrSuperadmin()) x-cloak @endif x-show="isOwner()" :href="getNavUrl('{{ url('/reports') }}?tab=consolidated_3branches')" class="flex items-center justify-between px-3.5 py-2 rounded-xl transition-all text-[12.5px] bg-purple-50 hover:bg-purple-100 text-purple-900 font-bold border border-purple-200 shadow-2xs">
                 <div class="flex items-center gap-2.5">
                     <span class="material-symbols-rounded text-[18px] text-purple-700">account_balance</span>
                     <span>Konsolidasi 3 Cabang</span>

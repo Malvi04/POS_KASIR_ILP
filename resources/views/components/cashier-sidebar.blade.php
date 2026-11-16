@@ -52,7 +52,7 @@
                     <span class="material-symbols-rounded text-[18px] transition-transform duration-200 text-gray-400"
                           :class="openMenus.produk ? 'rotate-180 text-[#0052cc]' : ''">expand_more</span>
                 </button>
-                <div id="submenu-produk" x-show="openMenus.produk" x-transition.origin.top class="flex flex-col gap-1 pl-8 pr-1 py-1">
+                <div id="submenu-produk" @if(!in_array($active, ['produk_masuk', 'inventory', 'produk'])) x-cloak @endif x-show="openMenus.produk" x-transition.origin.top class="flex flex-col gap-1 pl-8 pr-1 py-1">
                     <a href="{{ url('/kasir/produk/masuk') }}" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12.5px] transition-colors {{ $active === 'produk_masuk' ? 'bg-[#0052cc] text-white font-bold' : 'text-gray-600 hover:bg-gray-200 font-medium' }}">
                         <span class="w-1.5 h-1.5 rounded-full {{ $active === 'produk_masuk' ? 'bg-white' : 'bg-gray-400' }}"></span>
                         <span>Barang Masuk</span>
@@ -78,7 +78,7 @@
                     <span class="material-symbols-rounded text-[18px] transition-transform duration-200 text-gray-400"
                           :class="openMenus.retur ? 'rotate-180 text-[#0052cc]' : ''">expand_more</span>
                 </button>
-                <div id="submenu-retur" x-show="openMenus.retur" x-transition.origin.top class="flex flex-col gap-1 pl-8 pr-1 py-1">
+                <div id="submenu-retur" @if(!in_array($active, ['retur', 'retur_masuk'])) x-cloak @endif x-show="openMenus.retur" x-transition.origin.top class="flex flex-col gap-1 pl-8 pr-1 py-1">
                     <a href="{{ url('/kasir/retur') }}" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12.5px] transition-colors {{ $active === 'retur' ? 'bg-[#0052cc] text-white font-bold' : 'text-gray-600 hover:bg-gray-200 font-medium' }}">
                         <span class="w-1.5 h-1.5 rounded-full {{ $active === 'retur' ? 'bg-white' : 'bg-gray-400' }}"></span>
                         <span>Ajukan Retur Barang</span>
@@ -104,7 +104,7 @@
                     <span class="material-symbols-rounded text-[18px] transition-transform duration-200 text-gray-400"
                           :class="openMenus.transaksi ? 'rotate-180 text-[#0052cc]' : ''">expand_more</span>
                 </button>
-                <div id="submenu-transaksi" x-show="openMenus.transaksi" x-transition.origin.top class="flex flex-col gap-1 pl-8 pr-1 py-1">
+                <div id="submenu-transaksi" @if(!in_array($active, ['transaksi_riwayat', 'transaksi_ditahan', 'transaksi_refund', 'transaksi'])) x-cloak @endif x-show="openMenus.transaksi" x-transition.origin.top class="flex flex-col gap-1 pl-8 pr-1 py-1">
                     <a href="{{ url('/kasir/transaksi/riwayat') }}" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12.5px] transition-colors {{ $active === 'transaksi_riwayat' ? 'bg-[#0052cc] text-white font-bold' : 'text-gray-600 hover:bg-gray-200 font-medium' }}">
                         <span class="w-1.5 h-1.5 rounded-full {{ $active === 'transaksi_riwayat' ? 'bg-white' : 'bg-gray-400' }}"></span>
                         <span>Riwayat Transaksi</span>
@@ -140,7 +140,7 @@
                     <span class="material-symbols-rounded text-[18px] transition-transform duration-200 text-gray-400"
                           :class="openMenus.laporan ? 'rotate-180 text-[#0052cc]' : ''">expand_more</span>
                 </button>
-                <div id="submenu-laporan" x-show="openMenus.laporan" x-transition.origin.top class="flex flex-col gap-1 pl-8 pr-1 py-1">
+                <div id="submenu-laporan" @if(!in_array($active, ['reports', 'laporan_kasir', 'laporan_sesi', 'laporan_operasional', 'laporan'])) x-cloak @endif x-show="openMenus.laporan" x-transition.origin.top class="flex flex-col gap-1 pl-8 pr-1 py-1">
                     <a href="{{ url('/kasir/reports') }}" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12.5px] transition-colors {{ $active === 'reports' ? 'bg-[#0052cc] text-white font-bold' : 'text-gray-600 hover:bg-gray-200 font-medium' }}">
                         <span class="w-1.5 h-1.5 rounded-full {{ $active === 'reports' ? 'bg-white' : 'bg-gray-400' }}"></span>
                         <span>Laporan Penjualan</span>

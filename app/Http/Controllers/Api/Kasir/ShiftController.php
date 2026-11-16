@@ -2,10 +2,14 @@
 
 namespace App\Http\Controllers\Api\Kasir;
 
+use App\Events\AttendanceRecordedEvent;
+use App\Events\CashierShiftEvent;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Shared\NotificationController;
+use App\Models\Attendance;
 use App\Models\CashierShift;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -101,10 +105,11 @@ class ShiftController extends Controller
     public function open(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'terminal_code' => 'required|string|max:20',
+            'terminal_code' => 'required|string|max:50',
             'cashier_nik' => 'required|string|max:50',
             'cashier_name' => 'required|string|max:100',
             'opening_cash' => 'required|numeric|min:0',
+            'branch' => 'nullable|string|max:100',
             'pin' => 'nullable|string',
         ]);
 
@@ -133,7 +138,9 @@ class ShiftController extends Controller
             ], 422);
         }
 
-        $user = User::where('nik', $validated['cashier_nik'])->first();
+        $user = User::where('nik', $validated['cashier_nik'])
+            ->orWhere('username', $validated['cashier_nik'])
+            ->first();
 
         $baseCode = 'CS-' . date('Ymd') . '-' . strtoupper(Str::slug($validated['terminal_code'], ''));
         $counter = CashierShift::whereDate('created_at', today())->count() + 1;
@@ -161,6 +168,50 @@ class ShiftController extends Controller
             'status' => 'OPEN',
             'opened_at' => now(),
         ]);
+
+        // Pencatatan Absensi Karyawan Otomatis ke PostgreSQL saat sesi kasir dimulai
+        try {
+            $now = Carbon::now();
+            $today = $now->toDateString();
+            $isLate = ($now->hour > 7 || ($now->hour === 7 && $now->minute > 15));
+            $branch = $request->input('branch') ?: ($user?->branch ?: 'Cabang Pusat');
+            $staffName = $user?->name ?? $validated['cashier_name'];
+
+            $attendance = Attendance::whereDate('date', $today)
+                ->where('terminal', $validated['terminal_code'])
+                ->where(function ($q) use ($user, $staffName) {
+                    if ($user) {
+                        $q->where('user_id', $user->id)
+                          ->orWhere('staff_name', $user->name);
+                    } else {
+                        $q->where('staff_name', $staffName);
+                    }
+                })
+                ->first();
+
+            if (!$attendance) {
+                $attendance = Attendance::create([
+                    'staff_name' => $staffName,
+                    'user_id' => $user?->id,
+                    'terminal' => $validated['terminal_code'],
+                    'branch' => $branch,
+                    'date' => $today,
+                    'check_in' => $now->format('H:i'),
+                    'check_out' => '-',
+                    'status' => $isLate ? 'TERLAMBAT' : 'TEPAT_WAKTU',
+                    'notes' => "Sesi {$shift->shift_code} aktif di {$validated['terminal_code']}",
+                ]);
+            } else {
+                if ($attendance->check_in === '-' || empty($attendance->check_in)) {
+                    $attendance->check_in = $now->format('H:i');
+                }
+                $attendance->terminal = $validated['terminal_code'];
+                $attendance->branch = $branch;
+                $attendance->save();
+            }
+
+            event(new AttendanceRecordedEvent($attendance, 'MASUK'));
+        } catch (\Throwable $e) {}
 
         try {
             NotificationController::notify(
@@ -212,6 +263,30 @@ class ShiftController extends Controller
         }
 
         $shift->closeShift((float) $validated['actual_cash'], $validated['closing_notes'] ?? null);
+
+        // Update Jam Keluar Absensi Karyawan di PostgreSQL
+        try {
+            $attendance = Attendance::whereDate('date', Carbon::today()->toDateString())
+                ->where('terminal', $shift->terminal_code)
+                ->where(function ($q) use ($shift) {
+                    if ($shift->user_id) {
+                        $q->where('user_id', $shift->user_id)
+                          ->orWhere('staff_name', $shift->cashier_name);
+                    } else {
+                        $q->where('staff_name', $shift->cashier_name);
+                    }
+                })
+                ->latest('id')
+                ->first();
+
+            if ($attendance) {
+                $attendance->check_out = Carbon::now()->format('H:i');
+                $attendance->notes = ($attendance->notes ? $attendance->notes . ' | ' : '') . "Shift {$shift->shift_code} ditutup";
+                $attendance->save();
+
+                event(new AttendanceRecordedEvent($attendance, 'PULANG'));
+            }
+        } catch (\Throwable $e) {}
 
         try {
             $hasVariance = abs((float) $shift->variance) > 0;

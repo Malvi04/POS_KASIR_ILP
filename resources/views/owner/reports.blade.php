@@ -352,6 +352,7 @@
                                 <p class="font-bold text-sm text-slate-700">Belum ada data untuk ditampilkan.</p>
                             </td>
                         </tr>
+                    </template>
                     <template x-if="hasTransactions">
                         <!-- Row 5: ↳ Biaya Listrik, Air & Internet -->
                         <tr class="hover:bg-slate-50 text-slate-700">

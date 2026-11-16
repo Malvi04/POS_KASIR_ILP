@@ -1,37 +1,57 @@
 @props([
     'labelOnline' => 'Terhubung',
     'labelOffline' => 'Terputus',
+    'labelConnecting' => 'Menghubungkan...',
     'showLatency' => true
 ])
 
 <div class="flex items-center gap-2 px-3 py-1.5 rounded-full border text-[11px] font-bold tracking-wide transition-all shadow-2xs select-none"
-     :class="($store.network && $store.network.isOnline)
-        ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
-        : 'text-rose-700 bg-rose-50 border-rose-200'"
-     :title="($store.network && $store.network.isOnline) 
-        ? 'Status Jaringan: Terhubung Real-time (' + ($store.network.latency || 0) + 'ms)' 
-        : 'Status Jaringan: Terputus / Mode Offline Aktif'">
+     :class="{
+        'text-emerald-700 bg-emerald-50 border-emerald-200': ($store.network && $store.network.wsConnected),
+        'text-amber-700 bg-amber-50 border-amber-200': ($store.network && !$store.network.wsConnected && $store.network.wsStatus === 'connecting'),
+        'text-rose-700 bg-rose-50 border-rose-200': (!$store.network || (!$store.network.wsConnected && $store.network.wsStatus !== 'connecting'))
+     }"
+     :title="($store.network && $store.network.wsConnected)
+        ? 'Status Jaringan & Reverb: Terhubung Real-time (' + ($store.network.latency || 0) + 'ms)' 
+        : (($store.network && $store.network.wsStatus === 'connecting')
+            ? 'Status Jaringan & Reverb: Menghubungkan ke WebSocket...' 
+            : 'Status Jaringan & Reverb: Terputus')">
     <!-- Pulsing Indicator Dot -->
     <span class="w-2 h-2 rounded-full shrink-0"
-          :class="($store.network && $store.network.isOnline) ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'"></span>
+          :class="{
+            'bg-emerald-500 animate-pulse': ($store.network && $store.network.wsConnected),
+            'bg-amber-500 animate-ping': ($store.network && !$store.network.wsConnected && $store.network.wsStatus === 'connecting'),
+            'bg-rose-500': (!$store.network || (!$store.network.wsConnected && $store.network.wsStatus !== 'connecting'))
+          }"></span>
 
     <!-- Wifi Icon -->
     <span class="material-symbols-rounded text-[18px] shrink-0"
-          :class="($store.network && $store.network.isOnline) ? 'text-emerald-600' : 'text-rose-600'"
-          x-text="($store.network && $store.network.isOnline) ? 'wifi' : 'wifi_off'">wifi</span>
+          :class="{
+            'text-emerald-600': ($store.network && $store.network.wsConnected),
+            'text-amber-600 animate-spin': ($store.network && !$store.network.wsConnected && $store.network.wsStatus === 'connecting'),
+            'text-rose-600': (!$store.network || (!$store.network.wsConnected && $store.network.wsStatus !== 'connecting'))
+          }"
+          x-text="($store.network && $store.network.wsConnected) ? 'wifi' : (($store.network && $store.network.wsStatus === 'connecting') ? 'sync' : 'wifi_off')">wifi</span>
 
     <!-- Text Status -->
-    <span x-text="($store.network && $store.network.isOnline) ? '{{ $labelOnline }}' : '{{ $labelOffline }}'">{{ $labelOnline }}</span>
+    <span x-text="($store.network && $store.network.wsConnected) ? '{{ $labelOnline }}' : (($store.network && $store.network.wsStatus === 'connecting') ? '{{ $labelConnecting }}' : '{{ $labelOffline }}')">{{ $labelOnline }}</span>
 
     @if($showLatency)
-        <!-- Latency Display -->
-        <template x-if="$store.network && $store.network.isOnline && $store.network.latency">
-            <span class="text-[10px] text-emerald-600/80 font-mono hidden sm:inline ml-0.5"
+        <!-- Real-Time Network Speed / Latency Indicator -->
+        <template x-if="$store.network && $store.network.wsConnected && $store.network.latency !== undefined && $store.network.latency !== null">
+            <span class="text-[10px] font-mono hidden sm:inline ml-0.5 font-bold transition-colors"
+                  :class="{
+                      'text-emerald-600': ($store.network.latency < 50),
+                      'text-teal-600': ($store.network.latency >= 50 && $store.network.latency < 150),
+                      'text-amber-600': ($store.network.latency >= 150 && $store.network.latency <= 300),
+                      'text-rose-600': ($store.network.latency > 300)
+                  }"
+                  :title="'Kecepatan Jaringan WebSocket Reverb: ' + $store.network.latency + 'ms (Update tiap 1 detik)'"
                   x-text="$store.network.latency + 'ms'"></span>
         </template>
     @endif
 
-    <!-- WebSocket Reverb Status Indicator -->
+    <!-- WebSocket Reverb Status Badge -->
     <template x-if="$store.network && $store.network.wsConnected">
         <span class="inline-flex items-center gap-1 text-[10px] text-blue-600 bg-blue-100/80 px-1.5 py-0.5 rounded-full font-bold ml-1 tracking-tight"
               title="WebSocket Reverb Realtime Service Aktif">

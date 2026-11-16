@@ -118,7 +118,7 @@
     </div>
 
     <!-- TAB 2: OTORISASI & PIN KASIR -->
-    <div x-show="activeTab === 'kebijakan'" class="space-y-6">
+    <div x-cloak x-show="activeTab === 'kebijakan'" class="space-y-6">
         <div class="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-6 space-y-6">
             <div class="flex items-center gap-3 pb-4 border-b border-slate-100">
                 <div class="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
@@ -195,7 +195,7 @@
     </div>
 
     <!-- TAB 3: DATA & BACKUP KOPERASI -->
-    <div x-show="activeTab === 'data'" class="space-y-6">
+    <div x-cloak x-show="activeTab === 'data'" class="space-y-6">
         <div class="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-6 space-y-6">
             <div class="flex items-center gap-3 pb-4 border-b border-slate-100">
                 <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">

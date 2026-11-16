@@ -120,7 +120,7 @@ class DatabaseSeeder extends Seeder
         ];
 
         foreach ($users as $u) {
-            User::updateOrCreate(['nik' => $u['nik']], $u);
+            User::updateOrCreate(['username' => $u['username']], $u);
         }
 
         // ---------------------------------------------------------------------

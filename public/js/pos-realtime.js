@@ -138,8 +138,10 @@
             clearTimeout(timeoutId);
 
             if (res.ok) {
-                const latency = Math.max(1, Math.round(performance.now() - startTime));
-                updateNetworkState(true, latency, 'online', null);
+                const httpLatency = Math.max(1, Math.round(performance.now() - startTime));
+                const isWsConnected = window.posReverbState?.wsConnected || (window.Alpine?.store && window.Alpine.store('network')?.wsConnected);
+                const currentLatency = (isWsConnected && window.posReverbState?.latency) ? window.posReverbState.latency : httpLatency;
+                updateNetworkState(true, currentLatency, 'online', null);
                 scheduleNextHealthCheck(15000); // Normal 15s interval when online
             } else {
                 updateNetworkState(false, null, 'offline', 'server_offline');
@@ -164,9 +166,14 @@
     }
 
     function updateNetworkState(isOnline, latency, status, reason = null) {
+        const isWsConnected = window.posReverbState?.wsConnected || (window.Alpine?.store && window.Alpine.store('network')?.wsConnected);
+        const resolvedLatency = (isWsConnected && typeof window.posReverbState?.latency === 'number')
+            ? window.posReverbState.latency
+            : latency;
+
         const changed = state.isOnline !== isOnline || state.status !== status;
         state.isOnline = isOnline;
-        state.latency = isOnline ? latency : null; // Clear latency if offline
+        state.latency = isOnline ? resolvedLatency : null; // Clear latency if offline
         state.status = status;
         state.isReconnecting = false;
         state.offlineReason = reason;
@@ -177,7 +184,7 @@
             const store = window.Alpine.store('network');
             store.isOnline = isOnline;
             store.isReconnecting = false;
-            store.latency = isOnline ? latency : null;
+            store.latency = isOnline ? resolvedLatency : null;
             store.status = status;
             store.offlineReason = reason;
             store.wifiOnline = (typeof navigator !== 'undefined' ? navigator.onLine : true);
@@ -197,6 +204,20 @@
             }
         }
     }
+
+    // Real-time WebSocket Reverb Ping Synchronizer
+    window.addEventListener('pos:ws-ping', (e) => {
+        if (e.detail && typeof e.detail.latency === 'number') {
+            state.latency = e.detail.latency;
+            if (window.Alpine && window.Alpine.store && window.Alpine.store('network')) {
+                const store = window.Alpine.store('network');
+                store.latency = e.detail.latency;
+                store.wsLatency = e.detail.latency;
+                if (e.detail.quality) store.wsSpeedQuality = e.detail.quality;
+                if (e.detail.timestamp) store.lastPingAt = e.detail.timestamp;
+            }
+        }
+    });
 
     // Browser Online / Offline Event Handlers
     window.addEventListener('online', () => {
@@ -218,10 +239,15 @@
         }
     });
 
-    // Initial check immediately on script execution
+    // Initial check deferred slightly so it doesn't compete with initial page APIs on single-worker dev servers
     setTimeout(() => {
-        checkNetworkHealth();
-    }, 150);
+        if (window.posReverbState?.wsConnected && typeof window.posReverbState.latency === 'number') {
+            updateNetworkState(true, window.posReverbState.latency, 'online', null);
+            scheduleNextHealthCheck(15000);
+        } else {
+            checkNetworkHealth();
+        }
+    }, 600);
 
     // 5. Multi-Device Background Server Sync Poller
     // Silently checks server APIs for latest changes so different devices stay realtime
@@ -387,6 +413,14 @@
     function initAlpineStores() {
         if (!window.Alpine) return;
 
+        const curWsState = (window.Echo && window.Echo.connector && window.Echo.connector.pusher && window.Echo.connector.pusher.connection && window.Echo.connector.pusher.connection.state) 
+            || (window.posReverbState ? window.posReverbState.status : 'connecting');
+        const isWsConnected = curWsState === 'connected';
+        const isWsConnecting = curWsState === 'connecting';
+        const initialLatency = (isWsConnected && typeof window.posReverbState?.latency === 'number')
+            ? window.posReverbState.latency
+            : state.latency;
+
         // Network Store
         if (!window.Alpine.store('network')) {
             window.Alpine.store('network', {
@@ -394,16 +428,30 @@
                 isReconnecting: state.isReconnecting,
                 offlineReason: state.offlineReason,
                 wifiOnline: (typeof navigator !== 'undefined' ? navigator.onLine : true),
-                latency: state.latency,
+                latency: initialLatency,
+                wsLatency: window.posReverbState?.latency ?? null,
+                wsSpeedQuality: window.posReverbState?.wsSpeedQuality ?? null,
+                lastPingAt: window.posReverbState?.lastPingAt ?? null,
                 status: state.status,
                 lastChecked: state.lastChecked,
                 isChecking: false,
-                wsConnected: false,
-                wsStatus: 'disconnected',
+                wsConnected: isWsConnected,
+                wsStatus: curWsState,
+                wsConnecting: isWsConnecting,
                 syncNow() {
                     return PosRealtime.syncNow();
                 }
             });
+        } else {
+            const net = window.Alpine.store('network');
+            net.wsConnected = isWsConnected;
+            net.wsStatus = curWsState;
+            net.wsConnecting = isWsConnecting;
+            if (isWsConnected && typeof window.posReverbState?.latency === 'number') {
+                net.latency = window.posReverbState.latency;
+                net.wsLatency = window.posReverbState.latency;
+                net.wsSpeedQuality = window.posReverbState.wsSpeedQuality;
+            }
         }
 
         // PosRealtime Store
@@ -418,6 +466,15 @@
             });
         }
     }
+
+    window.addEventListener('pos:ws-status-changed', function(e) {
+        if (window.Alpine && window.Alpine.store && window.Alpine.store('network')) {
+            const net = window.Alpine.store('network');
+            net.wsConnected = e.detail.isConnected;
+            net.wsStatus = e.detail.state;
+            net.wsConnecting = e.detail.isConnecting;
+        }
+    });
 
     if (window.Alpine) {
         initAlpineStores();

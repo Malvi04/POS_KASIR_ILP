@@ -17,8 +17,8 @@
     // Form Manual Absen
     formAbsen: {
         staffName: '',
-        terminal: 'Kasir 01',
-        branch: 'Cabang Pusat',
+        terminal: 'POS-01',
+        branch: 'Pusat',
         type: 'MASUK', // MASUK | PULANG
         notes: ''
     },
@@ -36,6 +36,42 @@
     shifts: [],
 
     async initAttendance() {
+        await Promise.all([
+            this.loadAttendance(),
+            this.loadLeaves(),
+            this.loadShifts()
+        ]);
+
+        // 1. Event listener real-time Reverb untuk absensi kasir
+        window.addEventListener('pos:attendance-recorded', (e) => {
+            const item = e.detail;
+            if (!item) return;
+            const idx = this.attendanceList.findIndex(a => 
+                a.id === item.id || (a.staffName === item.staffName && a.terminal === item.terminal)
+            );
+            if (idx >= 0) {
+                this.attendanceList[idx] = { ...this.attendanceList[idx], ...item };
+            } else {
+                this.attendanceList.unshift(item);
+            }
+            if (item.type === 'PULANG') {
+                this.triggerToast(`Real-time: Sesi selesai untuk ${item.staffName} (${item.terminal || '-'}) - Check-out: ${item.checkOut}`);
+            } else {
+                this.triggerToast(`Real-time: Kasir ${item.staffName} mulai bertugas di ${item.terminal || '-'} (${item.branch || 'Pusat'})`);
+            }
+        });
+
+        // 2. Event listener shift terbuka / tertutup dari Reverb
+        window.addEventListener('pos:shift-opened', (e) => {
+            this.loadAttendance();
+        });
+
+        window.addEventListener('pos:shift-closed', (e) => {
+            this.loadAttendance();
+        });
+    },
+
+    async loadAttendance() {
         try {
             const res = await fetch(`/api/attendance?date=${this.selectedDate}`, {
                 headers: { 'Accept': 'application/json' }
@@ -46,7 +82,13 @@
                     this.attendanceList = json.data;
                 }
             }
+        } catch(e) {
+            console.error('Failed to load attendance from PostgreSQL API', e);
+        }
+    },
 
+    async loadLeaves() {
+        try {
             const leaveRes = await fetch('/api/attendance/leaves', {
                 headers: { 'Accept': 'application/json' }
             });
@@ -56,7 +98,11 @@
                     this.leaveRequests = leaveJson.data;
                 }
             }
+        } catch(e) {}
+    },
 
+    async loadShifts() {
+        try {
             const shiftRes = await fetch('/api/attendance/shifts', {
                 headers: { 'Accept': 'application/json' }
             });
@@ -66,34 +112,15 @@
                     this.shifts = shiftJson.data;
                 }
             }
-            return;
-        } catch(e) {
-            console.error('Failed to load attendance from API, using fallback', e);
-        }
-
-        const stored = localStorage.getItem('pos_ilp_attendance_v1');
-        if (stored) {
-            try { this.attendanceList = JSON.parse(stored); } catch(e) { this.attendanceList = []; }
-        } else {
-            this.attendanceList = [];
-        }
-
-        const storedLeaves = localStorage.getItem('pos_ilp_leaves_v1');
-        if (storedLeaves) {
-            try { this.leaveRequests = JSON.parse(storedLeaves); } catch(e) { this.leaveRequests = []; }
-        } else {
-            this.leaveRequests = [];
-        }
-
-        this.shifts = [];
+        } catch(e) {}
     },
 
     saveAttendance() {
-        localStorage.setItem('pos_ilp_attendance_v1', JSON.stringify(this.attendanceList));
+        // Data absensi permanen tersimpan di PostgreSQL
     },
 
     saveLeaves() {
-        localStorage.setItem('pos_ilp_leaves_v1', JSON.stringify(this.leaveRequests));
+        // Data cuti/izin tersimpan di PostgreSQL
     },
 
     getDefaultAttendance() {
@@ -106,11 +133,20 @@
 
     get filteredAttendance() {
         return this.attendanceList.filter(a => {
-            if (this.branchFilter !== 'all' && a.branch !== this.branchFilter) return false;
-            if (this.kasirFilter !== 'all' && a.terminal !== this.kasirFilter) return false;
+            if (this.branchFilter !== 'all') {
+                const b = (a.branch || '').toLowerCase();
+                const target = this.branchFilter.toLowerCase();
+                if (target === 'pusat' && !b.includes('pusat')) return false;
+                if (target !== 'pusat' && !b.includes(target)) return false;
+            }
+            if (this.kasirFilter !== 'all') {
+                const term = (a.terminal || '').toLowerCase();
+                const target = this.kasirFilter.toLowerCase();
+                if (!term.includes(target)) return false;
+            }
             if (this.searchQuery.trim() !== '') {
                 const q = this.searchQuery.toLowerCase();
-                return a.staffName.toLowerCase().includes(q) || a.terminal.toLowerCase().includes(q) || a.branch.toLowerCase().includes(q);
+                return (a.staffName || '').toLowerCase().includes(q) || (a.terminal || '').toLowerCase().includes(q) || (a.branch || '').toLowerCase().includes(q);
             }
             return true;
         });
@@ -348,7 +384,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
     <x-manager-sidebar active="absensi" />
 
     <!-- Main Content -->
-    <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
+    <main class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
 
         <!-- Top Header -->
         <header class="h-[72px] bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
@@ -449,18 +485,22 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             <label class="font-bold text-gray-600">Tanggal:</label>
                             <input type="date"
                                    x-model="selectedDate"
+                                   @change="loadAttendance()"
                                    class="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 bg-white focus:outline-none focus:border-[#0052cc]">
                         </div>
 
                         <div class="flex items-center gap-2">
                             <label class="font-bold text-gray-600">Terminal:</label>
                             <select x-model="kasirFilter" class="bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-gray-700 focus:outline-none focus:border-[#0052cc]">
-                                <option value="all">Semua Kasir</option>
-                                <option value="Kasir 1">Kasir 1</option>
-                                <option value="Kasir 2">Kasir 2</option>
-                                <option value="Kasir 3">Kasir 3</option>
-                                <option value="Kasir 4">Kasir 4</option>
-                                <option value="Kasir 5">Kasir 5</option>
+                                <option value="all">Semua Terminal</option>
+                                <option value="POS-01">POS-01 (Pusat)</option>
+                                <option value="POS-02">POS-02 (Pusat)</option>
+                                <option value="POS-03">POS-03 (Pusat)</option>
+                                <option value="POS-04">POS-04 (Pusat)</option>
+                                <option value="POS-05">POS-05 (Pusat)</option>
+                                <option value="POS-06">POS-06 (Cabang A)</option>
+                                <option value="POS-07">POS-07 (Cabang A)</option>
+                                <option value="POS-11">POS-11 (Cabang B)</option>
                             </select>
                         </div>
 
@@ -468,8 +508,9 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             <label class="font-bold text-gray-600">Cabang:</label>
                             <select x-model="branchFilter" class="bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-gray-700 focus:outline-none focus:border-[#0052cc]">
                                 <option value="all">Semua Cabang</option>
-                                <option value="Cabang Pusat">Cabang Pusat</option>
+                                <option value="Pusat">Pusat</option>
                                 <option value="Cabang A">Cabang A</option>
+                                <option value="Cabang B">Cabang B</option>
                             </select>
                         </div>
                     </div>
@@ -510,31 +551,31 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             <table class="w-full text-left border-collapse text-xs min-w-[850px]">
                                 <thead>
                                     <tr class="bg-gray-50/80 border-b border-gray-200 text-gray-600 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                        <th class="py-3.5 px-6 text-left w-[180px]">Nama Karyawan</th>
+                                        <th class="py-3.5 px-6 text-left w-[150px]">Cabang</th>
                                         <th class="py-3.5 px-6 text-left w-[150px]">Terminal Kasir</th>
-                                        <th class="py-3.5 px-6 text-left w-[180px]">Nama Staf</th>
-                                        <th class="py-3.5 px-6 text-center w-[110px]">Masuk</th>
-                                        <th class="py-3.5 px-6 text-center w-[110px]">Pulang</th>
-                                        <th class="py-3.5 px-6 text-left w-[150px]">Status / Keterangan</th>
-                                        <th class="py-3.5 px-6 text-left w-[150px]">Lokasi Cabang</th>
+                                        <th class="py-3.5 px-6 text-center w-[110px]">Jam Masuk</th>
+                                        <th class="py-3.5 px-6 text-center w-[110px]">Jam Pulang</th>
+                                        <th class="py-3.5 px-6 text-left w-[150px]">Status</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-100">
                                     <template x-for="row in filteredAttendance" :key="row.id">
                                         <tr class="hover:bg-blue-50/30 transition-colors">
-                                            <td class="py-3.5 px-6 font-bold text-gray-800 whitespace-nowrap" x-text="row.terminal"></td>
                                             <td class="py-3.5 px-6">
                                                 <div class="font-bold text-gray-900" x-text="row.staffName"></div>
                                             </td>
+                                            <td class="py-3.5 px-6 text-gray-600 whitespace-nowrap" x-text="row.branch"></td>
+                                            <td class="py-3.5 px-6 font-bold text-[#0052cc] whitespace-nowrap" x-text="row.terminal"></td>
                                             <td class="py-3.5 px-6 text-center font-mono font-bold whitespace-nowrap"
                                                 :class="row.status === 'TERLAMBAT' ? 'text-red-600' : 'text-gray-800'"
                                                 x-text="row.checkIn"></td>
                                             <td class="py-3.5 px-6 text-center font-mono font-bold text-gray-800 whitespace-nowrap" x-text="row.checkOut"></td>
                                             <td class="py-3.5 px-6 whitespace-nowrap">
-                                                <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
+                                                <span class="px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider"
                                                       :class="row.status === 'TERLAMBAT' ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'"
-                                                      x-text="row.status === 'TERLAMBAT' ? 'Terlambat' : 'Tepat Waktu'"></span>
+                                                      x-text="row.status === 'TERLAMBAT' ? 'Terlambat' : 'Hadir'"></span>
                                             </td>
-                                            <td class="py-3.5 px-6 text-gray-600 whitespace-nowrap" x-text="row.branch"></td>
                                         </tr>
                                     </template>
                                     <tr x-show="!filteredAttendance || filteredAttendance.length === 0">
@@ -675,7 +716,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         </td>
                                     </tr>
                                 </template>
-                                    <tr x-show="!filteredLeaves || filteredLeaves.length === 0">
+                                    <tr x-show="!leaveRequests || leaveRequests.length === 0">
                                         <td colspan="6" class="text-center py-12 text-gray-400 font-medium">
                                             <p class="text-sm">Belum ada pengajuan izin atau cuti.</p>
                                             <div class="mt-3">
@@ -735,9 +776,12 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <div>
                             <label class="font-bold text-gray-700 block mb-1">Terminal</label>
                             <select x-model="formAbsen.terminal" class="w-full px-3 py-2 border border-gray-300 rounded-xl">
-                                <option value="Kasir 1">Kasir 1</option>
-                                <option value="Kasir 2">Kasir 2</option>
-                                <option value="Kasir 3">Kasir 3</option>
+                                <option value="POS-01">POS-01</option>
+                                <option value="POS-02">POS-02</option>
+                                <option value="POS-03">POS-03</option>
+                                <option value="POS-05">POS-05</option>
+                                <option value="POS-06">POS-06</option>
+                                <option value="POS-11">POS-11</option>
                             </select>
                         </div>
                     </div>
@@ -745,8 +789,9 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <div>
                         <label class="font-bold text-gray-700 block mb-1">Cabang Penugasan</label>
                         <select x-model="formAbsen.branch" class="w-full px-3 py-2 border border-gray-300 rounded-xl">
-                            <option value="Cabang Pusat">Cabang Pusat</option>
+                            <option value="Pusat">Pusat</option>
                             <option value="Cabang A">Cabang A</option>
+                            <option value="Cabang B">Cabang B</option>
                         </select>
                     </div>
 

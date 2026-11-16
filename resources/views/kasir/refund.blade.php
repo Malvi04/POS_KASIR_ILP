@@ -256,7 +256,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
     <x-cashier-sidebar active="transaksi_refund" />
 
     <!-- Main Content Area -->
-    <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
+    <main class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
         <!-- Top Header -->
         <x-cashier-header title="Refund Transaksi Pelanggan">
             <div class="flex items-center gap-2 ml-2">
@@ -571,7 +571,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                 </div>
 
                 <!-- VIEW 2: RIWAYAT REFUND PELANGGAN -->
-                <div x-show="activeTab === 'history'" class="space-y-4">
+                <div x-cloak x-show="activeTab === 'history'" class="space-y-4">
                     <div class="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden flex flex-col">
                         <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                             <h2 class="text-sm font-bold text-gray-900">Riwayat Nota Refund Pelanggan</h2>

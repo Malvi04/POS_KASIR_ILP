@@ -24,10 +24,10 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
             <div class="flex items-center gap-2 ml-2">
                 <button type="button"
                         @click="toggleOfflineMode()"
-                        :class="activeSession.isOffline ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'"
+                        :class="activeSession?.isOffline ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'"
                         class="px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer">
-                    <span class="material-symbols-rounded text-[16px]" x-text="activeSession.isOffline ? 'cloud_off' : 'cloud_done'"></span>
-                    <span x-text="activeSession.isOffline ? 'Offline (' + activeSession.pendingSyncCount + ')' : 'Online'"></span>
+                    <span class="material-symbols-rounded text-[16px]" x-text="activeSession?.isOffline ? 'cloud_off' : 'cloud_done'"></span>
+                    <span x-text="activeSession?.isOffline ? 'Offline (' + (activeSession?.pendingSyncCount || 0) + ')' : 'Online'"></span>
                 </button>
             </div>
         </x-cashier-header>
@@ -39,12 +39,12 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                 <!-- 1. INFO SESI AKTIF -->
                 <div class="bg-white rounded-2xl border border-gray-200 shadow-xs p-6">
                     <!-- Banner jika sesi telah ditutup -->
-                    <template x-if="activeSession.status !== 'OPEN'">
+                    <template x-if="!activeSession || activeSession.status !== 'OPEN'">
                         <div class="mb-5 p-4 rounded-xl bg-amber-50/90 border border-amber-200 text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                             <div class="flex items-center gap-2.5">
                                 <span class="material-symbols-rounded text-amber-600 text-[22px] shrink-0">info</span>
                                 <div>
-                                    <span>Sesi kasir <strong class="font-mono text-gray-900" x-text="activeSession.sessionId"></strong> telah ditutup pada pukul <strong x-text="activeSession.endedAt || '-'"></strong> (Status: <strong x-text="activeSession.status"></strong>).</span>
+                                    <span>Sesi kasir <strong class="font-mono text-gray-900" x-text="activeSession?.sessionId || '-'"></strong> telah ditutup pada pukul <strong x-text="activeSession?.endedAt || '-'"></strong> (Status: <strong x-text="activeSession?.status || 'CLOSED'"></strong>).</span>
                                     <span class="block text-amber-700 mt-0.5">Laci telah siap/diserahterimakan. Silakan buka sesi baru untuk transaksi berikutnya.</span>
                                 </div>
                             </div>
@@ -56,10 +56,10 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </template>
 
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-gray-100">
-                        <h1 class="text-xl font-black text-gray-900" x-text="activeSession.status === 'OPEN' ? 'Informasi Sesi Aktif' : 'Informasi Sesi Kasir (Ditutup)'">Informasi Sesi Aktif</h1>
+                        <h1 class="text-xl font-black text-gray-900" x-text="activeSession?.status === 'OPEN' ? 'Informasi Sesi Aktif' : 'Informasi Sesi Kasir (Ditutup)'">Informasi Sesi Aktif</h1>
 
                         <div class="flex flex-wrap items-center gap-2.5">
-                            <template x-if="activeSession.status === 'OPEN'">
+                            <template x-if="activeSession && activeSession.status === 'OPEN'">
                                 <div class="flex items-center gap-2.5">
                                     <button type="button"
                                             @click="$dispatch('open-cash-movement'); showCashMovementModal = true"
@@ -75,7 +75,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     </button>
                                 </div>
                             </template>
-                            <template x-if="activeSession.status !== 'OPEN'">
+                            <template x-if="!activeSession || activeSession.status !== 'OPEN'">
                                 <a href="/select-shift"
                                    class="px-5 py-2.5 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer transition-colors">
                                     <span class="material-symbols-rounded text-[18px]">add_circle</span>
@@ -92,8 +92,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <span class="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">Terminal</span>
                                 <span class="material-symbols-rounded text-[#0052cc] text-[20px]">point_of_sale</span>
                             </div>
-                            <div class="text-lg font-black text-gray-900 mt-1.5" x-text="activeSession.terminalLabel">Kasir 01</div>
-                            <div class="text-xs text-gray-500 mt-0.5" x-text="activeSession.storeLocation">Minimarket - Sektor A</div>
+                            <div class="text-lg font-black text-gray-900 mt-1.5" x-text="activeSession?.terminalLabel || 'POS-01'">Kasir 01</div>
+                            <div class="text-xs text-gray-500 mt-0.5" x-text="activeSession?.storeLocation || 'Minimarket - Sektor A'">Minimarket - Sektor A</div>
                         </div>
 
                         <div class="p-4 rounded-xl bg-slate-50 border border-gray-200/80">
@@ -101,8 +101,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <span class="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">Petugas Aktif</span>
                                 <span class="material-symbols-rounded text-emerald-600 text-[20px]">badge</span>
                             </div>
-                            <div class="text-lg font-black text-gray-900 mt-1.5" x-text="activeOperator ? activeOperator.name : activeSession.cashierName">Budi Kurniawan</div>
-                            <div class="text-xs text-gray-500 font-mono mt-0.5" x-text="'NIK: ' + (activeOperator ? activeOperator.nik : activeSession.cashierNik)">NIK: 202409821002</div>
+                            <div class="text-lg font-black text-gray-900 mt-1.5" x-text="activeOperator ? activeOperator.name : (activeSession?.cashierName || 'Kasir')">Budi Kurniawan</div>
+                            <div class="text-xs text-gray-500 font-mono mt-0.5" x-text="'NIK: ' + (activeOperator ? activeOperator.nik : (activeSession?.cashierNik || '-'))">NIK: 202409821002</div>
                         </div>
 
                         <div class="p-4 rounded-xl bg-blue-50/60 border border-blue-200">
@@ -110,15 +110,15 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <span class="text-[10px] font-extrabold text-[#0052cc] uppercase tracking-wider">ID Sesi</span>
                                 <span class="px-2 py-0.5 rounded-full text-[9px] font-black"
                                       :class="{
-                                          'bg-emerald-100 text-emerald-800': activeSession.status === 'OPEN',
-                                          'bg-slate-200 text-slate-700': activeSession.status === 'CLOSED',
-                                          'bg-amber-100 text-amber-800': activeSession.status === 'PENDING_REVIEW'
+                                          'bg-emerald-100 text-emerald-800': activeSession?.status === 'OPEN',
+                                          'bg-slate-200 text-slate-700': !activeSession || activeSession?.status === 'CLOSED',
+                                          'bg-amber-100 text-amber-800': activeSession?.status === 'PENDING_REVIEW'
                                       }"
-                                      x-text="activeSession.status">OPEN</span>
+                                      x-text="activeSession?.status || 'CLOSED'">CLOSED</span>
                             </div>
-                            <div class="text-base font-black font-mono text-[#0052cc] mt-1.5" x-text="activeSession.sessionId">CS-20261019-K01-003</div>
+                            <div class="text-base font-black font-mono text-[#0052cc] mt-1.5" x-text="activeSession?.sessionId || '-'">-</div>
                             <div class="text-xs text-gray-600 mt-0.5">
-                                <span x-text="activeSession.status === 'OPEN' ? 'Mulai ' + activeSession.startedAt : 'Selesai ' + (activeSession.endedAt || '-')"></span> • <strong x-text="activeSession.trxCount">28</strong> Transaksi
+                                <span x-text="activeSession?.status === 'OPEN' ? 'Mulai ' + (activeSession?.startedAt || '-') : 'Selesai ' + (activeSession?.endedAt || '-')"></span> • <strong x-text="activeSession?.trxCount || 0">0</strong> Transaksi
                             </div>
                         </div>
 
@@ -127,8 +127,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <span class="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">Tanggal Operasional</span>
                                 <span class="material-symbols-rounded text-amber-600 text-[20px]">calendar_month</span>
                             </div>
-                            <div class="text-lg font-black text-gray-900 mt-1.5" x-text="activeSession.businessDayDate">19 Oktober 2026</div>
-                            <div class="text-xs text-gray-500 font-mono mt-0.5" x-text="activeSession.businessDayId">BD-20261019-01</div>
+                            <div class="text-lg font-black text-gray-900 mt-1.5" x-text="activeSession?.businessDayDate || businessDayDate">19 Oktober 2026</div>
+                            <div class="text-xs text-gray-500 font-mono mt-0.5" x-text="activeSession?.businessDayId || businessDayId">BD-20261019-01</div>
                         </div>
                     </div>
                 </div>
@@ -145,33 +145,33 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <div class="grid grid-cols-2 sm:grid-cols-3 gap-3.5 mt-4">
                             <div class="p-4 rounded-xl bg-slate-50 border border-gray-200/80">
                                 <span class="text-[11px] font-bold text-gray-500 uppercase block">Uang Awal</span>
-                                <span class="text-lg font-black font-mono text-gray-900 mt-1 block" x-text="formatRupiah(activeSession.openingCash)"></span>
+                                <span class="text-lg font-black font-mono text-gray-900 mt-1 block" x-text="formatRupiah(activeSession?.openingCash || 0)"></span>
                             </div>
 
                             <div class="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200/80">
                                 <span class="text-[11px] font-bold text-emerald-700 uppercase block">(+) Penjualan Tunai</span>
                                 <span class="text-lg font-black font-mono text-emerald-800 mt-1 block"
-                                      x-text="'+ ' + formatRupiah((Number(activeSession.cashSalesNet)||0) + (Number(activeSession.splitCashPortion)||0))"></span>
+                                      x-text="'+ ' + formatRupiah((Number(activeSession?.cashSalesNet)||0) + (Number(activeSession?.splitCashPortion)||0))"></span>
                             </div>
 
                             <div class="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200/80">
                                 <span class="text-[11px] font-bold text-emerald-700 uppercase block">(+) Kas Masuk</span>
-                                <span class="text-lg font-black font-mono text-emerald-800 mt-1 block" x-text="'+ ' + formatRupiah(activeSession.cashIn)"></span>
+                                <span class="text-lg font-black font-mono text-emerald-800 mt-1 block" x-text="'+ ' + formatRupiah(activeSession?.cashIn || 0)"></span>
                             </div>
 
                             <div class="p-4 rounded-xl bg-red-50/60 border border-red-200/80">
                                 <span class="text-[11px] font-bold text-red-700 uppercase block">(-) Retur Tunai</span>
-                                <span class="text-lg font-black font-mono text-red-700 mt-1 block" x-text="'- ' + formatRupiah(activeSession.cashReturn)"></span>
+                                <span class="text-lg font-black font-mono text-red-700 mt-1 block" x-text="'- ' + formatRupiah(activeSession?.cashReturn || 0)"></span>
                             </div>
 
                             <div class="p-4 rounded-xl bg-red-50/60 border border-red-200/80">
                                 <span class="text-[11px] font-bold text-red-700 uppercase block">(-) Kas Keluar</span>
-                                <span class="text-lg font-black font-mono text-red-700 mt-1 block" x-text="'- ' + formatRupiah(activeSession.cashOut)"></span>
+                                <span class="text-lg font-black font-mono text-red-700 mt-1 block" x-text="'- ' + formatRupiah(activeSession?.cashOut || 0)"></span>
                             </div>
 
                             <div class="p-4 rounded-xl bg-amber-50/70 border border-amber-200/80">
                                 <span class="text-[11px] font-bold text-amber-800 uppercase block">(-) Setor Brankas</span>
-                                <span class="text-lg font-black font-mono text-amber-900 mt-1 block" x-text="'- ' + formatRupiah(activeSession.cashDrop)"></span>
+                                <span class="text-lg font-black font-mono text-amber-900 mt-1 block" x-text="'- ' + formatRupiah(activeSession?.cashDrop || 0)"></span>
                             </div>
                         </div>
                     </div>
@@ -193,7 +193,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <div class="p-3.5 rounded-xl bg-orange-50/70 border border-orange-200/80 flex items-center justify-between">
                                     <div>
                                         <span class="text-[10px] font-extrabold text-orange-700 uppercase">Kredit Anggota</span>
-                                        <div class="text-lg font-black font-mono text-gray-900 mt-0.5" x-text="formatRupiah(activeSession.creditSales)"></div>
+                                        <div class="text-lg font-black font-mono text-gray-900 mt-0.5" x-text="formatRupiah(activeSession?.creditSales || 0)"></div>
                                     </div>
                                     <span class="material-symbols-rounded text-2xl text-orange-600">credit_score</span>
                                 </div>
@@ -244,7 +244,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
 
                     <!-- TAB 1: ARUS KAS LACI -->
-                    <div x-show="activeTab === 'movements'" class="p-6 space-y-4">
+                    <div x-cloak x-show="activeTab === 'movements'" class="p-6 space-y-4">
                         <div class="flex items-center justify-between">
                             <h3 class="text-sm font-black text-gray-900">Jurnal Kas Laci</h3>
                             <button type="button"
@@ -306,7 +306,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <p class="text-xs text-gray-500 mt-0.5">Daftar petugas kasir yang bertugas pada sesi finansial berjalan.</p>
                             </div>
                             <span class="text-xs font-bold px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full"
-                                  x-text="'Operator Aktif: ' + (activeOperator ? activeOperator.name : activeSession.cashierName)"></span>
+                                  x-text="'Operator Aktif: ' + (activeOperator ? activeOperator.name : (activeSession?.cashierName || 'Kasir'))"></span>
                         </div>
 
                         <div class="overflow-x-auto min-w-0 w-full border border-gray-200 rounded-xl bg-white">
@@ -377,12 +377,12 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-100">
-                                    <template x-if="activeSession.status === 'OPEN'">
+                                    <template x-if="activeSession && activeSession.status === 'OPEN'">
                                         <tr class="bg-blue-50/40 font-medium">
-                                            <td class="py-3.5 px-4 font-mono font-black text-[#0052cc] whitespace-nowrap" x-text="activeSession.sessionId"></td>
-                                            <td class="py-3.5 px-4 font-bold text-gray-900 whitespace-nowrap" x-text="activeSession.terminalLabel"></td>
-                                            <td class="py-3.5 px-4 font-mono text-blue-700 font-bold whitespace-nowrap" x-text="activeSession.startedAt + ' – Sekarang'"></td>
-                                            <td class="py-3.5 px-4 text-right font-mono font-bold text-gray-900 whitespace-nowrap" x-text="formatRupiah(activeSession.openingCash)"></td>
+                                            <td class="py-3.5 px-4 font-mono font-black text-[#0052cc] whitespace-nowrap" x-text="activeSession?.sessionId"></td>
+                                            <td class="py-3.5 px-4 font-bold text-gray-900 whitespace-nowrap" x-text="activeSession?.terminalLabel"></td>
+                                            <td class="py-3.5 px-4 font-mono text-blue-700 font-bold whitespace-nowrap" x-text="(activeSession?.startedAt || '-') + ' – Sekarang'"></td>
+                                            <td class="py-3.5 px-4 text-right font-mono font-bold text-gray-900 whitespace-nowrap" x-text="formatRupiah(activeSession?.openingCash || 0)"></td>
                                             <td class="py-3.5 px-4 text-right font-mono font-bold text-[#0052cc] whitespace-nowrap" x-text="formatRupiah(getExpectedClosingCash())"></td>
                                             <td class="py-3.5 px-4 text-right font-mono text-gray-400 whitespace-nowrap">-</td>
                                             <td class="py-3.5 px-4 text-right font-mono text-gray-400 whitespace-nowrap">-</td>
@@ -392,7 +392,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         </tr>
                                     </template>
 
-                                    <template x-for="sess in sessionHistory.filter(s => s.cashierId === activeSession.cashierId)" :key="sess.sessionId">
+                                    <template x-for="sess in sessionHistory.filter(s => !activeSession || s.cashierId === activeSession.cashierId)" :key="sess.sessionId">
                                         <tr class="hover:bg-blue-50/30 transition-colors">
                                             <td class="py-3.5 px-4 font-mono font-bold text-[#0052cc] whitespace-nowrap" x-text="sess.sessionId"></td>
                                             <td class="py-3.5 px-4 font-bold text-gray-800 whitespace-nowrap" x-text="sess.terminalLabel"></td>

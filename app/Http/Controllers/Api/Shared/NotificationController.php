@@ -17,9 +17,12 @@ class NotificationController extends Controller
     {
         $role = strtoupper(trim($request->query('role', '')));
         
-        // Auto-seed initial contextual notifications if table is empty
-        if (SystemNotification::count() === 0) {
-            $this->seedInitialNotifications();
+        // Auto-seed initial contextual notifications once (cached flag avoids extra COUNT query on every request)
+        if (!\Illuminate\Support\Facades\Cache::get('ilp_notifications_seeded_v1')) {
+            if (SystemNotification::count() === 0) {
+                $this->seedInitialNotifications();
+            }
+            \Illuminate\Support\Facades\Cache::put('ilp_notifications_seeded_v1', true, 3600);
         }
 
         $query = SystemNotification::query();
