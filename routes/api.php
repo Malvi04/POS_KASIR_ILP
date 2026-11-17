@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\Manager\MemberDebtReportController;
 use App\Http\Controllers\Api\Manager\MemberManagementController;
 use App\Http\Controllers\Api\Manager\ProductImportExportController;
 use App\Http\Controllers\Api\Manager\PromotionController;
+use App\Http\Controllers\Api\Manager\PurchaseController;
 use App\Http\Controllers\Api\Manager\ReturnController;
 use App\Http\Controllers\Api\Manager\SettingsController;
 use App\Http\Controllers\Api\Manager\StockCorrectionController;
@@ -320,6 +321,19 @@ Route::prefix('goods-receipts')->group(function () {
     Route::post('/', [GoodsReceiptController::class, 'store']);
     Route::post('/{id}/verify', [GoodsReceiptController::class, 'verify']);
     Route::put('/{id}/status', [GoodsReceiptController::class, 'updateStatus']);
+});
+
+// Pembelian Barang & Riwayat Harga Beli (Manager Gudang)
+Route::prefix('purchases')->middleware('auth.api:manager')->group(function () {
+    Route::get('/meta', [PurchaseController::class, 'meta']);
+    Route::post('/suppliers', [PurchaseController::class, 'storeSupplier']);
+    Route::get('/price-history', [PurchaseController::class, 'priceHistory']);
+    Route::get('/price-history/product/{productId}', [PurchaseController::class, 'productPriceHistory']);
+    Route::get('/', [PurchaseController::class, 'index']);
+    Route::post('/', [PurchaseController::class, 'store']);
+    Route::get('/{id}', [PurchaseController::class, 'show']);
+    Route::put('/{id}', [PurchaseController::class, 'update']);
+    Route::post('/{id}/receive', [PurchaseController::class, 'receive']);
 });
 
 // Sistem Notifikasi Realtime Berdasarkan Role

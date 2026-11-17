@@ -80,9 +80,9 @@ class UserManagementController extends Controller
                 'nik' => $u->nik,
                 'role' => $u->role,
                 'role_category' => $u->isOwnerOrSuperadmin() ? 'Owner / Superadmin' : ($u->isSupervisorOrManager() ? 'Supervisor / Manager' : 'Kasir'),
-                'branch' => $u->branch ?? 'Pusat',
+                'branch' => $u->branch ?? '',
                 'is_active' => (bool) $u->is_active,
-                'pin' => $u->pin ?? '123456',
+                'pin' => $u->pin ?? '',
                 'created_at' => $u->created_at ? $u->created_at->format('Y-m-d H:i') : null,
             ];
         });
@@ -123,7 +123,7 @@ class UserManagementController extends Controller
             'email' => $validated['email'],
             'nik' => $validated['nik'] ?? ('USR-' . time()),
             'role' => $validated['role'],
-            'pin' => $validated['pin'] ?? '123456',
+            'pin' => !empty($validated['pin']) ? $validated['pin'] : str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT),
             'branch' => $validated['branch'],
             'password' => Hash::make($validated['password']),
             'is_active' => $request->boolean('is_active', true),

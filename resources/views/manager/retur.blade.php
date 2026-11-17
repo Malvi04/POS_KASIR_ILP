@@ -11,6 +11,7 @@
     searchQuery: '',
     statusFilterApproval: 'all',
     filterPhysicalStatus: 'all', // 'all', 'pending', 'received'
+    isSubmittingReturn: false,
     
     // Modal: Detail Barang Retur dari Kasir Cabang
     showDetailDocModal: false,
@@ -34,7 +35,7 @@
     showPhysicalModal: false,
     receivingDoc: null,
     highlightedSku: null,
-    physicalInspector: 'Hendra W. (DC Head / Gudang Pusat)',
+    physicalInspector: @js(auth()->user()?->name ?? 'Manager'),
     physicalReceivedDate: '',
     physicalGlobalNotes: '',
     physicalItemsForm: [],
@@ -47,13 +48,13 @@
     showModal: false,
     modalMode: 'toko_ke_gudang',
     newDocBranch: 'Cabang A',
-    newDocCashier: 'Siti Aminah (Kasir Cabang A)',
+    newDocCashier: @js(auth()->user()?->name ?? ''),
     newDocSku: '',
-    newDocQty: 12,
+    newDocQty: 1,
     newDocUnit: 'Pcs',
     newDocCondition: 'RUSAK / BOCOR',
     newDocReason: '',
-    newDocDriver: 'Andi Pratama (B 9481 UQ)',
+    newDocDriver: '',
 
     // Toast Notification
     toastMessage: '',
@@ -84,93 +85,41 @@
             console.error('Failed to load returns from API', e);
         }
 
-        const stored = localStorage.getItem('pos_ilp_manager_returns_v1');
-        if (stored) {
-            try {
-                const parsed = JSON.parse(stored);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    this.items = parsed.map(d => this.normalizeReturnDoc(d));
-                    this.saveReturns();
-                    return;
-                }
-            } catch(e) {
-                console.error('Failed to parse returns data:', e);
-            }
-        }
-        this.items = this.getDefaultReturns().map(d => this.normalizeReturnDoc(d));
-        this.saveReturns();
+        this.items = [];
     },
 
     saveReturns() {
-        try {
-            localStorage.setItem('pos_ilp_manager_returns_v1', JSON.stringify(this.items));
-        } catch(e) {
-            console.error('Failed to save returns:', e);
-        }
+        // Data retur tersimpan di backend PostgreSQL
     },
 
     // Normalizer to ensure complete cashier info, clean units, and detailed item structures
     normalizeReturnDoc(doc) {
         if (!doc.branchOrigin) {
-            doc.branchOrigin = doc.docNo && doc.docNo.includes('TK') ? 'Cabang A' : 'Gudang Pusat';
+            doc.branchOrigin = doc.docNo && doc.docNo.includes('TK') ? 'Cabang' : 'Gudang Pusat';
         }
         if (!doc.cashierName) {
-            doc.cashierName = doc.direction === 'toko_ke_gudang' 
-                ? (doc.branchOrigin === 'Cabang B' ? 'Bambang S. (Kasir Cabang B)' : 'Siti Aminah (Kasir Cabang A)')
-                : 'Hendra W. (DC Head)';
+            doc.cashierName = '-';
         }
         if (!doc.terminalId) {
-            doc.terminalId = 'POS-01 (Kasir Toko)';
+            doc.terminalId = '-';
         }
         if (!doc.invoiceRef) {
-            doc.invoiceRef = doc.ref || ('INV-2024/' + (doc.branchOrigin || 'CAB-A'));
+            doc.invoiceRef = doc.ref || '-';
         }
 
         if (Array.isArray(doc.products)) {
-            doc.products.forEach((p, idx) => {
-                // Bersihkan kuantitas dan pastikan satuan Pcs murni (tanpa pouch/tetra/unit ganda)
+            doc.products.forEach((p) => {
                 let rawQty = String(p.submittedQty || p.qty || '1').trim();
                 let parsedNum = parseInt(rawQty) || 1;
                 p.submittedQty = parsedNum;
                 p.qty = parsedNum;
-                p.unit = 'Pcs';
-
-                if (!p.sku) {
-                    if (p.name.includes('Minyak')) p.sku = 'PRD-007';
-                    else if (p.name.includes('Ultra') || p.name.includes('Susu')) p.sku = 'PRD-003';
-                    else if (p.name.includes('Indomie')) p.sku = 'PRD-006';
-                    else if (p.name.includes('Kopi')) p.sku = 'PRD-001';
-                    else if (p.name.includes('Kecap')) p.sku = 'PRD-002';
-                    else if (p.name.includes('Yogurt')) p.sku = 'PRD-008';
-                    else if (p.name.includes('Roti')) p.sku = 'PRD-009';
-                    else if (p.name.includes('Deterjen')) p.sku = 'PRD-010';
-                    else if (p.name.includes('Pembersih')) p.sku = 'PRD-005';
-                    else p.sku = 'PRD-RET-0' + (idx + 1);
-                }
-                if (!p.barcode) {
-                    p.barcode = '899' + Math.floor(1000000000 + Math.random() * 9000000000);
-                }
-                if (!p.category) {
-                    if (p.name.includes('Minyak') || p.name.includes('Beras')) p.category = 'Kebutuhan Pokok';
-                    else if (p.name.includes('Susu') || p.name.includes('Yogurt') || p.name.includes('Aqua') || p.name.includes('Kopi')) p.category = 'Minuman';
-                    else if (p.name.includes('Indomie') || p.name.includes('Roti') || p.name.includes('Chitato')) p.category = 'Makanan';
-                    else if (p.name.includes('Deterjen') || p.name.includes('Pembersih') || p.name.includes('Sunlight')) p.category = 'Pembersih';
-                    else p.category = 'Barang Konsumsi';
-                }
-                if (!p.price) {
-                    if (p.name.includes('Minyak')) p.price = 34000;
-                    else if (p.name.includes('Susu')) p.price = 19200;
-                    else if (p.name.includes('Indomie')) p.price = 3500;
-                    else if (p.name.includes('Kopi')) p.price = 12500;
-                    else if (p.name.includes('Yogurt')) p.price = 9500;
-                    else if (p.name.includes('Roti')) p.price = 16000;
-                    else if (p.name.includes('Deterjen')) p.price = 22000;
-                    else if (p.name.includes('Pembersih')) p.price = 15500;
-                    else p.price = 15000;
-                }
+                p.unit = p.unit || 'Pcs';
+                p.sku = p.sku || '-';
+                p.barcode = p.barcode || '-';
+                p.category = p.category || '-';
+                p.price = Number(p.price) || 0;
                 p.subtotal = p.price * p.submittedQty;
 
-                // Sinkronkan data kuantitas fisik diterima dan kalkulasi stok tertinggal
                 if (p.receivedQty === undefined) {
                     if (doc.isPhysicalReceived && doc.physicalReceiptData && Array.isArray(doc.physicalReceiptData.items)) {
                         const recMatch = doc.physicalReceiptData.items.find(i => i.sku === p.sku || i.name === p.name);
@@ -232,177 +181,7 @@
     },
 
     getDefaultReturns() {
-        return [
-            {
-                id: 1,
-                docNo: '#RTR-TK-2024-0895',
-                date: 'Hari ini • 08:30 WIB',
-                ref: 'Ref: NOTA-CAB-A/2405',
-                direction: 'toko_ke_gudang',
-                directionLabel: 'TOKO → GUDANG',
-                branchOrigin: 'Cabang A',
-                cashierName: 'Siti Aminah (Kasir Cabang A)',
-                terminalId: 'POS-01 (Kasir Toko Depan)',
-                conditionType: 'rusak',
-                conditionLabel: 'RUSAK / PECAH',
-                conditionDesc: 'Karton rembes tersenggol rak dorong saat bongkar stok.',
-                products: [
-                    { sku: 'PRD-006', barcode: '899275321004', name: 'Indomie Goreng Spesial 85g', category: 'Makanan', submittedQty: 48, unit: 'Pcs', price: 3500, color: 'text-[#dc2626]' },
-                    { sku: 'PRD-001', barcode: '8991234567890', name: 'Kopi Kapal Api Spesial 165g', category: 'Minuman', submittedQty: 20, unit: 'Pcs', price: 12500, color: 'text-[#dc2626]' }
-                ],
-                subtotalLabel: 'Subtotal:',
-                subtotal: 'Rp 418.000',
-                truckFee: '-Rp 250.000',
-                truckFeeFree: false,
-                netLabel: 'Net Klaim:',
-                netAmount: 'Rp 168.000',
-                plate: 'B 9481 UQ',
-                driver: 'Andi Pratama',
-                statusKey: 'menunggu_approval',
-                statusLabel: 'MENUNGGU APPROVAL',
-                statusSub: 'Menunggu telaah Manager Toko',
-                needsApproval: true,
-                isPhysicalReceived: false,
-                physicalReceiptData: null
-            },
-            {
-                id: 2,
-                docNo: '#RTR-TK-2024-0892',
-                date: '24 Mei 2024 • 09:42 WIB',
-                ref: 'Ref: INV-2024/CAB-A',
-                direction: 'toko_ke_gudang',
-                directionLabel: 'TOKO → GUDANG',
-                branchOrigin: 'Cabang A',
-                cashierName: 'Siti Aminah (Kasir Cabang A)',
-                terminalId: 'POS-01 (Kasir Toko Depan)',
-                conditionType: 'rusak',
-                conditionLabel: 'RUSAK / BOCOR',
-                conditionDesc: 'Karton rembes saat transit delivery ke rak pajang.',
-                products: [
-                    { sku: 'PRD-007', barcode: '8996789012345', name: 'Minyak Goreng Sawit 2L', category: 'Kebutuhan Pokok', submittedQty: 15, unit: 'Pcs', price: 34000, color: 'text-[#dc2626]' },
-                    { sku: 'PRD-003', barcode: '8993456789012', name: 'Susu UHT Cokelat 1L', category: 'Minuman', submittedQty: 24, unit: 'Pcs', price: 19200, color: 'text-[#dc2626]' }
-                ],
-                subtotalLabel: 'Subtotal:',
-                subtotal: 'Rp 970.800',
-                truckFee: '-Rp 500.000',
-                truckFeeFree: false,
-                netLabel: 'Net:',
-                netAmount: 'Rp 470.800',
-                plate: 'B 9481 UQ',
-                driver: 'Andi Pratama',
-                statusKey: 'ditolak',
-                statusLabel: 'DITOLAK MANAGER',
-                statusSub: 'Ditolak: Kerusakan akibat kelalaian display cabang',
-                needsApproval: false,
-                isPhysicalReceived: false,
-                physicalReceiptData: null
-            },
-            {
-                id: 3,
-                docNo: '#RTR-TK-2024-0891',
-                date: '23 Mei 2024 • 16:15 WIB',
-                ref: 'Ref: STK-ED-2405',
-                direction: 'toko_ke_gudang',
-                directionLabel: 'TOKO → GUDANG',
-                branchOrigin: 'Cabang A',
-                cashierName: 'Bambang S. (Kasir Shift Siang)',
-                terminalId: 'POS-02 (Kasir Belakang)',
-                conditionType: 'ed',
-                conditionLabel: 'KEDALUWARSA / H-14',
-                conditionDesc: 'ED Bulan Juni 2024 batch A12 diverifikasi QC toko.',
-                products: [
-                    { sku: 'PRD-008', barcode: '8998899001122', name: 'Yogurt Drink Strawberry 250ml', category: 'Minuman', submittedQty: 48, unit: 'Pcs', price: 9500, color: 'text-[#d97706]' },
-                    { sku: 'PRD-009', barcode: '8997788990011', name: 'Roti Tawar Gandum Spesial', category: 'Makanan', submittedQty: 16, unit: 'Pcs', price: 16000, color: 'text-[#d97706]' }
-                ],
-                subtotalLabel: 'Subtotal:',
-                subtotal: 'Rp 712.000',
-                truckFee: '-Rp 500.000',
-                truckFeeFree: false,
-                netLabel: 'Net:',
-                netAmount: 'Rp 212.000',
-                plate: 'B 9102 UQ',
-                driver: 'Rahmat Hidayat',
-                statusKey: 'selesai',
-                statusLabel: 'SELESAI (BAST)',
-                statusSub: 'Diterima: Joko (WH-Staff)',
-                needsApproval: false,
-                isPhysicalReceived: true,
-                physicalReceiptData: {
-                    receivedDate: '23 Mei 2024 16:45 WIB',
-                    receivedBy: 'Joko (WH-Staff)',
-                    hasDiscrepancy: false,
-                    discrepancyReason: '',
-                    bastNo: 'BAST-2024/05/TK-0888',
-                    items: [
-                        { sku: 'PRD-008', name: 'Yogurt Drink Strawberry 250ml', submittedQty: 48, receivedQty: 48, unit: 'Pcs', selisih: 0, discrepancyReason: '' },
-                        { sku: 'PRD-009', name: 'Roti Tawar Gandum Spesial', submittedQty: 16, receivedQty: 16, unit: 'Pcs', selisih: 0, discrepancyReason: '' }
-                    ]
-                }
-            },
-            {
-                id: 4,
-                docNo: '#RTR-TK-2024-0890',
-                date: '22 Mei 2024 • 14:05 WIB',
-                ref: 'Ref: OVER-STOCK-09',
-                direction: 'toko_ke_gudang',
-                directionLabel: 'TOKO → GUDANG',
-                branchOrigin: 'Cabang A',
-                cashierName: 'Siti Aminah (Kasir Cabang A)',
-                terminalId: 'POS-01 (Kasir Toko Depan)',
-                conditionType: 'overstock',
-                conditionLabel: 'MUTASI OVERSTOCK',
-                conditionDesc: 'Penyesuaian buffer ruang simpan rak barang cepat saji.',
-                products: [
-                    { sku: 'PRD-010', barcode: '8995544332211', name: 'Deterjen Bubuk Premium 800g', category: 'Pembersih', submittedQty: 60, unit: 'Pcs', price: 22000, color: 'text-[#0052cc]' },
-                    { sku: 'PRD-005', barcode: '8995678901234', name: 'Pembersih Lantai Lavender 750ml', category: 'Pembersih', submittedQty: 36, unit: 'Pcs', price: 15500, color: 'text-[#0052cc]' }
-                ],
-                subtotalLabel: 'Subtotal:',
-                subtotal: 'Rp 1.878.000',
-                truckFee: 'GRATIS (SOP)',
-                truckFeeFree: true,
-                netLabel: 'Net:',
-                netAmount: 'Rp 1.878.000',
-                plate: 'B 9481 UQ',
-                driver: 'Andi Pratama',
-                statusKey: 'ditolak',
-                statusLabel: 'DITOLAK MANAGER',
-                statusSub: 'Ditolak: Gudang Pusat sedang renovasi area deterjen',
-                needsApproval: false,
-                isPhysicalReceived: false,
-                physicalReceiptData: null
-            },
-            {
-                id: 5,
-                docNo: '#REP-GD-2024-0310',
-                date: '24 Mei 2024 • 11:20 WIB',
-                ref: 'Klaim: #RTR-TK-2024-0880',
-                direction: 'gudang_ke_toko',
-                directionLabel: 'GUDANG → TOKO',
-                branchOrigin: 'Gudang Pusat',
-                cashierName: 'Hendra W. (DC Head)',
-                terminalId: 'DC-DISPATCH-01',
-                conditionType: 'garansi',
-                conditionLabel: 'PENGGANTIAN GARANSI',
-                conditionDesc: 'Barang Baru Kompensasi Distributor Supplier',
-                products: [
-                    { sku: 'PRD-002', barcode: '8992345678901', name: 'Kecap Manis Refill 550ml', category: 'Kebutuhan Pokok', submittedQty: 30, unit: 'Pcs', price: 14000, color: 'text-[#16a34a]' }
-                ],
-                subtotalLabel: 'Nilai Barang:',
-                subtotal: 'Rp 420.000',
-                truckFee: 'GRATIS (SOP)',
-                truckFeeFree: true,
-                netLabel: 'Total:',
-                netAmount: 'Rp 420.000',
-                plate: 'B 9844 XZ',
-                driver: 'Dedi Kurnia',
-                statusKey: 'perjalanan',
-                statusLabel: 'DALAM PERJALANAN',
-                statusSub: 'Menuju Toko Cabang A (Tol KM 14)',
-                needsApproval: false,
-                isPhysicalReceived: false,
-                physicalReceiptData: null
-            }
-        ];
+        return [];
     },
 
     // KPI Dynamic Counts
@@ -419,16 +198,12 @@
     },
 
     get totalQuarantineUnitsInGudang() {
-        try {
-            const raw = localStorage.getItem('pos_ilp_stok_retur_gudang_v1');
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                if (Array.isArray(parsed)) {
-                    return parsed.reduce((sum, item) => sum + (Number(item.qtyReceived) || 0), 0);
-                }
-            }
-        } catch(e) {}
-        return 77;
+        return this.items
+            .filter(i => i.statusKey === 'disetujui' || i.statusKey === 'selesai')
+            .reduce((sum, doc) => {
+                const docQty = (doc.products || []).reduce((s, p) => s + (parseInt(p.qty, 10) || 0), 0);
+                return sum + docQty;
+            }, 0);
     },
 
     // Filtered lists for each tab
@@ -454,66 +229,66 @@
         });
     },
     async approveItem(item) {
-        item.statusKey = 'disetujui';
-        item.statusLabel = 'DISETUJUI MANAGER';
-        item.statusSub = 'Siap Muat ke Gudang DC';
-        item.needsApproval = false;
-
         try {
-            if (item.id && typeof item.id === 'number' && item.id < 1000000000000) {
-                await fetch(`/api/returns/${item.id}/status`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    body: JSON.stringify({ status: 'disetujui' })
-                });
+            const res = await fetch(`/api/returns/${item.id}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                body: JSON.stringify({ status: 'disetujui' })
+            });
+            if (res.ok) {
+                item.statusKey = 'disetujui';
+                item.statusLabel = 'DISETUJUI MANAGER';
+                item.statusSub = 'Siap Muat ke Gudang DC';
+                item.needsApproval = false;
+                this.triggerToast('Pengajuan ' + item.docNo + ' berhasil di-Approve oleh Manager.');
+            } else {
+                this.triggerToast('Gagal menyetujui pengajuan di server.', 'error');
             }
         } catch(e) {
             console.error('Failed to sync return approval to API', e);
+            this.triggerToast('Gagal menghubungi server.', 'error');
         }
-
-        this.saveReturns();
-        this.triggerToast('Pengajuan ' + item.docNo + ' berhasil di-Approve oleh Manager.');
     },
     async rejectItem(item) {
-        item.statusKey = 'ditolak';
-        item.statusLabel = 'DITOLAK MANAGER';
-        item.statusSub = 'Dikembalikan ke Staf Toko';
-        item.needsApproval = false;
-
         try {
-            if (item.id && typeof item.id === 'number' && item.id < 1000000000000) {
-                await fetch(`/api/returns/${item.id}/status`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    body: JSON.stringify({ status: 'ditolak' })
-                });
+            const res = await fetch(`/api/returns/${item.id}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                body: JSON.stringify({ status: 'ditolak' })
+            });
+            if (res.ok) {
+                item.statusKey = 'ditolak';
+                item.statusLabel = 'DITOLAK MANAGER';
+                item.statusSub = 'Dikembalikan ke Staf Toko';
+                item.needsApproval = false;
+                this.triggerToast('Pengajuan ' + item.docNo + ' telah ditolak.');
+            } else {
+                this.triggerToast('Gagal menolak pengajuan di server.', 'error');
             }
         } catch(e) {
             console.error('Failed to sync return rejection to API', e);
+            this.triggerToast('Gagal menghubungi server.', 'error');
         }
-
-        this.saveReturns();
-        this.triggerToast('Pengajuan ' + item.docNo + ' telah ditolak.');
     },
     async confirmReceive(item) {
-        item.statusKey = 'selesai';
-        item.statusLabel = 'SELESAI (BAST)';
-        item.statusSub = 'Diterima Manager Toko';
-
         try {
-            if (item.id && typeof item.id === 'number' && item.id < 1000000000000) {
-                await fetch(`/api/returns/${item.id}/status`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    body: JSON.stringify({ status: 'selesai' })
-                });
+            const res = await fetch(`/api/returns/${item.id}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                body: JSON.stringify({ status: 'selesai' })
+            });
+            if (res.ok) {
+                item.statusKey = 'selesai';
+                item.statusLabel = 'SELESAI (BAST)';
+                item.statusSub = 'Diterima Manager Toko';
+                this.triggerToast('Pengiriman Gudang ' + item.docNo + ' dikonfirmasi masuk stok toko.');
+            } else {
+                this.triggerToast('Gagal mengkonfirmasi penerimaan di server.', 'error');
             }
         } catch(e) {
             console.error('Failed to sync return receive to API', e);
+            this.triggerToast('Gagal menghubungi server.', 'error');
         }
-
-        this.saveReturns();
-        this.triggerToast('Pengiriman Gudang ' + item.docNo + ' dikonfirmasi masuk stok toko.');
     },
 
     get filteredMasukList() {
@@ -647,7 +422,7 @@
         this.highlightedSku = focusSku;
         const now = new Date();
         this.physicalReceivedDate = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) + ' • ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB';
-        this.physicalInspector = doc.physicalReceiptData?.receivedBy || 'Hendra W. (DC Head / Gudang Pusat)';
+        this.physicalInspector = doc.physicalReceiptData?.receivedBy || @js(auth()->user()?->name ?? 'Manager');
         this.physicalGlobalNotes = doc.physicalReceiptData?.discrepancyReason || '';
 
         this.physicalItemsForm = doc.products.map(p => {
@@ -778,7 +553,7 @@
                             barcode: '899' + Math.floor(1000000000 + Math.random() * 9000000000),
                             name: formItem.name,
                             branchOrigin: this.receivingDoc.branchOrigin || 'Cabang A',
-                            cashierName: this.receivingDoc.cashierName || 'Siti Aminah (Kasir Cabang A)',
+                            cashierName: this.receivingDoc.cashierName || '-',
                             docRef: this.receivingDoc.docNo,
                             receivedDate: this.physicalReceivedDate,
                             qtyReceived: recQty,
@@ -869,8 +644,8 @@
             logs.unshift({
                 id: 'AUD-' + Date.now(),
                 timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-                actor_id: 'USR-MGR-001',
-                actor_name: 'Budi Santoso',
+                actor_id: @js(auth()->user()?->id ?? ''),
+                actor_name: @js(auth()->user()?->name ?? 'Manager'),
                 actor_role: 'Manager',
                 action_category: 'LOGISTICS_RETURN',
                 action_type: actionType,
@@ -887,83 +662,51 @@
 
     // Quick Draft Submission
     async submitQuickDraft() {
+        if (this.isSubmittingReturn) return;
         if (!this.newDocSku.trim() || !this.newDocQty) return;
         const isTokoToGudang = this.modalMode === 'toko_ke_gudang';
-        const codeNum = Math.floor(896 + Math.random() * 90);
-        let docId = isTokoToGudang ? '#RTR-TK-2024-0' + codeNum : '#REP-GD-2024-0' + codeNum;
-        const prodName = this.newDocSku.includes('-') ? this.newDocSku.split('-')[1].trim() : this.newDocSku.trim();
 
-        let newDbId = Date.now();
-
+        this.isSubmittingReturn = true;
+        const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('rtr-' + Date.now());
         try {
             const res = await fetch('/api/returns', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'X-Idempotency-Key': idemKey
+                },
                 body: JSON.stringify({
                     direction: this.modalMode || 'toko_ke_gudang',
                     condition_type: this.newDocCondition === 'ED' ? 'kadaluarsa' : 'rusak',
                     sku: this.newDocSku,
                     qty: Number(this.newDocQty) || 1,
                     unit: this.newDocUnit || 'Pcs',
-                    reason: isTokoToGudang ? 'Input cepat draft retur terverifikasi' : 'Pengiriman barang pengganti dari Gudang DC',
-                    driver_name: this.newDocDriver || (isTokoToGudang ? 'Andi Pratama' : 'Dedi Kurnia'),
-                    vehicle_plate: 'B 9481 UQ',
+                    reason: this.newDocReason || (isTokoToGudang ? 'Pengajuan retur barang dari toko' : 'Pengiriman barang pengganti dari Gudang DC'),
+                    driver_name: this.newDocDriver || '-',
+                    vehicle_plate: '-',
                     use_fleet: true
                 })
             });
 
-            if (res.ok) {
-                const json = await res.json();
-                if (json.success && json.data) {
-                    newDbId = json.data.id;
-                    if (json.data.return_number) {
-                        docId = json.data.return_number;
-                    }
-                }
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok || !json.success) {
+                this.triggerToast(json.message || 'Gagal menyimpan pengajuan retur ke server.', 'error');
+                return;
             }
+
+            await this.initReturns();
+            this.showModal = false;
+            this.newDocSku = '';
+            this.newDocReason = '';
+            this.triggerToast('Dokumen retur berhasil dibuat dan disimpan ke database.');
         } catch(e) {
             console.error('API create return error', e);
+            this.triggerToast('Terjadi kesalahan koneksi saat membuat retur.', 'error');
+        } finally {
+            this.isSubmittingReturn = false;
         }
-
-        const newDoc = {
-            id: newDbId,
-            docNo: docId,
-            date: 'Baru saja • Hari Ini',
-            ref: isTokoToGudang ? 'Ref: DRAFT-' + this.newDocBranch.toUpperCase() : 'Klaim: #RTR-TK-2024-0892',
-            direction: this.modalMode,
-            directionLabel: isTokoToGudang ? 'TOKO → GUDANG' : 'GUDANG → TOKO',
-            branchOrigin: isTokoToGudang ? this.newDocBranch : 'Gudang Pusat',
-            cashierName: this.newDocCashier || 'Siti Aminah (Kasir Cabang A)',
-            terminalId: 'POS-01 (Kasir Toko)',
-            conditionType: 'rusak',
-            conditionLabel: this.newDocCondition,
-            conditionDesc: this.newDocReason || 'Pengajuan retur barang rusak/ED dari kasir toko',
-            products: [
-                { sku: 'PRD-007', barcode: '8996789012345', name: prodName, category: 'Barang Konsumsi', submittedQty: Number(this.newDocQty), unit: this.newDocUnit, price: 25000, subtotal: 25000 * Number(this.newDocQty), color: 'text-[#dc2626]' }
-            ],
-            subtotalLabel: 'Subtotal:',
-            subtotal: 'Rp ' + (25000 * Number(this.newDocQty)).toLocaleString('id-ID'),
-            truckFee: isTokoToGudang ? '-Rp 500.000' : 'GRATIS (SOP)',
-            truckFeeFree: !isTokoToGudang,
-            netLabel: isTokoToGudang ? 'Net Klaim:' : 'Total:',
-            netAmount: 'Rp ' + Math.max(0, (25000 * Number(this.newDocQty)) - (isTokoToGudang ? 500000 : 0)).toLocaleString('id-ID'),
-            plate: 'B 9481 UQ',
-            driver: this.newDocDriver,
-            statusKey: isTokoToGudang ? 'menunggu_approval' : 'perjalanan',
-            statusLabel: isTokoToGudang ? 'MENUNGGU APPROVAL' : 'DALAM PERJALANAN',
-            statusSub: isTokoToGudang ? 'Menunggu telaah Manager Toko' : 'Dikirim dari Gudang DC',
-            needsApproval: isTokoToGudang,
-            isPhysicalReceived: false,
-            physicalReceiptData: null
-        };
-
-        this.items.unshift(this.normalizeReturnDoc(newDoc));
-        this.saveReturns();
-        this.logAudit('CREATE_RETURN_DRAFT', docId, `Dibuat pengajuan retur ${docId} dari ${this.newDocBranch} oleh ${this.newDocCashier}.`);
-        this.showModal = false;
-        this.newDocSku = '';
-        this.newDocReason = '';
-        this.triggerToast(`Dokumen ${docId} berhasil dibuat.`);
     }
 }"
 x-init="initReturns()"
@@ -1791,7 +1534,7 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
                             <div class="font-bold text-[13px] text-slate-900" x-text="selectedDocForDetail?.branchOrigin || 'Cabang A'"></div>
                             <div class="flex items-center justify-between text-slate-500">
                                 <span>Petugas Kasir:</span>
-                                <strong class="text-slate-800" x-text="selectedDocForDetail?.cashierName || 'Siti Aminah (Kasir 1)'"></strong>
+                                <strong class="text-slate-800" x-text="selectedDocForDetail?.cashierName || '-'"></strong>
                             </div>
                             <div class="flex items-center justify-between text-slate-500">
                                 <span>Terminal POS:</span>
@@ -1831,7 +1574,7 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
                         <div class="space-y-1.5 text-slate-700">
                             <div class="flex items-center justify-between text-slate-500">
                                 <span>Nama Pengirim:</span>
-                                <strong class="text-slate-900" x-text="selectedDocForDetail?.driver || 'Andi Pratama'"></strong>
+                                <strong class="text-slate-900" x-text="selectedDocForDetail?.driver || '-'"></strong>
                             </div>
                             <div class="flex items-center justify-between text-slate-500">
                                 <span>Plat Nomor:</span>
@@ -2000,7 +1743,7 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
                              :class="(selectedDocForDetail?.statusKey === 'disetujui' || selectedDocForDetail?.statusKey === 'selesai') ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-slate-50 border-slate-200 text-slate-400'">
                             <span class="material-symbols-rounded text-[18px] block" :class="(selectedDocForDetail?.statusKey === 'disetujui' || selectedDocForDetail?.statusKey === 'selesai') ? 'text-emerald-600' : 'text-slate-400'">local_shipping</span>
                             <div class="font-black text-[11px]">3. Pengiriman DC</div>
-                            <div class="text-[10px] text-slate-500" x-text="selectedDocForDetail?.driver || 'Andi Pratama'"></div>
+                            <div class="text-[10px] text-slate-500" x-text="selectedDocForDetail?.driver || '-'"></div>
                         </div>
 
                         <!-- Step 4 -->
@@ -2481,7 +2224,7 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
                     </div>
                     <div class="flex justify-between py-1 border-b border-slate-100">
                         <span class="text-slate-500">Pihak Gudang (Penerima QC):</span>
-                        <span class="font-bold text-slate-800" x-text="selectedBastDoc?.physicalReceiptData?.receivedBy || 'Hendra W. (DC Head)'"></span>
+                        <span class="font-bold text-slate-800" x-text="selectedBastDoc?.physicalReceiptData?.receivedBy || @js(auth()->user()?->name ?? 'Manager')"></span>
                     </div>
                     <div class="flex justify-between py-1 border-b border-slate-100">
                         <span class="text-slate-500">Waktu Serah Terima Fisik:</span>
@@ -2604,9 +2347,10 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
             </div>
 
             <div class="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5">
-                <button type="button" @click="showModal = false" class="px-4 py-2 rounded-xl text-slate-700 font-bold hover:bg-slate-200 cursor-pointer">Batal</button>
-                <button type="button" @click="submitQuickDraft()" class="px-5 py-2 rounded-xl bg-[#0047b3] hover:bg-[#003994] text-white font-bold shadow-xs cursor-pointer">
-                    Simpan &amp; Ajukan Retur
+                <button type="button" :disabled="isSubmittingReturn" @click="showModal = false" class="px-4 py-2 rounded-xl text-slate-700 font-bold hover:bg-slate-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">Batal</button>
+                <button type="button" :disabled="isSubmittingReturn" @click="submitQuickDraft()" class="px-5 py-2 rounded-xl bg-[#0047b3] hover:bg-[#003994] text-white font-bold shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span x-show="isSubmittingReturn" class="material-symbols-rounded text-[15px] animate-spin">progress_activity</span>
+                    <span x-text="isSubmittingReturn ? 'Menyimpan...' : 'Simpan & Ajukan Retur'"></span>
                 </button>
             </div>
         </div>

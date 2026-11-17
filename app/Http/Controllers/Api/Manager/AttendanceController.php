@@ -6,11 +6,13 @@ use App\Events\AttendanceRecordedEvent;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Shared\NotificationController;
 use App\Models\Attendance;
+use App\Models\CashierShift;
 use App\Models\LeaveRequest;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class AttendanceController extends Controller
 {
@@ -79,6 +81,9 @@ class AttendanceController extends Controller
             ->whereDate('date', $date)
             ->first();
 
+        $matchedUser = User::where('name', $validated['staffName'])->first();
+        $defaultBranch = $matchedUser?->branch ?: '-';
+
         if ($validated['type'] === 'MASUK') {
             if ($attendance) {
                 return response()->json([
@@ -89,9 +94,10 @@ class AttendanceController extends Controller
 
             $isLate = Carbon::now()->hour > 7 || (Carbon::now()->hour === 7 && Carbon::now()->minute > 5);
             $attendance = Attendance::create([
+                'user_id' => $matchedUser?->id,
                 'staff_name' => $validated['staffName'],
-                'terminal' => $validated['terminal'] ?? 'Kasir 01',
-                'branch' => $validated['branch'] ?? 'Cabang Pusat',
+                'terminal' => $validated['terminal'] ?? '-',
+                'branch' => $validated['branch'] ?? $defaultBranch,
                 'date' => $date,
                 'check_in' => $timeNow,
                 'check_out' => '-',
@@ -102,11 +108,12 @@ class AttendanceController extends Controller
             // Check out
             if (!$attendance) {
                 $attendance = Attendance::create([
+                    'user_id' => $matchedUser?->id,
                     'staff_name' => $validated['staffName'],
-                    'terminal' => $validated['terminal'] ?? 'Kasir 01',
-                    'branch' => $validated['branch'] ?? 'Cabang Pusat',
+                    'terminal' => $validated['terminal'] ?? '-',
+                    'branch' => $validated['branch'] ?? $defaultBranch,
                     'date' => $date,
-                    'check_in' => '07:00',
+                    'check_in' => '-',
                     'check_out' => $timeNow,
                     'status' => 'TEPAT_WAKTU',
                     'notes' => $validated['notes'] ?? null,
@@ -146,18 +153,6 @@ class AttendanceController extends Controller
     public function leaves(): JsonResponse
     {
         $leaves = LeaveRequest::orderBy('id', 'desc')->get();
-
-        if ($leaves->isEmpty() && LeaveRequest::count() === 0) {
-            $defaults = [
-                ['staff_name' => 'Rico Wijaya', 'type' => 'SAKIT', 'date_range' => Carbon::today()->format('d M Y'), 'reason' => 'Demam flu butuh istirahat dokter', 'status' => 'DISETUJUI', 'approved_by' => 'Manager HRD'],
-                ['staff_name' => 'Santi Larasati', 'type' => 'CUTI', 'date_range' => Carbon::today()->addDays(1)->format('d M') . ' - ' . Carbon::today()->addDays(3)->format('d M Y'), 'reason' => 'Keperluan keluarga di luar kota', 'status' => 'MENUNGGU', 'approved_by' => null],
-            ];
-
-            foreach ($defaults as $d) {
-                LeaveRequest::create($d);
-            }
-            $leaves = LeaveRequest::orderBy('id', 'desc')->get();
-        }
 
         return response()->json([
             'success' => true,
@@ -236,7 +231,7 @@ class AttendanceController extends Controller
 
         $leave->update([
             'status' => $validated['status'],
-            'approved_by' => $validated['approved_by'] ?? 'Supervisor Bertugas',
+            'approved_by' => $validated['approved_by'] ?? (Auth::user()?->name ?? 'Supervisor'),
         ]);
 
         try {
@@ -261,19 +256,55 @@ class AttendanceController extends Controller
     }
 
     /**
-     * Shift schedules.
+     * Shift schedules derived from real CashierShift & Attendance records in PostgreSQL.
      */
     public function shifts(): JsonResponse
     {
-        $shifts = [
-            ['id' => 1, 'name' => 'Shift Pagi (07:00 - 15:00)', 'staff' => ['Andi Setiawan', 'Budi Kurniawan', 'Citra Dewi'], 'branch' => 'Cabang Pusat'],
-            ['id' => 2, 'name' => 'Shift Siang (14:30 - 22:30)', 'staff' => ['Bambang Pamungkas', 'Dedi Nurcahyo', 'Eka Ramadhan'], 'branch' => 'Cabang Pusat'],
-            ['id' => 3, 'name' => 'Shift Pagi Cabang A (07:30 - 15:30)', 'staff' => ['Ahmad Fauzi', 'Siti Aminah'], 'branch' => 'Cabang A'],
-        ];
+        $activeOrTodayShifts = CashierShift::query()
+            ->where('status', 'OPEN')
+            ->orWhereDate('opened_at', Carbon::today())
+            ->orderByDesc('opened_at')
+            ->get();
+
+        if ($activeOrTodayShifts->isEmpty()) {
+            return response()->json([
+                'success' => true,
+                'data' => [],
+            ]);
+        }
+
+        $userIds = $activeOrTodayShifts->pluck('user_id')->filter()->unique()->all();
+        $niks = $activeOrTodayShifts->pluck('cashier_nik')->filter()->unique()->all();
+        $usersById = empty($userIds) ? collect() : User::whereIn('id', $userIds)->get()->keyBy('id');
+        $usersByNik = empty($niks) ? collect() : User::whereIn('nik', $niks)->get()->keyBy('nik');
+
+        $grouped = [];
+        foreach ($activeOrTodayShifts as $s) {
+            $user = ($s->user_id ? $usersById->get($s->user_id) : null)
+                ?? ($s->cashier_nik ? $usersByNik->get($s->cashier_nik) : null);
+            $branch = $user?->branch ?: ($s->terminal_code ?: '-');
+            $hour = $s->opened_at ? (int) $s->opened_at->format('H') : 8;
+            $period = $hour < 14 ? 'Shift Pagi' : 'Shift Siang';
+            $key = $period . '|' . $branch;
+
+            if (!isset($grouped[$key])) {
+                $grouped[$key] = [
+                    'id' => count($grouped) + 1,
+                    'name' => $period === 'Shift Pagi' ? 'Shift Pagi (07:00 - 15:00)' : 'Shift Siang (14:30 - 22:30)',
+                    'branch' => $branch,
+                    'staff' => [],
+                ];
+            }
+
+            $staffLabel = $s->cashier_name ?: ($user?->name ?? $s->cashier_nik);
+            if ($staffLabel && !in_array($staffLabel, $grouped[$key]['staff'], true)) {
+                $grouped[$key]['staff'][] = $staffLabel;
+            }
+        }
 
         return response()->json([
             'success' => true,
-            'data' => $shifts,
+            'data' => array_values($grouped),
         ]);
     }
 }

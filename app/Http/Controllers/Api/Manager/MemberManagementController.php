@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Manager;
 
 use App\Http\Controllers\Controller;
 use App\Models\DebtMutation;
+use App\Models\Location;
 use App\Models\Member;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -77,14 +78,18 @@ class MemberManagementController extends Controller
         // Paginated results with lightweight fields
         $paginated = $query->orderBy($sortBy, $sortOrder)->paginate($perPage);
 
+        $branches = Location::where('type', '!=', 'WAREHOUSE')
+            ->orderBy('code')
+            ->pluck('name')
+            ->merge(Member::whereNotNull('branch')->distinct()->pluck('branch'))
+            ->filter()
+            ->unique()
+            ->values();
+
         return response()->json([
             'success' => true,
             'summary' => $summary,
-            'branches' => [
-                'Cabang 1 - Mill / Pabrik',
-                'Cabang 2 - Kebun Barat',
-                'Cabang 3 - Kebun Timur',
-            ],
+            'branches' => $branches,
             'departments' => Member::whereNotNull('department')->distinct()->pluck('department')->filter()->values(),
             'data' => $paginated->items(),
             'meta' => [
@@ -123,7 +128,7 @@ class MemberManagementController extends Controller
                 'nik' => $member->nik,
                 'name' => $member->name,
                 'department' => $member->department,
-                'branch' => $member->branch ?? 'Cabang 1 - Mill / Pabrik',
+                'branch' => $member->branch ?? '-',
                 'phone' => $member->phone ?? '-',
                 'join_date' => $member->join_date ? $member->join_date->format('d M Y') : '-',
                 'credit_limit' => (float) $member->credit_limit,

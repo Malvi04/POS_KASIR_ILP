@@ -7,6 +7,24 @@ use Tests\TestCase;
 
 class NotificationTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        foreach (['KASIR', 'MANAGER', 'OWNER'] as $role) {
+            SystemNotification::create([
+                'role' => $role,
+                'title' => "Notifikasi Uji {$role}",
+                'message' => "Pesan uji untuk role {$role}.",
+                'category' => 'SYSTEM',
+                'icon' => 'notifications',
+                'color' => 'blue',
+                'link' => '/',
+                'is_read' => false,
+            ]);
+        }
+    }
+
     public function test_can_fetch_notifications_for_kasir(): void
     {
         $response = $this->getJson('/api/notifications?role=KASIR');

@@ -11,6 +11,7 @@
     showEditModal: false,
     showDeleteModal: false,
     showRuleModal: false,
+    isSavingPromo: false,
     deleteInputText: '',
     selectedPromo: null,
     editingPromo: null,
@@ -22,8 +23,8 @@
         condition: '',
         type: 'PERCENTAGE', // PERCENTAGE | FIXED | BOGO
         value: 10,
-        periodStart: '2026-10-25',
-        periodEnd: '2026-11-05',
+        periodStart: '{{ date('Y-m-d') }}',
+        periodEnd: '{{ date('Y-m-d', strtotime('+7 days')) }}',
         status: 'AKTIF'
     },
 
@@ -33,11 +34,7 @@
         autoPrint: true
     },
 
-    activities: [
-        { text: 'Promo Sembako Murah diaktifkan oleh Admin.', time: '10 menit yang lalu', icon: 'check', color: 'green' },
-        { text: 'Aturan H-7 Expired diubah menjadi 40%.', time: '2 jam yang lalu', icon: 'history', color: 'amber' },
-        { text: 'Promo Ramadan Kareem telah berakhir.', time: 'Kemarin, 23:59', icon: 'close', color: 'red' }
-    ],
+    activities: [],
 
     async initPromotions() {
         try {
@@ -75,75 +72,37 @@
                 }
             }
         } catch(e) {
-            console.error('Failed to load promotions API, using fallback', e);
-            const stored = localStorage.getItem('pos_ilp_promotions_v1');
-            if (stored) {
-                try { this.promotions = JSON.parse(stored); } catch(err) { this.promotions = this.getDefaultPromotions(); }
-            } else {
-                this.promotions = this.getDefaultPromotions();
-            }
+            console.error('Failed to load promotions API:', e);
+            this.promotions = [];
         }
     },
 
     savePromotions() {
-        localStorage.setItem('pos_ilp_promotions_v1', JSON.stringify(this.promotions));
+        // Data promosi tersimpan permanen di database backend
     },
 
     async saveSettings() {
         try {
-            await fetch('/api/promotions/settings', {
+            const res = await fetch('/api/promotions/settings', {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
                 body: JSON.stringify(this.expirySettings)
             });
+            if (!res.ok) {
+                this.triggerToast('Gagal menyimpan pengaturan ke server.');
+            }
         } catch(e) {
             console.error(e);
+            this.triggerToast('Terjadi kesalahan koneksi saat menyimpan pengaturan.');
         }
-        localStorage.setItem('pos_ilp_promo_settings_v1', JSON.stringify(this.expirySettings));
     },
 
     getDefaultPromotions() {
-        return [
-            {
-                id: 'PRM-001',
-                name: 'Promo Gajian Mantap',
-                condition: 'Min. belanja Rp 250k',
-                type: 'PERCENTAGE',
-                typeLabel: 'Persentase (10%)',
-                badgeClass: 'bg-[#dbeafe] text-[#1e40af]',
-                period: '25 Okt - 02 Nov',
-                periodStart: '2026-10-25',
-                periodEnd: '2026-11-02',
-                status: 'AKTIF',
-                statusColor: 'green'
-            },
-            {
-                id: 'PRM-002',
-                name: 'BOGO: Susu Cair Ultra',
-                condition: 'Beli 2 Gratis 1',
-                type: 'BOGO',
-                typeLabel: 'Bundle / BOGO',
-                badgeClass: 'bg-[#ffedd5] text-[#9a3412]',
-                period: '01 Nov - 15 Nov',
-                periodStart: '2026-11-01',
-                periodEnd: '2026-11-15',
-                status: 'MENDATANG',
-                statusColor: 'blue'
-            },
-            {
-                id: 'PRM-003',
-                name: 'Potongan Flat Deterjen',
-                condition: 'Diskon Rp 5.000',
-                type: 'FIXED',
-                typeLabel: 'Fixed Amount',
-                badgeClass: 'bg-gray-200 text-gray-700',
-                period: '01 Okt - 15 Okt',
-                periodStart: '2026-10-01',
-                periodEnd: '2026-10-15',
-                status: 'BERAKHIR',
-                statusColor: 'gray'
-            }
-        ];
+        return [];
     },
 
     get filteredPromotions() {
@@ -170,15 +129,23 @@
     },
 
     async saveNewPromo() {
+        if (this.isSavingPromo) return;
         if (!this.formPromo.name) {
             alert('Silakan masukkan nama promo!');
             return;
         }
 
+        this.isSavingPromo = true;
+        const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('prm-' + Date.now());
         try {
             const res = await fetch('/api/promotions', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'X-Idempotency-Key': idemKey
+                },
                 body: JSON.stringify({
                     name: this.formPromo.name,
                     condition: this.formPromo.condition || 'Tanpa syarat',
@@ -190,46 +157,48 @@
                 })
             });
 
-            if (res.ok) {
-                const json = await res.json();
-                if (json.success && json.data) {
-                    const p = json.data;
-                    this.promotions.unshift({
-                        id: p.id,
-                        code: p.code,
-                        name: p.name,
-                        condition: p.condition || '-',
-                        type: p.type,
-                        typeLabel: p.type === 'PERCENTAGE' ? `Persentase (${p.value}%)` : (p.type === 'FIXED' ? `Diskon Rp ${Number(p.value).toLocaleString('id-ID')}` : 'Bundle / BOGO'),
-                        value: Number(p.value) || 0,
-                        badgeClass: p.badge_class || 'bg-[#dbeafe] text-[#1e40af]',
-                        period: (p.period_start || '') + ' s/d ' + (p.period_end || ''),
-                        periodStart: p.period_start,
-                        periodEnd: p.period_end,
-                        status: p.status,
-                        statusColor: p.status_color || 'green'
-                    });
-                }
+            const json = await res.json().catch(() => ({}));
+            if (res.ok && json.success && json.data) {
+                const p = json.data;
+                this.promotions.unshift({
+                    id: p.id,
+                    code: p.code,
+                    name: p.name,
+                    condition: p.condition || '-',
+                    type: p.type,
+                    typeLabel: p.type === 'PERCENTAGE' ? `Persentase (${p.value}%)` : (p.type === 'FIXED' ? `Diskon Rp ${Number(p.value).toLocaleString('id-ID')}` : 'Bundle / BOGO'),
+                    value: Number(p.value) || 0,
+                    badgeClass: p.badge_class || 'bg-[#dbeafe] text-[#1e40af]',
+                    period: (p.period_start || '') + ' s/d ' + (p.period_end || ''),
+                    periodStart: p.period_start,
+                    periodEnd: p.period_end,
+                    status: p.status,
+                    statusColor: p.status_color || 'green'
+                });
+
+                this.activities.unshift({
+                    text: 'Promo ' + this.formPromo.name + ' ditambahkan oleh Manager.',
+                    time: 'Baru saja',
+                    icon: 'check',
+                    color: 'green'
+                });
+
+                this.showAddModal = false;
+                this.triggerToast('Promo baru berhasil disimpan ke Database!');
+
+                // Reset
+                this.formPromo.name = '';
+                this.formPromo.condition = '';
+                this.formPromo.value = 10;
+            } else {
+                alert(json.message || 'Gagal menyimpan promo baru ke server.');
             }
         } catch(e) {
             console.error('API create promo error', e);
+            alert('Terjadi kesalahan koneksi saat menyimpan promo.');
+        } finally {
+            this.isSavingPromo = false;
         }
-
-        this.savePromotions();
-        this.activities.unshift({
-            text: 'Promo ' + this.formPromo.name + ' ditambahkan oleh Manager.',
-            time: 'Baru saja',
-            icon: 'check',
-            color: 'green'
-        });
-
-        this.showAddModal = false;
-        this.triggerToast('Promo baru berhasil disimpan ke Database!');
-
-        // Reset
-        this.formPromo.name = '';
-        this.formPromo.condition = '';
-        this.formPromo.value = 10;
     },
 
     openEditPromo(p) {
@@ -241,9 +210,13 @@
         if (!this.editingPromo) return;
 
         try {
-            await fetch(`/api/promotions/${this.editingPromo.id}`, {
+            const res = await fetch(`/api/promotions/${this.editingPromo.id}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
                 body: JSON.stringify({
                     name: this.editingPromo.name,
                     condition: this.editingPromo.condition,
@@ -254,25 +227,30 @@
                     status: this.editingPromo.status
                 })
             });
+
+            if (res.ok) {
+                const idx = this.promotions.findIndex(p => p.id === this.editingPromo.id);
+                if (idx !== -1) {
+                    this.editingPromo.statusColor = this.editingPromo.status === 'AKTIF' ? 'green' : (this.editingPromo.status === 'MENDATANG' ? 'blue' : 'gray');
+                    this.promotions[idx] = this.editingPromo;
+                    this.activities.unshift({
+                        text: 'Promo ' + this.editingPromo.name + ' diperbarui di sistem.',
+                        time: 'Baru saja',
+                        icon: 'history',
+                        color: 'amber'
+                    });
+                    this.triggerToast('Promo ' + this.editingPromo.name + ' berhasil diperbarui!');
+                }
+                this.showEditModal = false;
+                this.editingPromo = null;
+            } else {
+                const json = await res.json().catch(() => ({}));
+                alert(json.message || 'Gagal memperbarui promo di server.');
+            }
         } catch(e) {
             console.error(e);
+            alert('Terjadi kesalahan koneksi saat memperbarui promo.');
         }
-
-        const idx = this.promotions.findIndex(p => p.id === this.editingPromo.id);
-        if (idx !== -1) {
-            this.editingPromo.statusColor = this.editingPromo.status === 'AKTIF' ? 'green' : (this.editingPromo.status === 'MENDATANG' ? 'blue' : 'gray');
-            this.promotions[idx] = this.editingPromo;
-            this.savePromotions();
-            this.activities.unshift({
-                text: 'Promo ' + this.editingPromo.name + ' diperbarui di sistem.',
-                time: 'Baru saja',
-                icon: 'history',
-                color: 'amber'
-            });
-            this.triggerToast('Promo ' + this.editingPromo.name + ' berhasil diperbarui!');
-        }
-        this.showEditModal = false;
-        this.editingPromo = null;
     },
 
     openDeletePromo(p) {
@@ -289,46 +267,60 @@
         }
 
         try {
-            await fetch(`/api/promotions/${this.selectedPromo.id}`, {
+            const res = await fetch(`/api/promotions/${this.selectedPromo.id}`, {
                 method: 'DELETE',
-                headers: { 'Accept': 'application/json' }
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                }
             });
+            if (res.ok) {
+                const name = this.selectedPromo.name;
+                this.promotions = this.promotions.filter(p => p.id !== this.selectedPromo.id);
+                this.activities.unshift({
+                    text: 'Promo ' + name + ' telah dihapus permanen dari Database.',
+                    time: 'Baru saja',
+                    icon: 'close',
+                    color: 'red'
+                });
+                this.showDeleteModal = false;
+                this.selectedPromo = null;
+                this.deleteInputText = '';
+                this.triggerToast('Promo berhasil dihapus!');
+            } else {
+                const json = await res.json().catch(() => ({}));
+                alert(json.message || 'Gagal menghapus promo di server.');
+            }
         } catch(e) {
             console.error(e);
+            alert('Terjadi kesalahan koneksi saat menghapus promo.');
         }
-
-        const name = this.selectedPromo.name;
-        this.promotions = this.promotions.filter(p => p.id !== this.selectedPromo.id);
-        this.savePromotions();
-        this.activities.unshift({
-            text: 'Promo ' + name + ' telah dihapus permanen dari Database.',
-            time: 'Baru saja',
-            icon: 'close',
-            color: 'red'
-        });
-        this.showDeleteModal = false;
-        this.selectedPromo = null;
-        this.deleteInputText = '';
-        this.triggerToast('Promo berhasil dihapus!');
     },
 
     async toggleStatus(p) {
-        const newStatus = p.status === 'AKTIF' ? 'NONAKTIF' : 'AKTIF';
-        p.status = newStatus;
-        p.statusColor = newStatus === 'AKTIF' ? 'green' : 'gray';
+        const newStatus = p.status === 'AKTIF' ? 'BERAKHIR' : 'AKTIF';
 
         try {
-            await fetch(`/api/promotions/${p.id}`, {
+            const res = await fetch(`/api/promotions/${p.id}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
                 body: JSON.stringify({ status: newStatus })
             });
+            if (res.ok) {
+                p.status = newStatus;
+                p.statusColor = newStatus === 'AKTIF' ? 'green' : 'gray';
+                this.triggerToast('Status promo diubah menjadi ' + p.status);
+            } else {
+                this.triggerToast('Gagal mengubah status promo.');
+            }
         } catch(e) {
             console.error(e);
+            this.triggerToast('Gagal terhubung ke server.');
         }
-
-        this.savePromotions();
-        this.triggerToast('Status promo diubah menjadi ' + p.status);
     },
 
     createRecommended() {
@@ -375,7 +367,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <span>Tambah Promo Baru</span>
                 </button>
                 <div class="flex items-center gap-2 bg-gray-100 border border-gray-200 rounded-full pl-3.5 pr-1.5 py-1">
-                    <span class="text-[12.5px] font-bold text-gray-800">Manager Toko</span>
+                    <span class="text-[12.5px] font-bold text-gray-800">{{ auth()->user()?->name ?? 'Manager' }}</span>
                     <div class="w-6 h-6 rounded-full bg-gray-800 text-white flex items-center justify-center">
                         <span class="material-symbols-rounded text-[16px]">person</span>
                     </div>
@@ -747,13 +739,16 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
                     <div class="pt-2 flex justify-end gap-2">
                         <button type="button"
+                                :disabled="isSavingPromo"
                                 @click="showAddModal = false"
-                                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold cursor-pointer">
+                                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                             Batal
                         </button>
                         <button type="submit"
-                                class="px-5 py-2 bg-[#0052cc] hover:bg-blue-700 text-white rounded-xl font-bold cursor-pointer">
-                            Simpan Promo
+                                :disabled="isSavingPromo"
+                                class="px-5 py-2 bg-[#0052cc] hover:bg-blue-700 text-white rounded-xl font-bold cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <span x-show="isSavingPromo" class="material-symbols-rounded text-[15px] animate-spin">progress_activity</span>
+                            <span x-text="isSavingPromo ? 'Menyimpan...' : 'Simpan Promo'"></span>
                         </button>
                     </div>
                 </form>

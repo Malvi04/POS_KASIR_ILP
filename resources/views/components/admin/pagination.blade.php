@@ -1,8 +1,8 @@
 @props([
-    'total' => '12',
-    'shown' => '5',
+    'total' => '0',
+    'shown' => '0',
     'currentPage' => '1',
-    'totalPages' => '3'
+    'totalPages' => '1'
 ])
 
 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-[12.5px] text-slate-500">
@@ -19,7 +19,7 @@
         </button>
 
         <div class="flex items-center gap-1">
-            <template x-for="p in [1, 2, 3]" :key="p">
+            <template x-for="p in Array.from({ length: Math.max(1, Number(typeof totalPages !== 'undefined' ? totalPages : {{ $totalPages }})) }, (_, i) => i + 1)" :key="p">
                 <button type="button"
                         @click="if (typeof setPage === 'function') setPage(p); else currentPage = p;"
                         :class="(typeof currentPage !== 'undefined' && currentPage === p) || p === 1 ? 'bg-[#0052cc] text-white font-bold border-[#0052cc]' : 'bg-white text-slate-700 hover:bg-slate-100 border-slate-200'"

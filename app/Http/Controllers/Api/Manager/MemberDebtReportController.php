@@ -296,7 +296,7 @@ class MemberDebtReportController extends Controller
                         "'" . $this->sanitizeCsvField($m->nik), // apostrophe prefix prevents scientific notation in Excel
                         $this->sanitizeCsvField($m->name),
                         $this->sanitizeCsvField($m->department),
-                        $this->sanitizeCsvField($m->branch ?? 'Cabang 1 - Mill / Pabrik'),
+                        $this->sanitizeCsvField($m->branch ?? '-'),
                         number_format($m->credit_limit, 2, '.', ''),
                         number_format($m->current_debt, 2, '.', ''),
                         number_format($remaining, 2, '.', ''),

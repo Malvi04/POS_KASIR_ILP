@@ -157,6 +157,10 @@ Route::middleware(['auth.web:manager'])->group(function () {
         return view('manager.inventory');
     })->name('manager.inventory');
 
+    Route::get('/manager/pembelian-barang', function () {
+        return view('manager.pembelian-barang');
+    })->name('manager.pembelian-barang');
+
     Route::get('/manager/products/export', [App\Http\Controllers\Api\Manager\ProductImportExportController::class, 'export'])->name('manager.products.export');
     Route::get('/manager/products/template', [App\Http\Controllers\Api\Manager\ProductImportExportController::class, 'downloadTemplate'])->name('manager.products.template');
 
@@ -303,6 +307,10 @@ Route::middleware(['auth.web:manager'])->group(function () {
             'activeNav' => 'kirim_barang'
         ]);
     });
+
+    Route::get('/pembelian-barang', function () {
+        return view('manager.pembelian-barang');
+    })->name('pembelian-barang');
 });
 
 /*

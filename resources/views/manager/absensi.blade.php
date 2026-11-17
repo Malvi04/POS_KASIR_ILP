@@ -11,6 +11,8 @@
     selectedDate: new Date().toISOString().split('T')[0],
     showCheckInModal: false,
     showIzinModal: false,
+    isSubmittingAttendance: false,
+    isSubmittingLeave: false,
     toastMessage: '',
     showToast: false,
 
@@ -169,6 +171,7 @@
     },
 
     async recordAttendance() {
+        if (this.isSubmittingAttendance) return;
         if (!this.formAbsen.staffName.trim()) {
             alert('Silakan masukkan nama staf!');
             return;
@@ -178,10 +181,17 @@
         const timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
         const isLate = now.getHours() > 7 || (now.getHours() === 7 && now.getMinutes() > 10);
 
+        this.isSubmittingAttendance = true;
+        const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('att-' + Date.now());
         try {
             const res = await fetch('/api/attendance', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'X-Idempotency-Key': idemKey
+                },
                 body: JSON.stringify({
                     staffName: this.formAbsen.staffName.trim(),
                     terminal: this.formAbsen.terminal,
@@ -192,77 +202,48 @@
                 })
             });
 
-            if (res.ok) {
-                const json = await res.json();
-                if (json.success && json.data) {
-                    if (this.formAbsen.type === 'MASUK') {
-                        this.attendanceList.unshift(json.data);
-                    } else {
-                        const existing = this.attendanceList.find(a => a.staffName.toLowerCase() === this.formAbsen.staffName.trim().toLowerCase());
-                        if (existing) {
-                            existing.checkOut = json.data.checkOut;
-                        }
+            const json = await res.json().catch(() => ({}));
+            if (res.ok && json.success && json.data) {
+                if (this.formAbsen.type === 'MASUK') {
+                    this.attendanceList.unshift(json.data);
+                } else {
+                    const existing = this.attendanceList.find(a => a.staffName.toLowerCase() === this.formAbsen.staffName.trim().toLowerCase());
+                    if (existing) {
+                        existing.checkOut = json.data.checkOut;
                     }
-                    this.saveAttendance();
-                    this.triggerToast(`${this.formAbsen.type === 'MASUK' ? 'Check-In' : 'Check-Out'} berhasil dicatat ke Database untuk ${this.formAbsen.staffName}!`);
-                    this.showCheckInModal = false;
-                    this.formAbsen.staffName = '';
-                    return;
                 }
+                this.triggerToast(`${this.formAbsen.type === 'MASUK' ? 'Check-In' : 'Check-Out'} berhasil dicatat ke Database untuk ${this.formAbsen.staffName}!`);
+                this.showCheckInModal = false;
+                this.formAbsen.staffName = '';
             } else {
-                const err = await res.json();
-                if (err.message) {
-                    alert(err.message);
-                    return;
-                }
+                alert(json.message || 'Gagal mencatat absensi ke server.');
             }
         } catch(e) {
             console.error('Failed to record attendance to API', e);
+            alert('Terjadi kesalahan koneksi saat menyimpan absensi.');
+        } finally {
+            this.isSubmittingAttendance = false;
         }
-
-        if (this.formAbsen.type === 'MASUK') {
-            const existing = this.attendanceList.find(a => a.staffName.toLowerCase() === this.formAbsen.staffName.trim().toLowerCase());
-            if (existing) {
-                existing.checkIn = timeStr;
-                existing.status = isLate ? 'TERLAMBAT' : 'TEPAT_WAKTU';
-            } else {
-                this.attendanceList.unshift({
-                    id: Date.now(),
-                    terminal: this.formAbsen.terminal,
-                    staffName: this.formAbsen.staffName.trim(),
-                    checkIn: timeStr,
-                    checkOut: '-',
-                    branch: this.formAbsen.branch,
-                    status: isLate ? 'TERLAMBAT' : 'TEPAT_WAKTU'
-                });
-            }
-            this.triggerToast(`Check-In berhasil untuk ${this.formAbsen.staffName} jam ${timeStr}`);
-        } else {
-            const existing = this.attendanceList.find(a => a.staffName.toLowerCase() === this.formAbsen.staffName.trim().toLowerCase());
-            if (existing) {
-                existing.checkOut = timeStr;
-                this.triggerToast(`Check-Out berhasil untuk ${this.formAbsen.staffName} jam ${timeStr}`);
-            } else {
-                alert('Staf belum tercatat check-in hari ini!');
-                return;
-            }
-        }
-
-        this.saveAttendance();
-        this.showCheckInModal = false;
-        this.formAbsen.staffName = '';
     },
 
     async submitIzin() {
+        if (this.isSubmittingLeave) return;
         if (!this.formIzin.staffName.trim() || !this.formIzin.reason.trim()) {
             alert('Mohon lengkapi nama dan alasan izin!');
             return;
         }
 
+        this.isSubmittingLeave = true;
+        const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('lv-' + Date.now());
         try {
             const res = await fetch('/api/attendance/leaves', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'X-Idempotency-Key': idemKey
+                },
                 body: JSON.stringify({
                     staffName: this.formIzin.staffName.trim(),
                     type: this.formIzin.type,
@@ -271,69 +252,60 @@
                 })
             });
 
-            if (res.ok) {
-                const json = await res.json();
-                if (json.success && json.data) {
-                    this.leaveRequests.unshift(json.data);
-                    this.saveLeaves();
-                    this.showIzinModal = false;
-                    this.triggerToast(`Pengajuan ${this.formIzin.type} untuk ${this.formIzin.staffName} berhasil disimpan ke Database!`);
-                    this.formIzin.staffName = '';
-                    this.formIzin.reason = '';
-                    return;
-                }
+            const json = await res.json().catch(() => ({}));
+            if (res.ok && json.success && json.data) {
+                this.leaveRequests.unshift(json.data);
+                this.showIzinModal = false;
+                this.triggerToast(`Pengajuan ${this.formIzin.type} untuk ${this.formIzin.staffName} berhasil disimpan ke Database!`);
+                this.formIzin.staffName = '';
+                this.formIzin.reason = '';
+            } else {
+                alert(json.message || 'Gagal mengirim pengajuan izin ke server.');
             }
         } catch(e) {
             console.error('Failed to submit leave to API', e);
+            alert('Terjadi kesalahan koneksi saat mengirim pengajuan izin.');
+        } finally {
+            this.isSubmittingLeave = false;
         }
-
-        this.leaveRequests.unshift({
-            id: Date.now(),
-            staffName: this.formIzin.staffName.trim(),
-            type: this.formIzin.type,
-            date: this.formIzin.date,
-            reason: this.formIzin.reason.trim(),
-            status: 'MENUNGGU'
-        });
-        this.saveLeaves();
-        this.showIzinModal = false;
-        this.triggerToast(`Pengajuan ${this.formIzin.type} untuk ${this.formIzin.staffName} berhasil diajukan!`);
-        this.formIzin.staffName = '';
-        this.formIzin.reason = '';
     },
 
     async approveLeave(req) {
-        req.status = 'DISETUJUI';
         try {
-            if (req.id && typeof req.id === 'number' && req.id < 1000000000000) {
-                await fetch(`/api/attendance/leaves/${req.id}/status`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    body: JSON.stringify({ status: 'DISETUJUI', approved_by: 'Manager Operasional' })
-                });
+            const res = await fetch(`/api/attendance/leaves/${req.id}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                body: JSON.stringify({ status: 'DISETUJUI', approved_by: @js(auth()->user()?->name ?? 'Manager') })
+            });
+            if (res.ok) {
+                req.status = 'DISETUJUI';
+                this.triggerToast(`Izin ${req.staffName} telah disetujui di Database.`);
+            } else {
+                this.triggerToast('Gagal menyetujui izin di server.');
             }
         } catch(e) {
             console.error(e);
+            this.triggerToast('Gagal terhubung ke server.');
         }
-        this.saveLeaves();
-        this.triggerToast(`Izin ${req.staffName} telah disetujui di Database.`);
     },
 
     async rejectLeave(req) {
-        req.status = 'DITOLAK';
         try {
-            if (req.id && typeof req.id === 'number' && req.id < 1000000000000) {
-                await fetch(`/api/attendance/leaves/${req.id}/status`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    body: JSON.stringify({ status: 'DITOLAK', approved_by: 'Manager Operasional' })
-                });
+            const res = await fetch(`/api/attendance/leaves/${req.id}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                body: JSON.stringify({ status: 'DITOLAK', approved_by: @js(auth()->user()?->name ?? 'Manager') })
+            });
+            if (res.ok) {
+                req.status = 'DITOLAK';
+                this.triggerToast(`Izin ${req.staffName} telah ditolak.`);
+            } else {
+                this.triggerToast('Gagal menolak izin di server.');
             }
         } catch(e) {
             console.error(e);
+            this.triggerToast('Gagal terhubung ke server.');
         }
-        this.saveLeaves();
-        this.triggerToast(`Izin ${req.staffName} telah ditolak.`);
     },
 
     exportData() {
@@ -604,12 +576,12 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
                         <div class="space-y-3 text-xs">
                             <div class="p-3 bg-blue-50/60 border border-blue-100 rounded-xl">
-                                <span class="font-bold text-blue-900 block">Shift Pagi (07:00 - 15:00)</span>
-                                <span class="text-blue-700 text-[11px] mt-0.5 block">3 Kasir Aktif di Terminal</span>
+                                <span class="font-bold text-blue-900 block">Shift Aktif Hari Ini</span>
+                                <span class="text-blue-700 text-[11px] mt-0.5 block" x-text="attendanceList.filter(a => a.checkIn && a.checkIn !== '-' && (!a.checkOut || a.checkOut === '-')).length + ' Personel Aktif Bertugas'">0 Personel Aktif Bertugas</span>
                             </div>
                             <div class="p-3 bg-slate-50 border border-gray-200 rounded-xl">
-                                <span class="font-bold text-gray-800 block">Shift Siang (14:30 - 22:30)</span>
-                                <span class="text-gray-500 text-[11px] mt-0.5 block">Persiapan serah terima sesi</span>
+                                <span class="font-bold text-gray-800 block">Selesai Shift / Check-Out</span>
+                                <span class="text-gray-500 text-[11px] mt-0.5 block" x-text="attendanceList.filter(a => a.checkOut && a.checkOut !== '-').length + ' Personel Telah Check-Out'">0 Personel Telah Check-Out</span>
                             </div>
                         </div>
                     </div>
@@ -760,7 +732,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <label class="font-bold text-gray-700 block mb-1">Nama Personel / Kasir <span class="text-red-500">*</span></label>
                         <input type="text"
                                x-model="formAbsen.staffName"
-                               placeholder="Contoh: Budi Kurniawan"
+                               placeholder="Nama lengkap personel"
                                required
                                class="w-full px-3.5 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-[#0052cc]" />
                     </div>
@@ -797,13 +769,16 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
                     <div class="pt-2 flex justify-end gap-2">
                         <button type="button"
+                                :disabled="isSubmittingAttendance"
                                 @click="showCheckInModal = false"
-                                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold cursor-pointer">
+                                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                             Batal
                         </button>
                         <button type="submit"
-                                class="px-5 py-2 bg-[#0052cc] hover:bg-blue-700 text-white rounded-xl font-bold cursor-pointer">
-                            Simpan Absensi
+                                :disabled="isSubmittingAttendance"
+                                class="px-5 py-2 bg-[#0052cc] hover:bg-blue-700 text-white rounded-xl font-bold cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <span x-show="isSubmittingAttendance" class="material-symbols-rounded text-[15px] animate-spin">progress_activity</span>
+                            <span x-text="isSubmittingAttendance ? 'Menyimpan...' : 'Simpan Absensi'"></span>
                         </button>
                     </div>
                 </form>
@@ -869,13 +844,16 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
                     <div class="pt-2 flex justify-end gap-2">
                         <button type="button"
+                                :disabled="isSubmittingLeave"
                                 @click="showIzinModal = false"
-                                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold cursor-pointer">
+                                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                             Batal
                         </button>
                         <button type="submit"
-                                class="px-5 py-2 bg-[#0052cc] hover:bg-blue-700 text-white rounded-xl font-bold cursor-pointer">
-                            Kirim Pengajuan
+                                :disabled="isSubmittingLeave"
+                                class="px-5 py-2 bg-[#0052cc] hover:bg-blue-700 text-white rounded-xl font-bold cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <span x-show="isSubmittingLeave" class="material-symbols-rounded text-[15px] animate-spin">progress_activity</span>
+                            <span x-text="isSubmittingLeave ? 'Mengirim...' : 'Kirim Pengajuan'"></span>
                         </button>
                     </div>
                 </form>

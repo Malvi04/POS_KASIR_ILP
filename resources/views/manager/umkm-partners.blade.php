@@ -157,11 +157,13 @@
     },
 
     async savePartner() {
+        if (this.isLoadingPartners) return;
         this.partnerFormErrors = {};
         if (!this.partnerFormData.name || !this.partnerFormData.name.trim()) this.partnerFormErrors.name = 'Nama UMKM / Usaha wajib diisi.';
         if (Object.keys(this.partnerFormErrors).length > 0) return;
 
         this.isLoadingPartners = true;
+        const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('umkm-' + Date.now());
         try {
             const url = this.partnerModalMode === 'create' ? '/api/consignment/partners' : `/api/consignment/partners/${this.partnerFormData.id}`;
             const method = this.partnerModalMode === 'create' ? 'POST' : 'PUT';
@@ -171,7 +173,8 @@
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
-                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'X-Idempotency-Key': idemKey
                 },
                 body: JSON.stringify(this.partnerFormData)
             });
@@ -215,8 +218,10 @@
     },
 
     async processSettlement() {
+        if (this.isSettling) return;
         if (!this.settlementSupplier) return;
         this.isSettling = true;
+        const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('settle-' + Date.now());
 
         try {
             const res = await fetch('/api/consignment/settlement', {
@@ -224,7 +229,8 @@
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
-                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'X-Idempotency-Key': idemKey
                 },
                 body: JSON.stringify({
                     supplier_id: this.settlementSupplier.id,
@@ -595,8 +601,11 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                 </div>
 
                 <div class="flex justify-end gap-2 pt-3 border-t">
-                    <button type="button" @click="showPartnerModal = false" class="px-4 py-2 border rounded-xl font-bold text-gray-600">Batal</button>
-                    <button type="submit" :disabled="isLoadingPartners" class="px-5 py-2 bg-[#0052cc] text-white rounded-xl font-bold">Simpan Mitra</button>
+                    <button type="button" :disabled="isLoadingPartners" @click="showPartnerModal = false" class="px-4 py-2 border rounded-xl font-bold text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed">Batal</button>
+                    <button type="submit" :disabled="isLoadingPartners" class="px-5 py-2 bg-[#0052cc] text-white rounded-xl font-bold flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <span x-show="isLoadingPartners" class="material-symbols-rounded text-[15px] animate-spin">progress_activity</span>
+                        <span x-text="isLoadingPartners ? 'Menyimpan...' : 'Simpan Mitra'"></span>
+                    </button>
                 </div>
             </form>
         </div>

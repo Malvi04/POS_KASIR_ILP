@@ -11,6 +11,7 @@ use App\Models\StoreReturnItem;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class ReturnController extends Controller
@@ -45,81 +46,6 @@ class ReturnController extends Controller
         }
 
         $returns = $query->orderBy('id', 'desc')->get();
-
-        // If empty, seed default return documents for demo/testing
-        if ($returns->isEmpty() && StoreReturnHeader::count() === 0) {
-            $cabang = Location::where('type', 'BRANCH')->first() ?: Location::first();
-            $dc = Location::where('type', 'DC')->first() ?: Location::first();
-            $user = User::first();
-            $product1 = Product::first();
-            $product2 = Product::skip(1)->first() ?: $product1;
-
-            if ($product1) {
-                $ret1 = StoreReturnHeader::create([
-                    'return_number' => '#RTR-TK-2026-0892',
-                    'from_location_id' => $cabang?->id,
-                    'to_location_id' => $dc?->id,
-                    'created_by' => $user?->id,
-                    'returned_at' => now()->subHours(4),
-                    'direction' => 'toko_ke_gudang',
-                    'condition_type' => 'rusak',
-                    'notes' => 'Karton rembes saat transit delivery rak toko',
-                    'driver_name' => 'Andi Pratama',
-                    'vehicle_plate' => 'B 9481 UQ',
-                    'subtotal' => 3420000,
-                    'truck_fee' => 500000,
-                    'net_amount' => 2920000,
-                    'status' => 'cek_fisik',
-                ]);
-
-                StoreReturnItem::create([
-                    'store_return_id' => $ret1->id,
-                    'product_id' => $product1->id,
-                    'qty' => 15,
-                    'disposition' => 'RUSAK_BOCOR',
-                    'claim_price' => $product1->cost_price ?: 15000,
-                ]);
-
-                if ($product2 && $product2->id !== $product1->id) {
-                    StoreReturnItem::create([
-                        'store_return_id' => $ret1->id,
-                        'product_id' => $product2->id,
-                        'qty' => 24,
-                        'disposition' => 'RUSAK_BOCOR',
-                        'claim_price' => $product2->cost_price ?: 12000,
-                    ]);
-                }
-
-                $ret2 = StoreReturnHeader::create([
-                    'return_number' => '#RTR-TK-2026-0891',
-                    'from_location_id' => $cabang?->id,
-                    'to_location_id' => $dc?->id,
-                    'created_by' => $user?->id,
-                    'returned_at' => now()->subDay(),
-                    'direction' => 'toko_ke_gudang',
-                    'condition_type' => 'ed',
-                    'notes' => 'ED batch bulan ini mendekati batas H-14',
-                    'driver_name' => 'Rahmat Hidayat',
-                    'vehicle_plate' => 'BE 8122 YZ',
-                    'subtotal' => 1880000,
-                    'truck_fee' => 0,
-                    'net_amount' => 1880000,
-                    'status' => 'disetujui',
-                ]);
-
-                StoreReturnItem::create([
-                    'store_return_id' => $ret2->id,
-                    'product_id' => $product1->id,
-                    'qty' => 30,
-                    'disposition' => 'KEDALUWARSA',
-                    'claim_price' => $product1->cost_price ?: 15000,
-                ]);
-            }
-
-            $returns = StoreReturnHeader::with(['items.product', 'fromLocation', 'toLocation', 'creator'])
-                ->orderBy('id', 'desc')
-                ->get();
-        }
 
         // Transform for frontend
         $transformed = $returns->map(function ($r) {
@@ -165,8 +91,8 @@ class ReturnController extends Controller
                 'truckFee' => (float)$r->truck_fee > 0 ? ('-Rp ' . number_format((float)$r->truck_fee, 0, ',', '.')) : 'GRATIS / ARMADA INTERNAL',
                 'truckFeeFree' => (float)$r->truck_fee <= 0,
                 'netAmount' => 'Rp ' . number_format((float)$r->net_amount, 0, ',', '.'),
-                'plate' => $r->vehicle_plate ?: 'B 9481 UQ',
-                'driver' => $r->driver_name ?: 'Supir Ekspedisi',
+                'plate' => $r->vehicle_plate ?: '-',
+                'driver' => $r->driver_name ?: '-',
                 'statusKey' => $r->status,
                 'statusLabel' => $statusLabels[$r->status] ?? strtoupper($r->status),
                 'statusSub' => $r->status === 'cek_fisik' ? 'Menunggu Approval Supervisor' : 'Diproses oleh Supervisor',
@@ -209,14 +135,17 @@ class ReturnController extends Controller
         }
 
         if (!$product) {
-            $product = Product::first();
+            return response()->json([
+                'success' => false,
+                'message' => 'Produk yang akan diretur tidak ditemukan di master inventaris.',
+            ], 422);
         }
 
-        $cabang = Location::where('type', 'BRANCH')->first() ?: Location::first();
-        $dc = Location::where('type', 'DC')->first() ?: Location::first();
-        $user = User::first();
+        $cabang = Location::where('type', 'STORE')->first() ?: Location::where('type', 'BRANCH')->first() ?: Location::first();
+        $dc = Location::where('type', 'WAREHOUSE')->first() ?: Location::where('type', 'DC')->first() ?: Location::first();
+        $user = Auth::user();
 
-        $price = $product ? (float)$product->cost_price : 10000;
+        $price = (float) $product->cost_price;
         $qty = (float)$validated['qty'];
         $subtotal = $price * $qty;
         $truckFee = empty($validated['use_fleet']) ? 250000 : 0;
@@ -235,8 +164,8 @@ class ReturnController extends Controller
                 'direction' => $validated['direction'] ?? 'toko_ke_gudang',
                 'condition_type' => $validated['condition_type'] ?? 'rusak',
                 'notes' => $validated['reason'] ?? 'Pengajuan retur barang toko',
-                'driver_name' => $validated['driver_name'] ?? 'Driver Ekspedisi Internal',
-                'vehicle_plate' => $validated['vehicle_plate'] ?? 'B 9481 UQ',
+                'driver_name' => $validated['driver_name'] ?? '-',
+                'vehicle_plate' => $validated['vehicle_plate'] ?? '-',
                 'subtotal' => $subtotal,
                 'truck_fee' => $truckFee,
                 'net_amount' => $netAmount,

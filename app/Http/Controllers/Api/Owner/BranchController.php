@@ -9,6 +9,7 @@ use App\Models\Product;
 use App\Models\Transaction;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class BranchController extends Controller
 {
@@ -19,26 +20,23 @@ class BranchController extends Controller
     {
         $locations = Location::all();
 
-        if ($locations->isEmpty()) {
-            $locations = collect([
-                Location::create(['code' => 'CAB-001', 'name' => 'Toko Pusat', 'type' => 'STORE', 'address' => 'Jl. Industri Raya No. 45', 'manager' => 'Bambang Sudiro', 'manager_email' => 'bambang@ilp-pos.co.id', 'status' => 'AKTIF', 'is_active' => true]),
-                Location::create(['code' => 'CAB-002', 'name' => 'Cabang 1 - Mill / Pabrik', 'type' => 'STORE', 'address' => 'Kompleks Pabrik Gula ILP', 'manager' => 'Andi Susanto', 'manager_email' => 'andi@ilp-pos.co.id', 'status' => 'AKTIF', 'is_active' => true]),
-                Location::create(['code' => 'CAB-003', 'name' => 'Cabang 2 - Kebun Barat', 'type' => 'STORE', 'address' => 'Divisi Tanaman Barat', 'manager' => 'Siti Rahma', 'manager_email' => 'siti@ilp-pos.co.id', 'status' => 'AKTIF', 'is_active' => true]),
-                Location::create(['code' => 'GDG-001', 'name' => 'Gudang Pusat (DC)', 'type' => 'WAREHOUSE', 'address' => 'Central Hub Logistik', 'manager' => 'Supriyadi', 'manager_email' => 'supriyadi@ilp-pos.co.id', 'status' => 'AKTIF', 'is_active' => true]),
-            ]);
-        }
-
         $allProducts = Product::all();
         $totalStockMaster = (int) $allProducts->sum('stock');
         $totalSkuCount = $allProducts->count();
 
-        // Top 5 selling products across system
-        $topProducts = Product::orderByDesc('stock')->take(5)->get()->map(function ($p, $idx) {
+        // Real sales aggregation per product from transaction_items
+        $salesByProduct = \App\Models\TransactionItem::selectRaw('product_id, SUM(qty) as total_sold, SUM(total_price) as total_revenue')
+            ->groupBy('product_id')
+            ->get()
+            ->keyBy('product_id');
+
+        $topProducts = Product::orderByDesc('stock')->take(5)->get()->map(function ($p, $idx) use ($salesByProduct) {
+            $stat = $salesByProduct->get($p->id);
             return [
                 'rank' => $idx + 1,
                 'name' => $p->name,
-                'sold' => rand(15, 80),
-                'revenue' => (float) $p->price * rand(15, 80),
+                'sold' => (int) ($stat->total_sold ?? 0),
+                'revenue' => (float) ($stat->total_revenue ?? 0),
                 'stock' => (int) $p->stock,
             ];
         });
@@ -51,10 +49,10 @@ class BranchController extends Controller
                 'name' => $loc->name,
                 'facilityType' => $isStore ? 'store' : 'warehouse',
                 'typeName' => $isStore ? 'Gerai Ritel Toko' : 'Gudang Logistik / DC',
-                'address' => $loc->address ?? 'Alamat Operasional',
-                'manager' => $loc->manager ?? 'Penanggung Jawab',
+                'address' => $loc->address ?? '-',
+                'manager' => $loc->manager ?? '-',
                 'managerRole' => $isStore ? 'Manager Cabang' : 'Supervisor Gudang',
-                'managerEmail' => $loc->manager_email ?? 'manager@ilp-pos.co.id',
+                'managerEmail' => $loc->manager_email ?? '-',
                 'status' => $loc->status ?? ($loc->is_active ? 'AKTIF' : 'TUTUP'),
                 'totalSku' => (string) $totalSkuCount,
                 'stockOut' => 0,
@@ -66,6 +64,11 @@ class BranchController extends Controller
         $storeActiveCount = $data->where('facilityType', 'store')->where('status', 'AKTIF')->count();
         $warehouseCount = $data->where('facilityType', 'warehouse')->count();
 
+        $totalRev = (float) $salesByProduct->sum('total_revenue');
+        $avgMarginPct = $allProducts->count() > 0
+            ? round((float) $allProducts->avg(fn ($p) => $p->price > 0 ? (($p->price - $p->cost_price) / $p->price) * 100 : 0), 1)
+            : 0.0;
+
         return response()->json([
             'success' => true,
             'summary' => [
@@ -73,7 +76,7 @@ class BranchController extends Controller
                 'store_active_count' => $storeActiveCount,
                 'warehouse_count' => $warehouseCount,
                 'total_stok_master' => $totalStockMaster,
-                'avg_profitability' => '24.5%',
+                'avg_profitability' => ($totalRev > 0 || $allProducts->count() > 0) ? ($avgMarginPct . '%') : '0%',
             ],
             'data' => $data,
         ]);
@@ -110,9 +113,11 @@ class BranchController extends Controller
             'is_active' => ($validated['status'] ?? 'AKTIF') === 'AKTIF',
         ]);
 
+        $actor = Auth::user();
         AuditLog::record([
-            'user_name' => 'Ir. Hartono Wibowo (Owner)',
-            'user_role' => 'Owner',
+            'user_id' => $actor?->id,
+            'user_name' => $actor?->name ?? 'Owner',
+            'user_role' => $actor?->role ?? 'Owner',
             'location' => $location->name,
             'category' => 'Pengaturan Sistem',
             'action_name' => 'Pendaftaran Cabang Baru',
@@ -169,9 +174,11 @@ class BranchController extends Controller
             'is_active' => ($validated['status'] ?? $location->status) === 'AKTIF',
         ]);
 
+        $actor = Auth::user();
         AuditLog::record([
-            'user_name' => 'Ir. Hartono Wibowo (Owner)',
-            'user_role' => 'Owner',
+            'user_id' => $actor?->id,
+            'user_name' => $actor?->name ?? 'Owner',
+            'user_role' => $actor?->role ?? 'Owner',
             'location' => $location->name,
             'category' => 'Pengaturan Sistem',
             'action_name' => 'Pembaruan Lokasi Cabang',
@@ -197,9 +204,11 @@ class BranchController extends Controller
 
         $location->delete();
 
+        $actor = Auth::user();
         AuditLog::record([
-            'user_name' => 'Ir. Hartono Wibowo (Owner)',
-            'user_role' => 'Owner',
+            'user_id' => $actor?->id,
+            'user_name' => $actor?->name ?? 'Owner',
+            'user_role' => $actor?->role ?? 'Owner',
             'location' => $name,
             'category' => 'Pengaturan Sistem',
             'action_name' => 'Penghapusan Lokasi Cabang',

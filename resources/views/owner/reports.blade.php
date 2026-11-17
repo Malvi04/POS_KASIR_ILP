@@ -42,7 +42,7 @@
                 <div class="flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-[12.5px] font-bold shadow-2xs">
                     <span class="material-symbols-rounded text-[17px] text-slate-400">storefront</span>
                     <select x-model="selectedBranchFilter" 
-                            @change="triggerToast('Menampilkan data laporan: ' + cur.name)"
+                            @change="loadReportData(); triggerToast('Menampilkan data laporan: ' + cur.name)"
                             class="bg-transparent border-none outline-none font-bold text-slate-800 cursor-pointer pr-1">
                         <option value="all">Semua Cabang (Konsolidasian)</option>
                         <option value="pusat">Pusat</option>
@@ -57,12 +57,12 @@
                 <div class="flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-[12.5px] font-bold shadow-2xs">
                     <span class="material-symbols-rounded text-[17px] text-slate-400">calendar_month</span>
                     <select x-model="selectedPeriod" 
-                            @change="triggerToast('Periode laporan diperbarui!')"
+                            @change="loadReportData(); triggerToast('Periode laporan diperbarui!')"
                             class="bg-transparent border-none outline-none font-bold text-slate-800 cursor-pointer pr-1">
-                        <option value="month">Bulan Ini (Juni 2024)</option>
-                        <option value="last_month">Bulan Lalu (Mei 2024)</option>
-                        <option value="quarter">Kuartal II 2024</option>
-                        <option value="year">Tahun Berjalan (YTD 2024)</option>
+                        <option value="month">Bulan Ini</option>
+                        <option value="last_month">Bulan Lalu</option>
+                        <option value="quarter">Kuartal Ini</option>
+                        <option value="year">Tahun Berjalan (YTD)</option>
                     </select>
                 </div>
             </div>
@@ -91,7 +91,7 @@
             </div>
             <div class="mt-3 flex items-center gap-1.5 text-[11.5px] font-bold text-amber-600">
                 <span class="material-symbols-rounded text-[15px]">pie_chart</span>
-                <span>Rasio Beban: <span x-text="((totalBebanAll / cur.pendapatan) * 100).toFixed(1) + '%'"></span></span>
+                <span>Rasio Beban: <span x-text="(cur.pendapatan > 0 ? ((totalBebanAll / cur.pendapatan) * 100).toFixed(1) : '0.0') + '%'"></span></span>
             </div>
         </div>
 
@@ -429,9 +429,9 @@
                             <td class="py-4 px-5 text-right font-black text-emerald-700" x-text="marginPercent + '%'"></td>
                             <td class="py-4 px-6 text-right">
                                 <div class="inline-flex items-center gap-2">
-                                    <span class="text-[11.5px] font-extrabold text-slate-600">Skor: 8.5</span>
+                                    <span class="text-[11.5px] font-extrabold text-slate-600" x-text="'Skor: ' + Math.min(10, Math.max(0, Number(marginPercent) / 3)).toFixed(1)"></span>
                                     <div class="w-16 h-2 bg-emerald-100 rounded-full overflow-hidden">
-                                        <div class="bg-emerald-500 h-2 rounded-full" style="width: 85%"></div>
+                                        <div class="bg-emerald-500 h-2 rounded-full" :style="'width: ' + Math.min(100, Math.max(0, Number(marginPercent) * 3)) + '%'"></div>
                                     </div>
                                 </div>
                             </td>
@@ -455,7 +455,7 @@
             <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
                 <div class="flex justify-between items-center border-b pb-2">
                     <span class="font-bold text-slate-800">KOPERASI PEKERJA ILP - UNIT USAHA RITEL</span>
-                    <span class="text-xs text-slate-500">Periode: Juni 2024</span>
+                    <span class="text-xs text-slate-500" x-text="'Periode: ' + periodLabel"></span>
                 </div>
                 <div class="grid grid-cols-2 gap-2 text-xs">
                     <div>Penjualan Bersih: <span class="font-bold">Rp <span x-text="cur.pendapatan.toLocaleString('id-ID')"></span></span></div>
@@ -498,54 +498,63 @@ function reportsApp() {
         },
 
         async loadReportData() {
+            const now = new Date();
+            let startDate, endDate;
+            const fmt = d => d.toISOString().slice(0, 10);
+            if (this.selectedPeriod === 'last_month') {
+                startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                endDate = new Date(now.getFullYear(), now.getMonth(), 0);
+            } else if (this.selectedPeriod === 'quarter') {
+                const qStartMonth = Math.floor(now.getMonth() / 3) * 3;
+                startDate = new Date(now.getFullYear(), qStartMonth, 1);
+                endDate = now;
+            } else if (this.selectedPeriod === 'year') {
+                startDate = new Date(now.getFullYear(), 0, 1);
+                endDate = now;
+            } else {
+                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                endDate = now;
+            }
+
             try {
-                const res = await fetch(`/api/reports/consolidated-branches?branch=${this.selectedBranchFilter}`);
+                const params = new URLSearchParams({
+                    branch: this.selectedBranchFilter,
+                    start_date: fmt(startDate),
+                    end_date: fmt(endDate)
+                });
+                const res = await fetch(`/api/reports/consolidated-branches?${params.toString()}`, { headers: { 'Accept': 'application/json' } });
                 if (res.ok) {
                     const result = await res.json();
                     if (result.success && result.data) {
                         this.apiReport = result.data.financial_summary || null;
+                        return;
                     }
                 }
+                this.apiReport = null;
             } catch (err) {
-                console.warn('API report fetch error, falling back to local transactions', err);
+                console.error('API report fetch error', err);
+                this.apiReport = null;
             }
+        },
 
-            try {
-                const raw = localStorage.getItem('pos_ilp_transactions_v1');
-                if (raw) {
-                    const parsed = JSON.parse(raw);
-                    if (Array.isArray(parsed)) {
-                        this.transactions = parsed;
-                    }
-                }
-            } catch(e) {
-                this.transactions = [];
-            }
+        get periodLabel() {
+            if (this.selectedPeriod === 'last_month') return 'Bulan Lalu';
+            if (this.selectedPeriod === 'quarter') return 'Kuartal Ini';
+            if (this.selectedPeriod === 'year') return 'Tahun Berjalan (YTD)';
+            return 'Bulan Ini';
         },
 
         get hasTransactions() {
-            return (this.apiReport && this.apiReport.gross_revenue > 0) || this.transactions.length > 0;
+            return Boolean(this.apiReport && Number(this.apiReport.gross_revenue) > 0);
         },
 
         get cur() {
-            let pendapatan = 0;
-            let cogs = 0;
-
-            if (this.apiReport && this.apiReport.gross_revenue > 0) {
-                pendapatan = Number(this.apiReport.gross_revenue) || 0;
-                cogs = Number(this.apiReport.total_cogs) || Math.round(pendapatan * 0.6);
-            } else {
-                const trxs = this.transactions.filter(t => {
-                    if (this.selectedBranchFilter === 'all') return true;
-                    const b = (t.branch || t.branchName || '').toLowerCase();
-                    if (this.selectedBranchFilter === 'pusat') return b.includes('pusat') || !b;
-                    if (this.selectedBranchFilter === 'cabang-a') return b.includes('a');
-                    if (this.selectedBranchFilter === 'cabang-b') return b.includes('b');
-                    return true;
-                });
-                pendapatan = trxs.reduce((sum, t) => sum + (Number(t.total) || Number(t.finalTotal) || 0), 0);
-                cogs = Math.round(pendapatan * 0.6);
-            }
+            const pendapatan = (this.apiReport && Number(this.apiReport.gross_revenue) > 0)
+                ? Number(this.apiReport.gross_revenue)
+                : 0;
+            const cogs = (this.apiReport && Number(this.apiReport.total_cogs) > 0)
+                ? Number(this.apiReport.total_cogs)
+                : (pendapatan > 0 ? Math.round(pendapatan * 0.6) : 0);
 
             const hasSales = pendapatan > 0;
             const gaji = hasSales ? Math.round(pendapatan * 0.12) : 0;
@@ -553,6 +562,9 @@ function reportsApp() {
             const pemasaran = hasSales ? Math.round(pendapatan * 0.03) : 0;
             const operasionalToko = hasSales ? Math.round(pendapatan * 0.04) : 0;
             const lainnya = hasSales ? Math.round(pendapatan * 0.03) : 0;
+            const marginGrowth = hasSales && this.apiReport?.profit_margin_percent !== undefined
+                ? (Number(this.apiReport.profit_margin_percent).toFixed(1) + '% margin')
+                : '0%';
 
             return {
                 name: this.selectedBranchFilter === 'all' ? 'Konsolidasi Seluruh Cabang' : this.selectedBranchFilter.toUpperCase(),
@@ -563,8 +575,8 @@ function reportsApp() {
                 pemasaran: pemasaran,
                 operasionalToko: operasionalToko,
                 lainnya: lainnya,
-                growth: hasSales ? '+5.4%' : '0%',
-                monthlyTrend: hasSales ? [20, 40, 55, 60, 75, 100] : [0, 0, 0, 0, 0, 0]
+                growth: marginGrowth,
+                monthlyTrend: hasSales ? [0, 0, 0, 0, 0, 100] : [0, 0, 0, 0, 0, 0]
             };
         },
 
@@ -597,17 +609,19 @@ function reportsApp() {
 
         exportFullReport() {
             try {
+                const rev = Number(this.cur.pendapatan || 0);
+                const pct = v => (rev > 0 ? ((Number(v || 0) / rev) * 100).toFixed(1) : '0.0') + '%';
                 const headers = ['Komponen Laba Rugi', 'Nilai (Rp)', '% Rasio Terhadap Pendapatan', 'Status Kinerja'];
                 const rows = [
-                    ['PENDAPATAN OPERASIONAL', Number(this.cur.pendapatan || 0), '100%', 'Target Tercapai'],
-                    ['BEBAN POKOK PENDAPATAN (COGS)', Number(this.cur.cogs || 0), ((this.cur.cogs / this.cur.pendapatan) * 100).toFixed(1) + '%', 'Normal'],
-                    ['LABA KOTOR (GROSS PROFIT)', Number(this.labaKotor || 0), ((this.labaKotor / this.cur.pendapatan) * 100).toFixed(1) + '%', 'Sehat'],
-                    ['Beban Gaji Karyawan', Number(this.cur.gaji || 0), ((this.cur.gaji / this.cur.pendapatan) * 100).toFixed(1) + '%', 'Terkontrol'],
-                    ['Beban Listrik & Utilitas', Number(this.cur.listrik || 0), ((this.cur.listrik / this.cur.pendapatan) * 100).toFixed(1) + '%', 'Terkontrol'],
-                    ['Beban Pemasaran & Promo', Number(this.cur.pemasaran || 0), ((this.cur.pemasaran / this.cur.pendapatan) * 100).toFixed(1) + '%', 'Efektif'],
-                    ['Beban Operasional Toko', Number(this.cur.operasionalToko || 0), ((this.cur.operasionalToko / this.cur.pendapatan) * 100).toFixed(1) + '%', 'Efektif'],
-                    ['Beban Lain-lain', Number(this.cur.lainnya || 0), ((this.cur.lainnya / this.cur.pendapatan) * 100).toFixed(1) + '%', 'Terkendali'],
-                    ['TOTAL BEBAN USAHA (OPEX)', Number(this.totalBebanOps || 0), ((this.totalBebanOps / this.cur.pendapatan) * 100).toFixed(1) + '%', 'Sesuai Anggaran'],
+                    ['PENDAPATAN OPERASIONAL', rev, rev > 0 ? '100%' : '0%', 'Target Tercapai'],
+                    ['BEBAN POKOK PENDAPATAN (COGS)', Number(this.cur.cogs || 0), pct(this.cur.cogs), 'Normal'],
+                    ['LABA KOTOR (GROSS PROFIT)', Number(this.labaKotor || 0), pct(this.labaKotor), 'Sehat'],
+                    ['Beban Gaji Karyawan', Number(this.cur.gaji || 0), pct(this.cur.gaji), 'Terkontrol'],
+                    ['Beban Listrik & Utilitas', Number(this.cur.listrik || 0), pct(this.cur.listrik), 'Terkontrol'],
+                    ['Beban Pemasaran & Promo', Number(this.cur.pemasaran || 0), pct(this.cur.pemasaran), 'Efektif'],
+                    ['Beban Operasional Toko', Number(this.cur.operasionalToko || 0), pct(this.cur.operasionalToko), 'Efektif'],
+                    ['Beban Lain-lain', Number(this.cur.lainnya || 0), pct(this.cur.lainnya), 'Terkendali'],
+                    ['TOTAL BEBAN USAHA (OPEX)', Number(this.totalBebanOps || 0), pct(this.totalBebanOps), 'Sesuai Anggaran'],
                     ['LABA BERSIH OPERASIONAL (EBIT)', Number(this.ebit || 0), this.marginPercent + '%', 'Kinerja Prima']
                 ];
 

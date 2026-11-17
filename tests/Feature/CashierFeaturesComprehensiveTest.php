@@ -10,9 +10,18 @@ use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Support\Str;
 use Tests\TestCase;
+use Tests\Traits\SeedsTestFixtures;
 
 class CashierFeaturesComprehensiveTest extends TestCase
 {
+    use SeedsTestFixtures;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->seedTestFixtures();
+    }
+
     /**
      * Test Cashier Transactions List API with Search, Payment Method & Status Filter.
      */

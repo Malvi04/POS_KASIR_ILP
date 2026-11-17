@@ -18,31 +18,31 @@
     searchSetting: '',
     toastMessage: '',
     showToast: false,
-    lastSaved: 'Hari ini, 09:15 WIB',
+    lastSaved: '-',
 
     profileName: @js($settingsName),
-    profileNik: @js($settingsUser?->nik ?? 'MGR-ILP-001'),
+    profileNik: @js($settingsUser?->nik ?? '-'),
     profileEmail: @js($settingsUser?->email ?? ''),
-    profilePhone: '81299887766',
+    profilePhone: @js($settingsUser?->phone ?? ''),
     profileRole: @js(ucfirst(strtolower($settingsUser?->role ?? 'Manager'))),
-    profileBranch: @js($settingsUser?->branch_name ?? 'Cabang Pusat - Minimarket ILP'),
+    profileBranch: @js($settingsUser?->branch ?? 'Pusat'),
     avatarInitials: @js($settingsInitials),
     avatarFileName: '',
 
-    storeName: 'ILP Mart - Koperasi Pekerja Pusat',
-    storeCode: 'CAB-JKT-001',
-    storePhone: '(021) 5589-2210',
-    storeTaxId: '01.882.991.4-012.000',
-    storeOpenTime: '07:00',
-    storeCloseTime: '22:00',
-    storeAddress: 'Jl. Industri Raya No. 45, Kawasan Terpadu ILP',
-    storeCity: 'Jakarta Timur, DKI Jakarta',
+    storeName: '',
+    storeCode: '',
+    storePhone: '',
+    storeTaxId: '',
+    storeOpenTime: '',
+    storeCloseTime: '',
+    storeAddress: '',
+    storeCity: '',
 
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
-    twoFactorMode: 'Aktif via WhatsApp & Email',
-    posPin: '882910',
+    twoFactorMode: 'Aktif via Email',
+    posPin: '',
     showPin: false,
     maxDiscountNoPin: '0% (Wajib PIN Manager)',
     pinExpiry: '90 Hari',
@@ -53,9 +53,7 @@
     pinForCreditOverride: true,
 
     sessions: [
-        { id: 1, name: 'PC Backoffice Manager (Windows 11)', info: 'Chrome 125 • IP 192.168.1.10', status: 'Sesi Ini', current: true, icon: 'desktop_windows' },
-        { id: 2, name: 'Tablet Opname Gudang (iPadOS)', info: 'Safari • IP 192.168.1.45', status: '18 mnt lalu', current: false, icon: 'tablet_mac' },
-        { id: 3, name: 'Smartphone Manager (Android 14)', info: 'Mobile App • IP 114.122.89.12', status: 'Kemarin', current: false, icon: 'smartphone' }
+        { id: 1, name: (typeof navigator !== 'undefined' ? navigator.platform : 'Perangkat Ini'), info: 'Sesi Browser Aktif Saat Ini', status: 'Sesi Ini', current: true, icon: 'desktop_windows' }
     ],
 
     triggerToast(msg) {
@@ -65,23 +63,11 @@
     },
 
     resetForm() {
-        if (this.activeTab === 'profil') {
-            this.profileName = @js($settingsName);
-            this.profileEmail = @js($settingsUser?->email ?? '');
-            this.profilePhone = '81299887766';
-            this.storeName = 'ILP Mart - Koperasi Pekerja Pusat';
-            this.storePhone = '(021) 5589-2210';
-        } else if (this.activeTab === 'keamanan') {
-            this.currentPassword = '';
-            this.newPassword = '';
-            this.confirmPassword = '';
-            this.posPin = '882910';
-            this.pinForVoid = true;
-            this.pinForRefund = true;
-            this.pinForDrawer = true;
-            this.pinForCreditOverride = true;
-        }
-        this.triggerToast('Formulir dikembalikan ke pengaturan awal.');
+        this.initSettings();
+        this.currentPassword = '';
+        this.newPassword = '';
+        this.confirmPassword = '';
+        this.triggerToast('Formulir dikembalikan ke data server terbaru.');
     },
 
     // Pengaturan Pajak (PPN) - Modul D (Akses Owner / Superadmin)
@@ -100,11 +86,13 @@
                 if (json.success && json.data) {
                     const d = json.data;
                     if (d.store) {
-                        this.storeName = d.store.store_name || this.storeName;
-                        this.storeCode = d.store.store_code || this.storeCode;
-                        this.storePhone = d.store.store_phone || this.storePhone;
-                        this.storeAddress = d.store.store_address || this.storeAddress;
-                        this.storeTaxId = d.store.store_tax_id || this.storeTaxId;
+                        this.storeName = d.store.store_name || '';
+                        this.storeCode = d.store.store_code || '';
+                        this.storePhone = d.store.store_phone || '';
+                        this.storeAddress = d.store.store_address || '';
+                        this.storeTaxId = d.store.store_tax_id || '';
+                        this.storeOpenTime = d.store.open_time || '';
+                        this.storeCloseTime = d.store.close_time || '';
                     }
                     if (d.tax) {
                         this.taxRatePercent = d.tax.tax_rate_percent ?? 11;
@@ -112,7 +100,11 @@
                         this.taxMethod = d.tax.tax_calculation_method || 'EXCLUDE';
                     }
                     if (d.security) {
-                        this.pinForVoid = d.security.void_require_supervisor_pin ?? true;
+                        this.pinForVoid = d.security.pin_for_void ?? d.security.void_require_supervisor_pin ?? true;
+                        this.pinForRefund = d.security.pin_for_refund ?? true;
+                        this.pinForDrawer = d.security.pin_for_drawer ?? true;
+                        this.pinForCreditOverride = d.security.pin_for_credit_override ?? true;
+                        this.posPin = d.security.master_pin || '';
                     }
                 }
             }
@@ -172,7 +164,9 @@
                     store_name: this.storeName,
                     store_phone: this.storePhone,
                     store_address: this.storeAddress,
-                    store_tax_id: this.storeTaxId
+                    store_tax_id: this.storeTaxId,
+                    open_time: this.storeOpenTime,
+                    close_time: this.storeCloseTime
                 })
             });
 
@@ -192,7 +186,12 @@
                 },
                 body: JSON.stringify({
                     void_require_supervisor_pin: Boolean(this.pinForVoid),
-                    manual_discount_require_pin: true
+                    manual_discount_require_pin: true,
+                    pin_for_void: Boolean(this.pinForVoid),
+                    pin_for_refund: Boolean(this.pinForRefund),
+                    pin_for_drawer: Boolean(this.pinForDrawer),
+                    pin_for_credit_override: Boolean(this.pinForCreditOverride),
+                    master_pin: this.posPin || undefined
                 })
             });
 
@@ -297,7 +296,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         </div>
                         <div class="mt-3">
                             <p class="text-[11px] font-bold text-gray-500 tracking-wider uppercase">CABANG OPERASIONAL</p>
-                            <h3 class="text-[16px] font-bold text-gray-900 mt-1 tracking-tight truncate">Minimarket Pusat (JKT-01)</h3>
+                            <h3 class="text-[16px] font-bold text-gray-900 mt-1 tracking-tight truncate" x-text="profileBranch || storeName || '-'"></h3>
                         </div>
                     </div>
 
@@ -383,7 +382,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         AD
                                     </div>
                                     <div class="min-w-0">
-                                        <h3 class="text-[14px] font-bold text-gray-900 truncate" x-text="profileName">Andi Darmawan, S.E.</h3>
+                                        <h3 class="text-[14px] font-bold text-gray-900 truncate" x-text="profileName">{{ $settingsName }}</h3>
                                         <p class="text-[12px] text-gray-500 mt-0.5">Format foto JPG atau PNG (Maks. 2MB). Ditampilkan pada BAST & Laporan.</p>
                                         <p x-show="avatarFileName" class="text-[11.5px] font-bold text-green-600 mt-1" x-text="'File terpilih: ' + avatarFileName"></p>
                                     </div>
@@ -581,8 +580,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
                                 <div class="grid grid-cols-2 gap-4 text-[12.5px]">
                                     <div>
-                                        <p class="text-[11px] text-blue-200">Terminal Aktif</p>
-                                        <span class="font-mono font-bold text-[14px]">12 Kasir</span>
+                                        <p class="text-[11px] text-blue-200">Koneksi Sesi</p>
+                                        <span class="font-mono font-bold text-[14px]" x-text="sessions.length + ' Perangkat'">1 Perangkat</span>
                                     </div>
                                     <div>
                                         <p class="text-[11px] text-blue-200">Database</p>

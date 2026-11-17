@@ -241,38 +241,38 @@
 function ownerSettingsApp() {
     return {
         activeTab: 'identitas',
-        lastSaved: 'Hari ini, 09:15 WIB',
+        lastSaved: '-',
 
         settings: {
-            storeName: 'Koperasi Pekerja ILP Pusat',
-            coopLicense: 'AHU-0012984.AH.01.26.TAHUN 2024',
-            taxId: '01.882.991.4-012.000',
-            phone: '(021) 5589-2210',
-            address: 'Jl. Industri Raya No. 45, Kawasan Terpadu ILP, Jakarta Timur',
-            openTime: '07:00',
-            closeTime: '22:00',
+            storeName: '',
+            coopLicense: '',
+            taxId: '',
+            phone: '',
+            address: '',
+            openTime: '',
+            closeTime: '',
             pinForVoid: true,
             pinForRefund: true,
             pinForDrawer: true,
             pinForCreditOverride: true,
-            masterPin: '882910'
+            masterPin: ''
         },
 
         async init() {
             try {
-                const res = await fetch('/api/settings');
+                const res = await fetch('/api/settings', { headers: { 'Accept': 'application/json' } });
                 if (res.ok) {
                     const result = await res.json();
                     if (result.success && result.data) {
                         const st = result.data.store || {};
                         const sec = result.data.security || {};
-                        this.settings.storeName = st.store_name || this.settings.storeName;
-                        this.settings.coopLicense = st.coop_license || this.settings.coopLicense;
-                        this.settings.taxId = st.store_tax_id || this.settings.taxId;
-                        this.settings.phone = st.store_phone || this.settings.phone;
-                        this.settings.address = st.store_address || this.settings.address;
-                        this.settings.openTime = st.open_time || this.settings.openTime;
-                        this.settings.closeTime = st.close_time || this.settings.closeTime;
+                        this.settings.storeName = st.store_name || '';
+                        this.settings.coopLicense = st.coop_license || '';
+                        this.settings.taxId = st.store_tax_id || '';
+                        this.settings.phone = st.store_phone || '';
+                        this.settings.address = st.store_address || '';
+                        this.settings.openTime = st.open_time || '';
+                        this.settings.closeTime = st.close_time || '';
 
                         if (sec.pin_for_void !== undefined) this.settings.pinForVoid = sec.pin_for_void;
                         if (sec.pin_for_refund !== undefined) this.settings.pinForRefund = sec.pin_for_refund;
@@ -283,28 +283,13 @@ function ownerSettingsApp() {
                     }
                 }
             } catch(e) {
-                console.warn('API /api/settings error, reading local cache', e);
+                console.warn('API /api/settings error:', e);
             }
-
-            try {
-                const stored = localStorage.getItem('pos_ilp_store_settings_v1') || localStorage.getItem('pos_ilp_manager_settings_v1');
-                if (stored) {
-                    const parsed = JSON.parse(stored);
-                    this.settings = { ...this.settings, ...parsed };
-                    if (parsed.savedAt) this.lastSaved = parsed.savedAt;
-                }
-            } catch(e) {}
         },
 
         async saveAllSettings() {
-            const now = new Date();
-            const hh = String(now.getHours()).padStart(2, '0');
-            const mm = String(now.getMinutes()).padStart(2, '0');
-            this.lastSaved = 'Baru saja, ' + hh + ':' + mm + ' WIB';
-            this.settings.savedAt = this.lastSaved;
-
             try {
-                await fetch('/api/settings/store', {
+                const storeRes = await fetch('/api/settings/store', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
                     body: JSON.stringify({
@@ -318,7 +303,7 @@ function ownerSettingsApp() {
                     })
                 });
 
-                await fetch('/api/settings/security', {
+                const secRes = await fetch('/api/settings/security', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
                     body: JSON.stringify({
@@ -329,28 +314,37 @@ function ownerSettingsApp() {
                         masterPin: this.settings.masterPin
                     })
                 });
-            } catch(e) {
-                console.warn('API save settings error', e);
-            }
 
-            try {
-                localStorage.setItem('pos_ilp_store_settings_v1', JSON.stringify(this.settings));
-                localStorage.setItem('pos_ilp_manager_settings_v1', JSON.stringify(this.settings));
-                if (window.triggerToast) {
-                    window.triggerToast('Pengaturan Toko & Kebijakan Owner berhasil disimpan ke database!', 'success');
+                if (storeRes.ok && secRes.ok) {
+                    const now = new Date();
+                    const hh = String(now.getHours()).padStart(2, '0');
+                    const mm = String(now.getMinutes()).padStart(2, '0');
+                    this.lastSaved = 'Baru saja, ' + hh + ':' + mm + ' WIB';
+                    if (window.triggerToast) {
+                        window.triggerToast('Pengaturan Toko & Kebijakan Owner berhasil disimpan ke database!', 'success');
+                    }
+                } else {
+                    if (window.triggerToast) window.triggerToast('Gagal menyimpan pengaturan ke server.', 'error');
                 }
             } catch(e) {
+                console.warn('API save settings error', e);
                 if (window.triggerToast) window.triggerToast('Gagal menyimpan pengaturan: ' + e.message, 'error');
             }
         },
 
-        backupDataJson() {
+        async backupDataJson() {
             try {
+                const [uRes, mRes, pRes, bRes] = await Promise.all([
+                    fetch('/api/users', { headers: { 'Accept': 'application/json' } }).catch(() => null),
+                    fetch('/api/members?per_page=500', { headers: { 'Accept': 'application/json' } }).catch(() => null),
+                    fetch('/api/consignment/partners', { headers: { 'Accept': 'application/json' } }).catch(() => null),
+                    fetch('/api/branches', { headers: { 'Accept': 'application/json' } }).catch(() => null)
+                ]);
                 const dump = {
-                    users: JSON.parse(localStorage.getItem('pos_ilp_users_v1') || '[]'),
-                    members: JSON.parse(localStorage.getItem('pos_ilp_members_v1') || '[]'),
-                    umkm: JSON.parse(localStorage.getItem('pos_ilp_umkm_partners_v1') || '[]'),
-                    branches: JSON.parse(localStorage.getItem('pos_ilp_branches_v1') || '[]'),
+                    users: uRes && uRes.ok ? ((await uRes.json()).data || []) : [],
+                    members: mRes && mRes.ok ? ((await mRes.json()).data || []) : [],
+                    umkm: pRes && pRes.ok ? ((await pRes.json()).data || []) : [],
+                    branches: bRes && bRes.ok ? ((await bRes.json()).data || []) : [],
                     settings: this.settings,
                     exportedAt: new Date().toISOString()
                 };

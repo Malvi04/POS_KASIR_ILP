@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Api\Manager;
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
 use App\Models\CashierShift;
+use App\Models\Location;
 use App\Models\Product;
 use App\Models\Transaction;
 use App\Models\TransactionItem;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -47,7 +49,7 @@ class AccountingReportController extends Controller
         $query = Transaction::query()
             ->whereDate('created_at', '>=', $startDate)
             ->whereDate('created_at', '<=', $endDate)
-            ->where('status', 'SUCCESS');
+            ->whereIn('status', ['SUCCESS', 'COMPLETED']);
 
         if ($branch !== 'all') {
             $query->where('terminal_code', 'LIKE', "%{$branch}%");
@@ -101,28 +103,30 @@ class AccountingReportController extends Controller
             ];
         }
 
-        // 3. Breakdown Per-Cabang (Konsolidasi 3 Cabang)
-        $branches = ['Pusat', 'Cabang 1 - Mill / Pabrik', 'Cabang 2 - Kebun Barat'];
+        // 3. Breakdown Per-Cabang (Real PostgreSQL Location & Transaction Aggregation)
+        $locations = Location::where('type', '!=', 'WAREHOUSE')->orderBy('code')->get();
+        $txUserIds = $transactions->pluck('user_id')->filter()->unique()->all();
+        $userBranches = empty($txUserIds) ? collect() : User::whereIn('id', $txUserIds)->pluck('branch', 'id');
+
         $branchBreakdown = [];
-        foreach ($branches as $idx => $bName) {
-            $bTxs = $transactions->filter(function ($tx) use ($idx, $bName) {
-                return str_contains(strtolower($tx->terminal_code), 'cabang-' . ($idx + 1)) ||
-                       str_contains(strtolower($tx->terminal_code), 'pos-0' . ($idx + 1)) ||
-                       str_contains(strtolower($tx->terminal_code), strtolower($bName));
+        foreach ($locations as $idx => $loc) {
+            $bName = $loc->name;
+            $bCode = $loc->code ?: ('BR-' . str_pad((string) ($idx + 1), 3, '0', STR_PAD_LEFT));
+            $bTxs = $transactions->filter(function ($tx) use ($idx, $bName, $bCode, $userBranches) {
+                $term = strtolower((string) $tx->terminal_code);
+                $uBranch = strtolower((string) ($userBranches[$tx->user_id] ?? ''));
+                return ($uBranch !== '' && (str_contains($uBranch, strtolower($bName)) || str_contains(strtolower($bName), $uBranch))) ||
+                       str_contains($term, strtolower($bCode)) ||
+                       str_contains($term, 'cabang-' . ($idx + 1)) ||
+                       str_contains($term, 'pos-0' . ($idx + 1)) ||
+                       str_contains($term, strtolower($bName));
             });
 
             $bCount = $bTxs->count();
             $bRevenue = (float) $bTxs->sum('grand_total');
 
-            // Proportion fallback for realistic consolidated representation if terminal prefix unassigned
-            if ($trxCount > 0 && $bCount === 0) {
-                $weight = $idx === 0 ? 0.50 : ($idx === 1 ? 0.30 : 0.20);
-                $bRevenue = round($totalGrandTotal * $weight, 2);
-                $bCount = max(1, (int) round($trxCount * $weight));
-            }
-
             $branchBreakdown[] = [
-                'branch_code' => 'BR-00' . ($idx + 1),
+                'branch_code' => $bCode,
                 'branch_name' => $bName,
                 'transaction_count' => $bCount,
                 'total_sales' => $bRevenue,
@@ -233,7 +237,7 @@ class AccountingReportController extends Controller
                     $umkmPartnerShare += $partnerShare;
                 } else {
                     $regularSales += $lineTotal;
-                    $cost = $prod ? (float) $prod->cost_price : ((float) $item->unit_price * 0.75);
+                    $cost = $prod ? (float) $prod->cost_price : 0.0;
                     $regularCogs += ($cost * $qty);
                 }
             }

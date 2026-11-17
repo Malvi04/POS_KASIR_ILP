@@ -553,42 +553,22 @@ function auditLogApp() {
 
         async initLogs() {
             try {
-                const res = await fetch('/api/owner/audit-logs');
+                const res = await fetch('/api/owner/audit-logs', { headers: { 'Accept': 'application/json' } });
                 if (res.ok) {
                     const result = await res.json();
-                    if (result.success && Array.isArray(result.data) && result.data.length > 0) {
+                    if (result.success && Array.isArray(result.data)) {
                         this.logs = result.data;
                         this.apiSummary = result.summary || null;
-                        this.saveLogs();
                         return;
                     }
                 }
             } catch(e) {
-                console.warn('API /api/owner/audit-logs error, reading local cache', e);
-            }
-
-            try {
-                const raw = localStorage.getItem('pos_ilp_audit_logs_v1');
-                if (raw) {
-                    const parsed = JSON.parse(raw);
-                    if (Array.isArray(parsed) && parsed.length > 0) {
-                        this.logs = parsed;
-                        return;
-                    }
-                }
-            } catch (e) {
-                console.error('Failed to parse pos_ilp_audit_logs_v1', e);
+                console.warn('API /api/owner/audit-logs error:', e);
             }
             this.logs = [];
         },
 
-        saveLogs() {
-            try {
-                localStorage.setItem('pos_ilp_audit_logs_v1', JSON.stringify(this.logs));
-            } catch (e) {
-                console.error('Failed to save pos_ilp_audit_logs_v1', e);
-            }
-        },
+        saveLogs() {},
 
         // Summary Calculations (Dynamic)
         get todayString() {

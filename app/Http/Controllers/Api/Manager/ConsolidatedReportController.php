@@ -5,12 +5,15 @@ namespace App\Http\Controllers\Api\Manager;
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
 use App\Models\DebtMutation;
+use App\Models\Location;
 use App\Models\Member;
 use App\Models\Product;
+use App\Models\StockBatch;
 use App\Models\StockCorrection;
 use App\Models\StockOpname;
 use App\Models\Transaction;
 use App\Models\TransactionItem;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -28,10 +31,10 @@ class ConsolidatedReportController extends Controller
         $endDate = $request->query('end_date', Carbon::now()->toDateString());
         $branchFilter = $request->query('branch', 'all');
 
-        $branches = ['Pusat', 'Cabang 1 - Mill / Pabrik', 'Cabang 2 - Kebun Barat'];
+        $locations = Location::where('type', '!=', 'WAREHOUSE')->orderBy('code')->get();
 
         $cacheKey = "consolidated_report_{$startDate}_{$endDate}_{$branchFilter}";
-        $responseData = \Illuminate\Support\Facades\Cache::remember($cacheKey, 30, function () use ($startDate, $endDate, $branchFilter, $branches) {
+        $responseData = \Illuminate\Support\Facades\Cache::remember($cacheKey, 30, function () use ($startDate, $endDate, $branchFilter, $locations) {
             // 1. Transaction & Sales Query
             $txQuery = Transaction::query()
                 ->whereDate('created_at', '>=', $startDate)
@@ -72,7 +75,7 @@ class ConsolidatedReportController extends Controller
             foreach ($tx->items as $item) {
                 $cost = $item->cost_price ?? null;
                 if (!$cost) {
-                    $cost = $skuCosts[$item->sku] ?? ((float) $item->unit_price * 0.75);
+                    $cost = $skuCosts[$item->sku] ?? 0.0;
                 }
                 $totalCogs += ((float) $cost * (int) ($item->quantity ?? $item->qty ?? 1));
             }
@@ -114,45 +117,52 @@ class ConsolidatedReportController extends Controller
             ->whereDate('expired_date', '<=', Carbon::now()->addDays(14)->toDateString())
             ->count();
 
-        // 4. Branch Comparative Matrix (3 Branches Performance)
-        $branchBreakdown = [];
-        foreach ($branches as $idx => $bName) {
-            // Member stats per branch
-            $bMembers = Member::where('branch', $bName)->get();
-            $bDebt = (float) $bMembers->sum('current_debt');
-            $bMemberCount = $bMembers->count();
+        // 4. Branch Comparative Matrix (Real PostgreSQL Location, Member, StockBatch & Transaction Queries)
+        $txUserIds = $transactions->pluck('user_id')->filter()->unique()->all();
+        $userBranches = empty($txUserIds) ? collect() : User::whereIn('id', $txUserIds)->pluck('branch', 'id');
 
-            // Transactions per branch: matching terminal_code or simulated distribution
-            $bTxs = $transactions->filter(function ($tx) use ($idx, $bName) {
-                if (str_contains(strtolower($tx->terminal_code), 'cabang-' . ($idx + 1)) || str_contains(strtolower($tx->terminal_code), 'pos-0' . ($idx + 1))) {
-                    return true;
-                }
-                return false;
+        $membersByBranch = Member::selectRaw('branch, COUNT(*) as member_count, COALESCE(SUM(current_debt), 0) as total_debt')
+            ->groupBy('branch')
+            ->get()
+            ->keyBy('branch');
+
+        $stockByLocation = StockBatch::selectRaw('location_id, COALESCE(SUM(remaining_qty * unit_cost), 0) as valuation')
+            ->whereNotNull('location_id')
+            ->groupBy('location_id')
+            ->pluck('valuation', 'location_id');
+
+        $branchBreakdown = [];
+        foreach ($locations as $idx => $loc) {
+            $bName = $loc->name;
+            $bCode = $loc->code ?: ('BR-' . str_pad((string) ($idx + 1), 3, '0', STR_PAD_LEFT));
+            $bMemberStat = $membersByBranch->get($bName);
+            $bDebt = (float) ($bMemberStat->total_debt ?? 0);
+            $bMemberCount = (int) ($bMemberStat->member_count ?? 0);
+
+            $bTxs = $transactions->filter(function ($tx) use ($idx, $bName, $bCode, $userBranches) {
+                $term = strtolower((string) $tx->terminal_code);
+                $uBranch = strtolower((string) ($userBranches[$tx->user_id] ?? ''));
+                return ($uBranch !== '' && (str_contains($uBranch, strtolower($bName)) || str_contains(strtolower($bName), $uBranch))) ||
+                       str_contains($term, strtolower($bCode)) ||
+                       str_contains($term, 'cabang-' . ($idx + 1)) ||
+                       str_contains($term, 'pos-0' . ($idx + 1)) ||
+                       str_contains($term, strtolower($bName));
             });
 
-            // If no specific branch terminal prefix found, allocate proportionally for realistic reporting
             $bTxCount = $bTxs->count();
             $bRevenue = (float) $bTxs->sum('grand_total');
-
-            if ($transactionCount > 0 && $bTxCount === 0) {
-                // Proportion weight for demonstration: Pusat 50%, Cabang 1 30%, Cabang 2 20%
-                $weight = $idx === 0 ? 0.50 : ($idx === 1 ? 0.30 : 0.20);
-                $bRevenue = round($grossRevenue * $weight, 2);
-                $bTxCount = max(1, (int) round($transactionCount * $weight));
-            }
-
-            $bGrossProfit = round($bRevenue * ($profitMarginPercent / 100), 2);
+            $bGrossProfit = $bRevenue > 0 ? round($bRevenue * ($profitMarginPercent / 100), 2) : 0.0;
 
             $branchBreakdown[] = [
-                'branch_code' => 'BR-00' . ($idx + 1),
+                'branch_code' => $bCode,
                 'branch_name' => $bName,
                 'total_revenue' => $bRevenue,
                 'transaction_count' => $bTxCount,
                 'gross_profit' => $bGrossProfit,
                 'member_count' => $bMemberCount,
                 'member_debt' => $bDebt,
-                'stock_valuation_share' => round($totalStockAssetCost * ($idx === 0 ? 0.50 : ($idx === 1 ? 0.30 : 0.20)), 2),
-                'status' => 'OPERASIONAL AKTIF',
+                'stock_valuation_share' => round((float) ($stockByLocation[$loc->id] ?? 0), 2),
+                'status' => $loc->status ?? ($loc->is_active ? 'AKTIF' : 'NONAKTIF'),
             ];
         }
 

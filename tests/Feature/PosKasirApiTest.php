@@ -10,12 +10,16 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
+use Tests\Traits\SeedsTestFixtures;
 
 class PosKasirApiTest extends TestCase
 {
+    use SeedsTestFixtures;
+
     protected function setUp(): void
     {
         parent::setUp();
+        $this->seedTestFixtures();
 
         // Ensure users exist
         User::updateOrCreate(
@@ -379,7 +383,15 @@ class PosKasirApiTest extends TestCase
         $stockBefore = $product->stock;
 
         // Perform a checkout to get a real invoice
-        $shift = CashierShift::where('status', 'OPEN')->latest('id')->first();
+        $shift = CashierShift::where('status', 'OPEN')->latest('id')->first() ?? CashierShift::create([
+            'shift_code' => 'CS-VOID-TEST-' . uniqid(),
+            'terminal_code' => 'POS-01',
+            'cashier_nik' => '202409821002',
+            'cashier_name' => 'Kasir Test Void',
+            'opening_cash' => 100000,
+            'status' => 'OPEN',
+            'opened_at' => now(),
+        ]);
         $checkoutRes = $this->postJson('/api/pos/checkout', [
             'shift_id' => $shift->id,
             'terminal_code' => $shift->terminal_code,

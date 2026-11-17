@@ -10,12 +10,16 @@ use App\Models\StoreReturnHeader;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
+use Tests\Traits\SeedsTestFixtures;
 
 class ManagerSupervisorRolesTest extends TestCase
 {
+    use SeedsTestFixtures;
+
     protected function setUp(): void
     {
         parent::setUp();
+        $this->seedTestFixtures();
 
         // Ensure Supervisor user exists
         User::updateOrCreate(

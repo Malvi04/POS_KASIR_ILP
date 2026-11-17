@@ -9,11 +9,7 @@
         x-data="{
             searchQuery: '',
             showNotifications: false,
-            notifications: [
-                { id: 1, title: '12 Produk Mendekati Minimum', desc: 'SKU UMKM & Sembako menipis di gerai retail.', time: '10m lalu', link: '{{ url('/owner/umkm-partners') }}', icon: 'warning', color: 'text-amber-500 bg-amber-50' },
-                { id: 2, title: '1 Akun Anggota Dibekukan', desc: 'Plafon habis 100%, butuh otorisasi Owner.', time: '45m lalu', link: '{{ url('/owner/members') }}', icon: 'lock', color: 'text-rose-500 bg-rose-50' },
-                { id: 3, title: 'Sinkronisasi 3 Cabang Berhasil', desc: 'Pusat, Cabang A, dan B terhubung realtime.', time: '1j lalu', link: '{{ url('/owner/cabang') }}', icon: 'sync', color: 'text-blue-500 bg-blue-50' }
-            ],
+            notifications: [],
             markAsRead() {
                 this.notifications = [];
                 if (typeof triggerToast === 'function') triggerToast('Semua notifikasi ditandai telah dibaca.', 'success');

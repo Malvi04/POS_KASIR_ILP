@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Events\CashierShiftEvent;
-use App\Events\InventoryUpdatedEvent;
 use App\Events\NotificationBroadcastEvent;
 use App\Events\StockUpdatedEvent;
 use App\Events\TransactionCreatedEvent;
@@ -12,18 +11,11 @@ use App\Models\Location;
 use App\Models\Product;
 use App\Models\SystemNotification;
 use App\Models\Transaction;
-use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use Tests\TestCase;
 
 class ReverbWebSocketTest extends TestCase
 {
-    protected function setUp(): void
-    {
-        parent::setUp();
-    }
-
     public function test_notification_broadcast_event_structure_and_channels(): void
     {
         $notification = SystemNotification::create([
@@ -52,24 +44,30 @@ class ReverbWebSocketTest extends TestCase
 
     public function test_transaction_created_event_structure_and_channels(): void
     {
-        $shift = CashierShift::where('status', 'OPEN')->first() ?? CashierShift::create([
-            'shift_code' => 'CS-TEST-WS-' . uniqid(),
+        $location = Location::create([
+            'code' => 'LOC-WS-01',
+            'name' => 'Toko Uji WebSocket',
+            'type' => 'STORE',
+            'is_active' => true,
+        ]);
+
+        $shift = CashierShift::create([
+            'shift_code' => 'CS-WS-' . uniqid(),
             'terminal_code' => 'POS-01',
-            'cashier_nik' => 'KASIR01',
-            'cashier_name' => 'Budi Kasir',
+            'cashier_nik' => 'WS-KASIR-01',
+            'cashier_name' => 'Kasir Uji WS',
             'opening_cash' => 100000,
             'status' => 'OPEN',
             'opened_at' => now(),
         ]);
 
-        $inv = 'INV-TEST-WS-' . uniqid();
-        $location = Location::first();
+        $inv = 'INV-WS-' . uniqid();
         $transaction = Transaction::create([
             'shift_id' => $shift->id,
             'invoice_number' => $inv,
             'terminal_code' => 'POS-01',
-            'cashier_nik' => 'KASIR01',
-            'cashier_name' => 'Budi Kasir',
+            'cashier_nik' => 'WS-KASIR-01',
+            'cashier_name' => 'Kasir Uji WS',
             'payment_method' => 'TUNAI',
             'subtotal' => 50000,
             'discount_total' => 0,
@@ -77,7 +75,7 @@ class ReverbWebSocketTest extends TestCase
             'grand_total' => 55500,
             'cash_received' => 60000,
             'change_returned' => 4500,
-            'location_id' => $location?->id ?? 1,
+            'location_id' => $location->id,
             'status' => 'COMPLETED',
         ]);
 
@@ -99,7 +97,7 @@ class ReverbWebSocketTest extends TestCase
         $event = new StockUpdatedEvent([
             'location_id' => 1,
             'type' => 'checkout',
-            'sku' => 'BRG-001',
+            'sku' => 'BRG-WS-001',
             'new_stock' => 25,
         ]);
 
@@ -114,12 +112,12 @@ class ReverbWebSocketTest extends TestCase
 
     public function test_cashier_shift_event_structure_and_channels(): void
     {
-        $code = 'CS-TEST-WS-' . uniqid();
+        $code = 'CS-WS-' . uniqid();
         $shift = CashierShift::create([
             'shift_code' => $code,
             'terminal_code' => 'POS-01',
-            'cashier_nik' => 'KASIR01',
-            'cashier_name' => 'Budi Kasir',
+            'cashier_nik' => 'WS-KASIR-01',
+            'cashier_name' => 'Kasir Uji WS',
             'opening_cash' => 100000,
             'status' => 'OPEN',
             'opened_at' => now(),
@@ -162,20 +160,31 @@ class ReverbWebSocketTest extends TestCase
     {
         Event::fake([TransactionCreatedEvent::class, StockUpdatedEvent::class, NotificationBroadcastEvent::class]);
 
-        $shift = CashierShift::where('status', 'OPEN')->first();
-        if (!$shift) {
-            $shift = CashierShift::create([
-                'shift_code' => 'CS-WS-TEST-02',
-                'terminal_code' => 'POS-01',
-                'cashier_nik' => 'KASIR01',
-                'cashier_name' => 'Budi Kasir',
-                'opening_cash' => 200000,
-                'status' => 'OPEN',
-                'opened_at' => now(),
-            ]);
-        }
+        $shift = CashierShift::create([
+            'shift_code' => 'CS-WS-' . uniqid(),
+            'terminal_code' => 'POS-01',
+            'cashier_nik' => 'WS-KASIR-01',
+            'cashier_name' => 'Kasir Uji WS',
+            'opening_cash' => 200000,
+            'status' => 'OPEN',
+            'opened_at' => now(),
+        ]);
 
-        $product = Product::where('stock', '>', 5)->first();
+        $product = Product::create([
+            'sku' => 'WS-PRD-' . uniqid(),
+            'barcode' => '899999' . rand(100000, 999999),
+            'name' => 'Produk Uji WebSocket',
+            'category' => 'Minuman',
+            'unit' => 'Pcs',
+            'cost_price' => 4000,
+            'price' => 5500,
+            'member_price' => 5000,
+            'stock' => 50,
+            'min_stock' => 5,
+            'is_taxable' => true,
+            'tax_rate' => 11.00,
+            'status' => 'TERSEDIA',
+        ]);
 
         $response = $this->postJson('/api/pos/checkout', [
             'shift_id' => $shift->id,
@@ -189,9 +198,9 @@ class ReverbWebSocketTest extends TestCase
                     'sku' => $product->sku,
                     'name' => $product->name,
                     'qty' => 1,
-                    'price' => (float)$product->selling_price,
+                    'price' => (float) $product->price,
                     'unit' => $product->unit,
-                ]
+                ],
             ],
         ]);
 
