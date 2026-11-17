@@ -345,7 +345,7 @@
                 <div class="flex items-center justify-between mb-3">
                     <div class="flex items-center gap-2 text-amber-600 font-black text-sm">
                         <span class="material-symbols-rounded text-[18px]">warning</span>
-                        <span>Stok Rendah (12 Produk)</span>
+                        <span x-text="'Stok Rendah (' + criticalItems.length + ' Produk)'">Stok Rendah</span>
                     </div>
                     <span class="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">Reorder</span>
                 </div>
@@ -454,124 +454,16 @@ function ownerDashboardApp() {
                     }
                 }
             } catch (err) {
-                console.warn('API error, falling back to local cache', err);
+                console.warn('API /api/owner/dashboard-summary error:', err);
             }
 
-            // Fallback to local storage if offline
-            this.loadBranchesFallback();
-            this.loadCriticalItemsFallback();
-            this.loadSalesDataFallback();
-        },
-
-        loadBranchesFallback() {
-            try {
-                const stored = localStorage.getItem('pos_ilp_branches_v1');
-                if (stored) {
-                    const parsed = JSON.parse(stored);
-                    if (Array.isArray(parsed) && parsed.length > 0) {
-                        this.branches = parsed.filter(b => b.facilityType !== 'warehouse').map(b => ({
-                            id: b.id,
-                            name: b.name,
-                            type: 'Cabang Toko',
-                            manager: b.manager || 'Manager Cabang',
-                            rawSales: 0,
-                            trxCount: 0,
-                            status: b.status || 'AKTIF',
-                            statusColor: b.status === 'AKTIF' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'
-                        }));
-                        return;
-                    }
-                }
-            } catch(e) {}
-            this.branches = [
-                { id: 'pusat', name: 'Pusat', type: 'Cabang Toko', manager: 'Manager Pusat', rawSales: 0, trxCount: 0, status: 'AKTIF', statusColor: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-                { id: 'cabang-a', name: 'Cabang A', type: 'Cabang Toko', manager: 'Manager Cabang A', rawSales: 0, trxCount: 0, status: 'AKTIF', statusColor: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-                { id: 'cabang-b', name: 'Cabang B', type: 'Cabang Toko', manager: 'Manager Cabang B', rawSales: 0, trxCount: 0, status: 'AKTIF', statusColor: 'bg-emerald-50 text-emerald-700 border-emerald-200' }
-            ];
-        },
-
-        loadCriticalItemsFallback() {
-            try {
-                const rawProds = localStorage.getItem('pos_ilp_inventory_products_v1');
-                if (rawProds) {
-                    const prods = JSON.parse(rawProds);
-                    if (Array.isArray(prods)) {
-                        this.criticalItems = prods
-                            .filter(p => Number(p.stock) <= Number(p.minStock || 10))
-                            .slice(0, 5)
-                            .map(p => ({
-                                sku: p.sku || p.barcode,
-                                nama: p.name,
-                                vendor: p.brand || p.category || 'Vendor',
-                                stok: Number(p.stock) || 0,
-                                min: Number(p.minStock) || 10,
-                                unit: p.unit || 'Pcs',
-                                status: Number(p.stock) === 0 ? 'Habis' : 'Menipis'
-                            }));
-                        return;
-                    }
-                }
-            } catch(e) {}
-            this.criticalItems = [];
-        },
-
-        loadSalesDataFallback() {
-            try {
-                const storedTrx = localStorage.getItem('pos_ilp_transactions_v1');
-                if (storedTrx) {
-                    const parsed = JSON.parse(storedTrx);
-                    if (Array.isArray(parsed) && parsed.length > 0) {
-                        let salesMap = {
-                            'Pusat': { revenue: 0, trxCount: 0, colorDot: 'bg-[#0052cc]', barColor: 'bg-[#0052cc]' },
-                            'Cabang A': { revenue: 0, trxCount: 0, colorDot: 'bg-emerald-500', barColor: 'bg-emerald-500' },
-                            'Cabang B': { revenue: 0, trxCount: 0, colorDot: 'bg-amber-500', barColor: 'bg-amber-500' }
-                        };
-
-                        let foundValid = false;
-                        parsed.forEach(t => {
-                            if (t.status !== 'VOID' && t.status !== 'REFUND') {
-                                const bName = (t.branch || 'Pusat').includes('A') ? 'Cabang A' : ((t.branch || '').includes('B') ? 'Cabang B' : 'Pusat');
-                                const total = Number(t.total) || Number(t.grandTotal) || 0;
-                                if (salesMap[bName]) {
-                                    salesMap[bName].revenue += total;
-                                    salesMap[bName].trxCount++;
-                                    foundValid = true;
-                                }
-                            }
-                        });
-
-                        if (foundValid) {
-                            this.isRealtimeSource = true;
-                            const totalRev = Object.values(salesMap).reduce((acc, curr) => acc + curr.revenue, 0);
-                            this.totalSalesToday = totalRev;
-                            this.totalTrxToday = Object.values(salesMap).reduce((acc, curr) => acc + curr.trxCount, 0);
-                            this.totalLabaYtd = Math.round(totalRev * 0.25);
-
-                            this.branchSalesData = Object.keys(salesMap).map(k => {
-                                const rev = salesMap[k].revenue;
-                                const cnt = salesMap[k].trxCount;
-                                const pct = this.totalSalesToday > 0 ? Math.round((rev / this.totalSalesToday) * 100) : 0;
-                                return {
-                                    branch: k,
-                                    revenue: rev,
-                                    trxCount: cnt,
-                                    percentage: pct,
-                                    colorDot: salesMap[k].colorDot,
-                                    barColor: salesMap[k].barColor,
-                                    avgTicket: cnt > 0 ? Math.round(rev / cnt) : 0
-                                };
-                            });
-                            return;
-                        }
-                    }
-                }
-            } catch(e) {}
-
-            this.isRealtimeSource = true;
             this.totalSalesToday = 0;
             this.totalTrxToday = 0;
             this.totalLabaYtd = 0;
+            this.branches = [];
+            this.criticalItems = [];
             this.branchSalesData = [];
+            this.isRealtimeSource = false;
         },
 
         get filteredBranches() {

@@ -21,7 +21,7 @@
     showNewSessionModal: false,
     newSessionTitle: 'Stock Opname ' + new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }),
     newSessionBranch: 'Pusat',
-    newSessionAuditor: 'Manager Koperasi',
+    newSessionAuditor: @js(auth()->user()?->name ?? 'Manager'),
     
     showFinishModal: false,
     finishNotes: '',

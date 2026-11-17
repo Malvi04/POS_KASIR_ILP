@@ -72,7 +72,7 @@
             if (res.ok) {
                 const json = await res.json();
                 const items = json.data || (Array.isArray(json) ? json : []);
-                if (Array.isArray(items) && items.length > 0) {
+                if (Array.isArray(items)) {
                     const mapped = items.map(p => ({
                         id: p.id,
                         sku: p.sku,
@@ -84,6 +84,8 @@
                         stock: p.stock ?? 0,
                         minStock: p.min_stock ?? 10,
                         unit: p.unit || 'Pcs',
+                        costPrice: p.cost_price ?? 0,
+                        lastCostPrice: p.last_cost_price ?? p.cost_price ?? 0,
                         price: p.price ?? p.original_price ?? 0,
                         memberPrice: p.member_price ?? p.original_member_price ?? p.price ?? 0,
                         status: p.stock_status || this.calculateStatus(p.stock, p.min_stock, p.expired_date),
@@ -99,49 +101,11 @@
         } catch (e) {
             console.warn('API products fetch fallback:', e);
         }
-
-        try {
-            const raw = localStorage.getItem('pos_ilp_inventory_products_v1');
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    const cleaned = parsed.map(p => {
-                        let u = String(p.unit || 'Pcs').trim();
-                        if (u.toLowerCase().includes('pouch') || u.toLowerCase().includes('tetra') || u.toLowerCase().includes('puch')) {
-                            p.unit = 'Pcs';
-                        }
-                        return p;
-                    });
-                    const result = this.deduplicateProducts(cleaned);
-                    this.products = result.unique;
-                    if (result.hasDuplicates) {
-                        this.saveProductsToStorage();
-                    }
-                    return;
-                }
-            }
-        } catch (e) {
-            console.error('Failed to parse inventory storage:', e);
-        }
         this.products = [];
     },
 
     saveProductsToStorage() {
-        try {
-            const sliceToSave = this.products.length > 200 ? this.products.slice(0, 200) : this.products;
-            localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(sliceToSave));
-            window.dispatchEvent(new CustomEvent('pos-inventory-synced', { detail: { count: this.products.length } }));
-        } catch (e) {
-            console.error('Failed to save inventory products:', e);
-        }
-    },
-
-    resetToDefaultCatalog() {
-        if (confirm('Kembalikan seluruh katalog ke data bawaan simulasi (10 produk)? Data yang telah dibuat atau diedit akan ditimpa.')) {
-            this.products = JSON.parse(JSON.stringify(this.defaultProducts));
-            this.saveProductsToStorage();
-            this.triggerToast('Katalog berhasil di-reset ke 10 produk bawaan.', 'info');
-        }
+        window.dispatchEvent(new CustomEvent('pos-inventory-synced', { detail: { count: this.products.length } }));
     },
 
     get availableCategories() {
@@ -195,7 +159,7 @@
             if (res.ok) {
                 const json = await res.json();
                 const items = json.data || (Array.isArray(json) ? json : []);
-                if (Array.isArray(items) && items.length > 0) {
+                if (Array.isArray(items)) {
                     const mapped = items.map(p => ({
                         id: p.id,
                         sku: p.sku,
@@ -206,6 +170,8 @@
                         stock: Number(p.stock) || 0,
                         minStock: Number(p.min_stock) || 10,
                         unit: p.unit || 'Pcs',
+                        costPrice: Number(p.cost_price) || 0,
+                        lastCostPrice: Number(p.last_cost_price ?? p.cost_price) || 0,
                         price: Number(p.price ?? p.original_price) || 0,
                         memberPrice: Number(p.member_price ?? p.original_member_price ?? p.price) || 0,
                         rackLocation: p.rack_location || 'Lorong Toko',
@@ -414,6 +380,7 @@
 
     // Form Modal (Create & Edit) State
     showProductModal: false,
+    isSavingProduct: false,
     modalMode: 'create',
     formSkuOriginal: '',
     duplicateExistingProduct: null,
@@ -461,12 +428,12 @@
             name: '',
             brand: '',
             category: 'Minuman',
-            rackLocation: 'Lorong A - Rak 01',
-            stock: 24,
+            rackLocation: '',
+            stock: 0,
             minStock: 10,
             unit: 'Pcs',
-            price: 5000,
-            memberPrice: 4500,
+            price: 0,
+            memberPrice: 0,
             batchLot: 'BATCH-' + new Date().getFullYear() + String(new Date().getMonth() + 1).padStart(2, '0'),
             expiredDate: defaultExpDate
         };
@@ -518,6 +485,7 @@
     },
 
     async saveProduct() {
+        if (this.isSavingProduct) return;
         this.formErrors = {};
         this.duplicateExistingProduct = null;
         const f = this.formData;
@@ -601,14 +569,17 @@
             expiredDate: displayExpDate
         };
 
-        if (this.modalMode === 'create') {
-            try {
+        this.isSavingProduct = true;
+        const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('prd-' + Date.now());
+        try {
+            if (this.modalMode === 'create') {
                 const res = await fetch('/api/products', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'X-Idempotency-Key': idemKey
                     },
                     body: JSON.stringify({
                         sku: payload.sku,
@@ -622,30 +593,28 @@
                         member_price: Number(payload.memberPrice || payload.price),
                         stock: Number(payload.stock),
                         min_stock: Number(payload.minStock),
-                        rack_location: payload.rackLocation || 'Lorong A - Rak 01'
+                        rack_location: payload.rackLocation || 'Display Rak'
                     })
                 });
-                if (res.ok) {
-                    const json = await res.json();
+                const json = await res.json().catch(() => ({}));
+                if (res.ok && json.success !== false) {
                     if (json.data && json.data.id) {
                         payload.id = json.data.id;
                     }
+                    this.products.unshift(payload);
+                    this.saveProductsToStorage();
+                    this.showProductModal = false;
+                    this.triggerToast(`Produk '${payload.name}' berhasil ditambahkan ke katalog stok.`, 'success');
+                } else {
+                    this.formErrors.general = json.message || 'Gagal menyimpan produk ke server.';
+                    this.triggerToast(this.formErrors.general, 'error');
                 }
-            } catch (err) {
-                console.warn('API /api/products create error, storing locally', err);
-            }
-
-            this.products.unshift(payload);
-            this.saveProductsToStorage();
-            this.showProductModal = false;
-            this.triggerToast(`Produk '${payload.name}' berhasil ditambahkan ke katalog stok.`, 'success');
-        } else {
-            const idx = this.products.findIndex(p => p.sku === this.formSkuOriginal);
-            if (idx !== -1) {
-                const existingProduct = this.products[idx];
-                if (existingProduct.id) {
-                    try {
-                        await fetch(`/api/products/${existingProduct.id}`, {
+            } else {
+                const idx = this.products.findIndex(p => p.sku === this.formSkuOriginal);
+                if (idx !== -1) {
+                    const existingProduct = this.products[idx];
+                    if (existingProduct.id) {
+                        const res = await fetch(`/api/products/${existingProduct.id}`, {
                             method: 'PUT',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -658,7 +627,7 @@
                                 barcode: payload.barcode,
                                 category: payload.category,
                                 unit: payload.unit,
-                                cost_price: Math.round(Number(payload.price) * 0.75),
+                                cost_price: Number(existingProduct.costPrice ?? Math.round(Number(payload.price) * 0.75)),
                                 price: Number(payload.price),
                                 member_price: Number(payload.memberPrice || payload.price),
                                 stock: Number(payload.stock),
@@ -666,21 +635,31 @@
                                 rack_location: payload.rackLocation
                             })
                         });
-                    } catch (err) {
-                        console.warn('API /api/products update error, saving locally', err);
+                        const json = await res.json().catch(() => ({}));
+                        if (!res.ok) {
+                            this.formErrors.general = json.message || 'Gagal memperbarui produk di server.';
+                            this.triggerToast(this.formErrors.general, 'error');
+                            return;
+                        }
                     }
+                    payload.id = existingProduct.id;
+                    this.products[idx] = payload;
+                    this.saveProductsToStorage();
+                    if (this.selectedProduct && this.selectedProduct.sku === this.formSkuOriginal) {
+                        this.selectedProduct = payload;
+                    }
+                    this.showProductModal = false;
+                    this.triggerToast(`Produk '${payload.name}' berhasil diperbarui.`, 'success');
+                } else {
+                    this.formErrors.general = 'Produk tidak ditemukan di database katalog.';
                 }
-                payload.id = existingProduct.id;
-                this.products[idx] = payload;
-                this.saveProductsToStorage();
-                if (this.selectedProduct && this.selectedProduct.sku === this.formSkuOriginal) {
-                    this.selectedProduct = payload;
-                }
-                this.showProductModal = false;
-                this.triggerToast(`Produk '${payload.name}' berhasil diperbarui.`, 'success');
-            } else {
-                this.formErrors.general = 'Produk tidak ditemukan di database katalog.';
             }
+        } catch (err) {
+            console.error('API /api/products save error:', err);
+            this.formErrors.general = 'Terjadi kesalahan koneksi ke server database.';
+            this.triggerToast(this.formErrors.general, 'error');
+        } finally {
+            this.isSavingProduct = false;
         }
     },
 
@@ -706,15 +685,22 @@
 
         if (this.productToDelete.id) {
             try {
-                await fetch(`/api/products/${this.productToDelete.id}`, {
+                const res = await fetch(`/api/products/${this.productToDelete.id}`, {
                     method: 'DELETE',
                     headers: {
                         'Accept': 'application/json',
                         'X-CSRF-TOKEN': '{{ csrf_token() }}'
                     }
                 });
+                if (!res.ok) {
+                    const errJson = await res.json().catch(() => ({}));
+                    this.triggerToast(errJson.message || 'Gagal menghapus produk dari database.', 'error');
+                    return;
+                }
             } catch (err) {
-                console.warn('API /api/products delete error, removing locally', err);
+                console.warn('API /api/products delete error:', err);
+                this.triggerToast('Gagal menghubungi server saat menghapus produk.', 'error');
+                return;
             }
         }
 
@@ -771,127 +757,53 @@
         status: '',
         followUp: '',
         notes: '',
-        inspector: 'Hendra W. (QC Gudang Pusat)'
+        inspector: @js(auth()->user()?->name ?? 'Manager')
     },
 
-    initReturnStock() {
-        // Cek database Barang Masuk Retur (pos_ilp_manager_retur_masuk_v1)
-        const rawInDocs = localStorage.getItem('pos_ilp_manager_retur_masuk_v1');
-        let inDocs = null;
-        if (rawInDocs) {
-            try { inDocs = JSON.parse(rawInDocs); } catch(e) {}
-        }
-
-        const stored = localStorage.getItem('pos_ilp_stok_retur_gudang_v1');
-        let rawItems = [];
-        if (stored) {
-            try {
-                const parsed = JSON.parse(stored);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    rawItems = parsed;
-                }
-            } catch(e) {
-                console.error('Failed to parse return stock:', e);
-            }
-        }
-        if (rawItems.length === 0) {
-            rawItems = this.getDefaultReturnStock();
-        }
-
-        // ATURAN MUTLAK BISNIS RETUR GUDANG KOPKAR:
-        // 1. Barang retur HANYA masuk ke stok inventaris jika sudah DISETUJUI / DITERIMA di halaman Barang Masuk Retur!
-        // 2. Barang yang TIDAK DISETUJUI (DITOLAK / MENUNGGU PENGEMBALIAN) TIDAK MASUK STOK APAPUN!
-        // 3. Barang yang masih MENUNGGU VERIFIKASI belum boleh masuk stok aktif sampai disetujui.
-        const seenIds = new Set();
-        const cleaned = [];
-        rawItems.forEach(i => {
-            if (!i) return;
-
-            // Jika item merujuk ke dokumen di Barang Masuk Retur:
-            if (inDocs && Array.isArray(inDocs)) {
-                const matchedDoc = inDocs.find(d => d.docNo === i.docRef);
-                if (matchedDoc) {
-                    // Jika dokumen ditolak (MENUNGGU_PENGEMBALIAN atau DITOLAK), JANGAN MASUKKAN KE STOK!
-                    if (matchedDoc.status === 'MENUNGGU_PENGEMBALIAN' || matchedDoc.status === 'DITOLAK') {
-                        return;
-                    }
-                    // Jika dokumen masih menunggu verifikasi, BELUM MASUK STOK sampai disetujui!
-                    if (matchedDoc.status === 'MENUNGGU_VERIFIKASI') {
-                        return;
-                    }
-                    // Jika dokumen diterima sebagian, pastikan item yang qtyAccepted == 0 tidak masuk stok
-                    if (matchedDoc.status === 'DITERIMA_SEBAGIAN' && Array.isArray(matchedDoc.items)) {
-                        const matchedItem = matchedDoc.items.find(it => it.sku === i.sku);
-                        if (matchedItem && (parseInt(matchedItem.qtyAccepted) || 0) <= 0) {
-                            return;
-                        }
-                    }
-                }
-            }
-
-            // Cegah dokumen yang ditolak historis masuk ke stok
-            if (i.docRef === '#RTR-TK-2024-0892' || i.docRef === '#RTR-TK-2024-0890') {
-                return;
-            }
-
-            const id = i.id || ('RET-' + (i.sku || 'SKU') + '-' + (i.docRef || 'DOC'));
-            if (!seenIds.has(id)) {
-                seenIds.add(id);
-                i.id = id;
-                i.qtyReceived = Math.max(0, parseInt(i.qtyReceived) || 0);
-                i.unit = 'Pcs';
-                cleaned.push(i);
-            }
-        });
-
-        // Sinkronisasi dokumen yang SUDAH DISETUJUI dari Barang Masuk Retur
-        if (inDocs && Array.isArray(inDocs)) {
-            inDocs.forEach(d => {
-                if (d.status === 'DITERIMA_LENGKAP' || d.status === 'DITERIMA_SEBAGIAN') {
-                    if (Array.isArray(d.items)) {
-                        d.items.forEach(it => {
-                            const acceptedQty = parseInt(it.qtyAccepted, 10) || 0;
-                            if (acceptedQty > 0) {
-                                const existingIndex = cleaned.findIndex(c => c.docRef === d.docNo && c.sku === it.sku);
-                                if (existingIndex >= 0) {
-                                    cleaned[existingIndex].qtyReceived = acceptedQty;
-                                } else {
-                                    cleaned.unshift({
-                                        id: 'RET-GD-' + (it.sku || 'SKU') + '-' + (d.docNo.replace(/[^a-zA-Z0-9]/g, '')),
-                                        sku: it.sku || 'PRD-RET',
-                                        barcode: it.sku || '899000000',
-                                        name: it.name,
-                                        branchOrigin: d.warehouseOrigin || 'Cabang',
-                                        docRef: d.docNo,
-                                        receivedDate: d.receivedAt || d.date || 'Hari ini',
-                                        qtyReceived: acceptedQty,
+    async initReturnStock() {
+        try {
+            const res = await fetch('/api/returns?direction=toko_ke_gudang', { headers: { 'Accept': 'application/json' } });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && Array.isArray(json.data)) {
+                    const items = [];
+                    json.data.forEach(doc => {
+                        if (doc.statusKey === 'disetujui' || doc.statusKey === 'selesai') {
+                            (doc.products || []).forEach((p, idx) => {
+                                const qtyNum = parseInt(p.qty, 10) || 0;
+                                if (qtyNum > 0) {
+                                    items.push({
+                                        id: 'RET-GD-' + doc.id + '-' + idx,
+                                        sku: p.sku || '-',
+                                        barcode: p.barcode || '-',
+                                        name: p.name,
+                                        branchOrigin: doc.branchOrigin || 'Cabang',
+                                        docRef: doc.docNo,
+                                        receivedDate: doc.date || '-',
+                                        qtyReceived: qtyNum,
                                         unit: 'Pcs',
-                                        initialCondition: it.condition || 'Barang Retur Diterima',
-                                        inspectionStatus: 'QC Selesai',
+                                        initialCondition: doc.conditionLabel || 'Barang Retur Diterima',
+                                        inspectionStatus: doc.statusKey === 'selesai' ? 'QC Selesai' : 'Menunggu Pemeriksaan',
                                         followUp: 'Karantina Gudang / Klaim Supplier',
-                                        inspectorNotes: `Diterima dari ${d.warehouseOrigin} via dokumen ${d.docNo}. Disetujui masuk stok retur. ${it.note || ''}`,
-                                        inspectedBy: d.receiverName || 'Budi Santoso (Manager Operasional)',
-                                        updatedAt: d.receivedAt || new Date().toLocaleString('id-ID')
+                                        inspectorNotes: doc.conditionDesc || '-',
+                                        inspectedBy: @js(auth()->user()?->name ?? 'Manager'),
+                                        updatedAt: doc.date || '-'
                                     });
                                 }
-                            }
-                        });
-                    }
+                            });
+                        }
+                    });
+                    this.returnStockItems = items;
+                    return;
                 }
-            });
+            }
+        } catch (e) {
+            console.error('Failed to load return stock from API:', e);
         }
-
-        this.returnStockItems = cleaned;
-        this.saveReturnStock();
+        this.returnStockItems = [];
     },
 
-    saveReturnStock() {
-        try {
-            localStorage.setItem('pos_ilp_stok_retur_gudang_v1', JSON.stringify(this.returnStockItems));
-        } catch(e) {
-            console.error('Failed to save return stock:', e);
-        }
-    },
+    saveReturnStock() {},
 
     getDefaultReturnStock() {
         return [];
@@ -919,13 +831,6 @@
     },
 
     get totalRejectedInDC() {
-        try {
-            const raw = localStorage.getItem('pos_ilp_manager_retur_masuk_v1');
-            if (raw) {
-                const docs = JSON.parse(raw);
-                return docs.reduce((acc, d) => acc + (parseInt(d.sisaBarangDitolakDiGudang) || 0), 0);
-            }
-        } catch(e) {}
         return 0;
     },
 
@@ -1039,7 +944,7 @@
             status: item.inspectionStatus || 'Menunggu Pemeriksaan',
             followUp: item.followUp || '',
             notes: item.inspectorNotes || '',
-            inspector: item.inspectedBy || 'Hendra W. (DC Head)'
+            inspector: item.inspectedBy || @js(auth()->user()?->name ?? 'Manager')
         };
         this.showInspectionModal = true;
     },
@@ -1060,29 +965,7 @@
     },
 
     logReturnStockAudit(item, oldStatus, newStatus) {
-        try {
-            const rawLogs = localStorage.getItem('pos_ilp_audit_logs_v1');
-            const logs = rawLogs ? JSON.parse(rawLogs) : [];
-            const newLog = {
-                id: 'AUD-' + Date.now(),
-                timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-                actor_id: 'USR-MGR-001',
-                actor_name: 'Budi Santoso',
-                actor_role: 'Manager',
-                action_category: 'INVENTORY',
-                action_type: 'UPDATE_RETURN_INSPECTION',
-                reference_number: item.docRef || item.id,
-                location: 'Gudang Pusat',
-                description: `Pemeriksaan stok retur ${item.sku} - ${item.name} (${item.qtyReceived} ${item.unit}) diubah dari '${oldStatus}' ke '${newStatus}'.`,
-                previous_state: JSON.stringify({ status: oldStatus }),
-                new_state: JSON.stringify({ status: newStatus, followUp: item.followUp, notes: item.inspectorNotes }),
-                status: 'SUCCESS'
-            };
-            logs.unshift(newLog);
-            localStorage.setItem('pos_ilp_audit_logs_v1', JSON.stringify(logs.slice(0, 300)));
-        } catch(e) {
-            console.error('Audit log failed:', e);
-        }
+        // Audit log dicatat oleh backend saat operasi API
     }
 }"
 x-init="initOpening(); initProducts(); initReturnStock();"
@@ -1320,6 +1203,9 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                 <span class="font-bold text-gray-900 text-[13px]" x-text="formatRupiah(p.price)"></span>
                                                 <template x-if="p.memberPrice && p.memberPrice < p.price">
                                                     <span class="text-[10.5px] text-[#0052cc] font-semibold" x-text="'Mbr: ' + formatRupiah(p.memberPrice)"></span>
+                                                </template>
+                                                <template x-if="(p.lastCostPrice ?? p.costPrice ?? 0) > 0">
+                                                    <span class="text-[10px] text-slate-400 font-medium" x-text="'Beli: ' + formatRupiah(p.lastCostPrice ?? p.costPrice)"></span>
                                                 </template>
                                             </div>
                                         </td>
@@ -2214,16 +2100,18 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                 <!-- Footer -->
                 <div class="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-slate-50">
                     <button type="button"
+                            :disabled="isSavingProduct"
                             @click="showProductModal = false"
-                            class="px-5 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-bold text-xs hover:bg-gray-100 transition-colors cursor-pointer">
+                            class="px-5 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-bold text-xs hover:bg-gray-100 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                         Batal
                     </button>
 
                     <button type="button"
+                            :disabled="isSavingProduct"
                             @click="saveProduct()"
-                            class="px-6 py-2.5 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-xs flex items-center gap-2 shadow-xs transition-colors cursor-pointer active:scale-95">
-                        <span class="material-symbols-rounded text-[18px]">save</span>
-                        <span x-text="modalMode === 'create' ? 'Simpan Produk Baru' : 'Perbarui Data Produk'"></span>
+                            class="px-6 py-2.5 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-xs flex items-center gap-2 shadow-xs transition-colors cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <span class="material-symbols-rounded text-[18px]" :class="isSavingProduct ? 'animate-spin' : ''" x-text="isSavingProduct ? 'progress_activity' : 'save'"></span>
+                        <span x-text="isSavingProduct ? 'Menyimpan...' : (modalMode === 'create' ? 'Simpan Produk Baru' : 'Perbarui Data Produk')"></span>
                     </button>
                 </div>
 
@@ -2373,16 +2261,21 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-3 p-4 bg-blue-50/50 rounded-xl border border-blue-100">
+                    <div class="grid grid-cols-3 gap-3 p-4 bg-blue-50/50 rounded-xl border border-blue-100">
                         <div>
                             <span class="text-[10px] font-bold text-gray-500 uppercase block">HARGA UMUM</span>
-                            <span class="text-lg font-black text-gray-900 font-mono mt-0.5 block" x-text="formatRupiah(selectedProduct?.price)"></span>
+                            <span class="text-base font-black text-gray-900 font-mono mt-0.5 block" x-text="formatRupiah(selectedProduct?.price)"></span>
                             <span class="text-[10px] text-gray-500">Harga non-member</span>
                         </div>
                         <div>
                             <span class="text-[10px] font-bold text-[#0052cc] uppercase block">HARGA ANGGOTA KOPKAR</span>
-                            <span class="text-lg font-black text-[#0052cc] font-mono mt-0.5 block" x-text="formatRupiah(selectedProduct?.memberPrice || selectedProduct?.price)"></span>
+                            <span class="text-base font-black text-[#0052cc] font-mono mt-0.5 block" x-text="formatRupiah(selectedProduct?.memberPrice || selectedProduct?.price)"></span>
                             <span class="text-[10px] text-emerald-700 font-bold">Harga member toko</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] font-bold text-slate-500 uppercase block">HARGA BELI TERAKHIR</span>
+                            <span class="text-base font-black text-slate-800 font-mono mt-0.5 block" x-text="formatRupiah(selectedProduct?.lastCostPrice ?? selectedProduct?.costPrice ?? 0)"></span>
+                            <span class="text-[10px] text-slate-500">Update saat terima barang</span>
                         </div>
                     </div>
 
@@ -2461,19 +2354,6 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                            @keyup.enter="handleScan()"
                            placeholder="Scan atau ketik barcode..."
                            class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-xs font-mono font-bold focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20">
-
-                    <div class="flex flex-wrap items-center gap-2">
-                        <button type="button"
-                                @click="scannerInput = '8991234567890'; handleScan();"
-                                class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-[10px] font-mono font-bold text-gray-700 cursor-pointer">
-                            Aqua 600ml
-                        </button>
-                        <button type="button"
-                                @click="scannerInput = '899275321004'; handleScan();"
-                                class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-[10px] font-mono font-bold text-gray-700 cursor-pointer">
-                            Indomie Goreng
-                        </button>
-                    </div>
                 </div>
 
                 <div class="flex justify-end gap-2 mt-6">

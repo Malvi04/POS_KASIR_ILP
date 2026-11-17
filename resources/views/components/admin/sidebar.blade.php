@@ -104,11 +104,17 @@
              ownerEmail: @js($sidebarOwnerEmail),
              ownerNik: @js($sidebarOwnerNik),
              ownerAvatar: @js($sidebarOwnerAvatar),
-             initProfile() {
+             async initProfile() {
                  try {
-                     const p = JSON.parse(localStorage.getItem('pos_ilp_owner_profile_v1'));
-                     if (p) {
-                         if (p.avatar) this.ownerAvatar = p.avatar;
+                     const res = await fetch('/api/owner/profile', { headers: { 'Accept': 'application/json' } });
+                     if (res.ok) {
+                         const json = await res.json();
+                         if (json.success && json.data) {
+                             if (json.data.name) this.ownerName = json.data.name;
+                             if (json.data.email) this.ownerEmail = String(json.data.email).toUpperCase();
+                             if (json.data.nik) this.ownerNik = json.data.nik;
+                             if (json.data.avatar) this.ownerAvatar = json.data.avatar;
+                         }
                      }
                  } catch(e){}
              }

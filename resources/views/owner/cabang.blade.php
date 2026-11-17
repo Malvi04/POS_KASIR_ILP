@@ -544,8 +544,11 @@
             </div>
 
             <div class="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
-                <button type="button" @click="showAddBranchModal = false" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-[12.5px]">Batal</button>
-                <button type="submit" class="px-5 py-2 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-[12.5px]">Daftarkan Lokasi</button>
+                <button type="button" :disabled="isSavingBranch" @click="showAddBranchModal = false" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-[12.5px] disabled:opacity-50 disabled:cursor-not-allowed">Batal</button>
+                <button type="submit" :disabled="isSavingBranch" class="px-5 py-2 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-[12.5px] flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span x-show="isSavingBranch" class="material-symbols-rounded text-[15px] animate-spin">progress_activity</span>
+                    <span x-text="isSavingBranch ? 'Menyimpan...' : 'Daftarkan Lokasi'"></span>
+                </button>
             </div>
         </form>
     </x-admin.modal>
@@ -595,11 +598,16 @@ function cabangApp() {
         showAddBranchModal: false,
         showEditBranchModal: false,
         showFilterDropdown: false,
+        isSavingBranch: false,
         selectedBranchId: null,
         branchTrendPeriod: '7days',
 
         defaultBranches: [],
         warehouseLowestItems: [],
+        branchSummary: {
+            total_stok_master: 0,
+            avg_profitability: '0%'
+        },
 
         branches: [],
         newBranch: { name: '', facilityType: 'store', address: '', manager: '', managerEmail: '', status: 'AKTIF' },
@@ -611,55 +619,46 @@ function cabangApp() {
 
         async initBranches() {
             try {
-                const res = await fetch('/api/branches');
+                const res = await fetch('/api/branches', { headers: { 'Accept': 'application/json' } });
                 if (res.ok) {
                     const result = await res.json();
-                    if (result.success && Array.isArray(result.data) && result.data.length > 0) {
+                    if (result.success && Array.isArray(result.data)) {
                         this.branches = result.data;
-                        this.selectedBranchId = this.branches[0].id;
-                        this.saveBranches();
-                        this.loadWarehouseLowest();
+                        if (result.summary) {
+                            this.branchSummary = result.summary;
+                        }
+                        this.selectedBranchId = this.branches.length > 0 ? this.branches[0].id : null;
+                        await this.loadWarehouseLowest();
                         return;
                     }
                 }
             } catch (err) {
-                console.warn('API /api/branches unavailable, loading local cache', err);
+                console.warn('API /api/branches error:', err);
             }
 
-            try {
-                const raw = localStorage.getItem('pos_ilp_branches_v1');
-                if (raw) {
-                    const parsed = JSON.parse(raw);
-                    if (Array.isArray(parsed) && parsed.length > 0) {
-                        this.branches = parsed;
-                        this.selectedBranchId = this.branches[0].id;
-                        this.loadWarehouseLowest();
-                        return;
-                    }
-                }
-            } catch(e) {}
             this.branches = [];
             this.selectedBranchId = null;
-            this.loadWarehouseLowest();
+            await this.loadWarehouseLowest();
         },
 
-        loadWarehouseLowest() {
+        async loadWarehouseLowest() {
             try {
-                const prodsRaw = localStorage.getItem('pos_ilp_inventory_products_v1');
-                if (prodsRaw) {
-                    const prods = JSON.parse(prodsRaw);
+                const res = await fetch('/api/products?per_page=100', { headers: { 'Accept': 'application/json' } });
+                if (res.ok) {
+                    const result = await res.json();
+                    const prods = result.data || [];
                     if (Array.isArray(prods) && prods.length > 0) {
                         this.warehouseLowestItems = prods.slice()
                             .sort((a,b) => (Number(a.stock)||0) - (Number(b.stock)||0))
                             .slice(0, 10)
                             .map((p, idx) => ({
                                 rank: idx + 1,
-                                sku: p.sku || ('SKU-' + (idx+1)),
+                                sku: p.sku || '-',
                                 name: p.name,
                                 stock: Number(p.stock) || 0,
-                                minStock: Number(p.minStock) || 10,
+                                minStock: Number(p.min_stock) || 10,
                                 unit: p.unit || 'Pcs',
-                                status: (Number(p.stock)||0) <= 0 ? 'Habis' : ((Number(p.stock)||0) <= (Number(p.minStock)||10) ? 'Kritis' : 'Menipis')
+                                status: (Number(p.stock)||0) <= 0 ? 'Habis' : ((Number(p.stock)||0) <= (Number(p.min_stock)||10) ? 'Kritis' : 'Menipis')
                             }));
                         return;
                     }
@@ -668,11 +667,7 @@ function cabangApp() {
             this.warehouseLowestItems = [];
         },
 
-        saveBranches() {
-            try {
-                localStorage.setItem('pos_ilp_branches_v1', JSON.stringify(this.branches));
-            } catch(e) {}
-        },
+        saveBranches() {},
 
         selectBranch(id) {
             this.selectedBranchId = id;
@@ -691,20 +686,11 @@ function cabangApp() {
         },
 
         get totalStokMaster() {
-            try {
-                const raw = localStorage.getItem('pos_ilp_inventory_products_v1');
-                if (raw) {
-                    const list = JSON.parse(raw);
-                    if (Array.isArray(list)) {
-                        return list.reduce((sum, p) => sum + (Number(p.stock) || 0), 0);
-                    }
-                }
-            } catch(e) {}
-            return 0;
+            return Number(this.branchSummary?.total_stok_master) || 0;
         },
 
         get avgProfitability() {
-            return '24.5%';
+            return this.branchSummary?.avg_profitability || '0%';
         },
 
         get selectedBranch() {
@@ -729,55 +715,40 @@ function cabangApp() {
         },
 
         async saveNewBranch() {
+            if (this.isSavingBranch) return;
             if (!this.newBranch.name || !this.newBranch.manager) {
                 if (typeof triggerToast === 'function') triggerToast('Harap lengkapi nama lokasi dan penanggung jawab!', 'error');
                 return;
             }
 
+            this.isSavingBranch = true;
+            const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('cab-' + Date.now());
             try {
                 const res = await fetch('/api/branches', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'X-Idempotency-Key': idemKey
                     },
                     body: JSON.stringify(this.newBranch)
                 });
                 if (res.ok) {
-                    const created = await res.json();
                     if (typeof triggerToast === 'function') triggerToast('Lokasi operasional ' + this.newBranch.name + ' berhasil didaftarkan!', 'success');
                     this.showAddBranchModal = false;
                     this.newBranch = { name: '', facilityType: 'store', address: '', manager: '', managerEmail: '', status: 'AKTIF' };
                     await this.initBranches();
                     return;
                 }
+                const errJson = await res.json().catch(() => ({}));
+                if (typeof triggerToast === 'function') triggerToast(errJson.message || 'Gagal mendaftarkan lokasi.', 'error');
             } catch (err) {
-                console.warn('API error, saving locally', err);
+                console.error('API error creating branch:', err);
+                if (typeof triggerToast === 'function') triggerToast('Terjadi kesalahan koneksi saat mendaftarkan lokasi.', 'error');
+            } finally {
+                this.isSavingBranch = false;
             }
-
-            const isStore = this.newBranch.facilityType === 'store';
-            const newId = (isStore ? 'CAB-00' : 'GDG-00') + (this.branches.length + 1);
-            const item = {
-                id: newId,
-                name: this.newBranch.name,
-                facilityType: this.newBranch.facilityType,
-                typeName: isStore ? 'Gerai Ritel Toko' : 'Gudang Logistik',
-                address: this.newBranch.address || 'Alamat Lokasi Baru',
-                manager: this.newBranch.manager,
-                managerRole: isStore ? 'Manager Cabang' : 'Supervisor Gudang',
-                managerEmail: this.newBranch.managerEmail || 'manager@ilp-pos.co.id',
-                status: this.newBranch.status,
-                totalSku: '500',
-                stockOut: 0,
-                topProducts: []
-            };
-            this.branches.push(item);
-            this.saveBranches();
-            this.selectedBranchId = newId;
-            this.showAddBranchModal = false;
-            if (typeof triggerToast === 'function') triggerToast('Lokasi operasional ' + item.name + ' berhasil didaftarkan!', 'success');
-            this.newBranch = { name: '', facilityType: 'store', address: '', manager: '', managerEmail: '', status: 'AKTIF' };
         },
 
         openEditModal(branch) {
@@ -792,33 +763,26 @@ function cabangApp() {
             }
 
             try {
-                if (typeof this.editingBranch.id === 'number') {
-                    const res = await fetch(`/api/branches/${this.editingBranch.id}`, {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json',
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                        },
-                        body: JSON.stringify(this.editingBranch)
-                    });
-                    if (res.ok) {
-                        this.showEditBranchModal = false;
-                        if (typeof triggerToast === 'function') triggerToast('Data cabang ' + this.editingBranch.name + ' berhasil diperbarui!', 'success');
-                        await this.initBranches();
-                        return;
-                    }
+                const res = await fetch(`/api/branches/${this.editingBranch.id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify(this.editingBranch)
+                });
+                if (res.ok) {
+                    this.showEditBranchModal = false;
+                    if (typeof triggerToast === 'function') triggerToast('Data cabang ' + this.editingBranch.name + ' berhasil diperbarui!', 'success');
+                    await this.initBranches();
+                    return;
                 }
+                const errJson = await res.json().catch(() => ({}));
+                if (typeof triggerToast === 'function') triggerToast(errJson.message || 'Gagal memperbarui cabang.', 'error');
             } catch (err) {
-                console.warn('API error updating branch, updating locally', err);
-            }
-
-            const idx = this.branches.findIndex(b => b.id === this.editingBranch.id);
-            if (idx !== -1) {
-                this.branches[idx] = { ...this.branches[idx], ...this.editingBranch };
-                this.saveBranches();
-                this.showEditBranchModal = false;
-                if (typeof triggerToast === 'function') triggerToast('Data cabang ' + this.editingBranch.name + ' berhasil diperbarui!', 'success');
+                console.error('API error updating branch:', err);
+                if (typeof triggerToast === 'function') triggerToast('Terjadi kesalahan koneksi saat memperbarui cabang.', 'error');
             }
         },
 
@@ -826,30 +790,24 @@ function cabangApp() {
             if (!confirm(`Apakah Anda yakin ingin menghapus lokasi ${branch.name}?`)) return;
 
             try {
-                if (typeof branch.id === 'number') {
-                    const res = await fetch(`/api/branches/${branch.id}`, {
-                        method: 'DELETE',
-                        headers: {
-                            'Accept': 'application/json',
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                        }
-                    });
-                    if (res.ok) {
-                        if (typeof triggerToast === 'function') triggerToast('Lokasi ' + branch.name + ' berhasil dihapus.', 'info');
-                        await this.initBranches();
-                        return;
+                const res = await fetch(`/api/branches/${branch.id}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
                     }
+                });
+                if (res.ok) {
+                    if (typeof triggerToast === 'function') triggerToast('Lokasi ' + branch.name + ' berhasil dihapus.', 'info');
+                    await this.initBranches();
+                    return;
                 }
+                const errJson = await res.json().catch(() => ({}));
+                if (typeof triggerToast === 'function') triggerToast(errJson.message || 'Gagal menghapus lokasi.', 'error');
             } catch (err) {
-                console.warn('API error deleting branch', err);
+                console.error('API error deleting branch:', err);
+                if (typeof triggerToast === 'function') triggerToast('Terjadi kesalahan koneksi saat menghapus lokasi.', 'error');
             }
-
-            this.branches = this.branches.filter(b => b.id !== branch.id);
-            this.saveBranches();
-            if (this.selectedBranchId === branch.id) {
-                this.selectedBranchId = this.branches[0] ? this.branches[0].id : null;
-            }
-            if (typeof triggerToast === 'function') triggerToast('Lokasi ' + branch.name + ' berhasil dihapus.', 'info');
         },
 
         exportData() {

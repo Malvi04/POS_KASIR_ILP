@@ -4,8 +4,8 @@
 
 @section('content')
 <div x-data="{
-    currentRole: @js(auth()->user()?->isOwnerOrSuperadmin() ? 'Owner' : (auth()->check() ? 'Manager' : null)) || (new URLSearchParams(window.location.search).get('role') || localStorage.getItem('pos_user_role') || 'Manager'),
-    userName: @js(auth()->user()?->name) || (localStorage.getItem('pos_user_name') || 'Admin Manager'),
+    currentRole: @js(auth()->user()?->isOwnerOrSuperadmin() ? 'Owner' : 'Manager'),
+    userName: @js(auth()->user()?->name ?? 'Manager'),
     isOwner() {
         return (this.currentRole || '').toLowerCase() === 'owner' || (this.currentRole || '').toLowerCase() === 'superadmin';
     },
@@ -43,57 +43,12 @@
             console.error('Failed to fetch dashboard summary from API', e);
         }
 
-        // Fallback if network or offline
-        const rawTrx = localStorage.getItem('pos_ilp_transactions_v1');
         this.salesToday = 0;
         this.trxCountToday = 0;
-        if (rawTrx) {
-            try {
-                const trxs = JSON.parse(rawTrx);
-                if (Array.isArray(trxs)) {
-                    this.trxCountToday = trxs.length;
-                    this.salesToday = trxs.reduce((sum, t) => sum + (Number(t.total) || Number(t.finalTotal) || 0), 0);
-                }
-            } catch(e){}
-        }
-
-        const rawProds = localStorage.getItem('pos_ilp_inventory_products_v1');
         this.lowStockCount = 0;
         this.lowStockItems = [];
-        if (rawProds) {
-            try {
-                const prods = JSON.parse(rawProds);
-                if (Array.isArray(prods)) {
-                    const critical = prods.filter(p => Number(p.stock !== undefined ? p.stock : p.stok) <= Number(p.minStock || 10));
-                    this.lowStockCount = critical.length;
-                    this.lowStockItems = critical.slice(0, 5).map(p => ({
-                        nama: p.name || p.nama,
-                        stok: Number(p.stock !== undefined ? p.stock : p.stok) || 0,
-                        kategori: p.category || p.kategori || 'Umum',
-                        desc: 'Stok tersisa: ' + (p.stock !== undefined ? p.stock : p.stok)
-                    }));
-                }
-            } catch(e){}
-        }
-
-        // 3. Active Cashiers from session storage
         this.cashierList = [];
-        const rawSession = localStorage.getItem('pos_ilp_active_cashier_session_v1');
-        if (rawSession) {
-            try {
-                const sess = JSON.parse(rawSession);
-                if (sess && sess.status === 'OPEN' && sess.cashierName) {
-                    this.cashierList.push({
-                        name: sess.cashierName,
-                        initial: sess.cashierName.substring(0, 2).toUpperCase(),
-                        terminal: sess.terminalLabel || 'Terminal 01',
-                        total: 'Rp ' + this.salesToday.toLocaleString('id-ID'),
-                        status: 'Aktif',
-                        color: 'bg-green-500'
-                    });
-                }
-            } catch(e){}
-        }
+        this.weeklySales = [];
         this.isLoading = false;
     },
 
@@ -138,7 +93,7 @@ class="flex h-screen w-full bg-[#f4f7fb] font-sans text-gray-800 overflow-hidden
                     <span class="text-xs font-bold text-gray-800" x-text="isOwner() ? (userName + ' (Owner)') : userName">Manager Gerai</span>
                     <div class="w-6 h-6 rounded-full text-white flex items-center justify-center text-xs font-bold shadow-2xs"
                          :class="isOwner() ? 'bg-purple-900 ring-2 ring-purple-300' : 'bg-[#0052cc]'"
-                         x-text="isOwner() ? 'HW' : 'M'">
+                         x-text="(userName || 'M').split(' ').filter(Boolean).map(w => w[0]).join('').substring(0, 2).toUpperCase()">
                         M
                     </div>
                 </div>
@@ -276,7 +231,7 @@ class="flex h-screen w-full bg-[#f4f7fb] font-sans text-gray-800 overflow-hidden
                             </template>
                         </template>
                         <template x-if="!weeklySales || weeklySales.length === 0">
-                            <div class="w-full flex items-center justify-center text-xs text-gray-400 py-8">
+                            <div class="w-full flex items-center justify-center text-xs text-gray-400 py-8" x-text="isLoading ? 'Memuat statistik mingguan...' : 'Belum ada data penjualan minggu ini.'">
                                 Memuat statistik mingguan...
                             </div>
                         </template>

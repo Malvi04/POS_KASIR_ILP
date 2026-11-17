@@ -501,11 +501,12 @@
                     </div>
 
                     <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
-                        <button type="button" @click="showCreateModal = false" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold transition-colors">
+                        <button type="button" :disabled="isSavingProduct" @click="showCreateModal = false" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                             Batal
                         </button>
-                        <button type="submit" class="px-5 py-2 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold transition-colors shadow-2xs">
-                            Simpan Master SKU
+                        <button type="submit" :disabled="isSavingProduct" class="px-5 py-2 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold transition-colors shadow-2xs flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <span x-show="isSavingProduct" class="material-symbols-rounded text-[15px] animate-spin">progress_activity</span>
+                            <span x-text="isSavingProduct ? 'Menyimpan...' : 'Simpan Master SKU'"></span>
                         </button>
                     </div>
                 </form>
@@ -757,6 +758,7 @@ function ownerProductsApp() {
         showEditModal: false,
         showDetailModal: false,
         showScannerModal: false,
+        isSavingProduct: false,
         scannerInput: '',
 
         selectedProduct: null,
@@ -766,12 +768,12 @@ function ownerProductsApp() {
             name: '',
             brand: '',
             category: 'Kebutuhan Pokok',
-            stock: 50,
+            stock: 0,
             minStock: 10,
             unit: 'Pcs',
-            price: 15000,
-            memberPrice: 14000,
-            rackLocation: 'Lorong A - Rak 01'
+            price: 0,
+            memberPrice: 0,
+            rackLocation: ''
         },
         formEditProduct: {},
 
@@ -829,10 +831,10 @@ function ownerProductsApp() {
 
         async initProducts() {
             try {
-                const res = await fetch('/api/products?per_page=100');
+                const res = await fetch('/api/products?per_page=100', { headers: { 'Accept': 'application/json' } });
                 if (res.ok) {
                     const result = await res.json();
-                    if (result.success && Array.isArray(result.data) && result.data.length > 0) {
+                    if (result.success && Array.isArray(result.data)) {
                         const formatted = result.data.map(p => ({
                             id: p.id,
                             sku: p.sku,
@@ -850,29 +852,11 @@ function ownerProductsApp() {
                         }));
                         const dedup = this.deduplicateProducts(formatted);
                         this.products = dedup.unique.map(p => this.ensureBranchStock(p));
-                        this.saveProductsToStorage();
                         return;
                     }
                 }
             } catch (err) {
-                console.warn('API /api/products error, reading local cache', err);
-            }
-
-            try {
-                const raw = localStorage.getItem('pos_ilp_inventory_products_v1');
-                if (raw) {
-                    const parsed = JSON.parse(raw);
-                    if (Array.isArray(parsed) && parsed.length > 0) {
-                        const result = this.deduplicateProducts(parsed);
-                        this.products = result.unique.map(p => this.ensureBranchStock(p));
-                        if (result.hasDuplicates) {
-                            this.saveProductsToStorage();
-                        }
-                        return;
-                    }
-                }
-            } catch (e) {
-                console.error('Failed to parse inventory products', e);
+                console.error('API /api/products error', err);
             }
             this.products = [];
         },
@@ -910,13 +894,7 @@ function ownerProductsApp() {
         },
 
         saveProductsToStorage() {
-            try {
-                const sliceToSave = this.products.length > 200 ? this.products.slice(0, 200) : this.products;
-                localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(sliceToSave));
-                window.dispatchEvent(new CustomEvent('pos-inventory-synced', { detail: { count: this.products.length } }));
-            } catch (e) {
-                console.error('Failed to save products:', e);
-            }
+            window.dispatchEvent(new CustomEvent('pos-inventory-synced', { detail: { count: this.products.length } }));
         },
 
         searchTimer: null,
@@ -938,7 +916,7 @@ function ownerProductsApp() {
                 });
                 if (res.ok) {
                     const result = await res.json();
-                    if (result.success && Array.isArray(result.data) && result.data.length > 0) {
+                    if (result.success && Array.isArray(result.data)) {
                         const formatted = result.data.map(p => ({
                             id: p.id,
                             sku: p.sku,
@@ -1026,24 +1004,24 @@ function ownerProductsApp() {
         },
 
         openCreateModal() {
-            const nextIdx = this.products.length + 1;
             this.formProduct = {
-                sku: 'PRD-' + String(nextIdx).padStart(3, '0'),
-                barcode: '899' + Math.floor(1000000000 + Math.random() * 9000000000),
+                sku: '',
+                barcode: '',
                 name: '',
                 brand: '',
                 category: 'Kebutuhan Pokok',
-                stock: 50,
+                stock: 0,
                 minStock: 10,
                 unit: 'Pcs',
-                price: 15000,
-                memberPrice: 14000,
-                rackLocation: 'Lorong A - Rak 01'
+                price: 0,
+                memberPrice: 0,
+                rackLocation: ''
             };
             this.showCreateModal = true;
         },
 
         async saveNewProduct() {
+            if (this.isSavingProduct) return;
             if (!this.formProduct.name.trim() || !this.formProduct.sku.trim()) return;
             const cleanSku = this.formProduct.sku.trim().toUpperCase();
             const cleanBarcode = (this.formProduct.barcode || '').trim();
@@ -1061,13 +1039,16 @@ function ownerProductsApp() {
                 }
             }
 
+            this.isSavingProduct = true;
+            const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('prd-' + Date.now());
             try {
                 const res = await fetch('/api/products', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'X-Idempotency-Key': idemKey
                     },
                     body: JSON.stringify({
                         sku: cleanSku,
@@ -1081,7 +1062,7 @@ function ownerProductsApp() {
                         member_price: Number(this.formProduct.memberPrice || this.formProduct.price),
                         stock: Number(this.formProduct.stock),
                         min_stock: Number(this.formProduct.minStock),
-                        rack_location: this.formProduct.rackLocation || 'Lorong A - Rak 01'
+                        rack_location: this.formProduct.rackLocation || ''
                     })
                 });
                 if (res.ok) {
@@ -1090,21 +1071,14 @@ function ownerProductsApp() {
                     await this.initProducts();
                     return;
                 }
+                const errJson = await res.json().catch(() => ({}));
+                if (typeof triggerToast === 'function') triggerToast(errJson.message || 'Gagal menyimpan produk ke server.', 'error');
             } catch (err) {
-                console.warn('API /api/products create error, storing locally', err);
+                console.error('API /api/products create error', err);
+                if (typeof triggerToast === 'function') triggerToast('Gagal terhubung ke server saat menyimpan produk.', 'error');
+            } finally {
+                this.isSavingProduct = false;
             }
-
-            let newP = {
-                ...this.formProduct,
-                sku: cleanSku,
-                barcode: cleanBarcode,
-                status: this.formProduct.stock <= 0 ? 'HABIS' : (this.formProduct.stock <= this.formProduct.minStock ? 'STOK_RENDAH' : 'TERSEDIA')
-            };
-            newP = this.ensureBranchStock(newP);
-            this.products.unshift(newP);
-            this.saveProductsToStorage();
-            this.showCreateModal = false;
-            if (typeof triggerToast === 'function') triggerToast(`Master SKU '${newP.name}' berhasil didaftarkan.`, 'success');
         },
 
         openEditModal(p) {
@@ -1131,57 +1105,39 @@ function ownerProductsApp() {
                 }
             }
 
-            if (this.selectedProduct.id) {
-                try {
-                    const res = await fetch(`/api/products/${this.selectedProduct.id}`, {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json',
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                        },
-                        body: JSON.stringify({
-                            name: this.formEditProduct.name,
-                            sku: cleanSku,
-                            barcode: cleanBarcode,
-                            category: this.formEditProduct.category,
-                            unit: this.formEditProduct.unit,
-                            cost_price: Math.round(Number(this.formEditProduct.price) * 0.75),
-                            price: Number(this.formEditProduct.price),
-                            member_price: Number(this.formEditProduct.memberPrice || this.formEditProduct.price),
-                            stock: Number(this.formEditProduct.stock),
-                            min_stock: Number(this.formEditProduct.minStock),
-                            rack_location: this.formEditProduct.rackLocation
-                        })
-                    });
-                    if (res.ok) {
-                        this.showEditModal = false;
-                        if (typeof triggerToast === 'function') triggerToast(`Data master SKU '${this.formEditProduct.name}' berhasil diperbarui di database.`, 'success');
-                        await this.initProducts();
-                        return;
-                    }
-                } catch (err) {
-                    console.warn('API update error, saving locally', err);
+            try {
+                const res = await fetch(`/api/products/${this.selectedProduct.id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({
+                        name: this.formEditProduct.name,
+                        sku: cleanSku,
+                        barcode: cleanBarcode,
+                        category: this.formEditProduct.category,
+                        unit: this.formEditProduct.unit,
+                        cost_price: Math.round(Number(this.formEditProduct.price) * 0.75),
+                        price: Number(this.formEditProduct.price),
+                        member_price: Number(this.formEditProduct.memberPrice || this.formEditProduct.price),
+                        stock: Number(this.formEditProduct.stock),
+                        min_stock: Number(this.formEditProduct.minStock),
+                        rack_location: this.formEditProduct.rackLocation
+                    })
+                });
+                if (res.ok) {
+                    this.showEditModal = false;
+                    if (typeof triggerToast === 'function') triggerToast(`Data master SKU '${this.formEditProduct.name}' berhasil diperbarui di database.`, 'success');
+                    await this.initProducts();
+                    return;
                 }
-            }
-
-            const idx = this.products.findIndex(p => p.sku === this.selectedProduct.sku);
-            if (idx !== -1) {
-                this.formEditProduct.status = this.formEditProduct.stock <= 0 ? 'HABIS' : (this.formEditProduct.stock <= this.formEditProduct.minStock ? 'STOK_RENDAH' : 'TERSEDIA');
-                const oldTotal = this.products[idx].stock || 1;
-                const newTotal = Number(this.formEditProduct.stock) || 0;
-                const ratio = oldTotal > 0 ? (newTotal / oldTotal) : 1;
-                const bs = this.products[idx].branchStock || {};
-                this.formEditProduct.branchStock = {
-                    'GDG-001': Math.round((bs['GDG-001'] || 0) * ratio),
-                    'CAB-001': Math.round((bs['CAB-001'] || 0) * ratio),
-                    'CAB-002': Math.round((bs['CAB-002'] || 0) * ratio),
-                    'CAB-003': Math.max(0, newTotal - Math.round((bs['GDG-001'] || 0) * ratio) - Math.round((bs['CAB-001'] || 0) * ratio) - Math.round((bs['CAB-002'] || 0) * ratio))
-                };
-                this.products[idx] = { ...this.formEditProduct };
-                this.saveProductsToStorage();
-                this.showEditModal = false;
-                if (typeof triggerToast === 'function') triggerToast(`Data master SKU '${this.formEditProduct.name}' berhasil diperbarui.`, 'success');
+                const errJson = await res.json().catch(() => ({}));
+                if (typeof triggerToast === 'function') triggerToast(errJson.message || 'Gagal memperbarui produk di server.', 'error');
+            } catch (err) {
+                console.error('API update error', err);
+                if (typeof triggerToast === 'function') triggerToast('Gagal terhubung ke server saat memperbarui produk.', 'error');
             }
         },
 

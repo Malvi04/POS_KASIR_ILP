@@ -24,6 +24,7 @@
     users: [],
     membersList: [],
     securityLogs: [],
+    isSavingUser: false,
     searchQuery: '',
     roleFilter: 'all',
     branchFilter: 'all',
@@ -77,7 +78,7 @@
         branch: 'Pusat',
         username: '',
         password: '',
-        pin: '123456'
+        pin: ''
     },
     selectedMember: null,
     searchMemberQuery: '',
@@ -90,7 +91,7 @@
         role: 'Manager',
         accessLevel: 'full', // full | reporting
         branch: 'Cabang Pusat',
-        pin: '123456'
+        pin: ''
     },
 
     // Form Tambah Cabang pada Modal Kelola Penugasan
@@ -115,29 +116,13 @@
             this.loadMembersFromApi()
         ]);
 
-        // 2. Fallback Data Users ke localStorage HANYA jika API kosong/gagal
-        if (!Array.isArray(this.users) || this.users.length === 0) {
-            const stored = localStorage.getItem('pos_ilp_users_v1');
-            if (stored) {
-                try {
-                    this.users = JSON.parse(stored);
-                } catch(e) {
-                    this.users = [];
-                }
-            } else {
-                this.users = [];
-            }
-        }
-
-        // 3. Normalisasi Struktur Penugasan Cabang (Migrasi Idempotent Backwards-Compatible)
-        let needsSave = false;
+        // 2. Pastikan struktur penugasan cabang tersedia dari data API
         this.users.forEach(u => {
             if (!Array.isArray(u.assignedBranches) || u.assignedBranches.length === 0) {
-                const legacyBranch = u.branch || 'Cabang A';
+                const legacyBranch = u.branch || 'Pusat';
                 u.assignedBranches = [
-                    { branch: legacyBranch, status: u.status || 'AKTIF', assignedAt: '19 Okt 2026' }
+                    { branch: legacyBranch, status: u.status || 'AKTIF', assignedAt: u.created_at || '-' }
                 ];
-                needsSave = true;
             }
             if (!u.nik) {
                 const foundMember = this.membersList.find(m => m.name && m.name.toLowerCase() === (u.name || '').toLowerCase());
@@ -145,24 +130,9 @@
                     u.memberId = foundMember.id;
                     u.nik = foundMember.nik;
                     u.dept = foundMember.dept;
-                    needsSave = true;
-                } else if (this.isKasirRole(u.role)) {
-                    u.nik = '3275' + Math.floor(100000000000 + Math.random() * 900000000000);
-                    needsSave = true;
                 }
             }
-            if (!u.pin || u.pin === '1234') {
-                u.pin = '123456';
-                needsSave = true;
-            }
-            if (!u.password) {
-                u.password = (u.username ? u.username.replace('cashier_', '') : 'kasir') + '123';
-                needsSave = true;
-            }
         });
-        if (needsSave) {
-            this.saveUsers();
-        }
 
         // 4. Inisialisasi Security Audit Logs
         const storedLogs = localStorage.getItem('pos_ilp_security_logs_v1');
@@ -253,7 +223,7 @@
     },
 
     saveUsers() {
-        localStorage.setItem('pos_ilp_users_v1', JSON.stringify(this.users));
+        // Data akun tersimpan di backend database PostgreSQL
     },
 
     saveLogs() {
@@ -331,10 +301,10 @@
         const existingUser = this.findUserByMember(m);
         if (existingUser) {
             this.formKasir.username = existingUser.username;
-            this.formKasir.password = existingUser.password || 'kasir123';
-            this.formKasir.pin = existingUser.pin || '123456';
+            this.formKasir.password = '';
+            this.formKasir.pin = existingUser.pin || '';
         } else {
-            // Auto generate username & default password unik dari nama depan karyawan
+            // Auto generate username unik dari nama depan karyawan
             const firstName = (m.name || '').toLowerCase().trim().split(/\s+/)[0].replace(/[^a-z0-9]/g, '');
             let candidate = 'cashier_' + firstName;
             let counter = 1;
@@ -343,8 +313,8 @@
                 counter++;
             }
             this.formKasir.username = candidate;
-            this.formKasir.password = firstName + '123';
-            this.formKasir.pin = '123456';
+            this.formKasir.password = '';
+            this.formKasir.pin = '';
         }
     },
 
@@ -352,7 +322,7 @@
         this.selectedMember = null;
         this.formKasir.username = '';
         this.formKasir.password = '';
-        this.formKasir.pin = '123456';
+        this.formKasir.pin = '';
         this.showFormKasirPassword = false;
         this.showFormKasirPin = false;
         this.searchMemberQuery = '';
@@ -395,6 +365,7 @@
 
     // Tambah / Daftarkan Penugasan Kasir via API
     async addKasir() {
+        if (this.isSavingUser) return;
         if (!this.selectedMember) {
             alert('Silakan cari dan pilih karyawan dari data Members terlebih dahulu!');
             return;
@@ -412,15 +383,28 @@
 
         const targetBranch = this.formKasir.branch;
         const cleanUsername = this.formKasir.username.toLowerCase().replace(/\s+/g, '_').trim();
-        const cleanPassword = this.formKasir.password && this.formKasir.password.trim() ? this.formKasir.password.trim() : (cleanUsername.replace('cashier_', '') + '123');
+        const cleanPassword = (this.formKasir.password || '').trim();
+        const cleanPin = (this.formKasir.pin || '').trim();
 
+        if (!cleanPassword || cleanPassword.length < 4) {
+            alert('Password login kasir minimal 4 karakter wajib diisi! (atau klik Acak Sandi)');
+            return;
+        }
+        if (!/^\d{6}$/.test(cleanPin)) {
+            alert('PIN Kasir POS harus berupa 6 digit angka! (atau klik Acak PIN)');
+            return;
+        }
+
+        this.isSavingUser = true;
+        const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('usr-' + Date.now());
         try {
             const res = await fetch('/api/users', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
-                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'X-Idempotency-Key': idemKey
                 },
                 body: JSON.stringify({
                     name: this.selectedMember.name,
@@ -430,7 +414,7 @@
                     role: 'Kasir',
                     branch: targetBranch,
                     password: cleanPassword,
-                    pin: this.formKasir.pin || '123456',
+                    pin: cleanPin,
                     is_active: true
                 })
             });
@@ -446,11 +430,14 @@
         } catch (e) {
             console.error('Error creating cashier:', e);
             alert('Terjadi kesalahan koneksi server.');
+        } finally {
+            this.isSavingUser = false;
         }
     },
 
     // Registrasi Pengguna SPV / Manager / Owner via API
     async addManager() {
+        if (this.isSavingUser) return;
         if (!this.formManager.name || !this.formManager.email) {
             alert('Silakan isi nama lengkap dan email!');
             return;
@@ -458,15 +445,28 @@
 
         const roleTarget = this.formManager.role || (this.formManager.accessLevel === 'reporting' ? 'Supervisor' : 'Manager');
         const cleanUsername = (this.formManager.username && this.formManager.username.trim()) ? this.formManager.username.trim() : this.formManager.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
-        const pwd = this.formManager.password || 'password123';
+        const pwd = (this.formManager.password || '').trim();
+        const cleanPin = (this.formManager.pin || '').trim();
 
+        if (!pwd || pwd.length < 4) {
+            alert('Password login minimal 4 karakter wajib diisi!');
+            return;
+        }
+        if (cleanPin && !/^\d{6}$/.test(cleanPin)) {
+            alert('PIN Otorisasi harus berupa 6 digit angka!');
+            return;
+        }
+
+        this.isSavingUser = true;
+        const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('usr-' + Date.now());
         try {
             const res = await fetch('/api/users', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
-                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'X-Idempotency-Key': idemKey
                 },
                 body: JSON.stringify({
                     name: this.formManager.name,
@@ -476,7 +476,7 @@
                     branch: this.formManager.branch || 'Pusat',
                     password: pwd,
                     password_confirmation: pwd,
-                    pin: this.formManager.pin || '123456',
+                    pin: cleanPin || null,
                     is_active: true
                 })
             });
@@ -493,6 +493,8 @@
         } catch (e) {
             console.error('Error creating user:', e);
             alert('Terjadi kesalahan saat mendaftarkan akun ke server.');
+        } finally {
+            this.isSavingUser = false;
         }
     },
 
@@ -877,7 +879,7 @@
             branch: u.branch || (u.assignedBranches && u.assignedBranches[0] ? u.assignedBranches[0].branch : this.currentManagerBranch),
             resetType: type === 'password' ? 'Password Portal' : 'PIN Terminal (6-Digit)',
             resetTypeKey: type,
-            processedBy: this.currentManager.name || 'Diana Putri',
+            processedBy: this.currentManager.name || @js($mgrAuthUser?->name ?? 'Manager'),
             processedByRole: 'Manager',
             processedBranch: this.currentManagerBranch,
             status: 'BERHASIL',
@@ -921,8 +923,8 @@
             const auditEntry = {
                 id: logId,
                 timestamp: `${dateStr} ${timeStr}`,
-                userId: this.currentManager.id || 'usr_04',
-                userName: this.currentManager.name || 'Diana Putri',
+                userId: this.currentManager.id || @js($mgrAuthUser?->id ?? ''),
+                userName: this.currentManager.name || @js($mgrAuthUser?->name ?? 'Manager'),
                 userRole: 'Manager',
                 location: this.currentManagerBranch || 'Cabang A',
                 category: 'User & Hak Akses',
@@ -957,28 +959,7 @@
             }
         } catch(e) {}
 
-        // Data awal simulasi riwayat reset
-        this.resetHistory = [
-            {
-                id: 'RST-179344001',
-                timestamp: '2026-11-03 14:15:20',
-                timeFormatted: '14:15, 03 Nov 2026',
-                userId: 'usr_02',
-                userName: 'Citra Dewi',
-                userUsername: 'cashier_citra',
-                userNik: '327501009920002',
-                userDept: 'Operasional Kasir',
-                branch: 'Cabang A',
-                resetType: 'PIN Terminal (6-Digit)',
-                resetTypeKey: 'pin',
-                processedBy: 'Diana Putri',
-                processedByRole: 'Manager',
-                processedBranch: 'Cabang A',
-                status: 'BERHASIL',
-                mustChangeNextLogin: false
-            }
-        ];
-        this.saveResetHistory();
+        this.resetHistory = [];
     },
 
     saveResetHistory() {
@@ -1472,7 +1453,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                            maxlength="8"
                                            :readonly="selectedMember && findUserByMember(selectedMember)"
                                            :class="selectedMember && findUserByMember(selectedMember) ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'bg-white text-gray-800 focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15'"
-                                           placeholder="123456"
+                                           placeholder="Masukkan 6 digit PIN"
                                            required
                                            class="w-full pl-9 pr-10 py-2.5 rounded-xl border border-gray-200 font-mono tracking-widest font-bold text-sm transition-all">
                                     <button type="button" 
@@ -1489,9 +1470,10 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <!-- Submit Button -->
                         <div class="pt-2 flex justify-end">
                             <button type="submit"
-                                    class="bg-[#0052cc] hover:bg-[#0043a8] active:scale-[0.99] text-white px-6 py-2.5 rounded-xl font-bold text-xs inline-flex items-center gap-2 shadow-xs transition-all cursor-pointer">
-                                <span class="material-symbols-rounded text-[18px]">how_to_reg</span>
-                                <span>Daftarkan Penugasan Kasir</span>
+                                    :disabled="isSavingUser"
+                                    class="bg-[#0052cc] hover:bg-[#0043a8] active:scale-[0.99] text-white px-6 py-2.5 rounded-xl font-bold text-xs inline-flex items-center gap-2 shadow-xs transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                                <span class="material-symbols-rounded text-[18px]" :class="isSavingUser ? 'animate-spin' : ''" x-text="isSavingUser ? 'progress_activity' : 'how_to_reg'"></span>
+                                <span x-text="isSavingUser ? 'Menyimpan...' : 'Daftarkan Penugasan Kasir'"></span>
                             </button>
                         </div>
                     </form>
@@ -1574,7 +1556,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                 <div class="inline-flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100/90 px-2.5 py-1 rounded-lg border border-slate-200 text-slate-700 transition-colors">
                                                     <span class="material-symbols-rounded text-slate-400 text-[14px]">key</span>
                                                     <span class="font-bold text-xs tracking-wide text-slate-800 select-all"
-                                                          x-text="showPasswordList[u.id] ? (u.password || 'kasir123') : '••••••••'"></span>
+                                                          x-text="showPasswordList[u.id] ? (u.password || '••••••••') : '••••••••'"></span>
                                                     <button type="button"
                                                             @click="togglePasswordVisibility(u.id)"
                                                             class="text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer ml-0.5"
@@ -1582,7 +1564,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                         <span class="material-symbols-rounded text-[15px]" x-text="showPasswordList[u.id] ? 'visibility_off' : 'visibility'"></span>
                                                     </button>
                                                     <button type="button"
-                                                            @click="copyCredential(u.password || 'kasir123', 'Password Portal', u.name)"
+                                                            @click="copyCredential(u.password || '', 'Password Portal', u.name)"
                                                             class="text-slate-400 hover:text-[#0052cc] p-0.5 cursor-pointer"
                                                             title="Salin Password Portal">
                                                         <span class="material-symbols-rounded text-[15px]">content_copy</span>
@@ -1595,7 +1577,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                 <div class="inline-flex items-center gap-1.5 bg-blue-50/70 hover:bg-blue-100/80 px-2.5 py-1 rounded-lg border border-blue-200 text-blue-900 transition-colors">
                                                     <span class="material-symbols-rounded text-blue-500 text-[14px]">lock</span>
                                                     <span class="font-bold text-xs tracking-wider text-blue-950 select-all"
-                                                          x-text="showPinList[u.id] ? (u.pin || '123456') : '••••••'"></span>
+                                                          x-text="showPinList[u.id] ? (u.pin || '-') : '••••••'"></span>
                                                     <button type="button"
                                                             @click="togglePinVisibility(u.id)"
                                                             class="text-blue-400 hover:text-blue-800 p-0.5 cursor-pointer ml-0.5"
@@ -1603,7 +1585,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                         <span class="material-symbols-rounded text-[15px]" x-text="showPinList[u.id] ? 'visibility_off' : 'visibility'"></span>
                                                     </button>
                                                     <button type="button"
-                                                            @click="copyCredential(u.pin || '123456', 'PIN Kasir POS', u.name)"
+                                                            @click="u.pin ? copyCredential(u.pin, 'PIN Kasir POS', u.name) : triggerToast('PIN belum diatur untuk akun ini.')"
                                                             class="text-blue-400 hover:text-blue-800 p-0.5 cursor-pointer"
                                                             title="Salin PIN Kasir POS">
                                                         <span class="material-symbols-rounded text-[15px]">content_copy</span>
@@ -1712,7 +1694,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         <label class="block font-bold text-gray-600 uppercase mb-1">NAMA LENGKAP MANAGER <span class="text-red-500">*</span></label>
                                         <input type="text"
                                                x-model="formManager.name"
-                                               placeholder="Contoh: Siti Aminah"
+                                               placeholder="Nama lengkap"
                                                required
                                                class="w-full px-3.5 py-2 rounded-xl border border-gray-200 focus:outline-none focus:border-[#9a3412]">
                                     </div>
@@ -1720,7 +1702,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         <label class="block font-bold text-gray-600 uppercase mb-1">EMAIL PROFESIONAL <span class="text-red-500">*</span></label>
                                         <input type="email"
                                                x-model="formManager.email"
-                                               placeholder="manager.siti@pos.com"
+                                               placeholder="email@perusahaan.com"
                                                required
                                                class="w-full px-3.5 py-2 rounded-xl border border-gray-200 focus:outline-none focus:border-[#9a3412]">
                                     </div>
@@ -1750,9 +1732,9 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 </div>
 
                                 <div class="pt-2 flex justify-end">
-                                    <button type="submit" class="bg-[#9a3412] hover:bg-[#7c2d12] text-white px-5 py-2 rounded-xl font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer">
-                                        <span class="material-symbols-rounded text-[18px]">admin_panel_settings</span>
-                                        <span>Registrasikan Manager</span>
+                                    <button type="submit" :disabled="isSavingUser" class="bg-[#9a3412] hover:bg-[#7c2d12] text-white px-5 py-2 rounded-xl font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                                        <span class="material-symbols-rounded text-[18px]" :class="isSavingUser ? 'animate-spin' : ''" x-text="isSavingUser ? 'progress_activity' : 'admin_panel_settings'"></span>
+                                        <span x-text="isSavingUser ? 'Menyimpan...' : 'Registrasikan Manager'"></span>
                                     </button>
                                 </div>
                             </form>
@@ -2149,10 +2131,10 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <span class="font-mono text-gray-600 text-[11px]" x-text="maskNik(managingUser?.nik)"></span>
                                 <div class="mt-1 flex flex-wrap items-center gap-2 font-mono text-[11px]">
                                     <span class="text-gray-500">Password Portal:</span>
-                                    <span class="font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-gray-200" x-text="managingUser?.password || 'kasir123'"></span>
+                                    <span class="font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-gray-200" x-text="managingUser?.password || '••••••••'"></span>
                                     <span class="text-gray-300">•</span>
                                     <span class="text-gray-500">PIN POS:</span>
-                                    <span class="font-bold text-blue-900 bg-blue-50 px-2 py-0.5 rounded border border-blue-200" x-text="managingUser?.pin || '123456'"></span>
+                                    <span class="font-bold text-blue-900 bg-blue-50 px-2 py-0.5 rounded border border-blue-200" x-text="managingUser?.pin || '-'"></span>
                                 </div>
                             </div>
                             <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase"

@@ -46,7 +46,7 @@
     // Plafon Form
     newLimitAmount: 5000000,
     limitNotes: '',
-    limitProcessedBy: 'Manager Koperasi',
+    limitProcessedBy: @js(auth()->user()?->name ?? 'Manager'),
 
     // Settlement Form
     settlementAmount: 0,
@@ -167,6 +167,7 @@
 
     // Save Member (POST or PUT)
     async saveMember() {
+        if (this.isLoading) return;
         this.formErrors = {};
         if (!this.formData.name || !this.formData.name.trim()) this.formErrors.name = 'Nama lengkap wajib diisi.';
         if (!this.formData.nik || !this.formData.nik.trim()) this.formErrors.nik = 'NIK karyawan wajib diisi.';
@@ -175,6 +176,7 @@
         if (Object.keys(this.formErrors).length > 0) return;
 
         this.isLoading = true;
+        const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('mbr-' + Date.now());
         try {
             const url = this.modalMode === 'create' ? '/api/members' : `/api/members/${this.formData.id}`;
             const method = this.modalMode === 'create' ? 'POST' : 'PUT';
@@ -184,7 +186,8 @@
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
-                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'X-Idempotency-Key': idemKey
                 },
                 body: JSON.stringify(this.formData)
             });
@@ -235,7 +238,7 @@
                 body: JSON.stringify({
                     credit_limit: amt,
                     notes: this.limitNotes,
-                    processed_by: 'Manager Koperasi'
+                    processed_by: this.limitProcessedBy
                 })
             });
 
@@ -288,7 +291,7 @@
                     amount: amt,
                     type: this.settlementType,
                     notes: this.settlementNotes,
-                    processed_by: 'Finance Koperasi ILP'
+                    processed_by: @js(auth()->user()?->name ?? 'Manager')
                 })
             });
 

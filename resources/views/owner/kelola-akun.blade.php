@@ -406,7 +406,7 @@
                 <span class="material-symbols-rounded text-[26px]">group</span>
             </div>
             <div>
-                <div class="text-2xl font-black text-slate-900 tracking-tight leading-none" x-text="staffList.length > 5 ? staffList.length : '38'"></div>
+                <div class="text-2xl font-black text-slate-900 tracking-tight leading-none" x-text="staffList.length"></div>
                 <div class="text-[10px] font-black uppercase tracking-wider text-slate-400 mt-1">TOTAL STAF AKTIF</div>
             </div>
         </div>
@@ -417,7 +417,7 @@
                 <span class="material-symbols-rounded text-[26px]">storefront</span>
             </div>
             <div>
-                <div class="text-2xl font-black text-slate-900 tracking-tight leading-none">12</div>
+                <div class="text-2xl font-black text-slate-900 tracking-tight leading-none" x-text="branchesCount"></div>
                 <div class="text-[10px] font-black uppercase tracking-wider text-slate-400 mt-1">CABANG TERDAFTAR</div>
             </div>
         </div>
@@ -492,17 +492,20 @@
             <div class="grid grid-cols-2 gap-3">
                 <div>
                     <label class="block font-bold text-slate-700 mb-1">Sandi Akses Portal</label>
-                    <input type="password" x-model="formStaff.password" placeholder="kasir123" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 outline-none focus:border-[#0052cc]">
+                    <input type="password" x-model="formStaff.password" placeholder="Minimal 4 karakter" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 outline-none focus:border-[#0052cc]">
                 </div>
                 <div>
                     <label class="block font-bold text-slate-700 mb-1">PIN Kasir (6 Digit)</label>
-                    <input type="password" maxlength="6" x-model="formStaff.pin" placeholder="123456" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 outline-none focus:border-[#0052cc]">
+                    <input type="password" maxlength="6" x-model="formStaff.pin" placeholder="6 digit angka" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 outline-none focus:border-[#0052cc]">
                 </div>
             </div>
 
             <div class="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
-                <button type="button" @click="showAddModal = false" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 font-bold">Batal</button>
-                <button type="submit" class="px-5 py-2 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold">Simpan Staf</button>
+                <button type="button" :disabled="isSavingStaff" @click="showAddModal = false" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 font-bold disabled:opacity-50 disabled:cursor-not-allowed">Batal</button>
+                <button type="submit" :disabled="isSavingStaff" class="px-5 py-2 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span x-show="isSavingStaff" class="material-symbols-rounded text-[15px] animate-spin">progress_activity</span>
+                    <span x-text="isSavingStaff ? 'Menyimpan...' : 'Simpan Staf'"></span>
+                </button>
             </div>
         </form>
     </x-admin.modal>
@@ -696,9 +699,11 @@ function ownerKelolaAkunApp() {
         selectedRoleTab: 'KASIR',
         showAddModal: false,
         showEditModal: false,
+        isSavingStaff: false,
         selectedMemberId: '',
         membersList: [],
-        updateIzinCount: 14,
+        branchesCount: 0,
+        updateIzinCount: 0,
         editingStaff: { id: '', name: '', role: 'Kasir', branch: 'Cabang Pusat - Jakarta', status: 'Online' },
 
         // State Pemulihan & Reset Kredensial Owner
@@ -716,8 +721,8 @@ function ownerKelolaAkunApp() {
             role: 'Kasir',
             branch: 'Cabang Pusat - Jakarta',
             status: 'Online',
-            password: 'kasir123',
-            pin: '123456'
+            password: '',
+            pin: ''
         },
 
         // Default Staff
@@ -756,16 +761,16 @@ function ownerKelolaAkunApp() {
         async init() {
             // 1. Load Staf dari /api/users (Database)
             try {
-                const res = await fetch('/api/users');
+                const res = await fetch('/api/users', { headers: { 'Accept': 'application/json' } });
                 if (res.ok) {
                     const result = await res.json();
-                    if (result.success && Array.isArray(result.data) && result.data.length > 0) {
+                    if (result.success && Array.isArray(result.data)) {
                         this.staffList = result.data.map((u, i) => {
                             const name = u.name || 'Staf ' + (i+1);
                             const initials = name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
                             return {
                                 id: u.id,
-                                empId: u.nik || ('EMP-00' + (400 + i)),
+                                empId: u.nik || '-',
                                 name: name,
                                 username: u.username || ('user_' + u.id),
                                 email: u.email || '',
@@ -775,46 +780,32 @@ function ownerKelolaAkunApp() {
                                 branch: u.branch || 'Cabang Pusat - Jakarta',
                                 status: u.is_active ? 'Online' : 'Offline',
                                 password: '••••••',
-                                pin: u.pin || '123456'
+                                pin: u.pin || ''
                             };
                         });
-                        this.saveStaff();
-                        this.loadRbacAndMembers();
-                        return;
+                    } else {
+                        this.staffList = [];
                     }
+                } else {
+                    this.staffList = [];
                 }
             } catch(err) {
-                console.warn('API /api/users error, reading local cache', err);
+                console.warn('API /api/users error', err);
+                this.staffList = [];
             }
 
             try {
-                const stored = localStorage.getItem('pos_ilp_users_v1');
-                if (stored) {
-                    const parsed = JSON.parse(stored);
-                    if (Array.isArray(parsed) && parsed.length > 0) {
-                        this.staffList = parsed.map((u, i) => {
-                            const name = u.name || 'Staf ' + (i+1);
-                            const initials = name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-                            return {
-                                id: u.id || ('USR-0' + (i+1)),
-                                empId: u.nik || u.empId || ('EMP-00' + (400 + i)),
-                                name: name,
-                                initials: initials,
-                                avatarBg: i % 3 === 0 ? 'bg-blue-100 text-[#0052cc]' : (i % 3 === 1 ? 'bg-purple-100 text-purple-700' : 'bg-slate-800 text-white'),
-                                role: u.role || 'Kasir',
-                                branch: u.branch || (u.assignedBranches && u.assignedBranches[0] ? u.assignedBranches[0].branch : 'Cabang Pusat - Jakarta'),
-                                status: u.status === 'AKTIF' || u.status === 'Online' ? 'Online' : (u.status === 'DIBLOKIR' ? 'Nonaktif' : 'Offline'),
-                                password: u.password || '123456',
-                                pin: u.pin || '123456'
-                            };
-                        });
-                        this.loadRbacAndMembers();
-                        return;
-                    }
+                const bRes = await fetch('/api/branches', { headers: { 'Accept': 'application/json' } });
+                if (bRes.ok) {
+                    const bJson = await bRes.json();
+                    const bRows = bJson.data?.data || bJson.data || [];
+                    this.branchesCount = Array.isArray(bRows) ? bRows.length : 0;
                 }
-            } catch(e) {}
-            this.staffList = [];
-            this.loadRbacAndMembers();
+            } catch(e) {
+                this.branchesCount = 0;
+            }
+
+            await this.loadRbacAndMembers();
         },
 
         async loadRbacAndMembers() {
@@ -826,31 +817,23 @@ function ownerKelolaAkunApp() {
                 }
             } catch(e) {}
 
-            // 3. Load Members List dari API database terlebih dahulu (fallback localStorage)
+            // 3. Load Members List dari API database
             try {
                 const mRes = await fetch('/api/members?per_page=100', { headers: { 'Accept': 'application/json' } });
                 if (mRes.ok) {
                     const mJson = await mRes.json();
                     const rows = mJson.data?.data || mJson.data || [];
-                    if (Array.isArray(rows) && rows.length > 0) {
-                        this.membersList = rows;
-                        return;
-                    }
+                    this.membersList = Array.isArray(rows) ? rows : [];
+                } else {
+                    this.membersList = [];
                 }
-            } catch(e) {}
-
-            try {
-                const storedMembers = localStorage.getItem('pos_ilp_members_v1');
-                if (storedMembers) {
-                    this.membersList = JSON.parse(storedMembers);
-                }
-            } catch(e) {}
+            } catch(e) {
+                this.membersList = [];
+            }
         },
 
         saveStaff() {
-            try {
-                localStorage.setItem('pos_ilp_users_v1', JSON.stringify(this.staffList));
-            } catch(e) {}
+            // Data staf tersimpan langsung di backend PostgreSQL melalui API
         },
 
         get currentPermissions() {
@@ -898,12 +881,12 @@ function ownerKelolaAkunApp() {
         openAddStaffModal() {
             this.formStaff = {
                 name: '',
-                empId: 'EMP-00' + (this.staffList.length + 420),
+                empId: '',
                 role: 'Kasir',
                 branch: 'Cabang Pusat - Jakarta',
                 status: 'Online',
-                password: 'kasir123',
-                pin: '123456'
+                password: '',
+                pin: ''
             };
             this.selectedMemberId = '';
             this.showAddModal = true;
@@ -920,8 +903,17 @@ function ownerKelolaAkunApp() {
         },
 
         async saveNewStaff() {
+            if (this.isSavingStaff) return;
             if (!this.formStaff.name) {
                 if (window.triggerToast) window.triggerToast('Harap masukkan nama staf!', 'error');
+                return;
+            }
+            if (!this.formStaff.password || this.formStaff.password.length < 4) {
+                if (window.triggerToast) window.triggerToast('Sandi akses portal wajib diisi (minimal 4 karakter).', 'error');
+                return;
+            }
+            if (this.formStaff.pin && !/^\d{6}$/.test(this.formStaff.pin)) {
+                if (window.triggerToast) window.triggerToast('PIN Kasir harus terdiri dari 6 digit angka.', 'error');
                 return;
             }
 
@@ -929,25 +921,30 @@ function ownerKelolaAkunApp() {
             const username = this.formStaff.name.toLowerCase().replace(/[^a-z0-9]/g, '_') + Math.floor(10 + Math.random() * 90);
             const email = username + '@ilp.com';
 
+            this.isSavingStaff = true;
+            const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('stf-' + Date.now());
             try {
+                const payload = {
+                    nik: cleanNik,
+                    name: this.formStaff.name,
+                    username: username,
+                    email: email,
+                    role: this.formStaff.role,
+                    branch: this.formStaff.branch,
+                    password: this.formStaff.password,
+                    password_confirmation: this.formStaff.password
+                };
+                if (this.formStaff.pin) payload.pin = this.formStaff.pin;
+
                 const res = await fetch('/api/users', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'X-Idempotency-Key': idemKey
                     },
-                    body: JSON.stringify({
-                        nik: cleanNik,
-                        name: this.formStaff.name,
-                        username: username,
-                        email: email,
-                        role: this.formStaff.role,
-                        branch: this.formStaff.branch,
-                        pin: this.formStaff.pin || '123456',
-                        password: this.formStaff.password || 'kasir123',
-                        password_confirmation: this.formStaff.password || 'kasir123'
-                    })
+                    body: JSON.stringify(payload)
                 });
 
                 const json = await res.json().catch(() => ({}));
@@ -960,28 +957,12 @@ function ownerKelolaAkunApp() {
 
                 const errMsg = json.message || (json.errors ? Object.values(json.errors).flat().join(', ') : ('HTTP ' + res.status));
                 if (window.triggerToast) window.triggerToast('Gagal menambahkan staf: ' + errMsg, 'error');
-                return;
             } catch(e) {
-                console.warn('API error creating staff, saving locally', e);
+                console.error('API error creating staff', e);
+                if (window.triggerToast) window.triggerToast('Gagal terhubung ke server saat menambahkan staf.', 'error');
+            } finally {
+                this.isSavingStaff = false;
             }
-
-            const initials = this.formStaff.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-            const newStaff = {
-                id: 'USR-0' + (this.staffList.length + 1),
-                empId: cleanNik,
-                name: this.formStaff.name,
-                initials: initials,
-                avatarBg: 'bg-blue-100 text-[#0052cc]',
-                role: this.formStaff.role,
-                branch: this.formStaff.branch,
-                status: this.formStaff.status,
-                password: this.formStaff.password || 'kasir123',
-                pin: this.formStaff.pin || '123456'
-            };
-            this.staffList.unshift(newStaff);
-            this.saveStaff();
-            this.showAddModal = false;
-            if (window.triggerToast) window.triggerToast('Staf ' + newStaff.name + ' (' + newStaff.role + ') berhasil ditambahkan!', 'success');
         },
 
         openEditStaff(staf) {
@@ -992,47 +973,41 @@ function ownerKelolaAkunApp() {
         async saveEditStaff() {
             if (!this.editingStaff) return;
 
-            if (typeof this.editingStaff.id === 'number') {
-                try {
-                    const res = await fetch(`/api/users/${this.editingStaff.id}`, {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json',
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                        },
-                        body: JSON.stringify({
-                            name: this.editingStaff.name,
-                            username: this.editingStaff.username || ('user_' + this.editingStaff.id),
-                            email: this.editingStaff.email || (this.editingStaff.name.toLowerCase().replace(/[^a-z0-9]/g, '_') + '@ilp.com'),
-                            nik: this.editingStaff.empId,
-                            role: this.editingStaff.role,
-                            branch: this.editingStaff.branch,
-                            pin: this.editingStaff.pin || '123456',
-                            is_active: this.editingStaff.status === 'Online' || this.editingStaff.status === 'AKTIF'
-                        })
-                    });
-                    const json = await res.json().catch(() => ({}));
-                    if (res.ok) {
-                        this.showEditModal = false;
-                        if (window.triggerToast) window.triggerToast('Data penugasan ' + this.editingStaff.name + ' berhasil diperbarui di database!', 'success');
-                        await this.init();
-                        return;
-                    }
-                    const errMsg = json.message || (json.errors ? Object.values(json.errors).flat().join(', ') : ('HTTP ' + res.status));
-                    if (window.triggerToast) window.triggerToast('Gagal memperbarui staf: ' + errMsg, 'error');
-                    return;
-                } catch(e) {
-                    console.warn('API error editing staff, updating locally', e);
+            try {
+                const payload = {
+                    name: this.editingStaff.name,
+                    username: this.editingStaff.username || ('user_' + this.editingStaff.id),
+                    email: this.editingStaff.email || (this.editingStaff.name.toLowerCase().replace(/[^a-z0-9]/g, '_') + '@ilp.com'),
+                    nik: this.editingStaff.empId,
+                    role: this.editingStaff.role,
+                    branch: this.editingStaff.branch,
+                    is_active: this.editingStaff.status === 'Online' || this.editingStaff.status === 'AKTIF'
+                };
+                if (this.editingStaff.pin && /^\d{6}$/.test(this.editingStaff.pin)) {
+                    payload.pin = this.editingStaff.pin;
                 }
-            }
 
-            const idx = this.staffList.findIndex(s => s.id === this.editingStaff.id);
-            if (idx !== -1) {
-                this.staffList[idx] = { ...this.staffList[idx], ...this.editingStaff };
-                this.saveStaff();
-                this.showEditModal = false;
-                if (window.triggerToast) window.triggerToast('Data penugasan ' + this.editingStaff.name + ' berhasil diperbarui!', 'success');
+                const res = await fetch(`/api/users/${this.editingStaff.id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                const json = await res.json().catch(() => ({}));
+                if (res.ok) {
+                    this.showEditModal = false;
+                    if (window.triggerToast) window.triggerToast('Data penugasan ' + this.editingStaff.name + ' berhasil diperbarui di database!', 'success');
+                    await this.init();
+                    return;
+                }
+                const errMsg = json.message || (json.errors ? Object.values(json.errors).flat().join(', ') : ('HTTP ' + res.status));
+                if (window.triggerToast) window.triggerToast('Gagal memperbarui staf: ' + errMsg, 'error');
+            } catch(e) {
+                console.error('API error editing staff', e);
+                if (window.triggerToast) window.triggerToast('Gagal terhubung ke server saat memperbarui staf.', 'error');
             }
         },
 
@@ -1042,38 +1017,36 @@ function ownerKelolaAkunApp() {
             }
             const newPin = String(Math.floor(100000 + Math.random() * 900000));
 
-            if (typeof staf.id === 'number') {
-                try {
-                    const res = await fetch(`/api/users/${staf.id}/pin`, {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json',
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                        },
-                        body: JSON.stringify({ pin: newPin })
-                    });
-                    if (res.ok) {
-                        staf.pin = newPin;
-                    }
-                } catch(e) {
-                    console.warn('API error resetting pin', e);
+            try {
+                const res = await fetch(`/api/users/${staf.id}/pin`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({ pin: newPin })
+                });
+                if (!res.ok) {
+                    const json = await res.json().catch(() => ({}));
+                    if (window.triggerToast) window.triggerToast(json.message || 'Gagal mereset PIN Kasir di server.', 'error');
+                    return;
                 }
+                staf.pin = newPin;
+                staf.mustChangePin = true;
+
+                this.recordOwnerResetHistory(staf, 'pin');
+                this.recordOwnerAuditLog(staf, 'pin');
+
+                this.ownerResetTarget = staf;
+                this.ownerResetType = 'pin';
+                this.ownerResetGeneratedCredential = newPin;
+                this.showOwnerResetSuccessModal = true;
+                if (window.triggerToast) window.triggerToast('PIN Kasir ' + staf.name + ' berhasil direset!', 'success');
+            } catch(e) {
+                console.error('API error resetting pin', e);
+                if (window.triggerToast) window.triggerToast('Gagal terhubung ke server saat mereset PIN.', 'error');
             }
-
-            staf.pin = newPin;
-            staf.mustChangePin = true;
-            this.saveStaff();
-
-            // Catat ke pos_ilp_reset_history_v1 & pos_ilp_audit_logs_v1
-            this.recordOwnerResetHistory(staf, 'pin');
-            this.recordOwnerAuditLog(staf, 'pin');
-
-            this.ownerResetTarget = staf;
-            this.ownerResetType = 'pin';
-            this.ownerResetGeneratedCredential = newPin;
-            this.showOwnerResetSuccessModal = true;
-            if (window.triggerToast) window.triggerToast('PIN Kasir ' + staf.name + ' berhasil direset!', 'success');
         },
 
         async resetStaffPassword(staf) {
@@ -1082,38 +1055,36 @@ function ownerKelolaAkunApp() {
             }
             const newPass = 'ILP-Kasir' + Math.floor(100 + Math.random() * 900);
 
-            if (typeof staf.id === 'number') {
-                try {
-                    const res = await fetch(`/api/users/${staf.id}/password`, {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json',
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                        },
-                        body: JSON.stringify({ password: newPass })
-                    });
-                    if (res.ok) {
-                        staf.password = newPass;
-                    }
-                } catch(e) {
-                    console.warn('API error resetting password', e);
+            try {
+                const res = await fetch(`/api/users/${staf.id}/password`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({ password: newPass })
+                });
+                if (!res.ok) {
+                    const json = await res.json().catch(() => ({}));
+                    if (window.triggerToast) window.triggerToast(json.message || 'Gagal mereset password portal di server.', 'error');
+                    return;
                 }
+                staf.password = newPass;
+                staf.mustChangePassword = true;
+
+                this.recordOwnerResetHistory(staf, 'password');
+                this.recordOwnerAuditLog(staf, 'password');
+
+                this.ownerResetTarget = staf;
+                this.ownerResetType = 'password';
+                this.ownerResetGeneratedCredential = newPass;
+                this.showOwnerResetSuccessModal = true;
+                if (window.triggerToast) window.triggerToast('Password portal ' + staf.name + ' berhasil direset!', 'success');
+            } catch(e) {
+                console.error('API error resetting password', e);
+                if (window.triggerToast) window.triggerToast('Gagal terhubung ke server saat mereset password.', 'error');
             }
-
-            staf.password = newPass;
-            staf.mustChangePassword = true;
-            this.saveStaff();
-
-            // Catat ke pos_ilp_reset_history_v1 & pos_ilp_audit_logs_v1
-            this.recordOwnerResetHistory(staf, 'password');
-            this.recordOwnerAuditLog(staf, 'password');
-
-            this.ownerResetTarget = staf;
-            this.ownerResetType = 'password';
-            this.ownerResetGeneratedCredential = newPass;
-            this.showOwnerResetSuccessModal = true;
-            if (window.triggerToast) window.triggerToast('Password portal ' + staf.name + ' berhasil direset!', 'success');
         },
 
         recordOwnerResetHistory(staf, type) {
@@ -1126,6 +1097,7 @@ function ownerKelolaAkunApp() {
                 const dateStr = now.toISOString().slice(0, 10);
                 const timeStr = now.toTimeString().slice(0, 8);
                 const timeFormatted = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ', ' + now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+                const actorName = @js(auth()->user()?->name ?? 'Owner');
 
                 history.unshift({
                     id: 'RST-' + Date.now(),
@@ -1138,7 +1110,7 @@ function ownerKelolaAkunApp() {
                     branch: staf.branch,
                     resetType: type === 'password' ? 'Password Portal' : 'PIN Terminal (6-Digit)',
                     resetTypeKey: type,
-                    processedBy: 'Hendra Gunawan (Owner)',
+                    processedBy: actorName + ' (Owner)',
                     processedByRole: 'Owner',
                     processedBranch: 'Semua Cabang (Akses Penuh)',
                     status: 'BERHASIL',
@@ -1158,17 +1130,19 @@ function ownerKelolaAkunApp() {
                 const dateStr = now.toISOString().slice(0, 10);
                 const timeStr = now.toTimeString().slice(0, 8);
                 const logId = 'LOG-' + dateStr.replace(/-/g, '') + '-' + Math.floor(1000 + Math.random() * 9000);
+                const actorId = @js(auth()->user()?->id ?? '');
+                const actorName = @js(auth()->user()?->name ?? 'Owner');
 
                 logs.unshift({
                     id: logId,
                     timestamp: `${dateStr} ${timeStr}`,
-                    userId: 'usr_05',
-                    userName: 'Hendra Gunawan',
+                    userId: actorId,
+                    userName: actorName,
                     userRole: 'Owner',
                     location: staf.branch || 'Pusat',
                     category: 'User & Hak Akses',
                     actionName: type === 'password' ? 'Reset Password Kasir (Darurat Owner)' : 'Reset PIN Kasir (Darurat Owner)',
-                    description: `Penerbitan kredensial sementara (${type === 'password' ? 'Password Portal' : 'PIN Terminal 6-Digit'}) oleh Owner Hendra untuk staf [${staf.name}] pada ${staf.branch}. Akun ditandai wajib ganti kredensial.`,
+                    description: `Penerbitan kredensial sementara (${type === 'password' ? 'Password Portal' : 'PIN Terminal 6-Digit'}) oleh ${actorName} untuk staf [${staf.name}] pada ${staf.branch}. Akun ditandai wajib ganti kredensial.`,
                     reference: 'RST-OWNER-' + (staf.empId || staf.id),
                     status: 'BERHASIL',
                     source: 'Web Owner Console / Darurat Operasional',
@@ -1208,57 +1182,50 @@ function ownerKelolaAkunApp() {
         },
 
         async toggleStaffStatus(staf) {
-            if (typeof staf.id === 'number') {
-                try {
-                    const res = await fetch(`/api/users/${staf.id}/toggle-status`, {
-                        method: 'POST',
-                        headers: {
-                            'Accept': 'application/json',
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                        }
-                    });
-                    if (res.ok) {
-                        const data = await res.json();
-                        staf.status = data.is_active ? 'Online' : 'Offline';
-                        this.saveStaff();
-                        if (window.triggerToast) window.triggerToast('Status ' + staf.name + ' berhasil diubah menjadi: ' + staf.status, 'info');
-                        return;
+            try {
+                const res = await fetch(`/api/users/${staf.id}/toggle-status`, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
                     }
-                } catch(e) {
-                    console.warn('API error toggling status', e);
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    staf.status = data.is_active ? 'Online' : 'Offline';
+                    if (window.triggerToast) window.triggerToast('Status ' + staf.name + ' berhasil diubah menjadi: ' + staf.status, 'info');
+                    return;
                 }
+                const err = await res.json().catch(() => ({}));
+                if (window.triggerToast) window.triggerToast(err.message || 'Gagal mengubah status staf.', 'error');
+            } catch(e) {
+                console.error('API error toggling status', e);
+                if (window.triggerToast) window.triggerToast('Gagal terhubung ke server saat mengubah status.', 'error');
             }
-
-            staf.status = staf.status === 'Online' ? 'Offline' : 'Online';
-            this.saveStaff();
-            if (window.triggerToast) window.triggerToast('Status ' + staf.name + ' diubah ke ' + staf.status, 'info');
         },
 
         async deleteStaff(staf) {
             if (!confirm('Hapus staf ' + staf.name + ' dari daftar akses sistem?')) return;
 
-            if (typeof staf.id === 'number') {
-                try {
-                    const res = await fetch(`/api/users/${staf.id}`, {
-                        method: 'DELETE',
-                        headers: {
-                            'Accept': 'application/json',
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                        }
-                    });
-                    if (res.ok) {
-                        if (window.triggerToast) window.triggerToast('Staf ' + staf.name + ' berhasil dihapus dari database.', 'info');
-                        await this.init();
-                        return;
+            try {
+                const res = await fetch(`/api/users/${staf.id}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
                     }
-                } catch(e) {
-                    console.warn('API error deleting user', e);
+                });
+                if (res.ok) {
+                    if (window.triggerToast) window.triggerToast('Staf ' + staf.name + ' berhasil dihapus dari database.', 'info');
+                    await this.init();
+                    return;
                 }
+                const err = await res.json().catch(() => ({}));
+                if (window.triggerToast) window.triggerToast(err.message || 'Gagal menghapus staf dari database.', 'error');
+            } catch(e) {
+                console.error('API error deleting user', e);
+                if (window.triggerToast) window.triggerToast('Gagal terhubung ke server saat menghapus staf.', 'error');
             }
-
-            this.staffList = this.staffList.filter(s => s.id !== staf.id);
-            this.saveStaff();
-            if (window.triggerToast) window.triggerToast('Staf ' + staf.name + ' berhasil dihapus dari sistem.', 'info');
         },
 
         exportStaffCsv() {

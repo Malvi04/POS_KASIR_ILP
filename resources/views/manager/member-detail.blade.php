@@ -150,7 +150,7 @@
                 body: JSON.stringify({
                     credit_limit: amt,
                     notes: this.limitNotes || 'Penyesuaian batas maksimal kasbon bulanan',
-                    processed_by: 'Manager Koperasi'
+                    processed_by: @js(auth()->user()?->name ?? 'Manager')
                 })
             });
 
@@ -190,7 +190,7 @@
                     amount: amt,
                     type: this.settlementType,
                     notes: this.settlementNotes || 'Pelunasan piutang kasbon',
-                    processed_by: 'Finance Koperasi ILP'
+                    processed_by: @js(auth()->user()?->name ?? 'Manager')
                 })
             });
 

@@ -27,8 +27,8 @@
     form: {
         destinationStore: 'Cabang A',
         requestRef: '',
-        driverName: 'Andi Kurniawan',
-        plateNumber: 'B 9182 UQ',
+        driverName: '',
+        plateNumber: '',
         date: '',
         generalNotes: '',
         items: []
@@ -42,68 +42,25 @@
     },
 
     async initKirimBarang() {
-        // 1. Baca data pengiriman dari localStorage
-        let localDocs = [];
-        const stored = localStorage.getItem('pos_ilp_goods_in_docs_v1');
-        if (stored) {
-            try {
-                localDocs = JSON.parse(stored);
-                if (!Array.isArray(localDocs)) localDocs = [];
-            } catch(e) {
-                console.error('Failed to parse shipments storage:', e);
-                localDocs = [];
-            }
-        }
-        this.documents = localDocs;
-
-        // 2. Fetch live data dari API backend goods-receipts
+        // Fetch live data dari API backend goods-receipts
         try {
             const res = await fetch('/api/goods-receipts', { headers: { 'Accept': 'application/json' } });
             if (res.ok) {
                 const json = await res.json();
                 if (json.success && Array.isArray(json.data)) {
-                    const apiDocs = json.data;
-                    const merged = [...apiDocs];
-                    // Pertahankan local drafts atau offline shipments
-                    for (const loc of localDocs) {
-                        const exists = merged.some(m => (m.id && m.id === loc.id) || (m.docNo && m.docNo === loc.docNo));
-                        if (!exists) {
-                            merged.push(loc);
-                        }
-                    }
-                    this.documents = merged;
-                    this.saveDocuments();
+                    this.documents = json.data;
                 }
             }
         } catch(e) {
             console.warn('API goods-receipts fetch error:', e);
+            this.documents = [];
         }
 
-        // 3. Load referensi produk katalog master
+        // Load referensi produk katalog master dari API
         await this.loadAvailableProducts();
 
-        // 4. Sinkronisasi real-time antar tab & server
-        const updateFromStorage = () => {
-            const stored = localStorage.getItem('pos_ilp_goods_in_docs_v1');
-            if (stored) {
-                try {
-                    const parsed = JSON.parse(stored);
-                    if (Array.isArray(parsed)) this.documents = parsed;
-                } catch(err) {}
-            }
-        };
-
-        window.addEventListener('storage', (e) => {
-            if (e.key === 'pos_ilp_goods_in_docs_v1' && e.newValue) {
-                updateFromStorage();
-            }
-            if (e.key === 'pos_ilp_inventory_products_v1') {
-                this.loadAvailableProducts();
-            }
-        });
-
         window.addEventListener('pos:goods_in_updated', () => {
-            updateFromStorage();
+            this.initKirimBarang();
         });
 
         window.addEventListener('pos:inventory_updated', () => {
@@ -111,39 +68,17 @@
         });
 
         window.addEventListener('pos:sync-all', () => {
-            updateFromStorage();
-            this.loadAvailableProducts();
+            this.initKirimBarang();
         });
     },
 
     async loadAvailableProducts() {
-        const raw = localStorage.getItem('pos_ilp_inventory_products_v1');
-        if (raw) {
-            try {
-                const parsed = JSON.parse(raw);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    this.availableProducts = parsed.map(p => ({
-                        id: p.id,
-                        sku: p.sku || p.barcode || '-',
-                        name: p.name || p.nama || '-',
-                        category: p.category || p.kategori || 'Umum',
-                        unit: p.unit || 'Pcs',
-                        stock: Math.max(0, Number(p.stock !== undefined ? p.stock : (p.stok || 0)))
-                    }));
-                    return;
-                }
-            } catch(e) {
-                console.error('Failed to parse catalog products:', e);
-            }
-        }
-
-        // Fallback: Ambil dari API produk jika localStorage belum ada
         try {
-            const res = await fetch('/api/pos/products/search?limit=100', { headers: { 'Accept': 'application/json' } });
+            const res = await fetch('/api/products?per_page=100', { headers: { 'Accept': 'application/json' } });
             if (res.ok) {
                 const json = await res.json();
                 const prods = json.data || json;
-                if (Array.isArray(prods) && prods.length > 0) {
+                if (Array.isArray(prods)) {
                     this.availableProducts = prods.map(p => ({
                         id: p.id,
                         sku: p.sku || p.barcode || '-',
@@ -152,7 +87,6 @@
                         unit: p.unit || 'Pcs',
                         stock: Math.max(0, Number(p.stock !== undefined ? p.stock : (p.stok || 0)))
                     }));
-                    localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(this.availableProducts));
                     return;
                 }
             }
@@ -164,13 +98,8 @@
     },
 
     saveDocuments() {
-        try {
-            localStorage.setItem('pos_ilp_goods_in_docs_v1', JSON.stringify(this.documents));
-            if (window.PosRealtime) {
-                window.PosRealtime.broadcast('goods_in_updated', { documents: this.documents });
-            }
-        } catch(e) {
-            console.error('Failed to save shipments storage:', e);
+        if (window.PosRealtime) {
+            window.PosRealtime.broadcast('goods_in_updated', { documents: this.documents });
         }
     },
 
@@ -204,8 +133,8 @@
         this.form = {
             destinationStore: 'Cabang A',
             requestRef: '',
-            driverName: 'Andi Kurniawan',
-            plateNumber: 'B 9182 UQ',
+            driverName: '',
+            plateNumber: '',
             date: today,
             generalNotes: '',
             items: [
@@ -339,48 +268,48 @@
                 items: preparedItems
             };
 
-            // Simpan ke database backend jika bukan offline
-            try {
-                const apiRes = await fetch('/api/goods-receipts', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    body: JSON.stringify({
-                        docNo: docNo,
-                        origin_source: newDoc.warehouseOrigin,
-                        destination_store: newDoc.destinationStore,
-                        driver_name: newDoc.driverName,
-                        plate_number: newDoc.plateNumber,
-                        status: newDoc.status,
-                        notes: newDoc.generalNotes,
-                        items: preparedItems.map(it => ({
-                            sku: it.sku,
-                            name: it.name,
-                            category: it.category,
-                            unit: it.unit,
-                            qty_sent: it.qtySent,
-                            condition: it.condition
-                        }))
-                    })
-                });
+            // Simpan ke database backend
+            const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('gr-' + Date.now());
+            const apiRes = await fetch('/api/goods-receipts', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'X-Idempotency-Key': idemKey
+                },
+                body: JSON.stringify({
+                    docNo: docNo,
+                    origin_source: newDoc.warehouseOrigin,
+                    destination_store: newDoc.destinationStore,
+                    driver_name: newDoc.driverName,
+                    plate_number: newDoc.plateNumber,
+                    status: newDoc.status,
+                    notes: newDoc.generalNotes,
+                    items: preparedItems.map(it => ({
+                        sku: it.sku,
+                        name: it.name,
+                        category: it.category,
+                        unit: it.unit,
+                        qty_sent: it.qtySent,
+                        condition: it.condition
+                    }))
+                })
+            });
 
-                if (apiRes.ok) {
-                    const apiJson = await apiRes.json();
-                    if (apiJson.success && apiJson.data) {
-                        newDoc = { ...newDoc, ...apiJson.data };
-                    }
-                }
-            } catch(apiErr) {
-                console.warn('API post shipment warning (persisted locally):', apiErr);
+            const apiJson = await apiRes.json().catch(() => ({}));
+            if (!apiRes.ok || !apiJson.success) {
+                this.triggerToast(apiJson.message || 'Gagal menyimpan dokumen pengiriman ke server.', 'error');
+                return;
             }
-
-            // Jika status langsung dikirim, kurangi stok master gudang
-            if (!isDraft) {
-                this.deductMasterStock(preparedItems);
+            if (apiJson.data) {
+                newDoc = { ...newDoc, ...apiJson.data };
             }
 
             // Simpan dokumen pengiriman
             this.documents.unshift(newDoc);
             this.saveDocuments();
+            await this.loadAvailableProducts();
 
             this.showCreateModal = false;
             if (isDraft) {
@@ -397,25 +326,8 @@
     },
 
     deductMasterStock(items) {
-        const raw = localStorage.getItem('pos_ilp_inventory_products_v1');
-        if (!raw) return;
-        try {
-            let prods = JSON.parse(raw);
-            items.forEach(it => {
-                const p = prods.find(pr => pr.sku === it.sku || pr.barcode === it.sku);
-                if (p) {
-                    const currentStock = Math.max(0, Number(p.stock !== undefined ? p.stock : (p.stok || 0)));
-                    const nextStock = Math.max(0, currentStock - it.qtySent);
-                    p.stock = nextStock;
-                    p.stok = nextStock;
-                }
-            });
-            localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(prods));
-            window.dispatchEvent(new CustomEvent('pos-inventory-synced'));
-            this.loadAvailableProducts();
-        } catch(e) {
-            console.error('Failed to deduct master stock:', e);
-        }
+        window.dispatchEvent(new CustomEvent('pos-inventory-synced'));
+        this.loadAvailableProducts();
     },
 
     async dispatchDraft(doc) {
@@ -434,33 +346,22 @@
             }
         }
 
-        // Potong stok
-        this.deductMasterStock(doc.items);
-
-        // Update status dokumen
-        const now = new Date();
-        const dateStr = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
-        const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':') + ' WIB';
-
-        doc.status = 'MENUNGGU_VERIFIKASI';
-        doc.sentAt = `${dateStr} • ${timeStr}`;
-
-        // Sinkronisasi ke backend DB jika memiliki ID di database
-        if (typeof doc.id === 'number') {
-            try {
-                await fetch('/api/goods-receipts/' + doc.id + '/status', {
+        // Sinkronisasi ke backend DB
+        try {
+            if (typeof doc.id === 'number') {
+                const res = await fetch('/api/goods-receipts/' + doc.id + '/status', {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
                     body: JSON.stringify({ status: 'MENUNGGU_VERIFIKASI' })
                 });
-            } catch(e) {
-                console.warn('API update status error:', e);
-            }
-        } else {
-            try {
+                if (!res.ok) {
+                    this.triggerToast('Gagal memperbarui status pengiriman di server.', 'error');
+                    return;
+                }
+            } else {
                 const apiRes = await fetch('/api/goods-receipts', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
                     body: JSON.stringify({
                         docNo: doc.docNo,
                         origin_source: doc.warehouseOrigin,
@@ -479,15 +380,27 @@
                         }))
                     })
                 });
-                if (apiRes.ok) {
-                    const apiJson = await apiRes.json();
-                    if (apiJson.success && apiJson.data) {
-                        doc.id = apiJson.data.id;
-                    }
+                if (!apiRes.ok) {
+                    this.triggerToast('Gagal menyimpan pengiriman ke server.', 'error');
+                    return;
                 }
-            } catch(e) {}
+                const apiJson = await apiRes.json();
+                if (apiJson.success && apiJson.data) {
+                    doc.id = apiJson.data.id;
+                }
+            }
+        } catch(e) {
+            this.triggerToast('Gagal menghubungi server.', 'error');
+            return;
         }
 
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+        const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':') + ' WIB';
+        doc.status = 'MENUNGGU_VERIFIKASI';
+        doc.sentAt = `${dateStr} • ${timeStr}`;
+
+        await this.loadAvailableProducts();
         this.saveDocuments();
 
         if (this.selectedDoc && this.selectedDoc.id === doc.id) {
@@ -501,20 +414,26 @@
         if (!confirm(`Batalkan dokumen draft pengiriman ${doc.docNo}?`)) {
             return;
         }
-        doc.status = 'DIBATALKAN';
 
         if (typeof doc.id === 'number') {
             try {
-                await fetch('/api/goods-receipts/' + doc.id + '/status', {
+                const res = await fetch('/api/goods-receipts/' + doc.id + '/status', {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
                     body: JSON.stringify({ status: 'DIBATALKAN' })
                 });
+                if (!res.ok) {
+                    this.triggerToast('Gagal membatalkan draft di server.', 'error');
+                    return;
+                }
             } catch(e) {
                 console.warn('API update status error:', e);
+                this.triggerToast('Gagal menghubungi server.', 'error');
+                return;
             }
         }
 
+        doc.status = 'DIBATALKAN';
         this.saveDocuments();
 
         if (this.selectedDoc && this.selectedDoc.id === doc.id) {

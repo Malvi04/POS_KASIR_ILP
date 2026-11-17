@@ -281,7 +281,7 @@
                                                 <span class="material-symbols-rounded text-[14px] text-rose-600 shrink-0" title="Akun Dibekukan">lock</span>
                                             </template>
                                         </div>
-                                        <span class="text-[11px] text-slate-500 mt-0.5" x-text="m.phone || '0812-9841-2201'"></span>
+                                        <span class="text-[11px] text-slate-500 mt-0.5" x-text="m.phone || '-'"></span>
                                     </div>
                                 </td>
 
@@ -671,8 +671,11 @@
             </div>
 
             <div class="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
-                <button type="button" @click="showRegisterModal = false" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs">Batal</button>
-                <button type="submit" class="px-5 py-2 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-xs shadow-sm">Simpan Anggota</button>
+                <button type="button" :disabled="isSavingMember" @click="showRegisterModal = false" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs disabled:opacity-50 disabled:cursor-not-allowed">Batal</button>
+                <button type="submit" :disabled="isSavingMember" class="px-5 py-2 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-xs shadow-sm flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span x-show="isSavingMember" class="material-symbols-rounded text-[15px] animate-spin">progress_activity</span>
+                    <span x-text="isSavingMember ? 'Menyimpan...' : 'Simpan Anggota'"></span>
+                </button>
             </div>
         </form>
     </x-admin.modal>
@@ -788,6 +791,7 @@ function membersApp() {
         activeTab: 'daftar', // 'daftar', 'permintaan', 'analisis'
         showRegisterModal: false,
         showDetailModal: false,
+        isSavingMember: false,
         showAuditModal: false,
         selectedAuditRequest: null,
         showSortMenu: false,
@@ -816,7 +820,7 @@ function membersApp() {
                 const res = await fetch('/api/members?per_page=100');
                 if (res.ok) {
                     const result = await res.json();
-                    if (result.success && Array.isArray(result.data) && result.data.length > 0) {
+                    if (result.success && Array.isArray(result.data)) {
                         this.members = result.data.map(m => {
                             const plafon = Number(m.credit_limit) || Number(m.plafon) || 5000000;
                             const piutang = Number(m.current_debt) || Number(m.piutang) || 0;
@@ -847,44 +851,7 @@ function membersApp() {
                     }
                 }
             } catch (err) {
-                console.warn('API /api/members error, loading local cache', err);
-            }
-
-            try {
-                const raw = localStorage.getItem('pos_ilp_members_v1');
-                if (raw) {
-                    const parsed = JSON.parse(raw);
-                    if (Array.isArray(parsed) && parsed.length > 0) {
-                        this.members = parsed.map((m, idx) => {
-                            const plafon = Number(m.creditLimit) || Number(m.plafon) || 5000000;
-                            const piutang = Number(m.currentDebt) || Number(m.piutang) || 0;
-                            const util = plafon > 0 ? Math.min(100, Math.round((piutang / plafon) * 100)) : 0;
-                            const sisa = Math.max(0, plafon - piutang);
-                            const isLocked = m.status === 'DIBLOKIR' || m.status === 'DIBEKUKAN' || m.locked === true;
-                            return {
-                                _raw: m,
-                                id: m.id || ('MBR-00' + (idx + 1)),
-                                name: m.name,
-                                nik: m.nik || ('32750100' + idx),
-                                phone: m.phone || ('0812-' + (9841 + idx) + '-2201'),
-                                dept: m.dept || 'Logistik & DC',
-                                branch: m.branch || (idx % 2 === 0 ? 'Pusat' : 'Cabang A'),
-                                plafon: plafon,
-                                piutang: piutang,
-                                utilitas: util,
-                                sisaPlafon: sisa,
-                                shu: Number(m.shu) || 0,
-                                trxCount: Number(m.trxCount) || 0,
-                                status: isLocked ? 'DIBEKUKAN' : (util >= 90 ? 'HAMPIR LIMIT' : 'LANCAR'),
-                                locked: isLocked
-                            };
-                        });
-                        this.loadStoredRequests();
-                        return;
-                    }
-                }
-            } catch(e) {
-                console.error('Failed to load pos_ilp_members_v1', e);
+                console.error('API /api/members error', err);
             }
 
             this.members = [];
@@ -908,31 +875,7 @@ function membersApp() {
         },
 
         saveMembers() {
-            try {
-                const payload = this.members.map(m => {
-                    const base = m._raw ? { ...m._raw } : {};
-                    return {
-                        ...base,
-                        id: m.id,
-                        nik: m.nik,
-                        name: m.name,
-                        phone: m.phone || base.phone || '',
-                        dept: m.dept,
-                        branch: m.branch,
-                        creditLimit: m.plafon,
-                        currentDebt: m.piutang,
-                        status: m.locked ? 'DIBLOKIR' : 'AKTIF',
-                        plafon: m.plafon,
-                        piutang: m.piutang,
-                        shu: m.shu,
-                        trxCount: m.trxCount,
-                        locked: m.locked
-                    };
-                });
-                localStorage.setItem('pos_ilp_members_v1', JSON.stringify(payload));
-            } catch(e) {
-                console.error('Failed to save pos_ilp_members_v1', e);
-            }
+            // Data anggota tersimpan langsung di database PostgreSQL melalui API
         },
 
         // Dynamic Calculations (Formula strictly audited: Deduplikasi NIK, Aktif Only, Pending Excluded)
@@ -1063,91 +1006,92 @@ function membersApp() {
         },
 
         async saveNewMember() {
+            if (this.isSavingMember) return;
             if (!this.newMember.name || !this.newMember.nik) {
                 if (typeof triggerToast === 'function') triggerToast('Harap lengkapi Nama dan NIK anggota!', 'error');
                 return;
             }
             const plafon = Number(this.newMember.plafon) || 5000000;
 
+            this.isSavingMember = true;
+            const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('mbr-' + Date.now());
             try {
-                const res = await fetch('/api/members', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                    },
-                    body: JSON.stringify({
-                        name: this.newMember.name,
-                        nik: this.newMember.nik,
-                        department: this.newMember.dept,
-                        branch: this.newMember.branch,
-                        credit_limit: plafon
-                    })
-                });
-                if (res.ok) {
-                    if (typeof triggerToast === 'function') triggerToast('Anggota baru berhasil diregistrasi ke sistem koperasi!', 'success');
-                    this.showRegisterModal = false;
-                    this.newMember = { name: '', nik: '', dept: 'Logistik & DC', branch: 'Pusat', plafon: 5000000 };
-                    await this.initMembers();
+                try {
+                    const res = await fetch('/api/members', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                            'X-Idempotency-Key': idemKey
+                        },
+                        body: JSON.stringify({
+                            name: this.newMember.name,
+                            nik: this.newMember.nik,
+                            department: this.newMember.dept,
+                            branch: this.newMember.branch,
+                            credit_limit: plafon
+                        })
+                    });
+                    if (res.ok) {
+                        if (typeof triggerToast === 'function') triggerToast('Anggota baru berhasil diregistrasi ke sistem koperasi!', 'success');
+                        this.showRegisterModal = false;
+                        this.newMember = { name: '', nik: '', dept: 'Logistik & DC', branch: 'Pusat', plafon: 5000000 };
+                        await this.initMembers();
+                        return;
+                    }
+                    const errJson = await res.json().catch(() => ({}));
+                    if (typeof triggerToast === 'function') triggerToast(errJson.message || 'Gagal mendaftarkan anggota ke server.', 'error');
                     return;
+                } catch (err) {
+                    console.error('API error registering member', err);
+                    if (typeof triggerToast === 'function') triggerToast('Gagal terhubung ke server saat mendaftarkan anggota.', 'error');
                 }
-            } catch (err) {
-                console.warn('API error, saving locally', err);
+            } finally {
+                this.isSavingMember = false;
             }
-
-            this.members.unshift({
-                id: 'MBR-00' + (this.members.length + 1),
-                name: this.newMember.name,
-                nik: this.newMember.nik,
-                dept: this.newMember.dept,
-                branch: this.newMember.branch,
-                plafon: plafon,
-                piutang: 0,
-                utilitas: 0,
-                sisaPlafon: plafon,
-                shu: 0,
-                trxCount: 0,
-                status: 'LANCAR',
-                locked: false
-            });
-            this.saveMembers();
-            this.showRegisterModal = false;
-            if (typeof triggerToast === 'function') triggerToast('Anggota baru berhasil diregistrasi!', 'success');
-            this.newMember = { name: '', nik: '', dept: 'Logistik & DC', branch: 'Pusat', plafon: 5000000 };
         },
 
         async unlockMember(member) {
-            member.locked = false;
-            member.status = 'LANCAR';
-            if (typeof member.id === 'number') {
-                try {
-                    await fetch(`/api/members/${member.id}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
-                        body: JSON.stringify({ status: 'AKTIF' })
-                    });
-                } catch(e){}
+            try {
+                const res = await fetch(`/api/members/${member.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                    body: JSON.stringify({ status: 'AKTIF' })
+                });
+                if (!res.ok) {
+                    const errJson = await res.json().catch(() => ({}));
+                    if (typeof triggerToast === 'function') triggerToast(errJson.message || 'Gagal membuka blokir plafon anggota.', 'error');
+                    return;
+                }
+                member.locked = false;
+                member.status = 'LANCAR';
+                if (typeof triggerToast === 'function') triggerToast('Blokir plafon anggota ' + member.name + ' berhasil dibuka!', 'success');
+            } catch(e) {
+                if (typeof triggerToast === 'function') triggerToast('Gagal terhubung ke server.', 'error');
             }
-            this.saveMembers();
-            if (typeof triggerToast === 'function') triggerToast('Blokir plafon anggota ' + member.name + ' berhasil dibuka!', 'success');
         },
 
         async toggleLockMember(member) {
-            member.locked = !member.locked;
-            member.status = member.locked ? 'DIBEKUKAN' : 'LANCAR';
-            if (typeof member.id === 'number') {
-                try {
-                    await fetch(`/api/members/${member.id}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
-                        body: JSON.stringify({ status: member.locked ? 'DIBLOKIR' : 'AKTIF' })
-                    });
-                } catch(e){}
+            const nextLocked = !member.locked;
+            try {
+                const res = await fetch(`/api/members/${member.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                    body: JSON.stringify({ status: nextLocked ? 'DIBLOKIR' : 'AKTIF' })
+                });
+                if (!res.ok) {
+                    const errJson = await res.json().catch(() => ({}));
+                    if (typeof triggerToast === 'function') triggerToast(errJson.message || 'Gagal mengubah status kredit anggota.', 'error');
+                    return;
+                }
+                member.locked = nextLocked;
+                member.status = nextLocked ? 'DIBEKUKAN' : 'LANCAR';
+                this.showActionMemberId = null;
+                if (typeof triggerToast === 'function') triggerToast('Status kredit anggota ' + member.name + ' diubah ke: ' + member.status, 'info');
+            } catch(e) {
+                if (typeof triggerToast === 'function') triggerToast('Gagal terhubung ke server.', 'error');
             }
-            this.saveMembers();
-            this.showActionMemberId = null;
-            if (typeof triggerToast === 'function') triggerToast('Status kredit anggota ' + member.name + ' diubah ke: ' + member.status, 'info');
         },
 
         openAuditModal(req) {

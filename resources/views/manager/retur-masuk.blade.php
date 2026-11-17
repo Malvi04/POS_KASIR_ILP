@@ -20,8 +20,8 @@
 
     // Return Back Modal Form State
     returnBackDoc: null,
-    returnBackDriver: 'Andi Pratama',
-    returnBackPlate: 'B 9481 UQ',
+    returnBackDriver: '',
+    returnBackPlate: '',
     returnBackNotes: '',
     returnBackItems: [],
     isSubmittingReturn: false,
@@ -33,19 +33,36 @@
 
     returnInDocuments: [],
 
-    initReturnIn() {
-        const stored = localStorage.getItem('pos_ilp_manager_retur_masuk_v1');
-        if (stored) {
-            try {
-                const parsed = JSON.parse(stored);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    this.returnInDocuments = parsed.map(d => this.normalizeDoc(d));
-                    this.saveDocs();
+    async initReturnIn() {
+        try {
+            const res = await fetch('/api/returns?direction=toko_ke_gudang', { headers: { 'Accept': 'application/json' } });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && Array.isArray(json.data)) {
+                    this.returnInDocuments = json.data.map(d => this.normalizeDoc({
+                        id: d.id,
+                        docNo: d.docNo,
+                        date: d.date,
+                        originRef: d.ref || '-',
+                        warehouseOrigin: d.branchOrigin || 'Cabang',
+                        driverName: d.driver || '-',
+                        plateNumber: d.plate || '-',
+                        type: d.conditionType || 'rusak',
+                        status: d.statusKey === 'selesai' ? 'SELESAI' : (d.statusKey === 'disetujui' ? 'DITERIMA_LENGKAP' : (d.statusKey === 'ditolak' ? 'DITOLAK' : 'MENUNGGU_VERIFIKASI')),
+                        generalNotes: d.conditionDesc || '',
+                        items: (d.products || []).map(p => ({
+                            sku: p.sku || '-',
+                            name: p.name,
+                            qtySent: parseInt(p.qty, 10) || 1,
+                            condition: d.conditionLabel || '-',
+                            unit: 'Pcs'
+                        }))
+                    }));
                     return;
                 }
-            } catch(e) {
-                console.error('Failed to parse manager return-in docs:', e);
             }
+        } catch(e) {
+            console.error('Failed to load return-in docs from API:', e);
         }
         this.returnInDocuments = [];
     },
@@ -72,11 +89,7 @@
     },
 
     saveDocs() {
-        try {
-            localStorage.setItem('pos_ilp_manager_retur_masuk_v1', JSON.stringify(this.returnInDocuments));
-        } catch(e) {
-            console.error('Failed to save manager return-in docs:', e);
-        }
+        // Dokumen retur masuk dikelola melalui API backend PostgreSQL
     },
 
     getDefaultDocs() {
@@ -144,8 +157,8 @@
 
     openReturnBackModal(doc) {
         this.returnBackDoc = doc;
-        this.returnBackDriver = doc.driverName || 'Andi Pratama';
-        this.returnBackPlate = doc.plateNumber || 'B 9481 UQ';
+        this.returnBackDriver = doc.driverName || '';
+        this.returnBackPlate = doc.plateNumber || '';
         this.returnBackNotes = '';
         this.isSubmittingReturn = false;
 
@@ -250,69 +263,20 @@
             }
 
             original.receivedAt = nowStr;
-            original.receiverName = 'Budi Santoso (Manager Operasional)';
+            original.receiverName = @js(auth()->user()?->name ?? 'Manager');
             original.generalNotes = this.verifyNotes.trim() || 'Verifikasi fisik barang masuk retur dari cabang selesai diperiksa.';
             original.sisaBarangDitolakDiGudang = totalRejected;
             if (!original.returnHistory) original.returnHistory = [];
 
-            // ATURAN MUTLAK BISNIS KOPKAR:
-            // 1. Stok Master (pos_ilp_inventory_products_v1) TIDAK BOLEH BERUBAH SAMA SEKALI!
-            // 2. Hanya barang yang DITERIMA (qtyAccepted > 0) yang masuk ke Stok Barang Retur (pos_ilp_stok_retur_gudang_v1).
-            // 3. Barang yang DITOLAK (qtyRejected > 0) TIDAK MASUK STOK APAPUN dan dicatat sebagai barang fisik di gudang yang menunggu pengembalian ke cabang.
-            try {
-                const rawRet = localStorage.getItem('pos_ilp_stok_retur_gudang_v1');
-                let retStock = rawRet ? JSON.parse(rawRet) : [];
-                // Bersihkan entri lama dari nomor dokumen ini jika pernah disimpan sebelumnya
-                retStock = retStock.filter(s => s.docRef !== original.docNo);
-
-                if (totalAccepted > 0) {
-                    original.items.forEach(it => {
-                        if (it.qtyAccepted > 0) {
-                            retStock.unshift({
-                                id: 'RET-GD-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
-                                sku: it.sku || 'PRD-RET',
-                                barcode: it.sku || '899000000',
-                                name: it.name,
-                                branchOrigin: original.warehouseOrigin || 'Cabang A',
-                                docRef: original.docNo,
-                                receivedDate: nowStr,
-                                qtyReceived: it.qtyAccepted,
-                                unit: 'Pcs',
-                                initialCondition: it.condition || 'Barang Retur Diterima',
-                                inspectionStatus: 'QC Selesai',
-                                followUp: 'Karantina Gudang / Klaim Supplier',
-                                inspectorNotes: `Diterima dari ${original.warehouseOrigin} via dokumen ${original.docNo}. ${it.note || ''}`,
-                                inspectedBy: 'Budi Santoso (Manager Operasional)',
-                                updatedAt: nowStr
-                            });
-                        }
-                    });
-                }
-                localStorage.setItem('pos_ilp_stok_retur_gudang_v1', JSON.stringify(retStock));
-                window.dispatchEvent(new CustomEvent('pos-return-stock-synced', { detail: { count: retStock.length } }));
-            } catch(e) {
-                console.error('Error updating return stock:', e);
+            if (typeof original.id === 'number') {
+                const targetApiStatus = totalAccepted === 0 && totalRejected > 0 ? 'ditolak' : 'selesai';
+                fetch(`/api/returns/${original.id}/status`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                    body: JSON.stringify({ status: targetApiStatus })
+                }).catch(() => {});
             }
 
-            // Catat Audit Log
-            try {
-                const rawAudit = localStorage.getItem('pos_ilp_audit_logs_v1');
-                let auditLogs = rawAudit ? JSON.parse(rawAudit) : [];
-                auditLogs.unshift({
-                    id: 'AUD-' + Date.now(),
-                    timestamp: new Date().toISOString(),
-                    user: 'Budi Santoso',
-                    role: 'Manager',
-                    branch: 'Gudang Pusat',
-                    category: 'Barang Masuk / Distribusi / Mutasi',
-                    action: `Verifikasi Fisik Retur Masuk ${original.docNo} dari ${original.warehouseOrigin}`,
-                    details: `Diterima ke Stok Retur: ${totalAccepted} Pcs, Ditolak (Menunggu Pengembalian): ${totalRejected} Pcs. Stok Master normal tidak berubah.`,
-                    status: 'Success'
-                });
-                localStorage.setItem('pos_ilp_audit_logs_v1', JSON.stringify(auditLogs.slice(0, 150)));
-            } catch(e) {}
-
-            this.saveDocs();
             this.showVerifyModal = false;
             this.isSubmitting = false;
 
@@ -392,24 +356,6 @@
                 original.status = 'PENGEMBALIAN_SEBAGIAN';
             }
 
-            // Catat ke Audit Trail
-            try {
-                const rawAudit = localStorage.getItem('pos_ilp_audit_logs_v1');
-                let auditLogs = rawAudit ? JSON.parse(rawAudit) : [];
-                auditLogs.unshift({
-                    id: 'AUD-' + Date.now(),
-                    timestamp: new Date().toISOString(),
-                    user: 'Budi Santoso',
-                    role: 'Manager',
-                    branch: 'Gudang Pusat',
-                    category: 'Barang Masuk / Distribusi / Mutasi',
-                    action: `Pengembalian Barang Ditolak Dokumen ${original.docNo} ke ${original.warehouseOrigin}`,
-                    details: `Dikeluarkan dari gudang: ${totalReturnNow} Pcs via driver ${this.returnBackDriver} (${this.returnBackPlate}). Sisa di gudang: ${remainingInDC} Pcs.`,
-                    status: 'Success'
-                });
-                localStorage.setItem('pos_ilp_audit_logs_v1', JSON.stringify(auditLogs.slice(0, 150)));
-            } catch(e) {}
-
             this.saveDocs();
             this.showReturnBackModal = false;
             this.isSubmittingReturn = false;
@@ -465,11 +411,11 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
                 <div class="flex items-center gap-2.5 bg-slate-50 border border-gray-200 px-3 py-1.5 rounded-xl">
                     <div class="w-7 h-7 rounded-lg bg-[#0052cc] text-white flex items-center justify-center text-xs font-black">
-                        BS
+                        {{ collect(explode(' ', trim(auth()->user()?->name ?? 'M')))->filter()->take(2)->map(fn($w) => strtoupper(substr($w, 0, 1)))->implode('') ?: 'M' }}
                     </div>
                     <div class="flex flex-col text-left">
-                        <span class="text-[11px] font-bold text-gray-900 leading-tight">Budi Santoso</span>
-                        <span class="text-[9.5px] font-semibold text-gray-500">Manager Operasional</span>
+                        <span class="text-[11px] font-bold text-gray-900 leading-tight">{{ auth()->user()?->name ?? 'Manager' }}</span>
+                        <span class="text-[9.5px] font-semibold text-gray-500">{{ ucfirst(strtolower(auth()->user()?->role ?? 'Manager')) }} Operasional</span>
                     </div>
                 </div>
             </div>
@@ -831,7 +777,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         </div>
                         <div>
                             <span class="text-[10px] font-bold text-gray-400 uppercase block">PETUGAS MANAGER</span>
-                            <span class="font-bold text-[#0052cc]">Budi Santoso (Gudang Pusat)</span>
+                            <span class="font-bold text-[#0052cc]">{{ auth()->user()?->name ?? 'Manager' }} (Gudang Pusat)</span>
                         </div>
                     </div>
 
@@ -1209,7 +1155,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <div>
                             <span class="text-[10px] font-bold text-gray-400 uppercase block">STATUS &amp; PENERIMA GUDANG</span>
                             <span class="font-bold text-emerald-700" x-text="selectedDoc?.status"></span>
-                            <span class="text-gray-700 text-[11px] block mt-0.5" x-text="'Pemeriksa: ' + (selectedDoc?.receiverName || 'Budi Santoso (Manager)')"></span>
+                            <span class="text-gray-700 text-[11px] block mt-0.5" x-text="'Pemeriksa: ' + (selectedDoc?.receiverName || @js(auth()->user()?->name ?? 'Manager'))"></span>
                             <span class="text-gray-500 text-[10.5px] block" x-text="'Tujuan: Gudang Pusat (DC Logistik)'"></span>
                         </div>
                     </div>

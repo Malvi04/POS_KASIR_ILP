@@ -317,37 +317,27 @@
 
             <!-- Restock Alert Items List -->
             <div class="space-y-3 pt-1">
-                <!-- Item 1 -->
-                <div class="p-3.5 rounded-xl border border-amber-200 bg-amber-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div class="flex items-center gap-3">
-                        <span class="material-symbols-rounded text-[20px] text-amber-500">warning</span>
-                        <div class="flex flex-col">
-                            <span class="text-[13px] font-bold text-slate-900">Batik Cantik Arum - Kain Batik Parang</span>
-                            <span class="text-[11.5px] font-bold text-rose-600">Sisa Stok: 2 pcs (Min: 10)</span>
-                        </div>
+                <template x-if="restockAlerts.length === 0">
+                    <div class="p-4 rounded-xl border border-slate-200 bg-slate-50 text-center text-xs font-medium text-slate-500">
+                        Tidak ada produk konsinyasi yang stoknya menipis saat ini.
                     </div>
-                    <button type="button" 
-                            @click="openContact('Batik Cantik Arum', 'Kain Batik Parang', 2)"
-                            class="px-3.5 py-1.5 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-xs font-bold shadow-2xs transition-colors self-start sm:self-auto">
-                        Hubungi Mitra
-                    </button>
-                </div>
-
-                <!-- Item 2 -->
-                <div class="p-3.5 rounded-xl border border-amber-200 bg-amber-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div class="flex items-center gap-3">
-                        <span class="material-symbols-rounded text-[20px] text-amber-500">warning</span>
-                        <div class="flex flex-col">
-                            <span class="text-[13px] font-bold text-slate-900">Keripik Ibu Siti - Keripik Singkong Pedas 250g</span>
-                            <span class="text-[11.5px] font-bold text-rose-600">Sisa Stok: 5 pcs (Min: 20)</span>
+                </template>
+                <template x-for="alert in restockAlerts" :key="alert.id">
+                    <div class="p-3.5 rounded-xl border border-amber-200 bg-amber-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div class="flex items-center gap-3">
+                            <span class="material-symbols-rounded text-[20px] text-amber-500">warning</span>
+                            <div class="flex flex-col">
+                                <span class="text-[13px] font-bold text-slate-900" x-text="alert.partnerName + ' - ' + alert.productName"></span>
+                                <span class="text-[11.5px] font-bold text-rose-600" x-text="'Sisa Stok: ' + alert.stock + ' pcs (Min: ' + alert.minStock + ')'"></span>
+                            </div>
                         </div>
+                        <button type="button" 
+                                @click="openContact(alert.partnerName, alert.productName, alert.stock)"
+                                class="px-3.5 py-1.5 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-xs font-bold shadow-2xs transition-colors self-start sm:self-auto">
+                            Hubungi Mitra
+                        </button>
                     </div>
-                    <button type="button" 
-                            @click="openContact('Keripik Ibu Siti', 'Keripik Singkong Pedas 250g', 5)"
-                            class="px-3.5 py-1.5 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-xs font-bold shadow-2xs transition-colors self-start sm:self-auto">
-                        Hubungi Mitra
-                    </button>
-                </div>
+                </template>
             </div>
             <p class="text-[11px] text-slate-400">
                 * Pemberitahuan restock bersifat komunikatif langsung ke produsen tanpa pemotongan saldo atau penagihan otomatis.
@@ -359,17 +349,17 @@
             <div>
                 <h4 class="text-base font-black tracking-tight text-white">Insight Bulan Ini</h4>
                 <p class="text-[13px] text-blue-100 mt-2.5 leading-relaxed">
-                    Produk Kerajinan mengalami kenaikan permintaan sebesar <strong class="text-white font-black">24%</strong> minggu ini.
+                    Total penjualan konsinyasi tercatat <strong class="text-white font-black" x-text="consignmentInsight.totalUnitsSold + ' unit'"></strong> dari <strong class="text-white font-black" x-text="consignmentInsight.totalSkus + ' SKU aktif'"></strong>.
                 </p>
             </div>
 
             <div class="pt-6">
                 <div class="flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 text-blue-200">
-                    <span>TARGET PENJUALAN UMKM</span>
-                    <span class="text-white text-sm">82%</span>
+                    <span>RASIO TERJUAL KONSINYASI</span>
+                    <span class="text-white text-sm" x-text="consignmentInsight.sellThroughPercent + '%'"></span>
                 </div>
                 <div class="w-full bg-blue-950/40 rounded-full h-2.5 overflow-hidden">
-                    <div class="bg-white h-2.5 rounded-full" style="width: 82%"></div>
+                    <div class="bg-white h-2.5 rounded-full" :style="'width: ' + consignmentInsight.sellThroughPercent + '%'"></div>
                 </div>
             </div>
         </div>
@@ -413,8 +403,11 @@
             </div>
 
             <div class="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
-                <button type="button" @click="showAddModal = false" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs">Batal</button>
-                <button type="submit" class="px-5 py-2 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-xs shadow-sm">Simpan Mitra</button>
+                <button type="button" :disabled="isSavingPartner" @click="showAddModal = false" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs disabled:opacity-50 disabled:cursor-not-allowed">Batal</button>
+                <button type="submit" :disabled="isSavingPartner" class="px-5 py-2 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-xs shadow-sm flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span x-show="isSavingPartner" class="material-symbols-rounded text-[15px] animate-spin">progress_activity</span>
+                    <span x-text="isSavingPartner ? 'Menyimpan...' : 'Simpan Mitra'"></span>
+                </button>
             </div>
         </form>
     </x-admin.modal>
@@ -481,8 +474,10 @@
             </div>
 
             <div class="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
-                <button type="button" @click="showEditModal = false" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs">Batal</button>
-                <button type="submit" class="px-5 py-2 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-xs shadow-sm">Simpan Perubahan</button>
+                <button type="button" :disabled="isSavingPartner" @click="showEditModal = false" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs disabled:opacity-50 disabled:cursor-not-allowed">Batal</button>
+                <button type="submit" :disabled="isSavingPartner" class="px-5 py-2 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-xs shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span x-text="isSavingPartner ? 'Menyimpan...' : 'Simpan Perubahan'"></span>
+                </button>
             </div>
         </form>
     </x-admin.modal>
@@ -538,12 +533,19 @@ function umkmPartnersApp() {
         showEditModal: false,
         showDetailModal: false,
         showContactModal: false,
+        isSavingPartner: false,
         selectedPartner: null,
         contactingPartner: null,
         editingPartner: {},
 
-        // Data Mitra UMKM - Terhubung dengan pos_ilp_umkm_partners_v1 (LocalStorage)
+        // Data Mitra UMKM - Terhubung langsung ke Backend API / Database
         partners: [],
+        restockAlerts: [],
+        consignmentInsight: {
+            totalUnitsSold: 0,
+            totalSkus: 0,
+            sellThroughPercent: 0
+        },
 
         defaultPartners: [],
 
@@ -557,43 +559,75 @@ function umkmPartnersApp() {
 
         async initUmkm() {
             try {
-                const res = await fetch('/api/consignment/partners');
+                const [res, repRes] = await Promise.all([
+                    fetch('/api/consignment/partners', { headers: { 'Accept': 'application/json' } }),
+                    fetch('/api/consignment/report', { headers: { 'Accept': 'application/json' } }).catch(() => null)
+                ]);
+
+                let reportItems = [];
+                if (repRes && repRes.ok) {
+                    const repJson = await repRes.json();
+                    reportItems = Array.isArray(repJson.data) ? repJson.data : [];
+                    let totalSold = 0;
+                    let totalStock = 0;
+                    this.restockAlerts = [];
+                    reportItems.forEach((item, idx) => {
+                        const stock = Number(item.stock ?? 0);
+                        const minStock = Number(item.min_stock ?? 10);
+                        const sold = Number(item.units_sold ?? 0);
+                        totalSold += sold;
+                        totalStock += stock;
+                        if (stock <= minStock) {
+                            this.restockAlerts.push({
+                                id: item.product_id || idx,
+                                partnerName: item.supplier_name || '-',
+                                productName: item.product_name || '-',
+                                stock: stock,
+                                minStock: minStock
+                            });
+                        }
+                    });
+                    const denom = totalSold + totalStock;
+                    this.consignmentInsight = {
+                        totalUnitsSold: totalSold,
+                        totalSkus: reportItems.length,
+                        sellThroughPercent: denom > 0 ? Math.min(100, Math.round((totalSold / denom) * 100)) : 0
+                    };
+                }
+
                 if (res.ok) {
                     const result = await res.json();
-                    if (result.success && Array.isArray(result.data) && result.data.length > 0) {
-                        this.partners = result.data.map(p => ({
-                            id: p.id,
-                            initial: (p.name || 'U').charAt(0).toUpperCase(),
-                            initialColor: 'bg-blue-100 text-[#0052cc]',
-                            name: p.name,
-                            location: p.address || 'Bandung',
-                            category: p.category || 'Snack',
-                            skuCount: p.products_count || 1,
-                            stockStatus: 'Aman',
-                            salesTotal: (p.products_count || 0) * 250000,
-                            status: p.status || 'AKTIF',
-                            phone: p.phone || '0812-0000-0000',
-                            commission: Number(p.commission_percent) || 15,
-                            products: []
-                        }));
-                        this.saveUmkm();
+                    if (result.success && Array.isArray(result.data)) {
+                        this.partners = result.data.map(p => {
+                            const partnerItems = reportItems.filter(it => Number(it.supplier_id) === Number(p.id));
+                            const salesTotal = partnerItems.reduce((sum, it) => sum + (Number(it.gross_sales) || 0), 0);
+                            const lowCount = partnerItems.filter(it => Number(it.stock ?? 0) <= Number(it.min_stock ?? 10)).length;
+                            return {
+                                id: p.id,
+                                initial: (p.name || 'U').charAt(0).toUpperCase(),
+                                initialColor: 'bg-blue-100 text-[#0052cc]',
+                                name: p.name,
+                                location: p.address || '-',
+                                category: p.category || 'Umum',
+                                skuCount: p.products_count || partnerItems.length || 0,
+                                stockStatus: lowCount > 0 ? 'Stok Rendah' : 'Aman',
+                                salesTotal: salesTotal,
+                                status: p.status || 'AKTIF',
+                                phone: p.phone || '-',
+                                commission: Number(p.commission_percent) || 0,
+                                products: partnerItems.map(it => ({
+                                    name: it.product_name,
+                                    price: Number(it.price) || 0,
+                                    stock: Number(it.stock) || 0
+                                }))
+                            };
+                        });
                         return;
                     }
                 }
             } catch (err) {
-                console.warn('API error, reading local cache', err);
+                console.error('API error loading consignment partners', err);
             }
-
-            try {
-                const stored = localStorage.getItem('pos_ilp_umkm_partners_v1');
-                if (stored) {
-                    const parsed = JSON.parse(stored);
-                    if (Array.isArray(parsed) && parsed.length > 0) {
-                        this.partners = parsed;
-                        return;
-                    }
-                }
-            } catch(e) {}
             this.partners = [];
         },
 
@@ -614,9 +648,7 @@ function umkmPartnersApp() {
         },
 
         saveUmkm() {
-            try {
-                localStorage.setItem('pos_ilp_umkm_partners_v1', JSON.stringify(this.partners));
-            } catch(e) {}
+            // Data mitra konsinyasi tersimpan di PostgreSQL melalui API
         },
 
         get filteredPartners() {
@@ -646,69 +678,70 @@ function umkmPartnersApp() {
         },
 
         async saveEditPartner() {
+            if (this.isSavingPartner) return;
             if (!this.editingPartner.name) {
                 if (window.triggerToast) window.triggerToast('Harap isi nama mitra usaha!', 'error');
                 return;
             }
 
-            if (typeof this.editingPartner.id === 'number') {
-                try {
-                    const res = await fetch(`/api/consignment/partners/${this.editingPartner.id}`, {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json',
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                        },
-                        body: JSON.stringify({
-                            name: this.editingPartner.name,
-                            address: this.editingPartner.location,
-                            category: this.editingPartner.category,
-                            phone: this.editingPartner.phone,
-                            commission_percent: this.editingPartner.commission || 15,
-                            settlement_period: 'BULANAN',
-                            status: this.editingPartner.status || 'AKTIF'
-                        })
-                    });
-                    if (res.ok) {
-                        this.showEditModal = false;
-                        if (window.triggerToast) window.triggerToast('Data mitra ' + this.editingPartner.name + ' berhasil diperbarui di database!', 'success');
-                        await this.initUmkm();
-                        return;
-                    }
-                } catch(e) {
-                    console.warn('API error, updating locally', e);
-                }
-            }
-
-            const idx = this.partners.findIndex(p => p.id === this.editingPartner.id);
-            if (idx !== -1) {
-                this.partners[idx] = { ...this.partners[idx], ...this.editingPartner };
-                this.saveUmkm();
-                this.showEditModal = false;
-                if (window.triggerToast) window.triggerToast('Data mitra ' + this.editingPartner.name + ' berhasil diperbarui!', 'success');
-            }
-        },
-
-        async saveNewPartner() {
-            if (!this.newPartner.name) {
-                if (window.triggerToast) window.triggerToast('Harap isi nama mitra produsen!', 'error');
-                return;
-            }
-
+            this.isSavingPartner = true;
             try {
-                const res = await fetch('/api/consignment/partners', {
-                    method: 'POST',
+                const res = await fetch(`/api/consignment/partners/${this.editingPartner.id}`, {
+                    method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json',
                         'X-CSRF-TOKEN': '{{ csrf_token() }}'
                     },
                     body: JSON.stringify({
-                        name: this.newPartner.name,
-                        address: this.newPartner.location || 'Bandung',
+                        name: this.editingPartner.name,
+                        address: this.editingPartner.location,
+                        category: this.editingPartner.category,
+                        phone: this.editingPartner.phone,
+                        commission_percent: this.editingPartner.commission || 15,
+                        settlement_period: 'BULANAN',
+                        status: this.editingPartner.status || 'AKTIF'
+                    })
+                });
+                if (res.ok) {
+                    this.showEditModal = false;
+                    if (window.triggerToast) window.triggerToast('Data mitra ' + this.editingPartner.name + ' berhasil diperbarui di database!', 'success');
+                    await this.initUmkm();
+                    return;
+                }
+                const errJson = await res.json().catch(() => ({}));
+                if (window.triggerToast) window.triggerToast(errJson.message || 'Gagal memperbarui mitra di server.', 'error');
+            } catch(e) {
+                console.error('API error updating partner', e);
+                if (window.triggerToast) window.triggerToast('Gagal terhubung ke server saat memperbarui mitra.', 'error');
+            } finally {
+                this.isSavingPartner = false;
+            }
+        },
+
+        async saveNewPartner() {
+            if (this.isSavingPartner) return;
+            if (!this.newPartner.name || !this.newPartner.name.trim()) {
+                if (window.triggerToast) window.triggerToast('Harap isi nama mitra produsen!', 'error');
+                return;
+            }
+
+            this.isSavingPartner = true;
+            const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('umkm-' + Date.now());
+            try {
+                const res = await fetch('/api/consignment/partners', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'X-Idempotency-Key': idemKey
+                    },
+                    body: JSON.stringify({
+                        name: this.newPartner.name.trim(),
+                        address: (this.newPartner.location || '').trim(),
                         category: this.newPartner.category,
-                        phone: this.newPartner.phone || '0812-0000-0000',
+                        phone: (this.newPartner.phone || '').trim(),
                         commission_percent: this.newPartner.commission || 15,
                         settlement_period: 'BULANAN'
                     })
@@ -720,56 +753,38 @@ function umkmPartnersApp() {
                     await this.initUmkm();
                     return;
                 }
+                const errJson = await res.json().catch(() => ({}));
+                if (window.triggerToast) window.triggerToast(errJson.message || 'Gagal menyimpan mitra konsinyasi.', 'error');
             } catch(e) {
-                console.warn('API error, saving locally', e);
+                console.error('API error saving partner', e);
+                if (window.triggerToast) window.triggerToast('Gagal terhubung ke server saat menyimpan mitra.', 'error');
+            } finally {
+                this.isSavingPartner = false;
             }
-
-            const initial = this.newPartner.name.charAt(0).toUpperCase();
-            this.partners.unshift({
-                id: 'UMKM-0' + (this.partners.length + 1),
-                initial: initial,
-                initialColor: 'bg-blue-100 text-[#0052cc]',
-                name: this.newPartner.name,
-                location: this.newPartner.location || 'Bandung',
-                category: this.newPartner.category,
-                skuCount: 1,
-                stockStatus: 'Aman',
-                salesTotal: 0,
-                status: 'AKTIF',
-                phone: this.newPartner.phone || '0812-0000-0000',
-                products: []
-            });
-            this.saveUmkm();
-            this.showAddModal = false;
-            if (window.triggerToast) window.triggerToast('Mitra konsinyasi baru berhasil didaftarkan!', 'success');
-            this.newPartner = { name: '', location: '', category: 'Snack', phone: '', commission: 15 };
         },
 
         async deletePartner(partner) {
             if (!confirm('Hapus mitra ' + partner.name + ' dari daftar konsinyasi?')) return;
 
-            if (typeof partner.id === 'number') {
-                try {
-                    const res = await fetch(`/api/consignment/partners/${partner.id}`, {
-                        method: 'DELETE',
-                        headers: {
-                            'Accept': 'application/json',
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                        }
-                    });
-                    if (res.ok) {
-                        if (window.triggerToast) window.triggerToast('Mitra konsinyasi berhasil dihapus dari database.', 'info');
-                        await this.initUmkm();
-                        return;
+            try {
+                const res = await fetch(`/api/consignment/partners/${partner.id}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
                     }
-                } catch(e) {
-                    console.warn('API error, removing locally', e);
+                });
+                if (res.ok) {
+                    if (window.triggerToast) window.triggerToast('Mitra konsinyasi berhasil dihapus dari database.', 'info');
+                    await this.initUmkm();
+                    return;
                 }
+                const errJson = await res.json().catch(() => ({}));
+                if (window.triggerToast) window.triggerToast(errJson.message || 'Gagal menghapus mitra konsinyasi.', 'error');
+            } catch(e) {
+                console.error('API error removing partner', e);
+                if (window.triggerToast) window.triggerToast('Gagal terhubung ke server saat menghapus mitra.', 'error');
             }
-
-            this.partners = this.partners.filter(p => p.id !== partner.id);
-            this.saveUmkm();
-            if (window.triggerToast) window.triggerToast('Mitra konsinyasi berhasil dihapus.', 'info');
         },
 
         openContact(partnerName, productName, stockLeft) {

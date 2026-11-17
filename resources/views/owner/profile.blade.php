@@ -48,12 +48,12 @@
                         <img :src="profile.avatar" 
                              :alt="profile.name" 
                              class="w-28 h-28 rounded-full object-cover border-4 border-blue-50 shadow-md mx-auto"
-                             onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=Dewi+Sartika&background=0052cc&color=fff&bold=true'">
+                             onerror="this.onerror=null; this.src=@js('https://ui-avatars.com/api/?name=' . urlencode(auth()->user()?->name ?? 'Owner') . '&background=0052cc&color=fff&bold=true')">
                         <span class="absolute bottom-1 right-1 w-4 h-4 bg-emerald-500 rounded-full ring-2 ring-white" title="Status Online"></span>
                     </div>
 
                     <div>
-                        <h3 class="text-lg font-black text-slate-900" x-text="profile.name">Dewi Sartika</h3>
+                        <h3 class="text-lg font-black text-slate-900" x-text="profile.name">{{ auth()->user()?->name ?? 'Owner' }}</h3>
                         <p class="text-xs font-bold text-[#0052cc] mt-0.5" x-text="profile.title || 'Pemilik Usaha & Direktur Koperasi'"></p>
                         <p class="text-[11px] text-slate-400 mt-1 font-mono" x-text="profile.email"></p>
                     </div>
@@ -68,19 +68,9 @@
                         </div>
                         <div class="flex items-center gap-1.5 pt-1">
                             <button type="button" 
-                                    @click="profile.avatar = 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80'"
+                                    @click="profile.avatar = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(profile.name || 'Owner') + '&background=0052cc&color=fff&bold=true'"
                                     class="flex-1 py-1 px-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] font-bold text-slate-600 transition-colors">
-                                Foto 1
-                            </button>
-                            <button type="button" 
-                                    @click="profile.avatar = 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150&auto=format&fit=crop&q=80'"
-                                    class="flex-1 py-1 px-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] font-bold text-slate-600 transition-colors">
-                                Foto 2
-                            </button>
-                            <button type="button" 
-                                    @click="profile.avatar = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(profile.name) + '&background=0052cc&color=fff&bold=true'"
-                                    class="flex-1 py-1 px-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] font-bold text-slate-600 transition-colors">
-                                Inisial
+                                Gunakan Avatar Inisial
                             </button>
                         </div>
                     </div>
@@ -224,14 +214,18 @@
 
 <script>
 function ownerProfileApp() {
+    const authName = @js(auth()->user()?->name ?? '');
+    const authEmail = @js(auth()->user()?->email ?? '');
+    const authNik = @js(auth()->user()?->nik ?? '');
+    const defaultAvatar = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(authName || 'Owner') + '&background=0052cc&color=fff&bold=true';
     return {
         profile: {
-            name: 'Dewi Sartika',
+            name: authName,
             title: 'Pemilik Usaha & Direktur Koperasi',
-            email: 'owner@coop.id',
-            phone: '0812-9841-2201',
-            nik: '327501550230056',
-            avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
+            email: authEmail,
+            phone: '',
+            nik: authNik,
+            avatar: defaultAvatar,
             defaultBranch: 'all',
             alertLowStock: true,
             compactTable: false
@@ -239,28 +233,18 @@ function ownerProfileApp() {
 
         async init() {
             try {
-                const res = await fetch('/api/owner/profile');
+                const res = await fetch('/api/owner/profile', { headers: { 'Accept': 'application/json' } });
                 if (res.ok) {
                     const result = await res.json();
                     if (result.success && result.data) {
                         this.profile = { ...this.profile, ...result.data };
-                        return;
+                        if (!this.profile.avatar) {
+                            this.profile.avatar = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(this.profile.name || 'Owner') + '&background=0052cc&color=fff&bold=true';
+                        }
                     }
                 }
             } catch(e) {
-                console.warn('API /api/owner/profile error, reading local cache', e);
-            }
-
-            try {
-                const raw = localStorage.getItem('pos_ilp_owner_profile_v1');
-                if (raw) {
-                    const parsed = JSON.parse(raw);
-                    if (parsed && typeof parsed === 'object') {
-                        this.profile = { ...this.profile, ...parsed };
-                    }
-                }
-            } catch (e) {
-                console.error('Failed to load owner profile:', e);
+                console.warn('API /api/owner/profile error:', e);
             }
         },
 
@@ -275,41 +259,29 @@ function ownerProfileApp() {
                     },
                     body: JSON.stringify(this.profile)
                 });
-                if (res.ok) {
+                const json = await res.json().catch(() => ({}));
+                if (res.ok && json.success !== false) {
                     if (typeof triggerToast === 'function') {
                         triggerToast('Profil dan preferensi Owner berhasil disimpan ke database!', 'success');
+                    }
+                } else {
+                    if (typeof triggerToast === 'function') {
+                        triggerToast(json.message || 'Gagal menyimpan profil ke server.', 'error');
                     }
                 }
             } catch(e) {
                 console.warn('API save profile error', e);
-            }
-
-            try {
-                localStorage.setItem('pos_ilp_owner_profile_v1', JSON.stringify(this.profile));
-                if (typeof triggerToast === 'function') {
-                    triggerToast('Profil dan preferensi Owner berhasil diperbarui!', 'success');
-                }
-            } catch (e) {
-                console.error('Failed to save owner profile:', e);
                 if (typeof triggerToast === 'function') {
                     triggerToast('Gagal menyimpan profil: ' + e.message, 'error');
                 }
             }
         },
 
-        resetToDefault() {
-            this.profile = {
-                name: 'Dewi Sartika',
-                title: 'Pemilik Usaha & Direktur Koperasi',
-                email: 'owner@coop.id',
-                phone: '0812-9841-2201',
-                nik: '327501550230056',
-                avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
-                defaultBranch: 'all',
-                alertLowStock: true,
-                compactTable: false
-            };
-            this.saveProfile();
+        async resetToDefault() {
+            await this.init();
+            if (typeof triggerToast === 'function') {
+                triggerToast('Data profil dimuat ulang dari server.', 'info');
+            }
         }
     };
 }
