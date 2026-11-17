@@ -29,7 +29,7 @@
                         customerType: b.member_nik ? 'Anggota Koperasi' : 'Pelanggan Umum',
                         holdTime: b.hold_time_label,
                         elapsedMinutes: 5,
-                        sessionLabel: b.terminal_code || 'Kasir 01',
+                        sessionLabel: b.terminal_code || '-',
                         isHandover: false,
                         handoverFrom: null,
                         note: b.note || '-',
@@ -55,17 +55,6 @@
             console.warn('API held bills fetch error:', e);
         }
 
-        try {
-            const raw = localStorage.getItem('pos_ilp_held_bills_v1');
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                if (Array.isArray(parsed)) {
-                    this.heldBills = parsed;
-                    if (this.activeSession) this.activeSession.heldBillsCount = this.heldBills.length;
-                    return;
-                }
-            }
-        } catch (e) {}
         this.heldBills = [];
         this.saveHeldBillsToStorage();
     },
@@ -179,7 +168,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
             <div class="flex items-center gap-2 ml-2">
                 <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1.5">
                     <span class="material-symbols-rounded text-[14px]">pause_circle</span>
-                    <span x-text="heldBills.length + ' Bill Tertahan'">3 Bill Tertahan</span>
+                    <span x-text="heldBills.length + ' Bill Tertahan'">0 Bill Tertahan</span>
                 </span>
             </div>
         </x-cashier-header>
@@ -214,7 +203,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <div class="bg-white rounded-2xl border border-amber-200 p-5 shadow-xs flex items-center justify-between border-l-4 border-l-amber-500">
                         <div>
                             <span class="text-[10px] font-bold text-amber-700 tracking-wider uppercase">TOTAL BILL TERTANGGUH</span>
-                            <h3 class="text-2xl font-black text-amber-600 mt-1" x-text="heldBills.length + ' Antrean'">3 Antrean</h3>
+                            <h3 class="text-2xl font-black text-amber-600 mt-1" x-text="heldBills.length + ' Antrean'">0 Antrean</h3>
                             <span class="text-[11px] text-gray-500 font-medium mt-0.5 block">Menunggu recall kasir</span>
                         </div>
                         <div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
@@ -225,7 +214,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs flex items-center justify-between">
                         <div>
                             <span class="text-[10px] font-bold text-gray-400 tracking-wider uppercase">ESTIMASI TOTAL NILAI</span>
-                            <h3 class="text-xl font-black text-gray-900 font-mono mt-1" x-text="formatRupiah(totalHeldAmount)">Rp 284.000</h3>
+                            <h3 class="text-xl font-black text-gray-900 font-mono mt-1" x-text="formatRupiah(totalHeldAmount)">Rp 0</h3>
                             <span class="text-[11px] text-gray-500 font-medium mt-0.5 block">Nilai keranjang tertahan</span>
                         </div>
                         <div class="w-12 h-12 rounded-xl bg-blue-50 text-[#0052cc] flex items-center justify-center shrink-0">
@@ -236,8 +225,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs flex items-center justify-between">
                         <div>
                             <span class="text-[10px] font-bold text-gray-400 tracking-wider uppercase">DITAHAN SESI INI</span>
-                            <h3 class="text-2xl font-black text-gray-900 mt-1" x-text="heldBills.filter(b => !b.isHandover).length + ' Bill'">2 Bill</h3>
-                            <span class="text-[11px] text-gray-500 font-medium mt-0.5 block">Diinput oleh Budi Kurniawan</span>
+                            <h3 class="text-2xl font-black text-gray-900 mt-1" x-text="heldBills.filter(b => !b.isHandover).length + ' Bill'">0 Bill</h3>
+                            <span class="text-[11px] text-gray-500 font-medium mt-0.5 block" x-text="'Diinput oleh ' + (activeSession?.cashierName || localStorage.getItem('pos_user_name') || '-')">Diinput oleh -</span>
                         </div>
                         <div class="w-12 h-12 rounded-xl bg-slate-100 text-gray-700 flex items-center justify-center shrink-0">
                             <span class="material-symbols-rounded text-[24px]">schedule</span>
@@ -247,8 +236,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <div class="bg-white rounded-2xl border border-purple-200 p-5 shadow-xs flex items-center justify-between border-l-4 border-l-purple-500">
                         <div>
                             <span class="text-[10px] font-bold text-purple-700 tracking-wider uppercase">HANDOVER SESI LALU</span>
-                            <h3 class="text-2xl font-black text-purple-700 mt-1" x-text="heldBills.filter(b => b.isHandover).length + ' Bill'">1 Bill</h3>
-                            <span class="text-[11px] text-purple-600 font-medium mt-0.5 block">Serah terima dari Andi P.</span>
+                            <h3 class="text-2xl font-black text-purple-700 mt-1" x-text="heldBills.filter(b => b.isHandover).length + ' Bill'">0 Bill</h3>
+                            <span class="text-[11px] text-purple-600 font-medium mt-0.5 block">Serah terima shift sebelumnya</span>
                         </div>
                         <div class="w-12 h-12 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center shrink-0">
                             <span class="material-symbols-rounded text-[24px]">sync_alt</span>

@@ -67,7 +67,7 @@
             if (res.ok) {
                 const json = await res.json();
                 const items = json.data || (Array.isArray(json) ? json : []);
-                if (Array.isArray(items) && items.length > 0) {
+                if (Array.isArray(items)) {
                     const mapped = items.map(p => ({
                         id: p.id,
                         sku: p.sku,
@@ -95,22 +95,6 @@
             console.warn('API products fetch fallback:', e);
         }
 
-        try {
-            const raw = localStorage.getItem('pos_ilp_inventory_products_v1');
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    const result = this.deduplicateProducts(parsed);
-                    this.products = result.unique;
-                    if (result.hasDuplicates) {
-                        this.saveProductsToStorage();
-                    }
-                    return;
-                }
-            }
-        } catch (e) {
-            console.error('Failed to parse inventory storage:', e);
-        }
         this.products = [];
     },
 
@@ -123,10 +107,9 @@
         }
     },
 
-    resetToDefaultCatalog() {
-        this.products = [];
-        this.saveProductsToStorage();
-        this.triggerToast('Katalog produk telah dikosongkan.', 'info');
+    async resetToDefaultCatalog() {
+        await this.initProducts();
+        this.triggerToast('Katalog produk berhasil dimuat ulang dari database.', 'info');
     },
 
     // Categories list for filtering and form
@@ -207,6 +190,7 @@
 
     // Form Modal (Create & Edit) State
     showProductModal: false,
+    isSavingProduct: false,
     modalMode: 'create', // 'create' | 'edit'
     formSkuOriginal: '',
     formData: {
@@ -258,13 +242,13 @@
             name: '',
             brand: '',
             category: 'Minuman',
-            rackLocation: 'Lorong A - Rak 01',
-            stock: 24,
-            minStock: 10,
+            rackLocation: '',
+            stock: 0,
+            minStock: 0,
             unit: 'Pcs',
-            price: 5000,
-            memberPrice: 4500,
-            batchLot: 'BATCH-' + new Date().getFullYear() + String(new Date().getMonth() + 1).padStart(2, '0'),
+            price: 0,
+            memberPrice: 0,
+            batchLot: '',
             expiredDate: defaultExpDate
         };
         this.showProductModal = true;
@@ -347,6 +331,7 @@
     },
 
     async saveProduct() {
+        if (this.isSavingProduct) return;
         this.formErrors = {};
         this.duplicateExistingProduct = null;
         const f = this.formData;
@@ -445,54 +430,51 @@
             expired_date: f.expiredDate || null,
         };
 
-        if (this.modalMode === 'create') {
-            try {
-                const res = await fetch('/api/products', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    body: JSON.stringify(apiPayload)
-                });
-                const json = await res.json();
-                if (!res.ok || !json.success) {
-                    await this.showServerErrors(json, 'Gagal menyimpan produk ke database.');
-                    return;
-                }
-                await this.initProducts();
-                this.showProductModal = false;
-                this.triggerToast(`Produk '${apiPayload.name}' berhasil disimpan ke database master & POS.`, 'success');
-            } catch (err) {
-                this.products.unshift(payload);
-                this.saveProductsToStorage();
-                this.showProductModal = false;
-                this.triggerToast(`Produk '${payload.name}' disimpan (mode lokal).`, 'info');
-            }
-        } else {
-            const targetId = this.formIdOriginal || this.products.find(p => p.sku === this.formSkuOriginal)?.id;
-            try {
-                if (targetId) {
-                    const res = await fetch('/api/products/' + targetId, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        this.isSavingProduct = true;
+        const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('prd-' + Date.now());
+        try {
+            if (this.modalMode === 'create') {
+                try {
+                    const res = await fetch('/api/products', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-Idempotency-Key': idemKey },
                         body: JSON.stringify(apiPayload)
                     });
                     const json = await res.json();
                     if (!res.ok || !json.success) {
-                        await this.showServerErrors(json, 'Gagal memperbarui produk di database.');
+                        await this.showServerErrors(json, 'Gagal menyimpan produk ke database.');
                         return;
                     }
-                }
-                await this.initProducts();
-                this.showProductModal = false;
-                this.triggerToast(`Produk '${apiPayload.name}' berhasil diperbarui di database master & POS.`, 'success');
-            } catch (err) {
-                const idx = this.products.findIndex(p => p.sku === this.formSkuOriginal);
-                if (idx !== -1) {
-                    this.products[idx] = payload;
-                    this.saveProductsToStorage();
+                    await this.initProducts();
                     this.showProductModal = false;
-                    this.triggerToast(`Produk '${payload.name}' diperbarui (mode lokal).`, 'info');
+                    this.triggerToast(`Produk '${apiPayload.name}' berhasil disimpan ke database master & POS.`, 'success');
+                } catch (err) {
+                    this.formErrors.general = 'Gagal menghubungi server database: ' + err.message;
+                }
+            } else {
+                const targetId = this.formIdOriginal || this.products.find(p => p.sku === this.formSkuOriginal)?.id;
+                try {
+                    if (targetId) {
+                        const res = await fetch('/api/products/' + targetId, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                            body: JSON.stringify(apiPayload)
+                        });
+                        const json = await res.json();
+                        if (!res.ok || !json.success) {
+                            await this.showServerErrors(json, 'Gagal memperbarui produk di database.');
+                            return;
+                        }
+                    }
+                    await this.initProducts();
+                    this.showProductModal = false;
+                    this.triggerToast(`Produk '${apiPayload.name}' berhasil diperbarui di database master & POS.`, 'success');
+                } catch (err) {
+                    this.formErrors.general = 'Gagal menghubungi server database: ' + err.message;
                 }
             }
+        } finally {
+            this.isSavingProduct = false;
         }
     },
 
@@ -529,7 +511,9 @@
                     return;
                 }
             } catch (e) {
-                console.warn('API product delete fallback:', e);
+                console.warn('API product delete error:', e);
+                this.triggerToast('Gagal menghubungi server database untuk menghapus produk.', 'error');
+                return;
             }
         }
 
@@ -707,10 +691,10 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             Reset
                         </button>
 
-                        <!-- Seed Data / Reset catalog button -->
+                        <!-- Refresh catalog button -->
                         <button type="button"
                                 @click="resetToDefaultCatalog()"
-                                title="Reset katalog ke data bawaan simulasi (10 produk)"
+                                title="Muat ulang katalog produk dari database"
                                 class="p-2.5 rounded-xl border border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-slate-50 transition-colors cursor-pointer shrink-0">
                             <span class="material-symbols-rounded text-[18px]">restart_alt</span>
                         </button>
@@ -1141,16 +1125,18 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                 <!-- Footer -->
                 <div class="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-slate-50">
                     <button type="button"
+                            :disabled="isSavingProduct"
                             @click="showProductModal = false"
-                            class="px-5 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-bold text-xs hover:bg-gray-100 transition-colors cursor-pointer">
+                            class="px-5 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-bold text-xs hover:bg-gray-100 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                         Batal
                     </button>
 
                     <button type="button"
+                            :disabled="isSavingProduct"
                             @click="saveProduct()"
-                            class="px-6 py-2.5 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-xs flex items-center gap-2 shadow-xs transition-colors cursor-pointer active:scale-95">
-                        <span class="material-symbols-rounded text-[18px]">save</span>
-                        <span x-text="modalMode === 'create' ? 'Simpan Produk Baru' : 'Perbarui Data Produk'"></span>
+                            class="px-6 py-2.5 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-xs flex items-center gap-2 shadow-xs transition-colors cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <span class="material-symbols-rounded text-[18px]" :class="isSavingProduct ? 'animate-spin' : ''" x-text="isSavingProduct ? 'progress_activity' : 'save'"></span>
+                        <span x-text="isSavingProduct ? 'Menyimpan...' : (modalMode === 'create' ? 'Simpan Produk Baru' : 'Perbarui Data Produk')"></span>
                     </button>
                 </div>
 
@@ -1407,19 +1393,6 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                            @keyup.enter="handleScan()"
                            placeholder="Scan atau ketik barcode..."
                            class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-xs font-mono font-bold focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20">
-
-                    <div class="flex flex-wrap items-center gap-2">
-                        <button type="button"
-                                @click="scannerInput = '8991234567890'; handleScan();"
-                                class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-[10px] font-mono font-bold text-gray-700 cursor-pointer">
-                            Aqua 600ml
-                        </button>
-                        <button type="button"
-                                @click="scannerInput = '899275321004'; handleScan();"
-                                class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-[10px] font-mono font-bold text-gray-700 cursor-pointer">
-                            Indomie Goreng
-                        </button>
-                    </div>
                 </div>
 
                 <div class="flex justify-end gap-2 mt-6">

@@ -652,7 +652,7 @@
                             localStorage.setItem('pos_user_role', 'Manager');
                             localStorage.setItem('pos_user_name', u.name);
                             localStorage.setItem('pos_user_title', 'Manager Gerai');
-                            localStorage.setItem('pos_user_branch', u.branch || 'Minimarket Pusat');
+                            localStorage.setItem('pos_user_branch', u.branch || '');
 
                             window.location.href = json.redirect_url || "{{ url('/dashboard') }}";
                         } else {
@@ -815,21 +815,6 @@
             }
         }
 
-        function submitManagerLogin(e) {
-            if (e && e.preventDefault) e.preventDefault();
-            const usernameInput = document.getElementById('manager-username');
-            const username = usernameInput ? usernameInput.value : 'andi_manager';
-            
-            try {
-                localStorage.setItem('pos_current_role', 'manager');
-                localStorage.setItem('pos_portal_logged_in_staff_id', 'USR-MGR-01');
-                localStorage.setItem('pos_portal_logged_in_username', username);
-            } catch (err) {}
-
-            window.location.href = "{{ url('/dashboard') }}";
-            return false;
-        }
-
         async function submitOwnerLogin(e) {
             if (e && e.preventDefault) e.preventDefault();
             const usernameInput = document.getElementById('owner-username');
@@ -871,8 +856,8 @@
                     localStorage.setItem('pos_user_role', u.role || 'Owner');
                     localStorage.setItem('pos_user_name', u.name || 'Owner');
                     localStorage.setItem('pos_user_title', 'Pemilik / Superadmin');
-                    localStorage.setItem('pos_user_branch', u.branch || 'Konsolidasi 3 Cabang');
-                    localStorage.setItem('pos_portal_logged_in_staff_id', u.id || 'USR-OWNER-01');
+                    localStorage.setItem('pos_user_branch', u.branch || '');
+                    localStorage.setItem('pos_portal_logged_in_staff_id', u.id || '');
                     localStorage.setItem('pos_portal_logged_in_username', u.username || username);
                     window.location.href = data.redirect_url || "{{ url('/owner') }}";
                     return false;
@@ -917,7 +902,7 @@
                         localStorage.setItem('pos_user_role', data.user.role || 'Owner');
                         localStorage.setItem('pos_user_name', data.user.name || 'Owner');
                         localStorage.setItem('pos_user_title', 'Pemilik / Superadmin');
-                        localStorage.setItem('pos_user_branch', data.user.branch || 'Konsolidasi 3 Cabang');
+                        localStorage.setItem('pos_user_branch', data.user.branch || '');
                         window.location.href = data.redirect_url || "{{ url('/dashboard?role=owner') }}";
                         return;
                     } else {

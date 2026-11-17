@@ -21,13 +21,13 @@
             });
             if (res.ok) {
                 const json = await res.json();
-                if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+                if (json.success && Array.isArray(json.data)) {
                     this.transactions = json.data.map(t => ({
                         id: t.id,
-                        sessionId: t.terminal || 'Kasir 01',
-                        terminal: t.terminal || 'Kasir 01',
-                        time: t.time || '11:42 WIB',
-                        cashier: t.cashier || 'Budi Kurniawan',
+                        sessionId: t.terminal || '-',
+                        terminal: t.terminal || '-',
+                        time: t.time || '-',
+                        cashier: t.cashier || '-',
                         method: t.method || 'TUNAI',
                         cashPortion: Number(t.cashPortion || 0),
                         nonCashPortion: Number(t.nonCashPortion || 0),
@@ -44,30 +44,6 @@
             console.warn('API report fetch fallback:', e);
         }
 
-        const raw = localStorage.getItem('pos_ilp_transactions_v1');
-        if (raw) {
-            try {
-                const trxs = JSON.parse(raw);
-                if (Array.isArray(trxs)) {
-                    this.transactions = trxs.map(t => ({
-                        id: t.id || t.trxId || '#TRX-001',
-                        sessionId: t.sessionId || 'CS-POS01',
-                        terminal: t.terminal || 'Kasir 01',
-                        time: t.time || new Date().toLocaleTimeString('id-ID'),
-                        cashier: t.cashier || 'Kasir',
-                        method: t.method || (t.paymentMethod || 'TUNAI'),
-                        cashPortion: Number(t.cashGiven || t.cashPortion || 0),
-                        nonCashPortion: Number(t.nonCashPortion || 0),
-                        subtotal: Number(t.subtotal || Math.round((t.total || 0) / 1.11)),
-                        tax: Number(t.tax || Math.round((t.total || 0) - ((t.total || 0) / 1.11))),
-                        total: Number(t.total || 0),
-                        status: t.status || 'SELESAI',
-                        date: t.date || new Date().toISOString().split('T')[0]
-                    }));
-                    return;
-                }
-            } catch(e) {}
-        }
         this.transactions = [];
     },
 
@@ -207,13 +183,13 @@ class="flex flex-col h-screen w-full font-sans">
                                     @click="periodFilter = 'today'"
                                     :class="periodFilter === 'today' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
                                     class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer">
-                                Hari Ini (24 Okt)
+                                Hari Ini
                             </button>
                             <button type="button"
                                     @click="periodFilter = 'yesterday'"
                                     :class="periodFilter === 'yesterday' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
                                     class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer">
-                                Kemarin (23 Okt)
+                                Kemarin
                             </button>
                             <button type="button"
                                     @click="periodFilter = 'all'"
@@ -240,9 +216,6 @@ class="flex flex-col h-screen w-full font-sans">
                                 <select x-model="selectedSessionFilter" class="appearance-none pl-3.5 pr-9 py-2 border border-gray-200 rounded-lg text-xs font-bold text-gray-800 min-w-[220px] outline-none bg-white cursor-pointer focus:border-[#0052cc]">
                                     <option value="all">Semua Sesi</option>
                                     <option value="active">Sesi Aktif Saat Ini</option>
-                                    <option value="CS-20261024-K01-003">CS-20261024-K01-003 (Budi Kurniawan)</option>
-                                    <option value="CS-20261024-K01-002">CS-20261024-K01-002 (Andi Pratama)</option>
-                                    <option value="CS-20261024-K01-001">CS-20261024-K01-001 (Budi Kurniawan)</option>
                                 </select>
                                 <span class="material-symbols-rounded absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none text-[18px]">expand_more</span>
                             </div>

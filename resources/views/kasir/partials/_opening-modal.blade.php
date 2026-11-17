@@ -25,7 +25,7 @@
             <div>
                 <h2 class="text-base font-black text-gray-900" x-text="selectedTerminalObj && selectedTerminalObj.status === 'HANDOVER_PENDING' ? 'Terima Laci & Buka Sesi' : 'Buka Sesi Kasir'"></h2>
                 <div class="flex items-center gap-2 mt-1 text-xs text-gray-600">
-                    <span class="font-bold text-[#0052cc]" x-text="(selectedBranch || 'Pusat') + ' • ' + formatShiftLabel(selectedShift)">Kasir 01</span>
+                    <span class="font-bold text-[#0052cc]" x-text="(selectedBranch || 'Pusat') + ' • ' + formatShiftLabel(selectedShift)">-</span>
                     <span>•</span>
                     <span class="font-bold text-gray-800" x-text="selectedStaffObj.name"></span>
                 </div>

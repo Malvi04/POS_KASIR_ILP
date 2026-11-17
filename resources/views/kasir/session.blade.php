@@ -92,8 +92,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <span class="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">Terminal</span>
                                 <span class="material-symbols-rounded text-[#0052cc] text-[20px]">point_of_sale</span>
                             </div>
-                            <div class="text-lg font-black text-gray-900 mt-1.5" x-text="activeSession?.terminalLabel || 'POS-01'">Kasir 01</div>
-                            <div class="text-xs text-gray-500 mt-0.5" x-text="activeSession?.storeLocation || 'Minimarket - Sektor A'">Minimarket - Sektor A</div>
+                            <div class="text-lg font-black text-gray-900 mt-1.5" x-text="activeSession?.terminalLabel || '-'">-</div>
+                            <div class="text-xs text-gray-500 mt-0.5" x-text="activeSession?.storeLocation || '-'">-</div>
                         </div>
 
                         <div class="p-4 rounded-xl bg-slate-50 border border-gray-200/80">
@@ -101,8 +101,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <span class="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">Petugas Aktif</span>
                                 <span class="material-symbols-rounded text-emerald-600 text-[20px]">badge</span>
                             </div>
-                            <div class="text-lg font-black text-gray-900 mt-1.5" x-text="activeOperator ? activeOperator.name : (activeSession?.cashierName || 'Kasir')">Budi Kurniawan</div>
-                            <div class="text-xs text-gray-500 font-mono mt-0.5" x-text="'NIK: ' + (activeOperator ? activeOperator.nik : (activeSession?.cashierNik || '-'))">NIK: 202409821002</div>
+                            <div class="text-lg font-black text-gray-900 mt-1.5" x-text="activeOperator ? activeOperator.name : (activeSession?.cashierName || localStorage.getItem('pos_user_name') || '-')">-</div>
+                            <div class="text-xs text-gray-500 font-mono mt-0.5" x-text="'NIK: ' + (activeOperator ? activeOperator.nik : (activeSession?.cashierNik || localStorage.getItem('pos_portal_logged_in_nik') || '-'))">NIK: -</div>
                         </div>
 
                         <div class="p-4 rounded-xl bg-blue-50/60 border border-blue-200">
@@ -127,8 +127,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <span class="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">Tanggal Operasional</span>
                                 <span class="material-symbols-rounded text-amber-600 text-[20px]">calendar_month</span>
                             </div>
-                            <div class="text-lg font-black text-gray-900 mt-1.5" x-text="activeSession?.businessDayDate || businessDayDate">19 Oktober 2026</div>
-                            <div class="text-xs text-gray-500 font-mono mt-0.5" x-text="activeSession?.businessDayId || businessDayId">BD-20261019-01</div>
+                            <div class="text-lg font-black text-gray-900 mt-1.5" x-text="activeSession?.businessDayDate || businessDayDate">-</div>
+                            <div class="text-xs text-gray-500 font-mono mt-0.5" x-text="activeSession?.businessDayId || businessDayId">-</div>
                         </div>
                     </div>
                 </div>
@@ -306,7 +306,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <p class="text-xs text-gray-500 mt-0.5">Daftar petugas kasir yang bertugas pada sesi finansial berjalan.</p>
                             </div>
                             <span class="text-xs font-bold px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full"
-                                  x-text="'Operator Aktif: ' + (activeOperator ? activeOperator.name : (activeSession?.cashierName || 'Kasir'))"></span>
+                                  x-text="'Operator Aktif: ' + (activeOperator ? activeOperator.name : (activeSession?.cashierName || localStorage.getItem('pos_user_name') || '-'))"></span>
                         </div>
 
                         <div class="overflow-x-auto min-w-0 w-full border border-gray-200 rounded-xl bg-white">

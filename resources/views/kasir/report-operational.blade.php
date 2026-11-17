@@ -10,21 +10,99 @@
 
     operationalLogs: [],
 
+    async initOperationalLogs() {
+        const logs = [];
+        try {
+            const [grRes, retRes, sopRes] = await Promise.allSettled([
+                fetch('/api/goods-receipts', { headers: { 'Accept': 'application/json' } }),
+                fetch('/api/returns', { headers: { 'Accept': 'application/json' } }),
+                fetch('/api/inventory/stock-opname', { headers: { 'Accept': 'application/json' } })
+            ]);
+
+            if (grRes.status === 'fulfilled' && grRes.value.ok) {
+                const grJson = await grRes.value.json();
+                if (grJson.success && Array.isArray(grJson.data)) {
+                    grJson.data.forEach(d => {
+                        logs.push({
+                            id: 'GR-' + d.id,
+                            type: 'barang_masuk',
+                            typeLabel: 'Barang Masuk DC',
+                            icon: 'inventory_2',
+                            badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                            refNo: d.docNo || '-',
+                            bastNo: d.status !== 'MENUNGGU_VERIFIKASI' ? d.docNo : '-',
+                            details: (d.warehouseOrigin || 'Gudang') + ' → ' + (d.destinationStore || 'Toko') + ' (' + (Array.isArray(d.items) ? d.items.length : 0) + ' SKU)',
+                            date: d.date || '-',
+                            operator: d.receiverName || d.driverName || '-',
+                            status: d.status || 'MENUNGGU_VERIFIKASI'
+                        });
+                    });
+                }
+            }
+
+            if (retRes.status === 'fulfilled' && retRes.value.ok) {
+                const retJson = await retRes.value.json();
+                if (retJson.success && Array.isArray(retJson.data)) {
+                    retJson.data.forEach(r => {
+                        const isInbound = r.direction === 'gudang_ke_toko';
+                        logs.push({
+                            id: 'RET-' + r.id,
+                            type: isInbound ? 'retur_masuk' : 'retur_keluar',
+                            typeLabel: isInbound ? 'Retur Masuk' : 'Retur ke DC',
+                            icon: isInbound ? 'assignment_returned' : 'assignment_return',
+                            badgeClass: isInbound ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-amber-50 text-amber-700 border-amber-200',
+                            refNo: r.docNo || '-',
+                            bastNo: '-',
+                            details: r.conditionDesc || r.conditionLabel || 'Dokumen retur toko',
+                            date: r.date || '-',
+                            operator: r.driver || '-',
+                            status: r.statusLabel || r.statusKey || '-'
+                        });
+                    });
+                }
+            }
+
+            if (sopRes.status === 'fulfilled' && sopRes.value.ok) {
+                const sopJson = await sopRes.value.json();
+                if (sopJson.success && Array.isArray(sopJson.data)) {
+                    sopJson.data.forEach(s => {
+                        logs.push({
+                            id: 'SOP-' + s.id,
+                            type: 'stock_opname',
+                            typeLabel: 'Stock Opname',
+                            icon: 'fact_check',
+                            badgeClass: 'bg-blue-50 text-[#0052cc] border-blue-200',
+                            refNo: s.opname_code || ('SOP-' + s.id),
+                            bastNo: '-',
+                            details: (s.title || 'Audit Stock Opname') + (s.notes ? ' — ' + s.notes : ''),
+                            date: s.created_at ? new Date(s.created_at).toLocaleString('id-ID') : '-',
+                            operator: s.conducted_by || '-',
+                            status: s.status || 'DRAFT'
+                        });
+                    });
+                }
+            }
+        } catch (e) {
+            console.warn('Operational logs fetch error:', e);
+        }
+        this.operationalLogs = logs;
+    },
+
     get filteredLogs() {
         return this.operationalLogs.filter(log => {
             if (this.activeTab !== 'all' && log.type !== this.activeTab) return false;
             if (this.searchQuery) {
                 const q = this.searchQuery.toLowerCase();
-                return log.refNo.toLowerCase().includes(q) ||
-                       log.details.toLowerCase().includes(q) ||
-                       log.operator.toLowerCase().includes(q) ||
+                return (log.refNo || '').toLowerCase().includes(q) ||
+                       (log.details || '').toLowerCase().includes(q) ||
+                       (log.operator || '').toLowerCase().includes(q) ||
                        (log.bastNo && log.bastNo.toLowerCase().includes(q));
             }
             return true;
         });
     }
 }"
-x-init="initOpening()"
+x-init="initOpening(); initOperationalLogs();"
 @pos-session-sync.window="initOpening()"
 class="flex flex-col h-screen w-full font-sans">
     <div class="flex flex-1 overflow-hidden">
@@ -94,7 +172,7 @@ class="flex flex-col h-screen w-full font-sans">
                             <span class="text-[11px] font-extrabold text-blue-800 uppercase tracking-wider">Stock Opname</span>
                             <span class="material-symbols-rounded text-blue-600 text-[20px]">fact_check</span>
                         </div>
-                        <h2 class="text-2xl font-black text-[#0052cc] mt-1.5 font-mono">-</h2>
+                        <h2 class="text-2xl font-black text-[#0052cc] mt-1.5 font-mono" x-text="(operationalLogs.filter(l => l.type === 'stock_opname').length) + ' Sesi'">0 Sesi</h2>
                         <span class="text-xs font-bold text-blue-600 mt-1 block">Akurasi Fisik vs Buku</span>
                     </div>
                 </div>

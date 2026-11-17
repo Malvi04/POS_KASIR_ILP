@@ -15,23 +15,23 @@
             const res = await fetch('/api/reports/cash-reconciliation', { headers: { 'Accept': 'application/json' } });
             if (res.ok) {
                 const json = await res.json();
-                if (json.success && json.data && Array.isArray(json.data.shifts) && json.data.shifts.length > 0) {
+                if (json.success && json.data && Array.isArray(json.data.shifts)) {
                     this.pastSessions = json.data.shifts.map(h => ({
-                        id: h.shift_code || 'CS-SESS-01',
-                        date: new Date(h.opened_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+                        id: h.shift_code || '-',
+                        date: h.opened_at ? new Date(h.opened_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-',
                         shift: 'Shift Kasir',
-                        terminal: h.terminal_code || 'Kasir 01',
-                        cashier: h.cashier_name || 'Budi Kurniawan',
-                        openingFloat: Number(h.opening_cash || 500000),
+                        terminal: h.terminal_code || '-',
+                        cashier: h.cashier_name || '-',
+                        openingFloat: Number(h.opening_cash || 0),
                         cashSales: Number(h.cash_sales_total || 0),
                         nonCashSales: Number(h.qris_sales_total || 0),
                         cashOut: Number(h.cash_out || 0),
                         expectedCash: Number(h.expected_cash || 0),
-                        actualCash: Number(h.actual_cash || h.expected_cash || 0),
+                        actualCash: Number(h.actual_cash ?? h.expected_cash ?? 0),
                         variance: Number(h.variance || 0),
                         varianceStatus: h.variance_status || 'SESUAI',
                         notes: h.closing_notes || 'Penutupan shift kasir.',
-                        status: 'CLOSED',
+                        status: h.status || 'CLOSED',
                         verifiedBy: 'Supervisor Toko'
                     }));
                     return;
@@ -41,33 +41,6 @@
             console.warn('API sessions report fetch error:', e);
         }
 
-        const raw = localStorage.getItem('pos_ilp_session_history_v1');
-        if (raw) {
-            try {
-                const hist = JSON.parse(raw);
-                if (Array.isArray(hist)) {
-                    this.pastSessions = hist.map(h => ({
-                        id: h.sessionId || h.id || 'CS-SESS-01',
-                        date: h.closedAt || h.date || new Date().toLocaleDateString('id-ID'),
-                        shift: h.shift || 'Shift Kasir',
-                        terminal: h.terminalLabel || 'Kasir 01',
-                        cashier: h.cashierName || 'Kasir',
-                        openingFloat: Number(h.openingCash || h.openingFloat || 0),
-                        cashSales: Number(h.cashSalesNet || h.cashSales || 0),
-                        nonCashSales: Number(h.nonCashSales || 0),
-                        cashOut: Number(h.cashOut || 0),
-                        expectedCash: Number(h.expectedCash || 0),
-                        actualCash: Number(h.actualCash || h.expectedCash || 0),
-                        variance: Number(h.variance || 0),
-                        varianceStatus: (Number(h.variance || 0) === 0) ? 'SESUAI' : (Number(h.variance) < 0 ? 'SELISIH_KURANG' : 'SELISIH_LEBIH'),
-                        notes: h.varianceReason || h.notes || 'Penutupan sesi kasir terverifikasi.',
-                        status: h.status || 'CLOSED',
-                        verifiedBy: h.verifiedBy || 'Supervisor Toko'
-                    }));
-                    return;
-                }
-            } catch(e) {}
-        }
         this.pastSessions = [];
     },
 
@@ -100,8 +73,8 @@ class="flex flex-col h-screen w-full font-sans">
                     <div>
                         <div class="flex items-center gap-2">
                             <h1 class="text-xl font-bold text-gray-900 tracking-tight">Rekonsiliasi & Riwayat Sesi Kasir</h1>
-                            <span class="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-blue-100 text-[#0052cc]">
-                                Kasir: Budi Kurniawan
+                            <span class="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-blue-100 text-[#0052cc]" x-text="'Kasir: ' + (activeSession?.cashierName || localStorage.getItem('pos_user_name') || '-')">
+                                Kasir: -
                             </span>
                         </div>
                         <p class="text-xs text-gray-500 mt-0.5">Pemantauan kas laci sesi aktif dan arsip riwayat sesi kasir.</p>
@@ -126,20 +99,20 @@ class="flex flex-col h-screen w-full font-sans">
                     <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-gray-100">
                         <div>
                             <div class="flex items-center gap-3">
-                                <span class="text-xs font-black text-gray-400 font-mono" x-text="activeSession.sessionId || 'CS-20261024-K01-003'"></span>
-                                <span class="text-base font-bold text-gray-900">Kasir 01 (TERM-01)</span>
+                                <span class="text-xs font-black text-gray-400 font-mono" x-text="activeSession?.sessionId || '-'"></span>
+                                <span class="text-base font-bold text-gray-900" x-text="activeSession?.terminalLabel || '-'">-</span>
                             </div>
                             <div class="flex items-center gap-4 text-xs text-gray-500 mt-1">
-                                <span>Dibuka: <strong class="text-gray-800">Hari Ini, 10:00 WIB</strong></span>
+                                <span>Dibuka: <strong class="text-gray-800" x-text="activeSession?.startedAt || '-'">-</strong></span>
                                 <span>•</span>
-                                <span>Petugas: <strong class="text-gray-800">Budi Kurniawan</strong></span>
+                                <span>Petugas: <strong class="text-gray-800" x-text="activeSession?.cashierName || localStorage.getItem('pos_user_name') || '-'">-</strong></span>
                             </div>
                         </div>
 
                         <div class="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-gray-200">
                             <div class="text-right">
                                 <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Estimasi Kas Fisik Laci:</span>
-                                <span class="text-xl font-black text-emerald-700 font-mono" x-text="formatRupiah((Number(activeSession.openingFloat)||500000) + (Number(activeSession.cashSalesNet)||970000))">Rp 1.470.000</span>
+                                <span class="text-xl font-black text-emerald-700 font-mono" x-text="formatRupiah(getExpectedClosingCash())">Rp 0</span>
                             </div>
                         </div>
                     </div>
@@ -148,13 +121,13 @@ class="flex flex-col h-screen w-full font-sans">
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
                         <div class="p-4 bg-gray-50 rounded-xl border border-gray-100">
                             <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Modal Awal (Float)</span>
-                            <span class="text-lg font-black font-mono text-gray-900 mt-1 block" x-text="formatRupiah(activeSession.openingFloat || 500000)">Rp 500.000</span>
+                            <span class="text-lg font-black font-mono text-gray-900 mt-1 block" x-text="formatRupiah(activeSession?.openingCash || 0)">Rp 0</span>
                             <span class="text-[11px] text-gray-500 mt-0.5 block">Diserahkan SPV saat buka</span>
                         </div>
 
                         <div class="p-4 bg-emerald-50/60 rounded-xl border border-emerald-100">
                             <span class="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">Penjualan Tunai Bersih</span>
-                            <span class="text-lg font-black font-mono text-emerald-700 mt-1 block" x-text="formatRupiah(activeSession.cashSalesNet || 0)">Rp 0</span>
+                            <span class="text-lg font-black font-mono text-emerald-700 mt-1 block" x-text="formatRupiah(activeSession?.cashSalesNet || 0)">Rp 0</span>
                             <span class="text-[11px] text-emerald-600 mt-0.5 block">Termasuk porsi split-bill</span>
                         </div>
 
@@ -166,7 +139,7 @@ class="flex flex-col h-screen w-full font-sans">
 
                         <div class="p-4 bg-purple-50/60 rounded-xl border border-purple-100">
                             <span class="text-[10px] font-bold text-purple-700 uppercase tracking-wider block">Kas Keluar Laci (Paid Out)</span>
-                            <span class="text-lg font-black font-mono text-purple-700 mt-1 block">Rp 0</span>
+                            <span class="text-lg font-black font-mono text-purple-700 mt-1 block" x-text="formatRupiah((Number(activeSession?.cashOut)||0) + (Number(activeSession?.cashReturn)||0))">Rp 0</span>
                             <span class="text-[11px] text-purple-600 mt-0.5 block">Beban operasional / refund tunai</span>
                         </div>
                     </div>
@@ -176,7 +149,7 @@ class="flex flex-col h-screen w-full font-sans">
                 <div class="bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden">
                     <div class="p-5 border-b border-gray-100 flex items-center justify-between">
                         <div>
-                            <h2 class="text-sm font-bold text-gray-900 tracking-tight">Riwayat Sesi Terdahulu (Kasir Budi Kurniawan)</h2>
+                            <h2 class="text-sm font-bold text-gray-900 tracking-tight" x-text="'Riwayat Sesi Terdahulu (' + (activeSession?.cashierName || localStorage.getItem('pos_user_name') || '-') + ')'">Riwayat Sesi Terdahulu</h2>
                             <p class="text-xs text-gray-500 mt-0.5">Daftar penutupan shift dan serah terima kasir.</p>
                         </div>
                         <span class="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1 rounded-lg" x-text="pastSessions.length + ' Sesi Tersimpan'"></span>

@@ -25,7 +25,7 @@
                             rawId: d.id,
                             time: new Date(d.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
                             date: new Date(d.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
-                            terminal: d.terminal_code || 'Kasir 01',
+                            terminal: d.terminal_code || '-',
                             cashier: d.cashier_name,
                             method: d.payment_method,
                             methodLabel: d.payment_method === 'TUNAI' ? 'Uang Tunai' : (d.payment_method === 'QRIS' ? 'QRIS Dinamis' : (d.payment_method === 'KREDIT' ? 'Kredit Anggota' : (d.payment_method === 'CAMPURAN' ? 'Tunai + QRIS' : d.payment_method))),
@@ -81,8 +81,8 @@
                         rawId: d.rawId || d.id,
                         time: d.time || new Date().toLocaleTimeString('id-ID'),
                         date: d.date || new Date().toLocaleDateString('id-ID'),
-                        terminal: d.terminal || 'Kasir 01',
-                        cashier: d.cashier || 'Kasir',
+                        terminal: d.terminal || '-',
+                        cashier: d.cashier || '-',
                         method: d.method,
                         methodLabel: d.methodLabel || d.method,
                         items: (d.items || []).map(it => ({
@@ -186,11 +186,11 @@ class="flex flex-col min-h-screen w-full bg-[#f8f9fa] font-sans">
                 </div>
                 <div class="flex justify-between">
                     <span class="text-gray-500">Terminal:</span>
-                    <span class="text-gray-800 font-bold" x-text="receipt?.terminal || activeSession?.terminalLabel || 'POS-01'"></span>
+                    <span class="text-gray-800 font-bold" x-text="receipt?.terminal || activeSession?.terminalLabel || '-'"></span>
                 </div>
                 <div class="flex justify-between">
                     <span class="text-gray-500">Kasir:</span>
-                    <span class="text-gray-800 font-bold" x-text="receipt?.cashier || activeSession?.cashierName || 'Kasir'"></span>
+                    <span class="text-gray-800 font-bold" x-text="receipt?.cashier || activeSession?.cashierName || '-'"></span>
                 </div>
                 <div class="flex justify-between">
                     <span class="text-gray-500">Waktu:</span>

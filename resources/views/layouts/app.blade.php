@@ -102,6 +102,14 @@
                 if (message) params.set('message', message);
                 window.location.href = '/error?' + params.toString();
             };
+
+            // Generate a unique idempotency key per form submission attempt
+            window.createIdempotencyKey = function() {
+                if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+                    return window.crypto.randomUUID();
+                }
+                return 'req-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
+            };
         })();
 
         // Register Offline PWA Service Worker and purge legacy v2 caches that caused stale redirects

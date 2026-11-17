@@ -10,6 +10,7 @@
     scanBarcode: '',
     items: [],
     showFinishModal: false,
+    isSubmittingOpname: false,
     toastMessage: '',
     showToast: false,
 
@@ -22,25 +23,13 @@
             });
             if (res.ok) {
                 const json = await res.json();
-                if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+                if (json.success && Array.isArray(json.data)) {
                     prods = json.data;
                     localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(prods));
                 }
             }
         } catch(e) {
-            console.warn('Could not fetch fresh products for opname, checking cache', e);
-        }
-
-        // 2. Fallback ke localStorage jika request jaringan gagal
-        if (!prods || prods.length === 0) {
-            const raw = localStorage.getItem('pos_ilp_inventory_products_v1');
-            if (raw) {
-                try {
-                    prods = JSON.parse(raw);
-                } catch(e) {
-                    prods = [];
-                }
-            }
+            console.warn('Could not fetch fresh products for opname:', e);
         }
 
         // 3. Muat draft opname aktif jika ada
@@ -188,70 +177,79 @@
         this.showFinishModal = true;
     },
 
-    executeFinishOpname() {
-        // 1. Update master inventory products in pos_ilp_inventory_products_v1
-        const raw = localStorage.getItem('pos_ilp_inventory_products_v1');
-        if (raw) {
-            try {
-                let prods = JSON.parse(raw);
-                this.items.forEach(it => {
-                    if (it.isAudited) {
-                        const target = prods.find(p => p.sku === it.sku || p.barcode === it.sku);
-                        if (target) {
-                            target.stok = it.stokFisik;
-                            target.stock = it.stokFisik;
-                        }
-                    }
-                });
-                localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(prods));
-            } catch(e) {
-                console.error(e);
-            }
-        }
-
-        // 2. Save opname record in history
-        const historyRecord = {
-            id: 'OPN-' + Date.now(),
-            date: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) + ' • ' +
-                  new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
-            auditor: (this.activeSession?.cashierName || 'Kasir') + ' (Kasir)',
-            terminal: this.activeSession?.terminalLabel || 'Kasir 01',
-            totalAudited: this.auditedCount,
-            totalVariance: this.totalVarianceUnits,
-            totalValueVariance: this.totalVarianceValue,
-            items: this.items.filter(i => i.isAudited)
-        };
-
-        const existingHist = localStorage.getItem('pos_ilp_stock_opname_history_v1');
-        let hist = [];
-        if (existingHist) {
-            try { hist = JSON.parse(existingHist); } catch(e){}
-        }
-        hist.unshift(historyRecord);
-        localStorage.setItem('pos_ilp_stock_opname_history_v1', JSON.stringify(hist));
-
-        // 3. Post opname record to backend API asynchronously
+    async executeFinishOpname() {
+        if (this.isSubmittingOpname) return;
+        this.isSubmittingOpname = true;
+        const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('sop-' + Date.now());
         try {
-            fetch('/api/inventory/stock-opname', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                body: JSON.stringify({
-                    title: 'Stock Opname ' + (this.activeSession?.terminalLabel || 'Kasir 01'),
-                    branch: this.activeSession?.storeLocation || 'Cabang 1 - Mill / Pabrik',
-                    conducted_by: (this.activeSession?.cashierName || 'Kasir') + ' (Kasir)',
-                    notes: 'Audit kasir ' + historyRecord.totalAudited + ' SKU. Selisih: ' + historyRecord.totalVariance + ' unit.'
-                })
-            }).catch(e => console.warn('Opname background sync', e));
-        } catch(e) {}
+            // 1. Update master inventory products in pos_ilp_inventory_products_v1
+            const raw = localStorage.getItem('pos_ilp_inventory_products_v1');
+            if (raw) {
+                try {
+                    let prods = JSON.parse(raw);
+                    this.items.forEach(it => {
+                        if (it.isAudited) {
+                            const target = prods.find(p => p.sku === it.sku || p.barcode === it.sku);
+                            if (target) {
+                                target.stok = it.stokFisik;
+                                target.stock = it.stokFisik;
+                            }
+                        }
+                    });
+                    localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(prods));
+                } catch(e) {
+                    console.error(e);
+                }
+            }
 
-        // 4. Clear draft
-        localStorage.removeItem('pos_ilp_active_opname_v1');
+            // 2. Save opname record in history
+            const historyRecord = {
+                id: 'OPN-' + Date.now(),
+                date: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) + ' • ' +
+                      new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
+                auditor: (this.activeSession?.cashierName || localStorage.getItem('pos_user_name') || 'Kasir') + ' (Kasir)',
+                terminal: this.activeSession?.terminalLabel || '-',
+                totalAudited: this.auditedCount,
+                totalVariance: this.totalVarianceUnits,
+                totalValueVariance: this.totalVarianceValue,
+                items: this.items.filter(i => i.isAudited)
+            };
 
-        this.showFinishModal = false;
-        this.triggerToast('Stock Opname berhasil diselesaikan! Stok master produk telah disesuaikan.');
+            const existingHist = localStorage.getItem('pos_ilp_stock_opname_history_v1');
+            let hist = [];
+            if (existingHist) {
+                try { hist = JSON.parse(existingHist); } catch(e){}
+            }
+            hist.unshift(historyRecord);
+            localStorage.setItem('pos_ilp_stock_opname_history_v1', JSON.stringify(hist));
 
-        // Re-init with new system stock
-        this.initOpname();
+            // 3. Post opname record to backend API
+            try {
+                await fetch('/api/inventory/stock-opname', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-Idempotency-Key': idemKey },
+                    body: JSON.stringify({
+                        title: 'Stock Opname ' + (this.activeSession?.terminalLabel || '-'),
+                        branch: this.activeSession?.storeLocation || localStorage.getItem('pos_kasir_branch') || '',
+                        conducted_by: (this.activeSession?.cashierName || localStorage.getItem('pos_user_name') || 'Kasir') + ' (Kasir)',
+                        notes: 'Audit kasir ' + historyRecord.totalAudited + ' SKU. Selisih: ' + historyRecord.totalVariance + ' unit.'
+                    })
+                });
+            } catch(e) {
+                console.warn('Opname background sync', e);
+            }
+
+            // 4. Clear draft
+            localStorage.removeItem('pos_ilp_active_opname_v1');
+
+            this.showFinishModal = false;
+            this.triggerToast('Stock Opname berhasil diselesaikan! Stok master produk telah disesuaikan.');
+
+            // Re-init with new system stock
+            this.initOpname();
+        } finally {
+            this.isSubmittingOpname = false;
+        }
     },
 
     exportData() {
@@ -288,8 +286,8 @@
             title: 'PT INDO LAMPUNG PERKASA - MINIMARKET KOPERASI',
             subtitle: 'HASIL PENCATATAN FISIK STOCK OPNAME (TERMINAL KASIR)',
             metadata: [
-                ['Terminal / Kasir', this.activeSession.terminalLabel || 'Kasir 01'],
-                ['Petugas Operator', this.activeSession.operatorName || 'Kasir Operasional'],
+                ['Terminal / Kasir', this.activeSession?.terminalLabel || '-'],
+                ['Petugas Operator', this.activeSession?.cashierName || localStorage.getItem('pos_user_name') || '-'],
                 ['Tanggal Sesi', new Date().toLocaleString('id-ID')],
                 ['Total Item', this.items.length + ' Produk']
             ],
@@ -320,7 +318,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
         <header class="h-[68px] bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
             <div class="flex items-center gap-3">
                 <h1 class="text-[16px] font-black text-gray-900 tracking-tight">Stock Opname</h1>
-                <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200" x-text="activeSession?.terminalLabel || 'Kasir 01'"></span>
+                <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200" x-text="activeSession?.terminalLabel || '-'"></span>
             </div>
 
             <div class="flex items-center gap-3 text-gray-600">
@@ -621,14 +619,17 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
                     <div class="pt-2 flex justify-end gap-2">
                         <button type="button"
+                                :disabled="isSubmittingOpname"
                                 @click="showFinishModal = false"
-                                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold cursor-pointer">
+                                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                             Periksa Lagi
                         </button>
                         <button type="button"
+                                :disabled="isSubmittingOpname"
                                 @click="executeFinishOpname()"
-                                class="px-5 py-2 bg-[#0052cc] hover:bg-blue-700 text-white rounded-xl font-bold cursor-pointer">
-                            Ya, Selesaikan & Terapkan
+                                class="px-5 py-2 bg-[#0052cc] hover:bg-blue-700 text-white rounded-xl font-bold cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <span x-show="isSubmittingOpname" class="material-symbols-rounded text-[15px] animate-spin">progress_activity</span>
+                            <span x-text="isSubmittingOpname ? 'Memproses...' : 'Ya, Selesaikan & Terapkan'"></span>
                         </button>
                     </div>
                 </div>

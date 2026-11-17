@@ -35,21 +35,13 @@
             if (res.ok) {
                 const json = await res.json();
                 if (json.success && Array.isArray(json.data)) {
-                    const apiDocs = json.data;
-                    const merged = [...apiDocs];
-                    // Pertahankan dokumen lokal yang belum tersimpan di backend atau draft
-                    for (const loc of localDocs) {
-                        const exists = merged.some(m => (m.id && m.id === loc.id) || (m.docNo && m.docNo === loc.docNo));
-                        if (!exists) {
-                            merged.push(loc);
-                        }
-                    }
-                    this.documents = merged;
+                    this.documents = json.data;
                     this.saveDocs();
                 }
             }
         } catch(e) {
             console.warn('API goods-receipts fetch error:', e);
+            this.documents = [];
         }
 
         // Sinkronisasi real-time antar tab & perangkat (Manager Kirim Barang <-> Kasir Barang Masuk)
@@ -222,7 +214,7 @@
 
             original.status = hasVariance ? 'DITERIMA_SELISIH' : 'DITERIMA_LENGKAP';
             original.receivedAt = nowStr;
-            original.receiverName = (this.activeSession?.cashierName || 'Budi Kurniawan') + ' (Kasir)';
+            original.receiverName = (this.activeSession?.cashierName || localStorage.getItem('pos_user_name') || 'Kasir') + ' (Kasir)';
             original.generalNotes = this.verifyNotes.trim() || (hasVariance ? 'Penerimaan diverifikasi dengan catatan selisih/kondisi.' : 'Penerimaan fisik barang transfer lengkap dan sesuai.');
 
             // Update master inventory stock via API
@@ -310,7 +302,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                           :class="($store.network && $store.network.isOnline) ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'"
                                           x-text="($store.network && $store.network.isOnline) ? 'ONLINE' : 'OFFLINE'">ONLINE</span>
                                 </div>
-                                <span class="text-xs font-bold text-gray-800" x-text="(activeSession && activeSession.terminalLabel) ? (activeSession.terminalLabel + ' • ' + activeSession.cashierName) : 'POS-01 • Budi Kurniawan'">Kasir 01 • Budi Kurniawan</span>
+                                <span class="text-xs font-bold text-gray-800" x-text="(activeSession && activeSession.terminalLabel) ? (activeSession.terminalLabel + ' • ' + activeSession.cashierName) : (localStorage.getItem('pos_user_name') || '-')">-</span>
                             </div>
                         </div>
                     </div>
@@ -324,7 +316,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                          :class="statusFilter === 'all' ? 'border-[#0052cc] ring-2 ring-[#0052cc]/20' : 'border-gray-200'">
                         <div>
                             <span class="text-[11px] font-bold text-gray-400 tracking-wider uppercase">TOTAL DOKUMEN</span>
-                            <h3 class="text-2xl font-black text-gray-900 mt-1" x-text="totalItemsCount">4</h3>
+                            <h3 class="text-2xl font-black text-gray-900 mt-1" x-text="totalItemsCount">0</h3>
                             <span class="text-[11px] text-gray-500 font-medium mt-0.5 block">Transfer periode aktif</span>
                         </div>
                         <div class="w-12 h-12 rounded-xl bg-blue-50 text-[#0052cc] flex items-center justify-center shrink-0">
@@ -339,7 +331,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <div>
                             <span class="text-[11px] font-bold text-amber-700 tracking-wider uppercase">PERLU VERIFIKASI</span>
                             <div class="flex items-baseline gap-2 mt-1">
-                                <h3 class="text-2xl font-black text-amber-600" x-text="pendingCount">2</h3>
+                                <h3 class="text-2xl font-black text-amber-600" x-text="pendingCount">0</h3>
                                 <span class="text-[11px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md">Tiba di Toko</span>
                             </div>
                             <span class="text-[11px] text-gray-500 font-medium mt-0.5 block">Harus dihitung kasir</span>
@@ -355,7 +347,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                          :class="statusFilter === 'DITERIMA_LENGKAP' ? 'border-emerald-400 ring-2 ring-emerald-400/30' : 'border-emerald-200'">
                         <div>
                             <span class="text-[11px] font-bold text-emerald-700 tracking-wider uppercase">DITERIMA LENGKAP</span>
-                            <h3 class="text-2xl font-black text-emerald-600 mt-1" x-text="completedFullCount">1</h3>
+                            <h3 class="text-2xl font-black text-emerald-600 mt-1" x-text="completedFullCount">0</h3>
                             <span class="text-[11px] text-emerald-600 font-medium mt-0.5 block">Fisik 100% Sesuai</span>
                         </div>
                         <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
@@ -369,7 +361,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                          :class="statusFilter === 'DITERIMA_SELISIH' ? 'border-rose-400 ring-2 ring-rose-400/30' : 'border-rose-200'">
                         <div>
                             <span class="text-[11px] font-bold text-rose-700 tracking-wider uppercase">DITERIMA SELISIH</span>
-                            <h3 class="text-2xl font-black text-rose-600 mt-1" x-text="completedVarianceCount">1</h3>
+                            <h3 class="text-2xl font-black text-rose-600 mt-1" x-text="completedVarianceCount">0</h3>
                             <span class="text-[11px] text-rose-600 font-medium mt-0.5 block">Catatan Deviasi/Rusak</span>
                         </div>
                         <div class="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
@@ -608,7 +600,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         </div>
                         <div>
                             <span class="text-[10px] font-bold text-gray-400 uppercase block">PETUGAS PEMERIKSA</span>
-                            <span class="font-bold text-[#0052cc]" x-text="(activeSession && activeSession.cashierName) ? activeSession.cashierName : 'Petugas Kasir'">Budi Kurniawan</span>
+                            <span class="font-bold text-[#0052cc]" x-text="(activeSession && activeSession.cashierName) ? activeSession.cashierName : (localStorage.getItem('pos_user_name') || '-')">-</span>
                         </div>
                     </div>
 

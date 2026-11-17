@@ -99,8 +99,8 @@
             <div>
                 <h2 class="text-base font-black text-gray-900">Tutup Sesi Kasir</h2>
                 <p class="text-xs text-gray-500 mt-0.5">
-                    <span class="font-bold text-gray-700" x-text="activeSession?.terminalLabel || 'POS-01'"></span> •
-                    <span class="font-bold text-gray-700" x-text="activeSession?.cashierName || 'Kasir'"></span> •
+                    <span class="font-bold text-gray-700" x-text="activeSession?.terminalLabel || '-'"></span> •
+                    <span class="font-bold text-gray-700" x-text="activeSession?.cashierName || '-'"></span> •
                     <span class="font-mono text-[#0052cc]" x-text="activeSession?.sessionId || '-'"></span>
                 </p>
             </div>

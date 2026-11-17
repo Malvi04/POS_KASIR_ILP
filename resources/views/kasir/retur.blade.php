@@ -18,6 +18,7 @@
     deleteTargetType: 'draft_batch', // 'draft_batch' | 'history_draft'
     deleteDocTarget: null,
     isProcessingDelete: false,
+    isSubmittingReturn: false,
 
     // Form State
     barcodeInput: '',
@@ -39,24 +40,24 @@
             const res = await fetch('/api/returns?direction=toko_ke_gudang', { headers: { 'Accept': 'application/json' } });
             if (res.ok) {
                 const json = await res.json();
-                if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+                if (json.success && Array.isArray(json.data)) {
                     this.historyDocuments = json.data.map(d => ({
                         rawId: d.id,
                         docNo: d.docNo,
                         date: d.date,
-                        storeLocation: 'Minimarket ILP - Sektor A',
-                        targetWarehouse: 'DC Cikarang (Pusat Logistik)',
-                        sopStatus: d.statusKey === 'disetujui' ? 'DISETUJUI_DC' : (d.statusKey === 'draft' ? 'DIAJUKAN_TOKO' : 'CEK_FISIK_DC'),
+                        storeLocation: d.branch || this.activeSession?.storeLocation || '-',
+                        targetWarehouse: d.target_warehouse || 'Gudang DC',
+                        sopStatus: d.statusKey === 'disetujui' ? 'DISETUJUI_SPV' : (d.statusKey === 'draft' ? 'DIAJUKAN_TOKO' : (d.statusKey === 'selesai' ? 'DITERIMA_GUDANG' : 'DIAJUKAN_TOKO')),
                         statusLabel: d.statusLabel,
                         statusDesc: d.conditionDesc || 'Pengajuan retur barang ke gudang logistik.',
                         totalSku: (d.products || []).length || 1,
                         totalKoli: (d.products || []).reduce((sum, p) => sum + (parseInt(p.qty, 10) || 1), 0),
                         totalClaimValue: parseInt((d.subtotal || '').replace(/[^0-9]/g, ''), 10) || 0,
-                        submittedBy: 'Kasir Toko',
+                        submittedBy: d.submitted_by || (this.activeSession?.cashierName || localStorage.getItem('pos_user_name') || 'Kasir'),
                         spvApprover: d.statusKey === 'disetujui' ? 'Supervisor Toko' : null,
                         dispatchedAt: null,
                         items: (d.products || []).map(p => ({
-                            sku: 'SKU-' + p.name.substring(0, 4).toUpperCase(),
+                            sku: p.sku || '-',
                             name: p.name,
                             qty: p.qty,
                             reason: d.conditionLabel
@@ -66,6 +67,7 @@
             }
         } catch(e) {
             console.warn('API retur fetch error:', e);
+            this.historyDocuments = [];
         }
 
         try {
@@ -74,98 +76,53 @@
                 this.draftItems = JSON.parse(savedDraft);
             } else {
                 this.draftItems = [];
-                this.persistReturState();
-            }
-
-            const savedHistory = localStorage.getItem('pos_ilp_retur_history_docs_v1');
-            if (savedHistory !== null) {
-                this.historyDocuments = JSON.parse(savedHistory);
-            } else {
-                this.historyDocuments = [
-                    {
-                        docNo: '#RTR-TK-20261024-001',
-                        date: '24 Oktober 2026 • 10:15 WIB',
-                        storeLocation: 'Minimarket ILP - Sektor A',
-                        targetWarehouse: 'DC Cikarang (Pusat Logistik)',
-                        sopStatus: 'DIAJUKAN_TOKO',
-                        statusLabel: 'DRAFT DIAJUKAN',
-                        statusDesc: 'Menunggu verifikasi Supervisor Toko. Barang masih di area karantina toko (stok belum dipotong).',
-                        totalSku: 4,
-                        totalKoli: 18,
-                        totalClaimValue: 1027000,
-                        submittedBy: 'Budi Kurniawan (Kasir)',
-                        spvApprover: null,
-                        dispatchedAt: null,
-                        items: [
-                            { sku: 'SKU-SUSU-0914', name: 'Susu UHT Full Cream 1000ml', qty: '4 Karton', reason: 'Rusak / Bocor kemasan' },
-                            { sku: 'SKU-ROTI-0102', name: 'Roti Tawar Gandum Spesial', qty: '5 Pack', reason: 'Kedaluwarsa ED' },
-                            { sku: 'SKU-BSK-4420', name: 'Biskuit Butter Cookies Kaleng', qty: '3 Kaleng', reason: 'Mutasi Overstock' },
-                            { sku: 'MYK-0021', name: 'Minyak Goreng Sawit 2L', qty: '6 Pcs', reason: 'Rembes kemasan' }
-                        ]
-                    },
-                    {
-                        docNo: '#RTR-TK-20261023-004',
-                        date: '23 Oktober 2026 • 16:30 WIB',
-                        storeLocation: 'Minimarket ILP - Sektor A',
-                        targetWarehouse: 'DC Cikarang (Pusat Logistik)',
-                        sopStatus: 'DISETUJUI_SPV',
-                        statusLabel: 'DISETUJUI SUPERVISOR',
-                        statusDesc: 'Telah disetujui Kepala Toko. Menunggu kedatangan armada logistik DC untuk serah terima fisik.',
-                        totalSku: 2,
-                        totalKoli: 12,
-                        totalClaimValue: 720000,
-                        submittedBy: 'Andi Pratama (Kasir)',
-                        spvApprover: 'Hendra Wijaya (Supervisor Toko)',
-                        dispatchedAt: null,
-                        items: [
-                            { sku: '8993456789012', name: 'Ultra Milk Cokelat 1L', qty: '8 Pcs', reason: 'Kemasan penyok' },
-                            { sku: '8992345678901', name: 'Chitato Sapi Panggang 68g', qty: '4 Karton', reason: 'Kedaluwarsa batch' }
-                        ]
-                    },
-                    {
-                        docNo: '#RTR-TK-20261022-002',
-                        date: '22 Oktober 2026 • 11:00 WIB',
-                        storeLocation: 'Minimarket ILP - Sektor A',
-                        targetWarehouse: 'DC Cikarang (Pusat Logistik)',
-                        sopStatus: 'PENYERAHAN_FISIK',
-                        statusLabel: 'PENYERAHAN FISIK (GOODS ISSUED)',
-                        statusDesc: 'BAST serah terima fisik barang telah ditandatangani pengemudi DC. Titik mutasi pengurangan stok toko.',
-                        totalSku: 3,
-                        totalKoli: 24,
-                        totalClaimValue: 1450000,
-                        submittedBy: 'Budi Kurniawan (Kasir)',
-                        spvApprover: 'Hendra Wijaya (Supervisor Toko)',
-                        dispatchedAt: '22 Okt 2026 13:45 WIB • Driver: Joko (B 9211 UQ)',
-                        items: [
-                            { sku: '8995678901234', name: 'Sunlight Jeruk Nipis 755ml', qty: '12 Botol', reason: 'Tutup pecah' },
-                            { sku: '8996789012345', name: 'Minyak Goreng Sania 2L', qty: '8 Pcs', reason: 'Bocor kemasan' },
-                            { sku: '8994567890123', name: 'Beras Pandan Wangi 5kg', qty: '4 Pack', reason: 'Kutu beras' }
-                        ]
-                    },
-                    {
-                        docNo: '#RTR-TK-20261020-001',
-                        date: '20 Oktober 2026 • 09:15 WIB',
-                        storeLocation: 'Minimarket ILP - Sektor A',
-                        targetWarehouse: 'DC Cikarang (Pusat Logistik)',
-                        sopStatus: 'DITERIMA_GUDANG',
-                        statusLabel: 'SELESAI (DITERIMA DC)',
-                        statusDesc: 'Gudang DC telah menyelesaikan verifikasi fisik barang dan menerbitkan nota kredit/kompensasi.',
-                        totalSku: 2,
-                        totalKoli: 15,
-                        totalClaimValue: 890000,
-                        submittedBy: 'Citra Dewi (Kasir)',
-                        spvApprover: 'Hendra Wijaya (Supervisor Toko)',
-                        dispatchedAt: '20 Okt 2026 11:20 WIB • Driver: Rahmat (B 9102 UQ)',
-                        items: [
-                            { sku: '8991234567890', name: 'Aqua Mineral 600ml', qty: '10 Karton', reason: 'Bocor karton' },
-                            { sku: '899275321004', name: 'Indomie Goreng 85g', qty: '5 Karton', reason: 'Remuk packaging' }
-                        ]
-                    }
-                ];
-                this.persistReturState();
             }
         } catch (e) {
-            console.warn('Failed restoring retur state from localStorage', e);
+            console.warn('Failed restoring retur state', e);
+            this.draftItems = [];
+        }
+    },
+
+    async lookupProductForReturn() {
+        const q = (this.barcodeInput || '').trim();
+        if (!q) return;
+        try {
+            let res = await fetch('/api/pos/products/barcode/' + encodeURIComponent(q), { headers: { 'Accept': 'application/json' } });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && json.data) {
+                    const p = json.data;
+                    this.selectedProduct = {
+                        id: p.id,
+                        sku: p.sku,
+                        barcode: p.barcode,
+                        name: p.name,
+                        category: p.category || 'Umum',
+                        buyPrice: Number(p.cost_price ?? p.price ?? 0)
+                    };
+                    return;
+                }
+            }
+            res = await fetch('/api/pos/products/search?q=' + encodeURIComponent(q) + '&limit=5', { headers: { 'Accept': 'application/json' } });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+                    const p = json.data[0];
+                    this.selectedProduct = {
+                        id: p.id,
+                        sku: p.sku,
+                        barcode: p.barcode,
+                        name: p.name,
+                        category: p.category || 'Umum',
+                        buyPrice: Number(p.cost_price ?? p.price ?? 0)
+                    };
+                    return;
+                }
+            }
+            this.selectedProduct = null;
+            this.showToastNotice('Produk tidak ditemukan di database.');
+        } catch (e) {
+            this.showToastNotice('Gagal mencari produk: ' + e.message);
         }
     },
 
@@ -294,60 +251,47 @@
         this.showToastNotice(`Dokumen pengajuan retur ${docNo} berhasil dibatalkan dan dihapus.`);
     },
 
-    submitBatchToSupervisor() {
-        if (this.draftItems.length === 0) return;
+    async submitBatchToSupervisor() {
+        if (this.isSubmittingReturn || this.draftItems.length === 0) return;
 
-        const newDocNo = '#RTR-TK-' + new Date().getFullYear() + '10' + Math.floor(100 + Math.random() * 900);
-        const nowStr = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) + ' • ' +
-                       new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':') + ' WIB';
-
-        const newDoc = {
-            docNo: newDocNo,
-            date: nowStr,
-            storeLocation: this.activeSession?.storeLocation || 'Minimarket ILP - Sektor A',
-            targetWarehouse: 'DC Cikarang (Pusat Logistik)',
-            sopStatus: 'DIAJUKAN_TOKO',
-            statusLabel: 'DRAFT DIAJUKAN',
-            statusDesc: 'Pengajuan retur berhasil dikirim ke antrean review Supervisor Toko. Barang disimpan di karantina gerai.',
-            totalSku: this.draftItems.length,
-            totalKoli: this.totalDraftQty,
-            totalClaimValue: this.totalDraftValue,
-            submittedBy: (this.activeSession?.cashierName || 'Budi Kurniawan') + ' (Kasir)',
-            spvApprover: null,
-            dispatchedAt: null,
-            items: this.draftItems.map(it => ({
-                sku: it.sku,
-                name: it.name,
-                qty: it.qty + ' ' + it.unit,
-                reason: it.reasonLabel + ' (' + it.note + ')'
-            }))
-        };
-
-        this.historyDocuments.unshift(newDoc);
-
-        // Sync to API
+        this.isSubmittingReturn = true;
+        const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('rtr-' + Date.now());
         try {
-            fetch('/api/returns', {
+            const monthStr = String(new Date().getMonth() + 1).padStart(2, '0');
+            const newDocNo = '#RTR-TK-' + new Date().getFullYear() + monthStr + Math.floor(100 + Math.random() * 900);
+            const nowStr = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) + ' • ' +
+                           new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':') + ' WIB';
+
+            const res = await fetch('/api/returns', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-Idempotency-Key': idemKey },
                 body: JSON.stringify({
                     direction: 'toko_ke_gudang',
                     condition_type: this.draftItems[0]?.reason === 'RUSAK_BOCOR' ? 'rusak' : (this.draftItems[0]?.reason === 'KEDALUWARSA' ? 'ed' : 'overstock'),
-                    sku: this.draftItems[0]?.sku || 'SKU-001',
+                    sku: this.draftItems[0]?.sku || '',
                     qty: this.totalDraftQty || 1,
-                    unit: 'Pcs',
+                    unit: this.draftItems[0]?.unit || 'Pcs',
                     reason: this.draftItems[0]?.note || 'Pengajuan retur toko ke DC',
-                    driver_name: 'Armada Internal DC',
-                    vehicle_plate: 'B 9102 UQ',
+                    use_fleet: true,
                     subtotal: this.totalDraftValue || 0
                 })
-            }).catch(e => console.warn('API sync return error', e));
-        } catch (e) {}
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok || !json.success) {
+                this.showToastNotice(json.message || 'Gagal mengajukan retur ke server.');
+                return;
+            }
 
-        this.draftItems = [];
-        this.persistReturState();
-        this.activeTab = 'history';
-        this.showToastNotice(`Dokumen pengajuan retur ${newDocNo} berhasil dibuat!`);
+            this.draftItems = [];
+            this.persistReturState();
+            await this.initRetur();
+            this.activeTab = 'history';
+            this.showToastNotice(`Dokumen pengajuan retur ${json.data?.return_number || newDocNo} berhasil dibuat!`);
+        } catch (e) {
+            this.showToastNotice('Gagal menghubungi server retur: ' + e.message);
+        } finally {
+            this.isSubmittingReturn = false;
+        }
     },
 
     openDetailModal(doc) {
@@ -413,7 +357,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 class="px-4 py-2 rounded-lg text-xs flex items-center gap-2 transition-all cursor-pointer">
                             <span class="material-symbols-rounded text-[16px]">history</span>
                             <span>Riwayat Dokumen Retur</span>
-                            <span class="px-1.5 py-0.5 rounded-full text-[10px] bg-blue-100 text-[#0052cc]" x-text="historyDocuments.length">4</span>
+                            <span class="px-1.5 py-0.5 rounded-full text-[10px] bg-blue-100 text-[#0052cc]" x-text="historyDocuments.length">0</span>
                         </button>
                     </div>
                 </div>
@@ -424,8 +368,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <div>
                             <span class="text-[10px] font-bold text-gray-400 tracking-wider uppercase">DRAFT MUATAN SAAT INI</span>
                             <div class="flex items-baseline gap-2 mt-1">
-                                <h3 class="text-2xl font-black text-gray-900" x-text="draftItems.length + ' SKU'">4 SKU</h3>
-                                <span class="text-xs font-bold text-gray-500" x-text="totalDraftQty + ' Unit'">18 Unit</span>
+                                <h3 class="text-2xl font-black text-gray-900" x-text="draftItems.length + ' SKU'">0 SKU</h3>
+                                <span class="text-xs font-bold text-gray-500" x-text="totalDraftQty + ' Unit'">0 Unit</span>
                             </div>
                             <span class="text-[11px] text-gray-500 font-medium mt-0.5 block">Di area karantina toko</span>
                         </div>
@@ -437,7 +381,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <div class="bg-white rounded-2xl border border-rose-200 p-5 shadow-xs flex items-center justify-between border-l-4 border-l-rose-500">
                         <div>
                             <span class="text-[10px] font-bold text-rose-700 tracking-wider uppercase">KATEGORI RUSAK / BOCOR</span>
-                            <h3 class="text-2xl font-black text-rose-600 mt-1" x-text="draftRusakCount + ' SKU'">2 SKU</h3>
+                            <h3 class="text-2xl font-black text-rose-600 mt-1" x-text="draftRusakCount + ' SKU'">0 SKU</h3>
                             <span class="text-[11px] text-gray-500 font-medium mt-0.5 block">Rembes lipatan & kemasan cacat</span>
                         </div>
                         <div class="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
@@ -448,7 +392,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <div class="bg-white rounded-2xl border border-amber-200 p-5 shadow-xs flex items-center justify-between border-l-4 border-l-amber-500">
                         <div>
                             <span class="text-[10px] font-bold text-amber-700 tracking-wider uppercase">KEDALUWARSA / ED</span>
-                            <h3 class="text-2xl font-black text-amber-600 mt-1" x-text="draftEdCount + ' SKU'">1 SKU</h3>
+                            <h3 class="text-2xl font-black text-amber-600 mt-1" x-text="draftEdCount + ' SKU'">0 SKU</h3>
                             <span class="text-[11px] text-gray-500 font-medium mt-0.5 block">&le; Batas retur pajang H-14</span>
                         </div>
                         <div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
@@ -459,7 +403,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <div class="bg-white rounded-2xl border border-emerald-200 p-5 shadow-xs flex items-center justify-between border-l-4 border-l-emerald-500">
                         <div>
                             <span class="text-[10px] font-bold text-emerald-700 tracking-wider uppercase">TOTAL NILAI KLAIM POKOK</span>
-                            <h3 class="text-xl font-black text-gray-900 font-mono mt-1" x-text="formatRupiah(totalDraftValue)">Rp 1.027.000</h3>
+                            <h3 class="text-xl font-black text-gray-900 font-mono mt-1" x-text="formatRupiah(totalDraftValue)">Rp 0</h3>
                             <span class="text-[10px] text-emerald-600 font-bold mt-0.5 block">Dijamin kompensasi DC</span>
                         </div>
                         <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
@@ -487,25 +431,29 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             <div class="flex gap-2">
                                 <input type="text"
                                        x-model="barcodeInput"
+                                       @keydown.enter.prevent="lookupProductForReturn()"
                                        placeholder="Scan barcode..."
                                        class="flex-1 px-4 py-2.5 bg-slate-50 border border-gray-200 rounded-xl font-mono text-xs font-bold text-gray-800 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20">
                                 <button type="button"
-                                        class="bg-[#0052cc] hover:bg-[#0043a8] text-white px-4 rounded-xl font-bold text-xs transition-colors shadow-2xs">
+                                        @click="lookupProductForReturn()"
+                                        class="bg-[#0052cc] hover:bg-[#0043a8] text-white px-4 rounded-xl font-bold text-xs transition-colors shadow-2xs cursor-pointer">
                                     Deteksi
                                 </button>
                             </div>
                         </div>
 
                         <!-- Product Display Card -->
-                        <div class="bg-blue-50/50 border border-blue-200 rounded-xl p-4 flex flex-col gap-1.5">
-                            <span class="text-[10px] font-bold text-[#0052cc] uppercase tracking-wider" x-text="selectedProduct.category">KEBUTUHAN POKOK</span>
-                            <h4 class="font-bold text-gray-900 text-sm leading-tight" x-text="selectedProduct.name">Minyak Goreng Sawit 2 Liter</h4>
-                            <div class="flex items-center gap-4 mt-1 text-xs text-gray-600 font-medium">
-                                <span>SKU: <strong class="font-mono text-gray-900" x-text="selectedProduct.sku">MYK-0021</strong></span>
-                                <span>•</span>
-                                <span>Hrg Beli: <strong class="font-mono text-gray-900" x-text="formatRupiah(selectedProduct.buyPrice)">Rp 34.500</strong></span>
+                        <template x-if="selectedProduct">
+                            <div class="bg-blue-50/50 border border-blue-200 rounded-xl p-4 flex flex-col gap-1.5">
+                                <span class="text-[10px] font-bold text-[#0052cc] uppercase tracking-wider" x-text="selectedProduct.category"></span>
+                                <h4 class="font-bold text-gray-900 text-sm leading-tight" x-text="selectedProduct.name"></h4>
+                                <div class="flex items-center gap-4 mt-1 text-xs text-gray-600 font-medium">
+                                    <span>SKU: <strong class="font-mono text-gray-900" x-text="selectedProduct.sku"></strong></span>
+                                    <span>•</span>
+                                    <span>Hrg Beli: <strong class="font-mono text-gray-900" x-text="formatRupiah(selectedProduct.buyPrice)"></strong></span>
+                                </div>
                             </div>
-                        </div>
+                        </template>
 
                         <!-- Quantity & Unit -->
                         <div class="grid grid-cols-2 gap-3">
@@ -515,7 +463,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     <button type="button"
                                             @click="inputQty = Math.max(1, inputQty - 1)"
                                             class="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-100 rounded-lg text-sm font-black cursor-pointer">−</button>
-                                    <span class="font-bold text-gray-900 text-sm" x-text="inputQty">2</span>
+                                    <span class="font-bold text-gray-900 text-sm" x-text="inputQty">1</span>
                                     <button type="button"
                                             @click="inputQty++"
                                             class="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-100 rounded-lg text-sm font-black cursor-pointer">+</button>
@@ -698,7 +646,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <div class="bg-white border border-gray-200 rounded-2xl shadow-xs p-6 flex flex-col gap-4">
                             <div class="flex items-center justify-between pb-3 border-b border-gray-100">
                                 <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">TOTAL ESTIMASI NILAI POKOK RETUR</span>
-                                <span class="font-mono text-2xl font-black text-[#0052cc]" x-text="formatRupiah(totalDraftValue)">Rp 1.027.000</span>
+                                <span class="font-mono text-2xl font-black text-[#0052cc]" x-text="formatRupiah(totalDraftValue)">Rp 0</span>
                             </div>
 
                             <!-- SOP Mutation Point Policy Notice -->
@@ -714,15 +662,15 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
                             <!-- Action Button: Finalize Draft -->
                             <div class="flex items-center justify-between pt-2">
-                                <span class="text-xs text-gray-500 font-medium">Petugas Pembuat: <strong class="text-gray-800" x-text="activeSession.cashierName">Budi Kurniawan</strong></span>
+                                <span class="text-xs text-gray-500 font-medium">Petugas Pembuat: <strong class="text-gray-800" x-text="activeSession?.cashierName || localStorage.getItem('pos_user_name') || '-'">-</strong></span>
 
                                 <button type="button"
                                         @click="submitBatchToSupervisor()"
-                                        :disabled="draftItems.length === 0"
-                                        :class="draftItems.length === 0 ? 'opacity-50 cursor-not-allowed bg-gray-400' : 'bg-[#0052cc] hover:bg-[#0043a8] cursor-pointer shadow-sm'"
+                                        :disabled="isSubmittingReturn || draftItems.length === 0"
+                                        :class="(isSubmittingReturn || draftItems.length === 0) ? 'opacity-50 cursor-not-allowed bg-gray-400' : 'bg-[#0052cc] hover:bg-[#0043a8] cursor-pointer shadow-sm'"
                                         class="px-6 py-3 rounded-xl text-white font-bold text-xs flex items-center gap-2 transition-all">
-                                    <span class="material-symbols-rounded text-[18px]">send</span>
-                                    <span>Ajukan ke Supervisor & Gudang DC</span>
+                                    <span class="material-symbols-rounded text-[18px]" :class="isSubmittingReturn ? 'animate-spin' : ''" x-text="isSubmittingReturn ? 'progress_activity' : 'send'"></span>
+                                    <span x-text="isSubmittingReturn ? 'Mengirim...' : 'Ajukan ke Supervisor & Gudang DC'"></span>
                                 </button>
                             </div>
                         </div>

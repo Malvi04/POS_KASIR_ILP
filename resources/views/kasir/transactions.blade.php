@@ -158,10 +158,10 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <div>
                             <span class="text-[10px] font-bold text-gray-400 tracking-wider uppercase">TOTAL TRANSAKSI</span>
                             <div class="flex items-baseline gap-2 mt-1">
-                                <h3 class="text-2xl font-black text-gray-900" x-text="transactions.length + ' Nota'">6 Nota</h3>
+                                <h3 class="text-2xl font-black text-gray-900" x-text="transactions.length + ' Nota'">0 Nota</h3>
                                 <span class="bg-blue-50 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-md">Shift Ini</span>
                             </div>
-                            <span class="text-[11px] text-gray-500 font-medium mt-0.5 block">Sesi: Kasir 01</span>
+                            <span class="text-[11px] text-gray-500 font-medium mt-0.5 block" x-text="'Sesi: ' + (activeSession?.terminalLabel || '-')">Sesi: -</span>
                         </div>
                         <div class="w-12 h-12 rounded-xl bg-blue-50 text-[#0052cc] flex items-center justify-center shrink-0">
                             <span class="material-symbols-rounded text-[24px]">receipt_long</span>
@@ -171,7 +171,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <div class="bg-white rounded-2xl border border-emerald-200 p-5 shadow-xs flex items-center justify-between border-l-4 border-l-emerald-500">
                         <div>
                             <span class="text-[10px] font-bold text-emerald-700 tracking-wider uppercase">OMZET SELESAI</span>
-                            <h3 class="text-xl font-black text-gray-900 font-mono mt-1" x-text="formatRupiah(totalOmzet)">Rp 623.138</h3>
+                            <h3 class="text-xl font-black text-gray-900 font-mono mt-1" x-text="formatRupiah(totalOmzet)">Rp 0</h3>
                             <span class="text-[11px] text-emerald-600 font-medium mt-0.5 block">Penjualan lunas tercatat</span>
                         </div>
                         <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
@@ -182,7 +182,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs flex items-center justify-between">
                         <div>
                             <span class="text-[10px] font-bold text-gray-400 tracking-wider uppercase">PENERIMAAN TUNAI</span>
-                            <h3 class="text-xl font-black text-gray-900 font-mono mt-1" x-text="formatRupiah(totalCash)">Rp 212.638</h3>
+                            <h3 class="text-xl font-black text-gray-900 font-mono mt-1" x-text="formatRupiah(totalCash)">Rp 0</h3>
                             <span class="text-[11px] text-gray-500 font-medium mt-0.5 block">Uang fisik laci kasir</span>
                         </div>
                         <div class="w-12 h-12 rounded-xl bg-slate-100 text-gray-700 flex items-center justify-center shrink-0">
@@ -193,7 +193,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs flex items-center justify-between">
                         <div>
                             <span class="text-[10px] font-bold text-gray-400 tracking-wider uppercase">NON-TUNAI & TEMPO</span>
-                            <h3 class="text-xl font-black text-[#0052cc] font-mono mt-1" x-text="formatRupiah(totalNonCash)">Rp 410.500</h3>
+                            <h3 class="text-xl font-black text-[#0052cc] font-mono mt-1" x-text="formatRupiah(totalNonCash)">Rp 0</h3>
                             <span class="text-[11px] text-gray-500 font-medium mt-0.5 block">QRIS, Debit, Piutang Member</span>
                         </div>
                         <div class="w-12 h-12 rounded-xl bg-blue-50 text-[#0052cc] flex items-center justify-center shrink-0">

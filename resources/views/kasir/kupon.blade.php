@@ -11,6 +11,7 @@
     showNewKuponModal: false,
     showEditKuponModal: false,
     showDeleteModal: false,
+    isSavingKupon: false,
     deleteInputText: '',
     showDetailModal: false,
     selectedKupon: null,
@@ -24,9 +25,9 @@
         code: '',
         recipientName: '',
         recipientNik: '',
-        recipientDept: 'Logistik & Armada',
-        volume: '20 Liter',
-        nominal: 200000,
+        recipientDept: '',
+        volume: '',
+        nominal: 0,
         notes: ''
     },
 
@@ -52,15 +53,6 @@
             this.isLoadingCoupons = false;
         }
 
-        const stored = localStorage.getItem('pos_ilp_coupons_v1');
-        if (stored) {
-            try {
-                this.coupons = JSON.parse(stored);
-                if (Array.isArray(this.coupons)) return;
-            } catch (e) {
-                this.coupons = [];
-            }
-        }
         this.coupons = [];
     },
 
@@ -106,56 +98,74 @@
         this.showDetailModal = true;
     },
 
-    redeemKupon(k) {
-        k.status = 'SELESAI';
-        k.statusLabel = 'Selesai Ditukar';
-        this.saveCoupons();
+    async redeemKupon(k) {
+        if (k.raw_id) {
+            try {
+                const res = await fetch(`/api/coupons/${k.raw_id}/redeem`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: localStorage.getItem('pos_portal_logged_in_staff_id') || null
+                    })
+                });
+                const json = await res.json().catch(() => ({}));
+                if (!res.ok || !json.success) {
+                    alert(json.message || 'Gagal menukarkan kupon.');
+                    return;
+                }
+            } catch (err) {
+                alert('Gagal menghubungi server: ' + err.message);
+                return;
+            }
+        }
+        await this.initCoupons();
         this.triggerToast('Kupon ' + k.id + ' berhasil diverifikasi dan ditukarkan kepada ' + k.recipientName + '!');
         this.showDetailModal = false;
     },
 
-    saveNewKupon() {
+    async saveNewKupon() {
+        if (this.isSavingKupon) return;
         if (!this.formKupon.code || !this.formKupon.recipientName) {
             alert('Mohon lengkapi nomor seri kupon dan nama penerima!');
             return;
         }
 
-        let label = 'BBM & Armada';
-        let badge = 'bg-blue-50 text-blue-700 border-blue-200';
-        let dot = 'bg-blue-500';
-        if (this.formKupon.category === 'beras') { label = 'Beras Subsidi'; badge = 'bg-emerald-50 text-emerald-700 border-emerald-200'; dot = 'bg-emerald-500'; }
-        if (this.formKupon.category === 'galon') { label = 'Galon Air Mineral'; badge = 'bg-cyan-50 text-cyan-700 border-cyan-200'; dot = 'bg-cyan-500'; }
-        if (this.formKupon.category === 'pulsa') { label = 'Kuota & Pulsa'; badge = 'bg-orange-50 text-orange-700 border-orange-200'; dot = 'bg-orange-500'; }
-
-        const newEntry = {
-            id: this.formKupon.code.toUpperCase(),
-            category: this.formKupon.category,
-            categoryLabel: label,
-            badgeClass: badge,
-            dotClass: dot,
-            itemDetail: this.formKupon.notes || label,
-            recipientName: this.formKupon.recipientName,
-            recipientRole: this.formKupon.recipientDept || 'Karyawan',
-            recipientNik: this.formKupon.recipientNik || 'NIK-PENDING',
-            vehicleNo: '-',
-            qty: this.formKupon.volume || '1 Unit',
-            nominal: Number(this.formKupon.nominal) || 0,
-            date: new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) + ' • ' + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
-            cashier: this.activeSession?.cashierName || 'Kasir',
-            status: 'TERVALIDASI',
-            statusLabel: 'Tervalidasi (Siap Pakai)'
-        };
-
-        this.coupons.unshift(newEntry);
-        this.saveCoupons();
-        this.showNewKuponModal = false;
-        this.triggerToast('Kupon ' + newEntry.id + ' berhasil didaftarkan dan tervalidasi!');
-
-        // Post to backend database asynchronously
+        this.isSavingKupon = true;
+        const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('kpn-' + Date.now());
         try {
-            fetch('/api/coupons', {
+            let label = 'BBM & Armada';
+            let badge = 'bg-blue-50 text-blue-700 border-blue-200';
+            let dot = 'bg-blue-500';
+            if (this.formKupon.category === 'beras') { label = 'Beras Subsidi'; badge = 'bg-emerald-50 text-emerald-700 border-emerald-200'; dot = 'bg-emerald-500'; }
+            if (this.formKupon.category === 'galon') { label = 'Galon Air Mineral'; badge = 'bg-cyan-50 text-cyan-700 border-cyan-200'; dot = 'bg-cyan-500'; }
+            if (this.formKupon.category === 'pulsa') { label = 'Kuota & Pulsa'; badge = 'bg-orange-50 text-orange-700 border-orange-200'; dot = 'bg-orange-500'; }
+
+            const newEntry = {
+                id: this.formKupon.code.toUpperCase(),
+                category: this.formKupon.category,
+                categoryLabel: label,
+                badgeClass: badge,
+                dotClass: dot,
+                itemDetail: this.formKupon.notes || label,
+                recipientName: this.formKupon.recipientName,
+                recipientRole: this.formKupon.recipientDept || 'Karyawan',
+                recipientNik: this.formKupon.recipientNik || 'NIK-PENDING',
+                vehicleNo: '-',
+                qty: this.formKupon.volume || '1 Unit',
+                nominal: Number(this.formKupon.nominal) || 0,
+                date: new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) + ' • ' + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
+                cashier: this.activeSession?.cashierName || 'Kasir',
+                status: 'TERVALIDASI',
+                statusLabel: 'Tervalidasi (Siap Pakai)'
+            };
+
+            const r = await fetch('/api/coupons', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-Idempotency-Key': idemKey
+                },
                 body: JSON.stringify({
                     category: this.formKupon.category,
                     serial_number: newEntry.id,
@@ -167,19 +177,25 @@
                     notes: newEntry.itemDetail,
                     status: newEntry.status
                 })
-            }).then(r => r.json()).then(res => {
-                if (res.success && res.data && res.data.id) {
-                    newEntry.raw_id = res.data.id;
-                    this.saveCoupons();
-                }
-            }).catch(err => console.warn('Coupons API background sync', err));
-        } catch(e) {}
+            });
+            const res = await r.json().catch(() => ({}));
+            if (!r.ok || !res.success) {
+                alert(res.message || 'Gagal menyimpan kupon ke database.');
+                return;
+            }
 
-        // Reset form
-        this.formKupon.code = '';
-        this.formKupon.recipientName = '';
-        this.formKupon.recipientNik = '';
-        this.formKupon.notes = '';
+            await this.initCoupons();
+            this.showNewKuponModal = false;
+            this.triggerToast('Kupon ' + (res.data?.serial_number || newEntry.id) + ' berhasil didaftarkan dan tervalidasi!');
+
+            // Reset form
+            this.formKupon.code = '';
+            this.formKupon.recipientName = '';
+            this.formKupon.recipientNik = '';
+            this.formKupon.notes = '';
+        } finally {
+            this.isSavingKupon = false;
+        }
     },
 
     openEditKupon(k) {
@@ -657,13 +673,16 @@ class="flex flex-col h-screen w-full font-sans">
 
                     <div class="pt-2 flex justify-end gap-2">
                         <button type="button"
+                                :disabled="isSavingKupon"
                                 @click="showNewKuponModal = false"
-                                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition-colors cursor-pointer">
+                                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                             Batal
                         </button>
                         <button type="submit"
-                                class="px-5 py-2 bg-[#0052cc] hover:bg-blue-700 text-white rounded-xl font-bold transition-colors cursor-pointer">
-                            Simpan & Validasi
+                                :disabled="isSavingKupon"
+                                class="px-5 py-2 bg-[#0052cc] hover:bg-blue-700 text-white rounded-xl font-bold transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <span x-show="isSavingKupon" class="material-symbols-rounded text-[15px] animate-spin">progress_activity</span>
+                            <span x-text="isSavingKupon ? 'Menyimpan...' : 'Simpan & Validasi'"></span>
                         </button>
                     </div>
 

@@ -22,29 +22,29 @@
             const res = await fetch('/api/returns?direction=gudang_ke_toko', { headers: { 'Accept': 'application/json' } });
             if (res.ok) {
                 const json = await res.json();
-                if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+                if (json.success && Array.isArray(json.data)) {
                     this.returnInDocuments = json.data.map(d => ({
                         id: d.id,
                         docNo: d.docNo,
                         type: d.conditionType === 'garansi' ? 'PENGGANTIAN_GARANSI' : 'PENGEMBALIAN_TOKO',
                         typeLabel: d.conditionLabel || 'BARANG PENGGANTI (GARANSI)',
-                        originRef: d.ref || '#RTR-TK-001',
-                        warehouseOrigin: 'DC Cikarang (Pusat Logistik)',
-                        destinationStore: 'Minimarket ILP - Sektor A',
+                        originRef: d.ref || '-',
+                        warehouseOrigin: d.warehouse_origin || 'Gudang Pusat',
+                        destinationStore: d.branch || this.activeSession?.storeLocation || '-',
                         date: d.date,
-                        driverName: d.driver || 'Supir Armada',
-                        plateNumber: d.plate || 'B 9102 UQ',
+                        driverName: d.driver || '-',
+                        plateNumber: d.plate || '-',
                         status: d.statusKey === 'selesai' ? 'DITERIMA_LENGKAP' : 'MENUNGGU_VERIFIKASI',
                         receivedAt: null,
                         receiverName: null,
                         generalNotes: d.conditionDesc || '',
-                        items: (d.products || []).map((p, idx) => ({
-                            sku: '899' + (idx + 1) + '0000',
+                        items: (d.products || []).map((p) => ({
+                            sku: p.sku || '-',
                             name: p.name,
                             category: 'Umum',
                             unit: 'Pcs',
-                            qtySent: parseInt(p.qty, 10) || 12,
-                            qtyReceived: parseInt(p.qty, 10) || 12,
+                            qtySent: parseInt(p.qty, 10) || 0,
+                            qtyReceived: parseInt(p.qty, 10) || 0,
                             condition: 'BAIK',
                             note: 'Sesuai'
                         }))
@@ -57,16 +57,7 @@
             console.warn('API returns fetch error:', e);
         }
 
-        const stored = localStorage.getItem('pos_ilp_return_in_docs_v1');
-        if (stored) {
-            try {
-                this.returnInDocuments = JSON.parse(stored);
-            } catch(e) {
-                this.returnInDocuments = [];
-            }
-        } else {
-            this.returnInDocuments = [];
-        }
+        this.returnInDocuments = [];
     },
 
     saveDocs() {
@@ -145,7 +136,7 @@
         }
     },
 
-    confirmReturnReceipt() {
+    async confirmReturnReceipt() {
         if (!this.selectedDoc) return;
 
         const nowStr = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) + ' • ' +
@@ -153,6 +144,23 @@
 
         const original = this.returnInDocuments.find(d => d.id === this.selectedDoc.id);
         if (original) {
+            if (original.id && typeof original.id === 'number') {
+                try {
+                    const res = await fetch('/api/returns/' + original.id + '/status', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                        body: JSON.stringify({ status: 'selesai' })
+                    });
+                    if (!res.ok) {
+                        this.showToastNotice('Gagal memperbarui status penerimaan retur di server.');
+                        return;
+                    }
+                } catch (e) {
+                    this.showToastNotice('Gagal menghubungi server retur: ' + e.message);
+                    return;
+                }
+            }
+
             original.items = this.selectedDoc.items.map(it => ({
                 ...it,
                 qtyReceived: Math.max(0, parseInt(it.qtyReceived, 10) || 0)
@@ -162,7 +170,7 @@
 
             original.status = hasVariance ? 'DITERIMA_SELISIH' : 'DITERIMA_LENGKAP';
             original.receivedAt = nowStr;
-            original.receiverName = (this.activeSession?.cashierName || 'Budi Kurniawan') + ' (Kasir)';
+            original.receiverName = (this.activeSession?.cashierName || localStorage.getItem('pos_user_name') || 'Kasir') + ' (Kasir)';
             original.generalNotes = this.verifyNotes.trim() || 'Verifikasi fisik barang masuk retur selesai dikonfirmasi kasir.';
 
             this.updateInventoryStock(original.items, original.type);
@@ -221,7 +229,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <div class="w-2.5 h-2.5 rounded-full bg-purple-600"></div>
                         <div class="flex flex-col">
                             <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">PETUGAS VERIFIKASI</span>
-                            <span class="text-xs font-bold text-gray-800" x-text="activeSession.terminalLabel + ' • ' + activeSession.cashierName">Kasir 01 • Budi Kurniawan</span>
+                            <span class="text-xs font-bold text-gray-800" x-text="(activeSession?.terminalLabel || '-') + ' • ' + (activeSession?.cashierName || localStorage.getItem('pos_user_name') || '-')">-</span>
                         </div>
                     </div>
                 </div>
@@ -232,7 +240,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs flex items-center justify-between">
                         <div>
                             <span class="text-[10px] font-bold text-gray-400 tracking-wider uppercase">TOTAL DOKUMEN RETUR MASUK</span>
-                            <h3 class="text-2xl font-black text-gray-900 mt-1" x-text="totalCount">4</h3>
+                            <h3 class="text-2xl font-black text-gray-900 mt-1" x-text="totalCount">0</h3>
                             <span class="text-[11px] text-gray-500 font-medium mt-0.5 block">Transfer periode aktif</span>
                         </div>
                         <div class="w-12 h-12 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center shrink-0">
@@ -245,7 +253,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <div>
                             <span class="text-[10px] font-bold text-amber-700 tracking-wider uppercase">MENUNGGU VERIFIKASI</span>
                             <div class="flex items-baseline gap-2 mt-1">
-                                <h3 class="text-2xl font-black text-amber-600" x-text="pendingCount">2</h3>
+                                <h3 class="text-2xl font-black text-amber-600" x-text="pendingCount">0</h3>
                                 <span class="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md">Tiba di Toko</span>
                             </div>
                             <span class="text-[11px] text-gray-500 font-medium mt-0.5 block">Perlu cek fisik & BAST</span>
@@ -259,7 +267,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <div class="bg-white rounded-2xl border border-emerald-200 p-5 shadow-xs flex items-center justify-between border-l-4 border-l-emerald-500">
                         <div>
                             <span class="text-[10px] font-bold text-emerald-700 tracking-wider uppercase">BARANG PENGGANTI (GARANSI)</span>
-                            <h3 class="text-2xl font-black text-emerald-600 mt-1" x-text="replacementCount">2</h3>
+                            <h3 class="text-2xl font-black text-emerald-600 mt-1" x-text="replacementCount">0</h3>
                             <span class="text-[11px] text-emerald-600 font-medium mt-0.5 block">Kompensasi DC Supplier</span>
                         </div>
                         <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
@@ -271,7 +279,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <div class="bg-white rounded-2xl border border-rose-200 p-5 shadow-xs flex items-center justify-between border-l-4 border-l-rose-500">
                         <div>
                             <span class="text-[10px] font-bold text-rose-700 tracking-wider uppercase">RETUR DITOLAK GUDANG</span>
-                            <h3 class="text-2xl font-black text-rose-600 mt-1" x-text="rejectedCount">1</h3>
+                            <h3 class="text-2xl font-black text-rose-600 mt-1" x-text="rejectedCount">0</h3>
                             <span class="text-[11px] text-rose-600 font-medium mt-0.5 block">Write-off / Audit Gerai</span>
                         </div>
                         <div class="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
@@ -519,7 +527,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         </div>
                         <div>
                             <span class="text-[10px] font-bold text-gray-400 uppercase block">KASIR PENERIMA</span>
-                            <span class="font-bold text-[#0052cc]" x-text="activeSession.cashierName">Budi Kurniawan</span>
+                            <span class="font-bold text-[#0052cc]" x-text="activeSession?.cashierName || localStorage.getItem('pos_user_name') || '-'">-</span>
                         </div>
                     </div>
 

@@ -77,12 +77,14 @@
     },
 
     async submitMemberForm() {
+        if (this.formSubmitting) return;
         this.formErrors = {};
         if (!this.memberForm.name.trim()) this.formErrors.name = 'Nama lengkap wajib diisi.';
         if (!this.memberForm.nik.trim()) this.formErrors.nik = 'NIK wajib diisi.';
         if (Object.keys(this.formErrors).length > 0) return;
 
         this.formSubmitting = true;
+        const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('mbr-' + Date.now());
         try {
             if (this.formMode === 'create') {
                 const res = await fetch('/api/members', {
@@ -90,7 +92,8 @@
                     headers: { 
                         'Content-Type': 'application/json', 
                         'Accept': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest'
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-Idempotency-Key': idemKey
                     },
                     body: JSON.stringify(this.memberForm)
                 });

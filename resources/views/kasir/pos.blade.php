@@ -73,7 +73,7 @@
 
                 if (res.ok) {
                     const json = await res.json();
-                    if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+                    if (json.success && Array.isArray(json.data)) {
                         const result = this.deduplicateProducts(json.data);
                         this.products = result.unique;
                         try {
@@ -352,24 +352,8 @@
                 this.triggerPosToast(`Seluruh keranjang belanja berhasil dibatalkan oleh ${json.supervisor.name}`);
             }
         } catch (e) {
-            console.warn('API void failed, checking offline SPV authorization:', e);
-            const inputPin = (this.voidModal.pin || '').trim();
-            if (inputPin === '123456' || inputPin === 'spv123') {
-                if (this.voidModal.actionType === 'VOID_ITEM' && this.voidModal.item) {
-                    const removedName = this.voidModal.item.name;
-                    this.cart.splice(this.voidModal.itemIndex, 1);
-                    this.saveCart();
-                    this.voidModal.open = false;
-                    this.triggerPosToast(`[Mode Offline] Item [${removedName}] dibatalkan oleh Supervisor.`);
-                } else {
-                    this.cart = [];
-                    this.saveCart();
-                    this.voidModal.open = false;
-                    this.triggerPosToast('[Mode Offline] Seluruh keranjang berhasil dibatalkan oleh Supervisor.');
-                }
-                return;
-            }
-            this.voidModal.error = 'Server otorisasi terputus. Masukkan PIN Supervisor offline (default: 123456).';
+            console.warn('API void failed:', e);
+            this.voidModal.error = 'Gagal menghubungi server otorisasi. Periksa koneksi jaringan Anda.';
         } finally {
             this.voidModal.isSubmitting = false;
         }
@@ -421,7 +405,7 @@
                 });
                 if (res.ok) {
                     const json = await res.json();
-                    if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+                    if (json.success && Array.isArray(json.data)) {
                         const existingSkus = new Set((this.products || []).map(p => p.sku));
                         const newItems = json.data.filter(p => !existingSkus.has(p.sku));
                         if (newItems.length > 0) {
@@ -735,9 +719,9 @@
         }
 
         const payload = {
-            terminal_code: this.activeSession?.terminalLabel || 'POS-01',
-            cashier_nik: (this.activeOperator && this.activeOperator.nik) ? this.activeOperator.nik : (this.activeSession?.cashierNik || '202409821002'),
-            cashier_name: (this.activeOperator && this.activeOperator.name) ? this.activeOperator.name : (this.activeSession?.cashierName || 'Budi Kurniawan'),
+            terminal_code: this.activeSession?.terminalLabel || localStorage.getItem('pos_active_terminal_label') || '',
+            cashier_nik: (this.activeOperator && this.activeOperator.nik) ? this.activeOperator.nik : (this.activeSession?.cashierNik || localStorage.getItem('pos_portal_logged_in_nik') || ''),
+            cashier_name: (this.activeOperator && this.activeOperator.name) ? this.activeOperator.name : (this.activeSession?.cashierName || localStorage.getItem('pos_user_name') || ''),
             payment_method: method.toUpperCase(),
             cash_received: method === 'tunai' ? (parseInt(this.paymentModal.uangDiterima.replace(/\D/g, ''), 10) || this.grandTotal) : 0,
             payment_reference: method === 'qris' ? (this.paymentModal.qrisRef || ('QRIS-' + Date.now())) : null,
@@ -877,10 +861,10 @@ class="flex w-full h-full relative text-gray-800">
                    class="flex items-center gap-2 bg-blue-50 hover:bg-blue-100 text-[#0052cc] border border-blue-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
                    :title="'ID Sesi: ' + (activeSession?.sessionId || '-')">
                     <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                    <span class="font-extrabold text-[#0052cc]" x-text="activeSession?.terminalLabel || 'Kasir 01'">Kasir 01</span>
+                    <span class="font-extrabold text-[#0052cc]" x-text="activeSession?.terminalLabel || '-'">-</span>
                     <span class="text-gray-300">•</span>
                     <span class="material-symbols-rounded text-[15px] text-[#0052cc]">badge</span>
-                    <span class="text-gray-800 font-black" x-text="activeOperator ? activeOperator.name : (activeSession?.cashierName || 'Budi Kurniawan')">Budi Kurniawan</span>
+                    <span class="text-gray-800 font-black" x-text="activeOperator ? activeOperator.name : (activeSession?.cashierName || localStorage.getItem('pos_user_name') || '-')">-</span>
                 </a>
 
                 <!-- Ganti Operator Kasir -->
@@ -1437,7 +1421,7 @@ class="flex w-full h-full relative text-gray-800">
                     <div class="p-3.5 rounded-xl bg-slate-50 border border-gray-200/90 text-xs space-y-2">
                         <div class="flex items-center justify-between">
                             <span class="text-gray-500 font-medium">Terminal &amp; Sesi:</span>
-                            <span class="font-bold text-gray-900" x-text="(activeSession.terminalLabel || 'Kasir 01') + ' (' + (activeSession.sessionId || '-') + ')'"></span>
+                            <span class="font-bold text-gray-900" x-text="(activeSession?.terminalLabel || '-') + ' (' + (activeSession?.sessionId || '-') + ')'"></span>
                         </div>
                         <div class="flex items-center justify-between">
                             <span class="text-gray-500 font-medium">Operator Aktif:</span>

@@ -22,7 +22,7 @@
         <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-slate-50/60">
             <div class="flex items-center gap-2.5">
                 <h2 class="text-lg font-bold text-gray-900">Pembayaran Kasir</h2>
-                <span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-blue-100 text-[#0052cc]" x-text="(activeSession?.terminalLabel || 'Kasir 01') + ' • ' + (activeOperator ? activeOperator.name : (activeSession?.cashierName || 'Kasir'))"></span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-blue-100 text-[#0052cc]" x-text="(activeSession?.terminalLabel || '-') + ' • ' + (activeOperator ? activeOperator.name : (activeSession?.cashierName || '-'))"></span>
             </div>
             <button @click="paymentModal.open = false" class="text-gray-400 hover:text-gray-600 rounded-lg p-1 hover:bg-gray-100 cursor-pointer">
                 <span class="material-symbols-rounded">close</span>

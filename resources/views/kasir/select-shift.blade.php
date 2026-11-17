@@ -19,7 +19,7 @@
         </div>
         <div class="flex items-center gap-5 text-sm">
             <div class="flex flex-col text-right leading-tight">
-                <span class="text-gray-500 font-medium text-xs" x-text="businessDayDate">19 Oktober 2026</span>
+                <span class="text-gray-500 font-medium text-xs" x-text="businessDayDate">-</span>
                 <span class="text-[#0052cc] font-mono font-bold text-xs">OPERASIONAL OPEN</span>
             </div>
             <x-realtime-network-badge />
@@ -343,7 +343,7 @@
                                         <span>Operan <strong class="text-gray-700" x-text="term.handover.fromCashierName"></strong>: <strong class="font-mono text-emerald-700 font-bold" x-text="formatRupiah(term.handover.actualCash)"></strong></span>
                                     </template>
                                     <template x-if="term.isActive !== false && term.status === 'AVAILABLE'">
-                                        <span>Siap dibuka • Modal Rp 500.000</span>
+                                        <span>Siap dibuka</span>
                                     </template>
                                     <template x-if="term.isActive !== false && term.status === 'ACTIVE_OTHER'">
                                         <span class="text-red-600 font-semibold flex items-center gap-1">

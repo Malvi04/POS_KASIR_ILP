@@ -28,27 +28,23 @@
             const res = await fetch('/api/pos/void/logs', { headers: { 'Accept': 'application/json' } });
             if (res.ok) {
                 const json = await res.json();
-                if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+                if (json.success && Array.isArray(json.data)) {
                     this.refundHistory = json.data.map((v, idx) => ({
                         refundNo: '#RFD-VOID-' + (v.id || (idx + 1)),
                         date: new Date(v.created_at).toLocaleString('id-ID'),
                         originFaktur: v.invoice_number,
-                        totalRefund: Number(v.amount || v.grand_total || 0),
+                        totalRefund: Number(v.amount || v.amount_voided || v.grand_total || 0),
+                        refundAmount: Number(v.amount || v.amount_voided || v.grand_total || 0),
                         reason: v.reason || 'Void Transaksi Kasir',
-                        cashierName: v.cashier_name || 'Kasir',
-                        supervisorName: v.authorized_by_name || 'Supervisor'
+                        condition: 'VOID / REFUND',
+                        cashier: v.cashier_name || '-',
+                        cashierName: v.cashier_name || '-',
+                        supervisorName: v.supervisor_name || v.authorized_by_name || '-',
+                        items: []
                     }));
                 }
             }
         } catch (e) {}
-
-        const raw = localStorage.getItem('pos_ilp_refund_history_v1');
-        if (raw && (!this.refundHistory || this.refundHistory.length === 0)) {
-            try {
-                const parsed = JSON.parse(raw);
-                if (Array.isArray(parsed)) this.refundHistory = parsed;
-            } catch (e) {}
-        }
 
         if (this.searchFakturInput.trim()) {
             this.lookupFaktur();
@@ -160,41 +156,44 @@
 
         // Supervisor PIN validation if > 50k
         if (this.needsSupervisorAuth) {
-            if (!this.supervisorPin || (this.supervisorPin !== '123456' && this.supervisorPin.length < 4)) {
+            if (!this.supervisorPin || this.supervisorPin.trim().length < 4) {
                 this.pinError = 'Nominal refund di atas Rp 50.000 wajib otorisasi PIN Supervisor.';
                 return;
             }
         }
 
-        // Try API void
+        // Call API void transaction
         try {
             const voidRes = await fetch('/api/pos/void/transaction', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                 body: JSON.stringify({
                     invoice_number: this.foundFaktur.id,
-                    pin_or_password: this.supervisorPin || '123456',
+                    pin_or_password: this.supervisorPin.trim(),
                     reason: `[${this.refundReason}] ${this.refundNotes || 'Refund Barang'}`
                 })
             });
             const voidJson = await voidRes.json();
-            if (!voidRes.ok && voidJson.message && !voidJson.message.includes('sudah pernah dibatalkan')) {
-                this.pinError = voidJson.message;
+            if (!voidRes.ok || !voidJson.success) {
+                this.pinError = voidJson.message || 'Otorisasi atau proses refund ditolak sistem.';
                 return;
             }
         } catch (e) {
-            console.warn('API void transaction warning:', e);
+            this.pinError = 'Gagal menghubungi server otorisasi refund: ' + e.message;
+            return;
         }
 
-        const newRefundNo = '#RFD-20261024-00' + (this.refundHistory.length + 1);
+        const todayCode = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const newRefundNo = '#RFD-' + todayCode + '-' + String(this.refundHistory.length + 1).padStart(3, '0');
         const nowStr = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) + ' • ' +
                        new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':') + ' WIB';
+        const activeCashier = this.activeSession?.cashierName || localStorage.getItem('pos_user_name') || '-';
 
         const refundDoc = {
             refundNo: newRefundNo,
             date: nowStr,
             originFaktur: this.foundFaktur.id,
-            cashier: this.activeSession.cashierName || 'Budi Kurniawan',
+            cashier: activeCashier,
             reason: this.refundReason,
             condition: this.itemCondition,
             itemCount: activeRefundItems.length,
@@ -210,7 +209,7 @@
         };
 
         // Record to cash movements as RETUR_TUNAI if cash method
-        if (this.foundFaktur.method === 'TUNAI' || this.foundFaktur.method === 'CAMPURAN') {
+        if ((this.foundFaktur.method === 'TUNAI' || this.foundFaktur.method === 'CAMPURAN') && this.activeSession) {
             this.activeSession.cashReturn = (Number(this.activeSession.cashReturn) || 0) + this.totalRefundCalculated;
             this.cashMovements.unshift({
                 id: 'CM-' + Math.floor(100 + Math.random() * 900),
@@ -219,7 +218,7 @@
                 label: `Refund Pelanggan ${this.foundFaktur.id} (${newRefundNo})`,
                 amount: this.totalRefundCalculated,
                 direction: 'out',
-                actor: this.activeSession.cashierName || 'Budi Kurniawan'
+                actor: activeCashier
             });
             this.persistAllState();
         }
@@ -300,7 +299,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 class="px-4 py-2 rounded-lg text-xs flex items-center gap-2 transition-all cursor-pointer">
                             <span class="material-symbols-rounded text-[16px]">history</span>
                             <span>Riwayat Refund</span>
-                            <span class="px-1.5 py-0.5 rounded-full text-[10px] bg-rose-100 text-rose-700" x-text="refundHistory.length">2</span>
+                            <span class="px-1.5 py-0.5 rounded-full text-[10px] bg-rose-100 text-rose-700" x-text="refundHistory.length">0</span>
                         </button>
                     </div>
                 </div>
@@ -310,8 +309,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs flex items-center justify-between">
                         <div>
                             <span class="text-[10px] font-bold text-gray-400 tracking-wider uppercase">TOTAL KLAIM REFUND HARI INI</span>
-                            <h3 class="text-2xl font-black text-gray-900 mt-1" x-text="refundHistory.length + ' Nota'">2 Nota</h3>
-                            <span class="text-[11px] text-gray-500 font-medium mt-0.5 block">Shift: Kasir 01</span>
+                            <h3 class="text-2xl font-black text-gray-900 mt-1" x-text="refundHistory.length + ' Nota'">0 Nota</h3>
+                            <span class="text-[11px] text-gray-500 font-medium mt-0.5 block" x-text="'Shift: ' + (activeSession?.terminalLabel || '-')">Shift: -</span>
                         </div>
                         <div class="w-12 h-12 rounded-xl bg-blue-50 text-[#0052cc] flex items-center justify-center shrink-0">
                             <span class="material-symbols-rounded text-[24px]">receipt</span>
@@ -321,7 +320,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <div class="bg-white rounded-2xl border border-rose-200 p-5 shadow-xs flex items-center justify-between border-l-4 border-l-rose-500">
                         <div>
                             <span class="text-[10px] font-bold text-rose-700 tracking-wider uppercase">TOTAL NILAI PENGEMBALIAN</span>
-                            <h3 class="text-xl font-black text-rose-600 font-mono mt-1" x-text="formatRupiah(refundHistory.reduce((a, b) => a + Number(b.refundAmount), 0))">Rp 44.800</h3>
+                            <h3 class="text-xl font-black text-rose-600 font-mono mt-1" x-text="formatRupiah(refundHistory.reduce((a, b) => a + Number(b.refundAmount || 0), 0))">Rp 0</h3>
                             <span class="text-[11px] text-rose-600 font-medium mt-0.5 block">Kas keluar laci</span>
                         </div>
                         <div class="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">

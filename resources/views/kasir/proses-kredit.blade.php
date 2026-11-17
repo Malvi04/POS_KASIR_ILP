@@ -18,7 +18,7 @@
             const res = await fetch('/api/pos/members/search', { headers: { 'Accept': 'application/json' } });
             if (res.ok) {
                 const json = await res.json();
-                if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+                if (json.success && Array.isArray(json.data)) {
                     this.members = json.data.map(m => ({
                         id: m.member_code,
                         nik: m.nik,
@@ -107,9 +107,9 @@
         }
 
         const payload = {
-            terminal_code: this.activeSession?.terminalLabel || 'POS-01',
-            cashier_nik: (this.activeOperator && this.activeOperator.nik) ? this.activeOperator.nik : (this.activeSession?.cashierNik || '202409821002'),
-            cashier_name: (this.activeOperator && this.activeOperator.name) ? this.activeOperator.name : (this.activeSession?.cashierName || 'Budi Kurniawan'),
+            terminal_code: this.activeSession?.terminalLabel || localStorage.getItem('pos_active_terminal_label') || '',
+            cashier_nik: (this.activeOperator && this.activeOperator.nik) ? this.activeOperator.nik : (this.activeSession?.cashierNik || localStorage.getItem('pos_portal_logged_in_nik') || ''),
+            cashier_name: (this.activeOperator && this.activeOperator.name) ? this.activeOperator.name : (this.activeSession?.cashierName || localStorage.getItem('pos_user_name') || ''),
             payment_method: 'KREDIT',
             member_nik: this.selectedMember.nik,
             items: this.cartItems.map(it => ({

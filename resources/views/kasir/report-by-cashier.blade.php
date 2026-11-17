@@ -31,50 +31,79 @@
             const res = await fetch('/api/pos/transactions?per_page=100', { headers: { 'Accept': 'application/json' } });
             if (res.ok) {
                 const json = await res.json();
-                if (json.success && Array.isArray(json.data) && json.data.length > 0) {
-                    const myName = (this.activeOperator ? this.activeOperator.name : (this.activeSession.cashierName || 'Budi Kurniawan')).toLowerCase();
-                    const filtered = json.data.filter(t => !t.cashier || t.cashier.toLowerCase() === myName);
-                    this.myTransactions = (filtered.length > 0 ? filtered : json.data).map(t => ({
+                if (json.success && Array.isArray(json.data)) {
+                    const myName = (this.activeOperator ? this.activeOperator.name : (this.activeSession?.cashierName || localStorage.getItem('pos_user_name') || '')).toLowerCase();
+                    const filtered = myName ? json.data.filter(t => !t.cashier || t.cashier.toLowerCase() === myName) : json.data;
+                    this.myTransactions = filtered.map(t => ({
                         id: t.id,
                         time: t.time,
                         method: t.method,
+                        cashPortion: Number(t.cashPortion || 0),
+                        nonCashPortion: Number(t.nonCashPortion || 0),
                         total: Number(t.total || 0),
                         discount: Number(t.discount || 0),
                         itemCount: Array.isArray(t.items) ? t.items.length : 1,
                         status: t.status || 'SELESAI'
                     }));
-                    return;
                 }
             }
         } catch (e) {
             console.warn('API report by cashier error:', e);
+            this.myTransactions = [];
         }
 
-        const raw = localStorage.getItem('pos_ilp_transactions_v1');
-        if (raw) {
-            try {
-                const trxs = JSON.parse(raw);
-                if (trxs && trxs.length > 0) {
-                    const myName = (this.activeOperator ? this.activeOperator.name : (this.activeSession.cashierName || 'Budi Kurniawan')).toLowerCase();
-                    const filtered = trxs.filter(t => !t.cashier || t.cashier.toLowerCase() === myName);
-                    this.myTransactions = (filtered.length > 0 ? filtered : trxs).map(t => ({
-                        id: t.id || t.trxId || '#TRX-001',
-                        time: t.time || new Date().toLocaleTimeString('id-ID'),
-                        method: t.method || (t.paymentMethod || 'TUNAI'),
-                        total: Number(t.total || 0),
-                        discount: Number(t.discount || 0),
-                        itemCount: t.items ? t.items.length : (t.itemCount || 1),
-                        status: t.status || 'SELESAI'
+        try {
+            const voidRes = await fetch('/api/pos/void/logs', { headers: { 'Accept': 'application/json' } });
+            if (voidRes.ok) {
+                const voidJson = await voidRes.json();
+                if (voidJson.success && Array.isArray(voidJson.data)) {
+                    this.refundActivities = voidJson.data.map(v => ({
+                        refundNo: '#VOID-' + v.id,
+                        trxId: v.item_sku || ('TRX-' + (v.transaction_id || '-')),
+                        reason: v.reason || 'Pembatalan Transaksi',
+                        amount: Number(v.amount_voided || 0)
                     }));
-                    return;
                 }
-            } catch(e) {}
+            }
+        } catch (e) {
+            this.refundActivities = [];
         }
-        this.myTransactions = [];
     },
 
     productCategoryShare: [],
     refundActivities: [],
+
+    get cashierInitials() {
+        const name = (this.activeCashierProfile?.name || 'K').trim();
+        const parts = name.split(/\s+/).filter(Boolean);
+        return parts.map(p => p[0]).join('').substring(0, 2).toUpperCase() || 'K';
+    },
+
+    getMethodStats(methodKey) {
+        const completed = this.myTransactions.filter(t => t.status === 'SELESAI');
+        let matched = [];
+        if (methodKey === 'TUNAI') {
+            matched = completed.filter(t => t.method === 'TUNAI');
+        } else if (methodKey === 'QRIS') {
+            matched = completed.filter(t => t.method === 'QRIS' || t.method === 'TRANSFER');
+        } else if (methodKey === 'CAMPURAN') {
+            matched = completed.filter(t => t.method === 'CAMPURAN');
+        } else if (methodKey === 'KREDIT') {
+            matched = completed.filter(t => (t.method || '').includes('KREDIT'));
+        }
+        return {
+            count: matched.length,
+            total: matched.reduce((sum, t) => sum + Number(t.total || 0), 0)
+        };
+    },
+
+    get expectedCashLiability() {
+        const cashFromTrx = this.myTransactions
+            .filter(t => t.status === 'SELESAI')
+            .reduce((sum, t) => sum + Number(t.cashPortion || (t.method === 'TUNAI' ? t.total : 0)), 0);
+        const opening = Number(this.activeSession?.openingCash || 0);
+        return opening + cashFromTrx - this.totalRefundAmount;
+    },
 
     get totalMySales() {
         return this.myTransactions.filter(t => t.status === 'SELESAI').reduce((sum, t) => sum + t.total, 0);
@@ -130,8 +159,8 @@ class="flex flex-col h-screen w-full font-sans">
                 <!-- Info Banner: Permission Kasir Login Only -->
                 <div class="bg-blue-50/70 border border-blue-200/80 rounded-2xl p-4 mb-6 flex items-start sm:items-center justify-between gap-4">
                     <div class="flex items-center gap-3.5">
-                        <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-xs">
-                            BK
+                        <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-xs" x-text="cashierInitials">
+                            -
                         </div>
                         <div>
                             <div class="flex items-center gap-2">
@@ -217,23 +246,23 @@ class="flex flex-col h-screen w-full font-sans">
                             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
                                 <div class="p-3 bg-emerald-50/60 border border-emerald-200 rounded-xl">
                                     <span class="text-[10px] font-bold text-emerald-800 uppercase block">Tunai</span>
-                                    <span class="text-base font-black font-mono text-emerald-700 mt-1 block">Rp 394.000</span>
-                                    <span class="text-[10px] text-emerald-600 mt-0.5 block">2 Transaksi</span>
+                                    <span class="text-base font-black font-mono text-emerald-700 mt-1 block" x-text="formatRupiah(getMethodStats('TUNAI').total)">Rp 0</span>
+                                    <span class="text-[10px] text-emerald-600 mt-0.5 block" x-text="getMethodStats('TUNAI').count + ' Transaksi'">0 Transaksi</span>
                                 </div>
                                 <div class="p-3 bg-blue-50/60 border border-blue-200 rounded-xl">
                                     <span class="text-[10px] font-bold text-blue-800 uppercase block">QRIS / EDC</span>
-                                    <span class="text-base font-black font-mono text-[#0052cc] mt-1 block">Rp 245.500</span>
-                                    <span class="text-[10px] text-blue-600 mt-0.5 block">1 Transaksi</span>
+                                    <span class="text-base font-black font-mono text-[#0052cc] mt-1 block" x-text="formatRupiah(getMethodStats('QRIS').total)">Rp 0</span>
+                                    <span class="text-[10px] text-blue-600 mt-0.5 block" x-text="getMethodStats('QRIS').count + ' Transaksi'">0 Transaksi</span>
                                 </div>
                                 <div class="p-3 bg-purple-50/60 border border-purple-200 rounded-xl">
                                     <span class="text-[10px] font-bold text-purple-800 uppercase block">Campuran</span>
-                                    <span class="text-base font-black font-mono text-purple-700 mt-1 block">Rp 145.000</span>
-                                    <span class="text-[10px] text-purple-600 mt-0.5 block">1 Transaksi</span>
+                                    <span class="text-base font-black font-mono text-purple-700 mt-1 block" x-text="formatRupiah(getMethodStats('CAMPURAN').total)">Rp 0</span>
+                                    <span class="text-[10px] text-purple-600 mt-0.5 block" x-text="getMethodStats('CAMPURAN').count + ' Transaksi'">0 Transaksi</span>
                                 </div>
                                 <div class="p-3 bg-orange-50/60 border border-orange-200 rounded-xl">
                                     <span class="text-[10px] font-bold text-orange-800 uppercase block">Kredit Anggota</span>
-                                    <span class="text-base font-black font-mono text-orange-700 mt-1 block">Rp 195.000</span>
-                                    <span class="text-[10px] text-orange-600 mt-0.5 block">1 Transaksi</span>
+                                    <span class="text-base font-black font-mono text-orange-700 mt-1 block" x-text="formatRupiah(getMethodStats('KREDIT').total)">Rp 0</span>
+                                    <span class="text-[10px] text-orange-600 mt-0.5 block" x-text="getMethodStats('KREDIT').count + ' Transaksi'">0 Transaksi</span>
                                 </div>
                             </div>
 
@@ -271,7 +300,7 @@ class="flex flex-col h-screen w-full font-sans">
 
                         <div class="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
                             <span>Total porsi kas fisik yang harus dipertanggungjawabkan pada saat tutup sesi:</span>
-                            <span class="font-mono font-black text-gray-900 text-sm">Rp 494.000</span>
+                            <span class="font-mono font-black text-gray-900 text-sm" x-text="formatRupiah(expectedCashLiability)">Rp 0</span>
                         </div>
                     </div>
                 </div>
@@ -280,7 +309,7 @@ class="flex flex-col h-screen w-full font-sans">
                 <div class="bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden">
                     <div class="p-4 border-b border-gray-100 flex items-center justify-between">
                         <div class="flex items-center gap-2">
-                            <h3 class="text-xs font-black text-gray-900 uppercase tracking-wider">Log Transaksi Kasir Budi Kurniawan (Hari Ini)</h3>
+                            <h3 class="text-xs font-black text-gray-900 uppercase tracking-wider" x-text="'Log Transaksi Kasir ' + (activeCashierProfile.name || '-') + ' (Hari Ini)'">Log Transaksi Kasir (Hari Ini)</h3>
                             <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-[#0052cc]" x-text="myTransactions.length + ' Transaksi'"></span>
                         </div>
                         <a href="{{ url('/kasir/transaksi/riwayat') }}" class="text-xs font-bold text-[#0052cc] hover:underline flex items-center gap-1">
