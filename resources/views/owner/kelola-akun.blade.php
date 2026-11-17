@@ -473,10 +473,10 @@
                 <div>
                     <label class="block font-bold text-slate-700 mb-1">Cabang Penugasan *</label>
                     <select x-model="formStaff.branch" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-[#0052cc]">
-                        <option value="Cabang Pusat - Jakarta">Cabang Pusat - Jakarta</option>
-                        <option value="Cabang Bandung Selatan">Cabang Bandung Selatan</option>
-                        <option value="Cabang Jakarta Selatan">Cabang Jakarta Selatan</option>
-                        <option value="Kantor Pusat (Global)">Kantor Pusat (Global)</option>
+                        <option value="Pusat">Pusat</option>
+                        <template x-for="b in branchesList.filter(x => x.name !== 'Pusat')" :key="b.id || b.name">
+                            <option :value="b.name" x-text="b.name"></option>
+                        </template>
                     </select>
                 </div>
                 <div>
@@ -531,10 +531,10 @@
                 <div>
                     <label class="block font-bold text-slate-700 mb-1">Cabang Penugasan</label>
                     <select x-model="editingStaff.branch" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-[#0052cc]">
-                        <option value="Cabang Pusat - Jakarta">Cabang Pusat - Jakarta</option>
-                        <option value="Cabang Bandung Selatan">Cabang Bandung Selatan</option>
-                        <option value="Cabang Jakarta Selatan">Cabang Jakarta Selatan</option>
-                        <option value="Kantor Pusat (Global)">Kantor Pusat (Global)</option>
+                        <option value="Pusat">Pusat</option>
+                        <template x-for="b in branchesList.filter(x => x.name !== 'Pusat')" :key="b.id || b.name">
+                            <option :value="b.name" x-text="b.name"></option>
+                        </template>
                     </select>
                 </div>
             </div>
@@ -702,9 +702,10 @@ function ownerKelolaAkunApp() {
         isSavingStaff: false,
         selectedMemberId: '',
         membersList: [],
+        branchesList: [],
         branchesCount: 0,
         updateIzinCount: 0,
-        editingStaff: { id: '', name: '', role: 'Kasir', branch: 'Cabang Pusat - Jakarta', status: 'Online' },
+        editingStaff: { id: '', name: '', role: 'Kasir', branch: 'Pusat', status: 'Online' },
 
         // State Pemulihan & Reset Kredensial Owner
         showResetHistoryModal: false,
@@ -719,7 +720,7 @@ function ownerKelolaAkunApp() {
             name: '',
             empId: '',
             role: 'Kasir',
-            branch: 'Cabang Pusat - Jakarta',
+            branch: 'Pusat',
             status: 'Online',
             password: '',
             pin: ''
@@ -777,7 +778,7 @@ function ownerKelolaAkunApp() {
                                 initials: initials,
                                 avatarBg: i % 3 === 0 ? 'bg-blue-100 text-[#0052cc]' : (i % 3 === 1 ? 'bg-purple-100 text-purple-700' : 'bg-slate-800 text-white'),
                                 role: u.role || 'Kasir',
-                                branch: u.branch || 'Cabang Pusat - Jakarta',
+                                branch: u.branch || 'Pusat',
                                 status: u.is_active ? 'Online' : 'Offline',
                                 password: '••••••',
                                 pin: u.pin || ''
@@ -799,9 +800,11 @@ function ownerKelolaAkunApp() {
                 if (bRes.ok) {
                     const bJson = await bRes.json();
                     const bRows = bJson.data?.data || bJson.data || [];
-                    this.branchesCount = Array.isArray(bRows) ? bRows.length : 0;
+                    this.branchesList = Array.isArray(bRows) ? bRows : [];
+                    this.branchesCount = this.branchesList.length;
                 }
             } catch(e) {
+                this.branchesList = [];
                 this.branchesCount = 0;
             }
 
@@ -883,7 +886,7 @@ function ownerKelolaAkunApp() {
                 name: '',
                 empId: '',
                 role: 'Kasir',
-                branch: 'Cabang Pusat - Jakarta',
+                branch: this.branchesList[0]?.name || 'Pusat',
                 status: 'Online',
                 password: '',
                 pin: ''
@@ -898,7 +901,7 @@ function ownerKelolaAkunApp() {
             if (found) {
                 this.formStaff.name = found.name;
                 this.formStaff.empId = found.nik || found.id;
-                this.formStaff.branch = found.branch ? ('Cabang ' + found.branch) : 'Cabang Pusat - Jakarta';
+                this.formStaff.branch = found.branch || 'Pusat';
             }
         },
 

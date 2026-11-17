@@ -725,9 +725,9 @@
                 <div class="space-y-2 text-xs">
                     <input type="text" x-model="scannerInput" @keydown.enter.prevent="handleScan()" placeholder="Ketik barcode EAN..." class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-mono text-center text-slate-800 focus:bg-white focus:border-[#0052cc] focus:outline-none">
                     <div class="flex flex-wrap gap-1.5 justify-center pt-1">
-                        <button type="button" @click="scannerInput = '8991234567890'; handleScan()" class="px-2 py-1 bg-slate-100 hover:bg-blue-50 hover:text-[#0052cc] rounded font-mono text-[10.5px]">8991234567890</button>
-                        <button type="button" @click="scannerInput = '8992345678901'; handleScan()" class="px-2 py-1 bg-slate-100 hover:bg-blue-50 hover:text-[#0052cc] rounded font-mono text-[10.5px]">8992345678901</button>
-                        <button type="button" @click="scannerInput = '8994567890123'; handleScan()" class="px-2 py-1 bg-slate-100 hover:bg-blue-50 hover:text-[#0052cc] rounded font-mono text-[10.5px]">8994567890123</button>
+                        <template x-for="bp in products.filter(p => p.barcode).slice(0, 3)" :key="bp.id || bp.sku">
+                            <button type="button" @click="scannerInput = bp.barcode; handleScan()" class="px-2 py-1 bg-slate-100 hover:bg-blue-50 hover:text-[#0052cc] rounded font-mono text-[10.5px]" x-text="bp.barcode"></button>
+                        </template>
                     </div>
                 </div>
                 <div class="flex items-center gap-2 pt-2">

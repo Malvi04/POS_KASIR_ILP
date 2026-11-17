@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\AppSetting;
 use App\Models\CashierShift;
+use App\Models\Location;
 use App\Models\Member;
 use App\Models\Product;
 use App\Models\StockCorrection;
@@ -18,6 +19,14 @@ class UserAccessSecurityModulDTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        foreach ([
+            ['code' => 'LOC-01', 'name' => 'Pusat', 'type' => 'STORE', 'is_active' => true],
+            ['code' => 'LOC-02', 'name' => 'Cabang 1 - Mill / Pabrik', 'type' => 'STORE', 'is_active' => true],
+            ['code' => 'LOC-03', 'name' => 'Cabang 2 - Kebun Barat', 'type' => 'STORE', 'is_active' => true],
+        ] as $loc) {
+            Location::updateOrCreate(['code' => $loc['code']], $loc);
+        }
 
         // Setup test users for each role
         User::updateOrCreate(
