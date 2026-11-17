@@ -10,6 +10,7 @@ use App\Models\TransactionItem;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -72,12 +73,50 @@ class ConsignmentController extends Controller
             'notes' => 'nullable|string',
         ]);
 
-        $code = 'UMKM-' . Str::padLeft((string) (Supplier::max('id') + 1), 3, '0');
+        $cleanName = trim((string) preg_replace('/\s+/', ' ', $validated['name']));
+        $lockKey = 'supplier_create:' . hash('sha256', mb_strtolower($cleanName));
 
-        $partner = Supplier::create(array_merge($validated, [
-            'code' => $code,
-            'status' => 'AKTIF',
-        ]));
+        $result = Cache::lock($lockKey, 10)->block(5, function () use ($validated, $cleanName) {
+            return DB::transaction(function () use ($validated, $cleanName) {
+                $recentDuplicate = Supplier::whereRaw('LOWER(TRIM(name)) = ?', [mb_strtolower($cleanName)])
+                    ->where('created_at', '>=', now()->subSeconds(10))
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($recentDuplicate) {
+                    return ['duplicate' => true, 'partner' => $recentDuplicate];
+                }
+
+                $nextNum = ((int) Supplier::max('id')) + 1;
+                $code = 'UMKM-' . Str::padLeft((string) $nextNum, 3, '0');
+                while (Supplier::where('code', $code)->exists()) {
+                    $nextNum++;
+                    $code = 'UMKM-' . Str::padLeft((string) $nextNum, 3, '0');
+                }
+
+                $partner = Supplier::create(array_merge($validated, [
+                    'name' => $cleanName,
+                    'code' => $code,
+                    'status' => 'AKTIF',
+                ]));
+
+                return ['duplicate' => false, 'partner' => $partner];
+            });
+        });
+
+        if ($result['duplicate']) {
+            $existing = $result['partner'];
+            return response()->json([
+                'success' => false,
+                'message' => "Mitra / Supplier dengan nama [{$existing->name}] sudah terdaftar ({$existing->code}).",
+                'errors' => [
+                    'name' => ["Mitra / Supplier dengan nama [{$existing->name}] sudah terdaftar ({$existing->code})."],
+                ],
+                'data' => $existing,
+            ], 422);
+        }
+
+        $partner = $result['partner'];
 
         return response()->json([
             'success' => true,

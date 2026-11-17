@@ -22,12 +22,12 @@ class OwnerProfileController extends Controller
             : User::whereRaw('LOWER(role) IN (?, ?, ?)', ['owner', 'superadmin', 'admin'])->first();
 
         $defaults = [
-            'name' => $ownerUser ? $ownerUser->name : 'Dewi Sartika',
-            'title' => 'Pemilik Usaha & Direktur Koperasi',
-            'email' => $ownerUser ? $ownerUser->email : 'owner@coop.id',
-            'phone' => '0812-9841-2201',
-            'nik' => $ownerUser ? ($ownerUser->nik ?? '327501550230056') : '327501550230056',
-            'avatar' => 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
+            'name' => $ownerUser ? $ownerUser->name : '',
+            'title' => $ownerUser ? ($ownerUser->role ?: 'Owner') : '',
+            'email' => $ownerUser ? ($ownerUser->email ?? '') : '',
+            'phone' => '',
+            'nik' => $ownerUser ? ($ownerUser->nik ?? '') : '',
+            'avatar' => '',
             'defaultBranch' => 'all',
             'alertLowStock' => true,
             'compactTable' => false,

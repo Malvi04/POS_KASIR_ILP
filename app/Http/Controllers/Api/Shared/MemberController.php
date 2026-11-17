@@ -34,7 +34,7 @@ class MemberController extends Controller
                 'nik' => $m->nik,
                 'name' => $m->name,
                 'department' => $m->department,
-                'branch' => $m->branch ?? 'Cabang 1 - Mill / Pabrik',
+                'branch' => $m->branch ?? '-',
                 'credit_limit' => (float) $m->credit_limit,
                 'current_debt' => (float) $m->current_debt,
                 'remaining_credit' => (float) $m->remaining_credit,

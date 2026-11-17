@@ -482,6 +482,8 @@ class ProductController extends Controller
             'rack_location' => $p->rack_location ?? 'Lorong Umum',
             // Cost & Prices
             'cost_price' => (float) $p->cost_price,
+            'last_cost_price' => $p->last_cost_price !== null ? (float) $p->last_cost_price : (float) $p->cost_price,
+            'raw_last_cost_price' => $p->last_cost_price !== null ? (float) $p->last_cost_price : null,
             'original_price' => (float) $p->price,
             'original_member_price' => (float) ($p->member_price ?? $p->price),
             // Real-time Stock & Threshold Alert

@@ -46,7 +46,7 @@ class OwnerDashboardController extends Controller
                 foreach ($tx->items as $item) {
                     $cost = $item->cost_price ?? null;
                     if (!$cost) {
-                        $cost = $skuCosts[$item->sku] ?? ((float) $item->unit_price * 0.75);
+                        $cost = $skuCosts[$item->sku] ?? 0.0;
                     }
                     $totalCogsToday += ((float) $cost * (int) ($item->quantity ?? $item->qty ?? 1));
                 }
@@ -55,15 +55,6 @@ class OwnerDashboardController extends Controller
 
             // 2. Locations / Branches
             $locations = Location::all();
-            if ($locations->isEmpty()) {
-                // Seed defaults if empty
-                $locations = collect([
-                    Location::create(['code' => 'LOC-01', 'name' => 'Cabang 1 - Mill / Pabrik', 'type' => 'STORE', 'address' => 'Kawasan Industri Mill', 'manager' => 'Manager Mill', 'status' => 'AKTIF', 'is_active' => true]),
-                    Location::create(['code' => 'LOC-02', 'name' => 'Cabang 2 - Kebun Barat', 'type' => 'STORE', 'address' => 'Afdeling Kebun Barat', 'manager' => 'Manager Barat', 'status' => 'AKTIF', 'is_active' => true]),
-                    Location::create(['code' => 'LOC-03', 'name' => 'Cabang 3 - Kebun Timur', 'type' => 'STORE', 'address' => 'Afdeling Kebun Timur', 'manager' => 'Manager Timur', 'status' => 'AKTIF', 'is_active' => true]),
-                    Location::create(['code' => 'LOC-DC', 'name' => 'DC Cikarang (Pusat Logistik)', 'type' => 'WAREHOUSE', 'address' => 'Hub Pergudangan Pusat', 'manager' => 'Kepala Gudang DC', 'status' => 'AKTIF', 'is_active' => true]),
-                ]);
-            }
 
             $stores = $locations->where('type', '!=', 'WAREHOUSE');
             $warehouse = $locations->firstWhere('type', 'WAREHOUSE') ?? $locations->first();
@@ -133,14 +124,22 @@ class OwnerDashboardController extends Controller
                 'total_trx_today' => $totalTrxToday,
                 'total_profit_today' => $totalProfitToday,
                 'branches' => $branchSalesMap,
-                'warehouse' => [
-                    'id' => $warehouse ? $warehouse->id : 4,
-                    'code' => $warehouse ? $warehouse->code : 'LOC-DC',
-                    'name' => $warehouse ? $warehouse->name : 'DC Cikarang (Pusat Logistik)',
+                'warehouse' => $warehouse ? [
+                    'id' => $warehouse->id,
+                    'code' => $warehouse->code,
+                    'name' => $warehouse->name,
                     'type' => 'Gudang Logistik',
-                    'manager' => $warehouse ? ($warehouse->manager ?? 'Kepala Gudang DC') : 'Kepala Gudang DC',
-                    'status' => 'OPERASIONAL DC',
+                    'manager' => $warehouse->manager ?? '-',
+                    'status' => $warehouse->status ?? 'AKTIF',
                     'statusColor' => 'bg-blue-50 text-blue-700 border-blue-200',
+                ] : [
+                    'id' => null,
+                    'code' => '-',
+                    'name' => 'Belum Ada Gudang Terdaftar',
+                    'type' => 'Gudang Logistik',
+                    'manager' => '-',
+                    'status' => 'BELUM DIATUR',
+                    'statusColor' => 'bg-slate-100 text-slate-600 border-slate-200',
                 ],
                 'critical_items' => $criticalItems,
                 'low_stock_count' => $lowStockCount,

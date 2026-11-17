@@ -6,10 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Shared\NotificationController;
 use App\Models\GoodsReceipt;
 use App\Models\GoodsReceiptItem;
+use App\Models\Location;
 use App\Models\Product;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -21,6 +23,11 @@ class GoodsReceiptController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = GoodsReceipt::with(['items.product', 'receiver']);
+
+        // Isolasi: jangan mencampur penerimaan pembelian supplier ke modul Kirim Barang / Barang Masuk Toko
+        if ($request->query('type') !== 'purchase') {
+            $query->whereNull('purchase_id');
+        }
 
         if ($request->filled('status') && $request->status !== 'all') {
             $query->where('status', strtoupper($request->status));
@@ -38,12 +45,6 @@ class GoodsReceiptController extends Controller
         }
 
         $receipts = $query->orderBy('id', 'desc')->get();
-
-        // Seed default goods receipts if table is empty
-        if ($receipts->isEmpty() && GoodsReceipt::count() === 0) {
-            $this->seedDefaults();
-            $receipts = GoodsReceipt::with(['items.product', 'receiver'])->orderBy('id', 'desc')->get();
-        }
 
         $mapped = $receipts->map(fn ($r) => $this->formatReceipt($r));
 
@@ -97,10 +98,11 @@ class GoodsReceiptController extends Controller
                 $docNo = $docNo . '-' . time();
             }
 
-            $origin = $validated['warehouseOrigin'] ?? $validated['origin_source'] ?? 'Gudang Pusat (DC)';
-            $dest = $validated['destinationStore'] ?? $validated['destination_store'] ?? 'Cabang A';
-            $driver = $validated['driverName'] ?? $validated['driver_name'] ?? 'Driver DC';
-            $plate = $validated['plateNumber'] ?? $validated['plate_number'] ?? 'B 9182 UQ';
+            $warehouseName = Location::where('type', 'WAREHOUSE')->value('name') ?? '-';
+            $origin = $validated['warehouseOrigin'] ?? $validated['origin_source'] ?? $warehouseName;
+            $dest = $validated['destinationStore'] ?? $validated['destination_store'] ?? '-';
+            $driver = $validated['driverName'] ?? $validated['driver_name'] ?? '-';
+            $plate = $validated['plateNumber'] ?? $validated['plate_number'] ?? '-';
             $status = strtoupper($validated['status'] ?? 'MENUNGGU_VERIFIKASI');
             $notes = $validated['generalNotes'] ?? $validated['notes'] ?? '';
 
@@ -137,11 +139,11 @@ class GoodsReceiptController extends Controller
                             'name' => $it['name'] ?? 'Produk Transfer',
                             'category' => $it['category'] ?? 'Umum',
                             'unit' => $it['unit'] ?? 'Pcs',
-                            'cost_price' => 10000,
-                            'price' => 12500,
+                            'cost_price' => (float) ($it['cost_price'] ?? 0),
+                            'price' => (float) ($it['price'] ?? 0),
                             'stock' => 0,
                             'min_stock' => 5,
-                            'status' => 'active',
+                            'status' => 'HABIS',
                         ]
                     );
                 }
@@ -151,7 +153,7 @@ class GoodsReceiptController extends Controller
                     'product_id' => $product->id,
                     'qty_sent' => $qty,
                     'qty_received' => 0,
-                    'actual_unit_cost' => $product->cost_price ?: 10000,
+                    'actual_unit_cost' => (float) ($product->cost_price ?? 0),
                     'condition' => $it['condition'] ?? 'BAIK',
                     'notes' => $it['note'] ?? ($it['notes'] ?? ''),
                 ]);
@@ -258,7 +260,8 @@ class GoodsReceiptController extends Controller
                 }
             }
 
-            $user = User::first();
+            $user = Auth::user()
+                ?? (!empty($validated['receiver_name']) ? User::where('name', $validated['receiver_name'])->first() : null);
             $receipt->status = $hasDiscrepancy ? 'DITERIMA_SELISIH' : 'DITERIMA_LENGKAP';
             $receipt->received_at = now();
             $receipt->received_by = $user?->id;
@@ -326,10 +329,10 @@ class GoodsReceiptController extends Controller
             'docNo' => $r->receipt_number,
             'date' => $dateStr,
             'time' => $r->created_at ? $r->created_at->format('H:i') . ' WIB' : now()->format('H:i') . ' WIB',
-            'warehouseOrigin' => $r->origin_source ?: 'Gudang Pusat (DC)',
-            'destinationStore' => $r->destination_store ?: 'Minimarket ILP - Pusat',
-            'driverName' => $r->driver_name ?: 'Supir Pengantar',
-            'plateNumber' => $r->plate_number ?: 'B 9182 UQ',
+            'warehouseOrigin' => $r->origin_source ?: '-',
+            'destinationStore' => $r->destination_store ?: '-',
+            'driverName' => $r->driver_name ?: '-',
+            'plateNumber' => $r->plate_number ?: '-',
             'status' => $r->status,
             'createdAt' => $r->created_at ? $r->created_at->toIso8601String() : now()->toIso8601String(),
             'sentAt' => $r->status !== 'DRAFT' ? ($r->created_at ? $r->created_at->format('d M Y • H:i') . ' WIB' : now()->format('d M Y • H:i') . ' WIB') : null,
@@ -351,62 +354,5 @@ class GoodsReceiptController extends Controller
                 ];
             })->values()->all(),
         ];
-    }
-
-    /**
-     * Seed initial demo records.
-     */
-    protected function seedDefaults(): void
-    {
-        $products = Product::take(6)->get();
-        if ($products->isEmpty()) return;
-
-        $user = User::first();
-
-        $r1 = GoodsReceipt::create([
-            'receipt_number' => '#SJ-DC-20261024-001',
-            'received_at' => now()->subHours(3),
-            'driver_name' => 'Rahmat Hidayat',
-            'plate_number' => 'B 9102 UQ',
-            'origin_source' => 'DC Cikarang (Pusat Logistik)',
-            'destination_store' => 'Cabang A',
-            'status' => 'MENUNGGU_VERIFIKASI',
-            'notes' => 'Pengiriman rutin stok rak minimarket',
-        ]);
-
-        foreach ($products->take(4) as $p) {
-            GoodsReceiptItem::create([
-                'goods_receipt_id' => $r1->id,
-                'product_id' => $p->id,
-                'qty_sent' => 48,
-                'qty_received' => 0,
-                'actual_unit_cost' => $p->cost_price ?: 10000,
-                'condition' => 'BAIK',
-            ]);
-        }
-
-        $r2 = GoodsReceipt::create([
-            'receipt_number' => '#SJ-DC-20261023-014',
-            'received_at' => now()->subDay(),
-            'received_by' => $user?->id,
-            'driver_name' => 'Andi Pratama',
-            'plate_number' => 'B 9481 UQ',
-            'origin_source' => 'DC Cibitung (Hub Sembako)',
-            'destination_store' => 'Cabang A',
-            'status' => 'DITERIMA_LENGKAP',
-            'notes' => 'Penerimaan fisik lengkap, segel boks aman.',
-        ]);
-
-        foreach ($products->skip(2)->take(3) as $p) {
-            GoodsReceiptItem::create([
-                'goods_receipt_id' => $r2->id,
-                'product_id' => $p->id,
-                'qty_sent' => 30,
-                'qty_received' => 30,
-                'actual_unit_cost' => $p->cost_price ?: 12000,
-                'condition' => 'BAIK',
-                'notes' => 'Sesuai',
-            ]);
-        }
     }
 }

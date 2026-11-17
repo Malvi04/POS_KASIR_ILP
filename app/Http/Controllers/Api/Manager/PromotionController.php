@@ -32,53 +32,6 @@ class PromotionController extends Controller
 
         $promotions = $query->orderBy('id', 'desc')->get();
 
-        // Seed default promotions if table is empty
-        if ($promotions->isEmpty() && Promotion::count() === 0) {
-            $defaults = [
-                [
-                    'code' => 'PRM-001',
-                    'name' => 'Promo Gajian Mantap',
-                    'condition' => 'Min. belanja Rp 250k',
-                    'type' => 'PERCENTAGE',
-                    'value' => 10,
-                    'badge_class' => 'bg-[#dbeafe] text-[#1e40af]',
-                    'period_start' => now()->subDays(5)->toDateString(),
-                    'period_end' => now()->addDays(5)->toDateString(),
-                    'status' => 'AKTIF',
-                    'status_color' => 'green',
-                ],
-                [
-                    'code' => 'PRM-002',
-                    'name' => 'BOGO: Susu Cair Ultra',
-                    'condition' => 'Beli 2 Gratis 1',
-                    'type' => 'BOGO',
-                    'value' => 100,
-                    'badge_class' => 'bg-[#ffedd5] text-[#9a3412]',
-                    'period_start' => now()->toDateString(),
-                    'period_end' => now()->addDays(14)->toDateString(),
-                    'status' => 'MENDATANG',
-                    'status_color' => 'blue',
-                ],
-                [
-                    'code' => 'PRM-003',
-                    'name' => 'Flash Sale Minyak Goreng',
-                    'condition' => 'Potongan Langsung Rp 5.000',
-                    'type' => 'FIXED',
-                    'value' => 5000,
-                    'badge_class' => 'bg-[#e0e7ff] text-[#3730a3]',
-                    'period_start' => now()->subDays(10)->toDateString(),
-                    'period_end' => now()->subDay()->toDateString(),
-                    'status' => 'NONAKTIF',
-                    'status_color' => 'red',
-                ],
-            ];
-
-            foreach ($defaults as $d) {
-                Promotion::create($d);
-            }
-            $promotions = Promotion::orderBy('id', 'desc')->get();
-        }
-
         return response()->json([
             'success' => true,
             'data' => $promotions,

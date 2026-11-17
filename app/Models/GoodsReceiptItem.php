@@ -30,6 +30,11 @@ class GoodsReceiptItem extends Model
         return $this->belongsTo(GoodsReceipt::class);
     }
 
+    public function purchaseItem(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseItem::class, 'purchase_item_id');
+    }
+
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);

@@ -473,14 +473,15 @@ class TransactionController extends Controller
                 }
 
                 if (!$shift) {
-                    $user = User::where('nik', $trxData['cashier_nik'] ?? '')->first();
+                    $user = (!empty($trxData['cashier_nik']) ? User::where('nik', $trxData['cashier_nik'])->first() : null)
+                        ?? \Illuminate\Support\Facades\Auth::user();
                     $shiftCode = 'CS-' . date('Ymd') . '-' . strtoupper(Str::slug($terminalCode, '')) . '-OFFLINE';
                     $shift = CashierShift::create([
                         'shift_code' => $shiftCode,
                         'terminal_code' => $terminalCode,
                         'user_id' => $user?->id,
-                        'cashier_nik' => $trxData['cashier_nik'] ?? '202409821002',
-                        'cashier_name' => $trxData['cashier_name'] ?? 'Budi Kurniawan (Offline)',
+                        'cashier_nik' => $trxData['cashier_nik'] ?? ($user?->nik ?? 'OFFLINE'),
+                        'cashier_name' => $trxData['cashier_name'] ?? ($user?->name ?? 'Kasir Offline'),
                         'opening_cash' => 0,
                         'cash_sales_total' => 0,
                         'qris_sales_total' => 0,

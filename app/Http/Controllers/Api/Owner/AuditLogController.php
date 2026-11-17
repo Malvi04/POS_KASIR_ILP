@@ -71,12 +71,6 @@ class AuditLogController extends Controller
         $sortOrder = strtolower($request->get('sort', 'desc')) === 'asc' ? 'asc' : 'desc';
         $logs = $query->orderBy('created_at', $sortOrder)->get();
 
-        // If table is completely empty, seed initial realistic logs
-        if ($logs->isEmpty() && AuditLog::count() === 0) {
-            $this->seedInitialLogs();
-            $logs = AuditLog::orderBy('created_at', $sortOrder)->get();
-        }
-
         // Calculate summary counters
         $allLogs = AuditLog::all();
         $todayStr = Carbon::today()->toDateString();
@@ -150,52 +144,5 @@ class AuditLogController extends Controller
             'message' => 'Catatan audit log berhasil direkam.',
             'data' => $log,
         ], 201);
-    }
-
-    /**
-     * Seed initial realistic logs if empty.
-     */
-    private function seedInitialLogs(): void
-    {
-        $now = Carbon::now();
-        $sampleLogs = [
-            [
-                'log_id' => 'LOG-' . $now->format('Ymd') . '-0001',
-                'user_name' => 'Ir. Hartono Wibowo (Owner)',
-                'user_role' => 'Owner',
-                'location' => 'Konsolidasi 3 Cabang',
-                'category' => 'User & Hak Akses',
-                'action_name' => 'Inisialisasi Console Eksekutif',
-                'description' => 'Pemeriksaan kepatuhan RBAC multi-cabang dan sinkronisasi hak akses seluruh petugas.',
-                'reference' => 'RBAC-INIT',
-                'created_at' => $now->copy()->subMinutes(15),
-            ],
-            [
-                'log_id' => 'LOG-' . $now->format('Ymd') . '-0002',
-                'user_name' => 'Andi Pratama (Manager)',
-                'user_role' => 'Manager',
-                'location' => 'Cabang 1 - Mill / Pabrik',
-                'category' => 'Sesi Kasir',
-                'action_name' => 'Approval Buka Shift Kasir',
-                'description' => 'Verifikasi modal awal kasir laci kasir terminal 01 sebesar Rp 500.000.',
-                'reference' => 'SFT-001',
-                'created_at' => $now->copy()->subHours(2),
-            ],
-            [
-                'log_id' => 'LOG-' . $now->format('Ymd') . '-0003',
-                'user_name' => 'Budi Kurniawan (Kasir)',
-                'user_role' => 'Kasir',
-                'location' => 'Toko Pusat',
-                'category' => 'Transaksi Penjualan',
-                'action_name' => 'Checkout Nota Belanja',
-                'description' => 'Penyelesaian transaksi penjualan tunai dengan diskon kupon BBM anggota.',
-                'reference' => 'TRX-202611-001',
-                'created_at' => $now->copy()->subHours(1),
-            ],
-        ];
-
-        foreach ($sampleLogs as $log) {
-            AuditLog::create($log);
-        }
     }
 }

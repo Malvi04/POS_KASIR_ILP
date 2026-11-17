@@ -83,6 +83,16 @@ class Product extends Model
         return $this->hasMany(ProductUnit::class);
     }
 
+    public function stockBatches(): HasMany
+    {
+        return $this->hasMany(StockBatch::class);
+    }
+
+    public function priceHistories(): HasMany
+    {
+        return $this->hasMany(PurchasePriceHistory::class)->orderByDesc('recorded_at')->orderByDesc('id');
+    }
+
     /**
      * Convert given unit quantity to base retail quantity (e.g. 2 Dus -> 48 Pcs).
      */

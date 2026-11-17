@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Manager;
 
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
+use App\Models\Location;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -15,23 +16,22 @@ class SettingsController extends Controller
     public function index(): JsonResponse
     {
         $all = AppSetting::all()->keyBy('key');
+        $branchesList = json_decode($all['branches_list']->value ?? '[]', true);
+        if (!is_array($branchesList) || empty($branchesList)) {
+            $branchesList = Location::where('type', '!=', 'WAREHOUSE')->orderBy('code')->pluck('name')->all();
+        }
 
         $settings = [
             'store' => [
-                'store_name' => $all['store_name']->value ?? 'ILP Mart - Koperasi Pekerja Pusat',
-                'store_code' => $all['store_code']->value ?? 'CAB-JKT-001',
-                'store_phone' => $all['store_phone']->value ?? '(021) 5589-2210',
-                'store_address' => $all['store_address']->value ?? 'Jl. Industri Raya No. 45, Kawasan Terpadu ILP',
-                'store_tax_id' => $all['store_tax_id']->value ?? '01.882.991.4-012.000',
-                'coop_license' => $all['coop_license']->value ?? 'AHU-0012984.AH.01.26.TAHUN 2024',
-                'open_time' => $all['open_time']->value ?? '07:00',
-                'close_time' => $all['close_time']->value ?? '22:00',
-                'branches' => json_decode($all['branches_list']->value ?? '[]', true) ?: [
-                    'Pusat',
-                    'Cabang 1 - Mill / Pabrik',
-                    'Cabang 2 - Kebun Barat',
-                    'Cabang 3 - Kebun Timur',
-                ],
+                'store_name' => $all['store_name']->value ?? '',
+                'store_code' => $all['store_code']->value ?? '',
+                'store_phone' => $all['store_phone']->value ?? '',
+                'store_address' => $all['store_address']->value ?? '',
+                'store_tax_id' => $all['store_tax_id']->value ?? '',
+                'coop_license' => $all['coop_license']->value ?? '',
+                'open_time' => $all['open_time']->value ?? '',
+                'close_time' => $all['close_time']->value ?? '',
+                'branches' => $branchesList,
             ],
             'tax' => [
                 'tax_rate_percent' => (float) ($all['tax_rate_percent']->value ?? 11),
@@ -45,10 +45,10 @@ class SettingsController extends Controller
                 'pin_for_refund' => ($all['pin_for_refund']->value ?? '1') === '1' || ($all['pin_for_refund']->value ?? '') === 'true',
                 'pin_for_drawer' => ($all['pin_for_drawer']->value ?? '1') === '1' || ($all['pin_for_drawer']->value ?? '') === 'true',
                 'pin_for_credit_override' => ($all['pin_for_credit_override']->value ?? '1') === '1' || ($all['pin_for_credit_override']->value ?? '') === 'true',
-                'master_pin' => $all['master_pin']->value ?? '882910',
+                'master_pin' => $all['master_pin']->value ?? '',
             ],
             'credit' => [
-                'credit_limit_default' => (float) ($all['credit_limit_default']->value ?? 2500000),
+                'credit_limit_default' => (float) ($all['credit_limit_default']->value ?? 0),
             ],
         ];
 
