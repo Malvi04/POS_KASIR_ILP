@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\AppSetting;
 use App\Models\CashierShift;
+use App\Models\Location;
 use App\Models\Product;
 use App\Models\Supplier;
 use App\Models\Transaction;
@@ -20,6 +21,14 @@ class AccountingReportModulETest extends TestCase
 
         AppSetting::set('tax_enabled', '1', 'tax');
         AppSetting::set('tax_rate_percent', '11', 'tax');
+
+        foreach ([
+            ['code' => 'LOC-01', 'name' => 'Pusat', 'type' => 'STORE', 'is_active' => true],
+            ['code' => 'LOC-02', 'name' => 'Cabang 1 - Mill / Pabrik', 'type' => 'STORE', 'is_active' => true],
+            ['code' => 'LOC-03', 'name' => 'Cabang 2 - Kebun Barat', 'type' => 'STORE', 'is_active' => true],
+        ] as $loc) {
+            Location::updateOrCreate(['code' => $loc['code']], $loc);
+        }
     }
 
     /**
