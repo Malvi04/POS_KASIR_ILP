@@ -26,6 +26,7 @@
     profilePhone: @js($settingsUser?->phone ?? ''),
     profileRole: @js(ucfirst(strtolower($settingsUser?->role ?? 'Manager'))),
     profileBranch: @js($settingsUser?->branch ?? 'Pusat'),
+    branchesList: [],
     avatarInitials: @js($settingsInitials),
     avatarFileName: '',
 
@@ -98,6 +99,9 @@
                         this.taxRatePercent = d.tax.tax_rate_percent ?? 11;
                         this.taxEnabled = d.tax.tax_enabled ?? true;
                         this.taxMethod = d.tax.tax_calculation_method || 'EXCLUDE';
+                    }
+                    if (Array.isArray(d.branches)) {
+                        this.branchesList = d.branches;
                     }
                     if (d.security) {
                         this.pinForVoid = d.security.pin_for_void ?? d.security.void_require_supervisor_pin ?? true;
@@ -450,9 +454,10 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     <div class="relative">
                                         <select x-model="profileBranch"
                                                 class="appearance-none w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 pr-10 text-[13.5px] text-gray-800 focus:outline-none focus:border-[#0052cc]">
-                                            <option>Cabang Pusat - Minimarket ILP</option>
-                                            <option>Cabang Barat - Koperasi ILP</option>
-                                            <option>Cabang Selatan - Koperasi ILP</option>
+                                            <option value="Pusat">Pusat</option>
+                                            <template x-for="b in branchesList.filter(x => x.name !== 'Pusat')" :key="b.id || b.name">
+                                                <option :value="b.name" x-text="b.name"></option>
+                                            </template>
                                         </select>
                                         <span class="material-symbols-rounded absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-[20px]">expand_more</span>
                                     </div>
