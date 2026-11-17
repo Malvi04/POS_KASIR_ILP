@@ -7,18 +7,17 @@ use App\Models\DebtMutation;
 use App\Models\Member;
 use App\Models\Product;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
+use Tests\Traits\SeedsTestFixtures;
 
 class MemberDebtModulBTest extends TestCase
 {
+    use SeedsTestFixtures;
+
     protected function setUp(): void
     {
         parent::setUp();
-        // Seed database if empty
-        if (Member::count() === 0) {
-            $this->seed();
-        }
+        $this->seedTestFixtures();
     }
 
     /**

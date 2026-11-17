@@ -9,17 +9,17 @@ use App\Models\StockOpname;
 use App\Models\Supplier;
 use App\Models\User;
 use Carbon\Carbon;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
+use Tests\Traits\SeedsTestFixtures;
 
 class InventoryConsignmentModulCTest extends TestCase
 {
+    use SeedsTestFixtures;
+
     protected function setUp(): void
     {
         parent::setUp();
-        if (Product::count() === 0) {
-            $this->seed();
-        }
+        $this->seedTestFixtures();
     }
 
     /**

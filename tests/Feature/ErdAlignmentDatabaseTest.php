@@ -17,9 +17,17 @@ use App\Models\Supplier;
 use App\Models\Unit;
 use App\Models\User;
 use Tests\TestCase;
+use Tests\Traits\SeedsTestFixtures;
 
 class ErdAlignmentDatabaseTest extends TestCase
 {
+    use SeedsTestFixtures;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->seedTestFixtures();
+    }
     /**
      * Test ERD Locations, Categories, Units and Chart of Accounts Seeding.
      */

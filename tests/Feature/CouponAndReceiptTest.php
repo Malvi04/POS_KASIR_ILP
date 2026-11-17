@@ -8,11 +8,18 @@ use App\Models\Member;
 use App\Models\Product;
 use App\Models\Transaction;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
+use Tests\Traits\SeedsTestFixtures;
 
 class CouponAndReceiptTest extends TestCase
 {
+    use SeedsTestFixtures;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->seedTestFixtures();
+    }
     public function test_coupon_crud_and_redemption_workflow(): void
     {
         // 1. List coupons
