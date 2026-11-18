@@ -17,9 +17,16 @@
     transactions: [],
 
     async initTransactions() {
-        const localRaw = localStorage.getItem('pos_ilp_transactions_v1');
         let localList = [];
-        try { localList = localRaw ? JSON.parse(localRaw) : []; } catch (e) {}
+        if (window.PosDb && typeof window.PosDb.transactions?.getHistory === 'function') {
+            try {
+                localList = await window.PosDb.transactions.getHistory(100);
+            } catch (dexieErr) {}
+        }
+        if (!localList || localList.length === 0) {
+            const localRaw = localStorage.getItem('pos_ilp_transactions_v1');
+            try { localList = localRaw ? JSON.parse(localRaw) : []; } catch (e) {}
+        }
 
         try {
             const params = new URLSearchParams({
@@ -41,7 +48,14 @@
                     const unsyncedOnly = pendingTrxs.filter(p => !serverIds.has(p.invoice_number || p.id));
 
                     this.transactions = [...unsyncedOnly, ...json.data];
-                    localStorage.setItem('pos_ilp_transactions_v1', JSON.stringify(this.transactions));
+                    if (window.PosDb && typeof window.PosDb.transactions?.saveHistory === 'function') {
+                        for (const item of json.data.slice(0, 50)) {
+                            window.PosDb.transactions.saveHistory(item).catch(() => {});
+                        }
+                    }
+                    try {
+                        localStorage.setItem('pos_ilp_transactions_v1', JSON.stringify(this.transactions.slice(0, 100)));
+                    } catch (e) {}
                     return;
                 }
             }

@@ -74,7 +74,7 @@
 
     async loadAvailableProducts() {
         try {
-            const res = await fetch('/api/products?per_page=100', { headers: { 'Accept': 'application/json' } });
+            const res = await fetch('/api/products?location_code=GDG-001&per_page=100', { headers: { 'Accept': 'application/json' } });
             if (res.ok) {
                 const json = await res.json();
                 const prods = json.data || json;

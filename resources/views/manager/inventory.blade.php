@@ -90,7 +90,8 @@
                         memberPrice: p.member_price ?? p.original_member_price ?? p.price ?? 0,
                         status: p.stock_status || this.calculateStatus(p.stock, p.min_stock, p.expired_date),
                         batchLot: 'LOT-' + p.sku,
-                        expiredDate: p.expired_date || ''
+                        expiredDate: p.expired_date || '',
+                        suppliedBy: Array.isArray(p.supplied_by) ? p.supplied_by : []
                     }));
                     const result = this.deduplicateProducts(mapped);
                     this.products = result.unique;
@@ -178,7 +179,8 @@
                         status: p.stock_status || this.calculateStatus(p.stock, p.min_stock, p.expired_date),
                         isConsignment: Boolean(p.is_consignment),
                         supplier: p.supplier || null,
-                        expiredDate: p.expired_date || ''
+                        expiredDate: p.expired_date || '',
+                        suppliedBy: Array.isArray(p.supplied_by) ? p.supplied_by : []
                     }));
                     const existingSkus = new Set((this.products || []).map(p => p.sku));
                     const newItems = mapped.filter(p => !existingSkus.has(p.sku));
@@ -2293,6 +2295,30 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             <span class="font-bold text-gray-800" x-text="(selectedProduct?.category || '-') + ' • ' + (selectedProduct?.brand || 'Lokal')"></span>
                         </div>
                     </div>
+
+                    <template x-if="selectedProduct?.suppliedBy && selectedProduct.suppliedBy.length > 0">
+                        <div class="p-4 bg-white rounded-xl border border-gray-200 space-y-2.5">
+                            <div class="flex items-center justify-between">
+                                <span class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Pemasok Produk (Supplier)</span>
+                                <span class="text-[10.5px] font-semibold text-gray-400" x-text="selectedProduct.suppliedBy.length + ' Supplier'"></span>
+                            </div>
+                            <div class="space-y-2">
+                                <template x-for="sup in selectedProduct.suppliedBy" :key="sup.supplier_id">
+                                    <a :href="'{{ url('/suppliers') }}/' + sup.supplier_id"
+                                       class="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-slate-50 hover:bg-blue-50/70 border border-gray-100 transition-colors">
+                                        <div class="min-w-0">
+                                            <div class="font-bold text-gray-900 truncate" x-text="sup.supplier_name"></div>
+                                            <div class="text-[10.5px] font-mono text-gray-500" x-text="sup.supplier_code + ' • ' + sup.total_transactions + 'x Pembelian'"></div>
+                                        </div>
+                                        <div class="text-right shrink-0">
+                                            <div class="font-mono font-bold text-[#0052cc]" x-text="formatRupiah(sup.last_purchase_price)"></div>
+                                            <div class="text-[10px] text-gray-400">Hrg Beli Supplier</div>
+                                        </div>
+                                    </a>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
 
                     <div class="flex items-center justify-end gap-2 pt-2">
                         <button type="button"

@@ -11,8 +11,11 @@ class GoodsReceipt extends Model
     protected $fillable = [
         'receipt_number',
         'purchase_id',
+        'from_location_id',
+        'to_location_id',
         'received_by',
         'received_at',
+        'verified_at',
         'driver_name',
         'plate_number',
         'origin_source',
@@ -23,11 +26,22 @@ class GoodsReceipt extends Model
 
     protected $casts = [
         'received_at' => 'datetime',
+        'verified_at' => 'datetime',
     ];
 
     public function purchase(): BelongsTo
     {
         return $this->belongsTo(Purchase::class);
+    }
+
+    public function fromLocation(): BelongsTo
+    {
+        return $this->belongsTo(Location::class, 'from_location_id');
+    }
+
+    public function toLocation(): BelongsTo
+    {
+        return $this->belongsTo(Location::class, 'to_location_id');
     }
 
     public function receiver(): BelongsTo

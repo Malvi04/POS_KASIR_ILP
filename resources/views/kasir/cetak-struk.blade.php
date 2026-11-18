@@ -50,6 +50,16 @@
                 console.warn('Could not fetch receipt from API, falling back to localStorage', e);
             }
 
+            if (window.PosDb && window.PosDb.db) {
+                try {
+                    const dexieTrx = await window.PosDb.db.transaction_history.get(fakturParam);
+                    if (dexieTrx && dexieTrx.payload) {
+                        this.receipt = dexieTrx.payload;
+                        return;
+                    }
+                } catch (dexieErr) {}
+            }
+
             try {
                 const trxs = JSON.parse(localStorage.getItem('pos_ilp_transactions_v1') || '[]');
                 const found = trxs.find(t => t.id === fakturParam || t.rawId === fakturParam || t.invoice_number === fakturParam);

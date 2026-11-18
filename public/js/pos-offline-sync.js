@@ -1,6 +1,7 @@
 /**
- * POS ILP - Offline Resiliency & Data Synchronization Engine
- * Handles offline transaction processing, local persistence, auto-recovery sync & manual sync.
+ * POS Kasir ILP - Offline Resiliency & Data Synchronization Engine
+ * Powered by Dexie.js (IndexedDB) with LocalStorage Fallback & In-Memory Snapshot
+ * Version 3.0
  */
 (function () {
     'use strict';
@@ -16,6 +17,26 @@
         LAST_SYNC: 'pos_ilp_last_sync_timestamp_v1'
     };
 
+    function generateUuid() {
+        if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+            return crypto.randomUUID();
+        }
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            const r = Math.random() * 16 | 0;
+            const v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+
+    function isQuotaError(err) {
+        if (!err) return false;
+        return err.name === 'QuotaExceededError'
+            || err.name === 'NS_ERROR_DOM_QUOTA_REACHED'
+            || err.code === 22
+            || err.code === 1014
+            || /quota/i.test(String(err.message || ''));
+    }
+
     function safeGetJson(key, defaultVal = []) {
         try {
             const raw = localStorage.getItem(key);
@@ -29,37 +50,82 @@
     function safeSetJson(key, val) {
         try {
             localStorage.setItem(key, JSON.stringify(val));
+            return { ok: true, isQuota: false, error: null };
         } catch (e) {
-            console.error(`[PosOfflineSync] Storage set error for key "${key}":`, e);
+            const quota = isQuotaError(e);
+            return { ok: false, isQuota: quota, error: e && e.message ? e.message : 'Storage write error' };
         }
     }
 
+    // In-Memory cache for lightning-fast synchronous UI queries
     const state = {
         isSyncing: false,
         pendingCount: 0,
         pendingMovementsCount: 0,
+        pendingShiftsCount: 0,
         lastSyncTime: localStorage.getItem(STORAGE_KEYS.LAST_SYNC) || null,
         lastError: null,
-        modalOpen: false
+        lastStorageError: null,
+        modalOpen: false,
+
+        // In-memory queues synced with Dexie
+        cachedTransactions: [],
+        cachedMovements: [],
+        cachedShifts: []
     };
 
+    async function reloadFromDexie() {
+        if (window.PosDb && typeof window.PosDb.init === 'function') {
+            try {
+                await window.PosDb.init();
+                const [trxs, movs, shifts] = await Promise.all([
+                    window.PosDb.transactions.getPending(),
+                    window.PosDb.movements.getPending(),
+                    window.PosDb.shifts.getPending()
+                ]);
+
+                state.cachedTransactions = Array.isArray(trxs) ? trxs : [];
+                state.cachedMovements = Array.isArray(movs) ? movs : [];
+                state.cachedShifts = Array.isArray(shifts) ? shifts : [];
+
+                refreshCounts();
+                return true;
+            } catch (e) {
+                console.warn('[PosOfflineSync] Failed to reload queues from Dexie:', e);
+            }
+        }
+
+        // Fallback to localStorage if PosDb is unavailable
+        state.cachedTransactions = safeGetJson(STORAGE_KEYS.OFFLINE_TRANSACTIONS, []);
+        state.cachedMovements = safeGetJson(STORAGE_KEYS.OFFLINE_MOVEMENTS, []);
+        state.cachedShifts = safeGetJson(STORAGE_KEYS.OFFLINE_SHIFTS, []);
+        refreshCounts();
+        return false;
+    }
+
     function refreshCounts() {
-        const trxs = safeGetJson(STORAGE_KEYS.OFFLINE_TRANSACTIONS, []);
-        const movs = safeGetJson(STORAGE_KEYS.OFFLINE_MOVEMENTS, []);
-        state.pendingCount = trxs.length;
-        state.pendingMovementsCount = movs.length;
+        state.pendingCount = state.cachedTransactions.length;
+        state.pendingMovementsCount = state.cachedMovements.length;
+        state.pendingShiftsCount = state.cachedShifts.length;
 
         if (window.Alpine && window.Alpine.store && window.Alpine.store('offlineSync')) {
             const store = window.Alpine.store('offlineSync');
-            store.pendingCount = trxs.length;
-            store.pendingMovementsCount = movs.length;
-            store.totalPending = trxs.length + movs.length;
-            store.pendingTransactions = trxs;
+            store.pendingCount = state.pendingCount;
+            store.pendingMovementsCount = state.pendingMovementsCount;
+            store.pendingShiftsCount = state.pendingShiftsCount;
+            store.totalPending = state.pendingCount + state.pendingMovementsCount + state.pendingShiftsCount;
+            store.pendingTransactions = state.cachedTransactions;
         }
     }
 
     const PosOfflineSync = {
         state: state,
+
+        generateUuid: generateUuid,
+        safeSetJson: safeSetJson,
+        safeGetJson: safeGetJson,
+        isQuotaError: isQuotaError,
+        reloadFromDexie: reloadFromDexie,
 
         isOnline() {
             if (window.Alpine && window.Alpine.store && window.Alpine.store('network')) {
@@ -69,17 +135,21 @@
         },
 
         getPendingTransactions() {
-            return safeGetJson(STORAGE_KEYS.OFFLINE_TRANSACTIONS, []);
+            return state.cachedTransactions || [];
         },
 
         getPendingMovements() {
-            return safeGetJson(STORAGE_KEYS.OFFLINE_MOVEMENTS, []);
+            return state.cachedMovements || [];
+        },
+
+        getPendingShifts() {
+            return state.cachedShifts || [];
         },
 
         getPendingCount() {
-            const trxs = this.getPendingTransactions();
-            const movs = this.getPendingMovements();
-            return trxs.length + movs.length;
+            return (state.cachedTransactions?.length || 0)
+                + (state.cachedMovements?.length || 0)
+                + (state.cachedShifts?.length || 0);
         },
 
         /**
@@ -93,20 +163,21 @@
         },
 
         /**
-         * Process and persist transaction 100% offline without server connection
+         * Process and persist transaction offline in Dexie.js (IndexedDB)
          */
         processOfflineTransaction({ payload, cart, activeSession, grandTotal, paymentModal, isMember, selectedMember }) {
             const now = new Date();
             const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':') + ' WIB';
             const dateStr = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
-            const terminal = payload.terminal_code || activeSession.terminalLabel || 'POS-01';
-            const cashier = payload.cashier_name || activeSession.cashierName || 'Kasir';
+            const terminal = payload.terminal_code || activeSession?.terminalLabel || 'POS-01';
+            const cashier = payload.cashier_name || activeSession?.cashierName || 'Kasir';
+            const activeBranch = payload.branch || activeSession?.storeLocation || localStorage.getItem('pos_kasir_branch') || 'Pusat';
+            const activeLocationId = payload.location_id || activeSession?.locationId || null;
             const method = payload.payment_method || 'TUNAI';
 
-            const invoiceNumber = this.generateOfflineInvoice(terminal);
-            const offlineId = 'off_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+            const invoiceNumber = payload.invoice_number || this.generateOfflineInvoice(terminal);
+            const offlineId = payload.offline_id || ('off_' + generateUuid());
 
-            // 1. Build Transaction Record
             const methodLabelMap = {
                 'TUNAI': 'Uang Tunai',
                 'QRIS': 'QRIS Dinamis',
@@ -133,13 +204,15 @@
                 created_at: now.toISOString(),
                 terminal: terminal,
                 terminal_code: terminal,
+                location_id: activeLocationId,
+                branch: activeBranch,
                 cashier: cashier,
-                cashier_nik: payload.cashier_nik || activeSession.cashierNik || null,
+                cashier_nik: payload.cashier_nik || activeSession?.cashierNik || null,
                 cashier_name: cashier,
                 method: method,
                 payment_method: method,
                 methodLabel: methodLabelMap[method] || method,
-                subtotal: grandTotal, // subtotal without extra fee
+                subtotal: grandTotal,
                 discount: 0,
                 discount_total: 0,
                 tax: 0,
@@ -158,6 +231,7 @@
                 nonCashPortion: method === 'TUNAI' ? 0 : (method === 'CAMPURAN' ? (payload.split_non_cash || 0) : grandTotal),
                 status: 'SELESAI',
                 syncStatus: 'PENDING_SYNC',
+                sync_status: 'PENDING_SYNC',
                 isOffline: true,
                 is_offline: true,
                 member: (isMember && selectedMember) ? {
@@ -186,12 +260,12 @@
                 }))
             };
 
-            // 2. Queue into Offline Transactions
-            const pendingList = safeGetJson(STORAGE_KEYS.OFFLINE_TRANSACTIONS, []);
-            pendingList.push({
+            const queueItem = {
                 offline_id: offlineId,
                 invoice_number: invoiceNumber,
                 terminal_code: terminal,
+                location_id: activeLocationId,
+                branch: activeBranch,
                 cashier_nik: trxRecord.cashier_nik,
                 cashier_name: cashier,
                 payment_method: method,
@@ -207,41 +281,44 @@
                 tax_total: trxRecord.tax_total,
                 grand_total: trxRecord.grand_total,
                 items: trxRecord.items,
+                sync_status: 'PENDING_SYNC',
                 retry_count: 0
-            });
-            safeSetJson(STORAGE_KEYS.OFFLINE_TRANSACTIONS, pendingList);
+            };
 
-            // 3. Save into Local Transaction History
-            const historyList = safeGetJson(STORAGE_KEYS.TRANSACTIONS, []);
-            // Insert at beginning of list
-            historyList.unshift(trxRecord);
-            safeSetJson(STORAGE_KEYS.TRANSACTIONS, historyList);
+            // 1. Immediately update in-memory queues for responsive UI
+            state.cachedTransactions.push(queueItem);
+            refreshCounts();
 
-            // 4. Save into Latest Printed Receipt (for cetak-struk page)
-            safeSetJson(STORAGE_KEYS.RECEIPT, trxRecord);
-
-            // 5. Deduct Local Inventory Stock (so cashier doesn't see phantom stock)
-            try {
-                const localProducts = safeGetJson(STORAGE_KEYS.INVENTORY, []);
-                if (Array.isArray(localProducts) && localProducts.length > 0) {
-                    cart.forEach(cartItem => {
-                        const targetProd = localProducts.find(p =>
-                            (cartItem.barcode && p.barcode === cartItem.barcode) ||
-                            (cartItem.sku && p.sku === cartItem.sku)
-                        );
-                        if (targetProd && typeof targetProd.stock === 'number') {
-                            targetProd.stock = Math.max(0, targetProd.stock - cartItem.qty);
-                            if (targetProd.stock <= 0) targetProd.status = 'HABIS';
-                            else if (targetProd.stock <= (targetProd.min_stock || 5)) targetProd.status = 'STOK_RENDAH';
-                        }
-                    });
-                    safeSetJson(STORAGE_KEYS.INVENTORY, localProducts);
-                }
-            } catch (e) {
-                console.warn('[PosOfflineSync] Local stock deduction warning:', e);
+            // 2. Persist to Dexie.js (IndexedDB)
+            if (window.PosDb && typeof window.PosDb.transactions?.enqueue === 'function') {
+                window.PosDb.transactions.enqueue(queueItem).then(() => {
+                    // Deduct stock in IndexedDB product_cache
+                    if (activeLocationId) {
+                        window.PosDb.products.deductStock(activeLocationId, trxRecord.items).catch(err => {
+                            console.warn('[PosOfflineSync] Stock deduction in Dexie warning:', err);
+                        });
+                    }
+                }).catch(err => {
+                    console.error('[PosOfflineSync] Dexie persistence error:', err);
+                });
             }
 
-            // 6. Update Active Session Figures Locally
+            // 3. Keep fallback mirror in localStorage if quota permits
+            try {
+                const pendingList = safeGetJson(STORAGE_KEYS.OFFLINE_TRANSACTIONS, []);
+                pendingList.push(queueItem);
+                safeSetJson(STORAGE_KEYS.OFFLINE_TRANSACTIONS, pendingList);
+
+                const historyList = safeGetJson(STORAGE_KEYS.TRANSACTIONS, []);
+                historyList.unshift(trxRecord);
+                safeSetJson(STORAGE_KEYS.TRANSACTIONS, historyList.slice(0, 100));
+
+                safeSetJson(STORAGE_KEYS.RECEIPT, trxRecord);
+            } catch (mirrorErr) {
+                // Secondary mirror failure is non-fatal because Dexie is the source of truth
+            }
+
+            // 4. Update Active Session Figures Locally
             try {
                 const sessionRaw = localStorage.getItem(STORAGE_KEYS.ACTIVE_SESSION);
                 if (sessionRaw) {
@@ -257,7 +334,7 @@
                         session.cashSalesNet = (session.cashSalesNet || 0) + (payload.split_cash || 0);
                         session.qrisSales = (session.qrisSales || 0) + (payload.split_non_cash || 0);
                     }
-                    session.pendingSyncCount = (session.pendingSyncCount || 0) + 1;
+                    session.pendingSyncCount = this.getPendingCount();
                     session.isOffline = true;
                     safeSetJson(STORAGE_KEYS.ACTIVE_SESSION, session);
                 }
@@ -265,40 +342,143 @@
                 console.warn('[PosOfflineSync] Active session update warning:', e);
             }
 
-            // 7. Refresh Counts & Broadcast
-            refreshCounts();
+            // 5. Broadcast events
             if (window.PosRealtime && typeof window.PosRealtime.broadcast === 'function') {
                 window.PosRealtime.broadcast('transactions_updated', { invoiceNumber, offline: true });
-                window.PosRealtime.broadcast('offline_queue_updated', { count: pendingList.length });
+                window.PosRealtime.broadcast('offline_queue_updated', { count: state.cachedTransactions.length });
             }
 
-            return trxRecord;
+            return {
+                success: true,
+                trxRecord: trxRecord,
+                ...trxRecord
+            };
+        },
+
+        /**
+         * Queue offline shift opening
+         */
+        processOfflineShiftOpen(shiftData) {
+            const offlineId = shiftData.offline_id || ('shf_open_' + generateUuid());
+            const item = {
+                offline_id: offlineId,
+                action: 'OPEN',
+                shift_code: shiftData.shift_code || null,
+                terminal_code: shiftData.terminal_code || 'POS-01',
+                location_id: shiftData.location_id || null,
+                branch: shiftData.branch || null,
+                cashier_nik: shiftData.cashier_nik || null,
+                cashier_name: shiftData.cashier_name || null,
+                opening_cash: Number(shiftData.opening_cash || 0),
+                opened_at: shiftData.opened_at || new Date().toISOString(),
+                sync_status: 'PENDING_SYNC',
+                retry_count: 0
+            };
+
+            state.cachedShifts.push(item);
+            refreshCounts();
+
+            if (window.PosDb && typeof window.PosDb.shifts?.enqueue === 'function') {
+                window.PosDb.shifts.enqueue(item).catch(err => {
+                    console.error('[PosOfflineSync] Error enqueuing shift in Dexie:', err);
+                });
+            }
+
+            // Fallback mirror
+            try {
+                const list = safeGetJson(STORAGE_KEYS.OFFLINE_SHIFTS, []);
+                list.push(item);
+                safeSetJson(STORAGE_KEYS.OFFLINE_SHIFTS, list);
+            } catch (e) {}
+
+            return { success: true, offline_id: offlineId };
+        },
+
+        /**
+         * Queue offline shift closing & handover
+         */
+        processOfflineShiftClose(shiftData) {
+            const offlineId = shiftData.offline_id || ('shf_close_' + generateUuid());
+            const item = {
+                offline_id: offlineId,
+                action: 'CLOSE',
+                shift_code: shiftData.shift_code || null,
+                terminal_code: shiftData.terminal_code || 'POS-01',
+                location_id: shiftData.location_id || null,
+                branch: shiftData.branch || null,
+                cashier_nik: shiftData.cashier_nik || null,
+                cashier_name: shiftData.cashier_name || null,
+                actual_cash: Number(shiftData.actual_cash || 0),
+                closing_notes: shiftData.closing_notes || null,
+                closed_at: shiftData.closed_at || new Date().toISOString(),
+                sync_status: 'PENDING_SYNC',
+                retry_count: 0
+            };
+
+            state.cachedShifts.push(item);
+            refreshCounts();
+
+            if (window.PosDb && typeof window.PosDb.shifts?.enqueue === 'function') {
+                window.PosDb.shifts.enqueue(item).catch(err => {
+                    console.error('[PosOfflineSync] Error enqueuing shift close in Dexie:', err);
+                });
+            }
+
+            // Fallback mirror
+            try {
+                const list = safeGetJson(STORAGE_KEYS.OFFLINE_SHIFTS, []);
+                list.push(item);
+                safeSetJson(STORAGE_KEYS.OFFLINE_SHIFTS, list);
+            } catch (e) {}
+
+            return { success: true, offline_id: offlineId };
         },
 
         /**
          * Record drawer cash movement offline
          */
         processOfflineCashMovement(movementData) {
-            const list = safeGetJson(STORAGE_KEYS.OFFLINE_MOVEMENTS, []);
-            const offlineId = 'mov_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
-            list.push({
+            const offlineId = movementData.offline_id || ('mov_' + generateUuid());
+            const item = {
                 offline_id: offlineId,
+                shift_code: movementData.shift_code || null,
                 terminal_code: movementData.terminal_code || 'POS-01',
+                location_id: movementData.location_id || null,
+                branch: movementData.branch || null,
+                cashier_nik: movementData.cashier_nik || null,
                 type: movementData.type || 'OUT',
-                amount: movementData.amount || 0,
+                amount: Number(movementData.amount || 0),
                 reason: movementData.reason || 'Biaya Operasional Laci',
-                created_at: new Date().toISOString()
-            });
-            safeSetJson(STORAGE_KEYS.OFFLINE_MOVEMENTS, list);
+                created_at: new Date().toISOString(),
+                sync_status: 'PENDING_SYNC',
+                retry_count: 0
+            };
+
+            state.cachedMovements.push(item);
             refreshCounts();
 
-            if (window.PosRealtime) {
+            if (window.PosDb && typeof window.PosDb.movements?.enqueue === 'function') {
+                window.PosDb.movements.enqueue(item).catch(err => {
+                    console.error('[PosOfflineSync] Error enqueuing movement in Dexie:', err);
+                });
+            }
+
+            // Fallback mirror
+            try {
+                const list = safeGetJson(STORAGE_KEYS.OFFLINE_MOVEMENTS, []);
+                list.push(item);
+                safeSetJson(STORAGE_KEYS.OFFLINE_MOVEMENTS, list);
+            } catch (e) {}
+
+            if (window.PosRealtime && typeof window.PosRealtime.broadcast === 'function') {
                 window.PosRealtime.broadcast('cash_movements_updated', { offline: true });
             }
+
+            return { success: true, offline_id: offlineId };
         },
 
         /**
-         * Synchronize all offline transactions & movements to the main server
+         * Synchronize all offline transactions, shifts, & cash movements to the main server
          */
         async syncAll(options = {}) {
             const isManual = !!options.isManual;
@@ -310,9 +490,11 @@
                 return { success: false, reason: 'ALREADY_SYNCING' };
             }
 
+            // Refresh from Dexie first before checking pending counts
+            await reloadFromDexie();
+
             // 1. Check Connectivity
             if (!this.isOnline()) {
-                // If device has Wi-Fi / LAN, do an active probe to /api/health before giving up!
                 if (typeof navigator !== 'undefined' && navigator.onLine) {
                     const probeCtrl = new AbortController();
                     const probeTimeout = setTimeout(() => probeCtrl.abort(), 1500);
@@ -348,14 +530,15 @@
                 }
             }
 
-            const pendingTrxs = safeGetJson(STORAGE_KEYS.OFFLINE_TRANSACTIONS, []);
-            const pendingMovs = safeGetJson(STORAGE_KEYS.OFFLINE_MOVEMENTS, []);
+            const pendingTrxs = state.cachedTransactions;
+            const pendingMovs = state.cachedMovements;
+            const pendingShifts = state.cachedShifts;
 
-            if (pendingTrxs.length === 0 && pendingMovs.length === 0) {
+            if (pendingTrxs.length === 0 && pendingMovs.length === 0 && pendingShifts.length === 0) {
                 if (isManual) {
                     this.showToast('Semua transaksi dan aktivitas kasir sudah tersinkronisasi 100% dengan server.', 'success');
                 }
-                return { success: true, syncedCount: 0 };
+                return { success: true, syncedCount: 0, remaining: 0 };
             }
 
             state.isSyncing = true;
@@ -364,10 +547,10 @@
             }
 
             const syncCtrl = new AbortController();
-            const syncTimeout = setTimeout(() => syncCtrl.abort(), 6000);
+            const syncTimeout = setTimeout(() => syncCtrl.abort(), 10000);
 
             try {
-                // 2. Perform Batch Sync Request
+                // 2. Perform Batch Sync Request (strict order: shifts -> transactions -> movements)
                 const res = await fetch('/api/pos/sync-offline', {
                     method: 'POST',
                     headers: {
@@ -376,6 +559,7 @@
                     },
                     signal: syncCtrl.signal,
                     body: JSON.stringify({
+                        offline_shifts: pendingShifts,
                         transactions: pendingTrxs,
                         cash_movements: pendingMovs
                     })
@@ -388,74 +572,175 @@
                     throw new Error(json.message || 'Gagal sinkronisasi data ke server');
                 }
 
-                // 3. Mark transactions as synced and clean offline queue
-                const syncedResults = json.results && json.results.transactions ? json.results.transactions : [];
-                const syncedIds = new Set(syncedResults.map(r => r.offline_id));
+                // 3. Process Per-Item Results: Remove ONLY confirmed SYNCED or ALREADY_SYNCED
+                const confirmedStatus = (s) => s === 'SYNCED' || s === 'ALREADY_SYNCED';
 
-                // Retain only unsynced transactions in queue (if any failed)
-                const remainingTrxs = pendingTrxs.filter(t => !syncedIds.has(t.offline_id));
-                safeSetJson(STORAGE_KEYS.OFFLINE_TRANSACTIONS, remainingTrxs);
+                const trxResults = json.results && Array.isArray(json.results.transactions) ? json.results.transactions : [];
+                const trxResMap = new Map(trxResults.map(r => [r.offline_id, r]));
 
-                // Clean movements
-                safeSetJson(STORAGE_KEYS.OFFLINE_MOVEMENTS, []);
+                const confirmedTrxIds = [];
+                const failedTrxList = [];
 
-                // 4. Update status in local transaction history list
+                pendingTrxs.forEach(t => {
+                    const match = trxResMap.get(t.offline_id);
+                    if (match && confirmedStatus(match.status)) {
+                        confirmedTrxIds.push(t.offline_id);
+                    } else {
+                        failedTrxList.push({
+                            ...t,
+                            sync_status: 'FAILED',
+                            retry_count: (t.retry_count || 0) + 1,
+                            last_error: match && match.message ? match.message : 'Belum terkonfirmasi server'
+                        });
+                    }
+                });
+
+                const movResults = json.results && Array.isArray(json.results.cash_movements) ? json.results.cash_movements : [];
+                const movResMap = new Map(movResults.map(r => [r.offline_id, r]));
+
+                const confirmedMovIds = [];
+                const failedMovList = [];
+
+                pendingMovs.forEach(m => {
+                    const match = movResMap.get(m.offline_id);
+                    if (match && confirmedStatus(match.status)) {
+                        confirmedMovIds.push(m.offline_id);
+                    } else {
+                        failedMovList.push({
+                            ...m,
+                            sync_status: 'FAILED',
+                            retry_count: (m.retry_count || 0) + 1,
+                            last_error: match && match.message ? match.message : 'Belum terkonfirmasi server'
+                        });
+                    }
+                });
+
+                const shiftResults = json.results && Array.isArray(json.results.shifts) ? json.results.shifts : [];
+                const shiftResMap = new Map(shiftResults.map(r => [r.offline_id, r]));
+
+                const confirmedShiftIds = [];
+                const failedShiftList = [];
+
+                pendingShifts.forEach(s => {
+                    const match = shiftResMap.get(s.offline_id);
+                    if (match && confirmedStatus(match.status)) {
+                        confirmedShiftIds.push(s.offline_id);
+                    } else {
+                        failedShiftList.push({
+                            ...s,
+                            sync_status: 'FAILED',
+                            retry_count: (s.retry_count || 0) + 1,
+                            last_error: match && match.message ? match.message : 'Belum terkonfirmasi server'
+                        });
+                    }
+                });
+
+                // 4. Update Dexie.js Tables
+                if (window.PosDb && typeof window.PosDb.init === 'function') {
+                    if (confirmedTrxIds.length > 0) {
+                        await window.PosDb.transactions.removeSynced(confirmedTrxIds);
+                    }
+                    if (confirmedMovIds.length > 0) {
+                        await window.PosDb.movements.removeSynced(confirmedMovIds);
+                    }
+                    if (confirmedShiftIds.length > 0) {
+                        await window.PosDb.shifts.removeSynced(confirmedShiftIds);
+                    }
+
+                    // Update failed items in Dexie
+                    for (const ft of failedTrxList) {
+                        await window.PosDb.transactions.markFailed(ft.offline_id, ft.last_error);
+                    }
+                    for (const fm of failedMovList) {
+                        await window.PosDb.movements.markFailed(fm.offline_id, fm.last_error);
+                    }
+                    for (const fs of failedShiftList) {
+                        await window.PosDb.shifts.markFailed(fs.offline_id, fs.last_error);
+                    }
+
+                    // Log audit entry
+                    await window.PosDb.logs.addLog('SYNC_BATCH', 'batch_' + Date.now(), 'SUCCESS', `Synced: ${json.synced_count}, Failed: ${json.failed_count || 0}`);
+                }
+
+                // 5. Update In-Memory Queues
+                state.cachedTransactions = failedTrxList;
+                state.cachedMovements = failedMovList;
+                state.cachedShifts = failedShiftList;
+
+                // Sync fallback mirror in localStorage
+                safeSetJson(STORAGE_KEYS.OFFLINE_TRANSACTIONS, failedTrxList);
+                safeSetJson(STORAGE_KEYS.OFFLINE_MOVEMENTS, failedMovList);
+                safeSetJson(STORAGE_KEYS.OFFLINE_SHIFTS, failedShiftList);
+
+                // 6. Update local history status
                 const historyList = safeGetJson(STORAGE_KEYS.TRANSACTIONS, []);
-                let historyChanged = false;
+                let histChanged = false;
+                const confirmedSet = new Set(confirmedTrxIds);
                 historyList.forEach(item => {
-                    if (item.offline_id && syncedIds.has(item.offline_id)) {
+                    if (item.offline_id && confirmedSet.has(item.offline_id)) {
                         item.syncStatus = 'SYNCED';
                         item.isOffline = false;
                         item.is_offline = false;
-                        const match = syncedResults.find(r => r.offline_id === item.offline_id);
-                        if (match && match.server_id) {
-                            item.rawId = match.server_id;
-                        }
-                        historyChanged = true;
+                        const match = trxResMap.get(item.offline_id);
+                        if (match && match.server_id) item.rawId = match.server_id;
+                        histChanged = true;
                     }
                 });
-                if (historyChanged) {
+                if (histChanged) {
                     safeSetJson(STORAGE_KEYS.TRANSACTIONS, historyList);
                 }
 
-                // 5. Reset pendingSyncCount on active session
+                // 7. Reset active session counters
+                const totalRemaining = failedTrxList.length + failedMovList.length + failedShiftList.length;
                 try {
                     const sessionRaw = localStorage.getItem(STORAGE_KEYS.ACTIVE_SESSION);
                     if (sessionRaw) {
                         const session = JSON.parse(sessionRaw);
-                        session.pendingSyncCount = remainingTrxs.length;
-                        if (remainingTrxs.length === 0) session.isOffline = false;
+                        session.pendingSyncCount = totalRemaining;
+                        if (totalRemaining === 0) session.isOffline = false;
                         safeSetJson(STORAGE_KEYS.ACTIVE_SESSION, session);
                     }
                 } catch (e) {}
 
-                // 6. Record last sync time
+                // 8. Record last sync time
                 const nowTime = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
                 state.lastSyncTime = nowTime;
                 localStorage.setItem(STORAGE_KEYS.LAST_SYNC, nowTime);
 
                 refreshCounts();
 
-                // 7. Dispatch events
+                // 9. Dispatch events
                 window.dispatchEvent(new CustomEvent('pos:sync-completed', {
-                    detail: { syncedCount: json.synced_count, totalPending: remainingTrxs.length }
+                    detail: { syncedCount: json.synced_count, totalPending: totalRemaining, failedCount: json.failed_count || 0 }
                 }));
 
-                if (window.PosRealtime) {
+                if (window.PosRealtime && typeof window.PosRealtime.broadcast === 'function') {
                     window.PosRealtime.broadcast('transactions_updated', { synced: true });
                     window.PosRealtime.broadcast('inventory_updated', { synced: true });
                 }
 
-                const toastMsg = json.synced_count > 0
-                    ? `Sinkronisasi Berhasil: ${json.synced_count} transaksi offline berhasil disinkronkan ke server utama!`
-                    : 'Semua transaksi offline telah diverifikasi & tersinkronkan!';
-                this.showToast(toastMsg, 'success');
+                const toastMsg = (json.failed_count > 0)
+                    ? `Sinkronisasi parsial: ${json.synced_count} transaksi berhasil, ${json.failed_count} item tertunda di antrean.`
+                    : (json.synced_count > 0
+                        ? `Sinkronisasi Berhasil: ${json.synced_count} transaksi offline berhasil disinkronkan ke server utama!`
+                        : 'Semua aktivitas offline telah diverifikasi & tersinkronkan!');
+                this.showToast(toastMsg, json.failed_count > 0 ? 'warning' : 'success');
 
-                return { success: true, syncedCount: json.synced_count, remaining: remainingTrxs.length };
+                return {
+                    success: true,
+                    partial: totalRemaining > 0,
+                    syncedCount: json.synced_count,
+                    duplicateCount: json.duplicate_count || 0,
+                    failedCount: json.failed_count || 0,
+                    remaining: totalRemaining
+                };
 
             } catch (err) {
                 console.error('[PosOfflineSync] Sync failed:', err);
                 state.lastError = err.message;
+                if (window.PosDb && typeof window.PosDb.logs?.addLog === 'function') {
+                    window.PosDb.logs.addLog('SYNC_BATCH', 'batch_err', 'FAILED', err.message);
+                }
                 if (isManual) {
                     this.showToast('Gagal sinkronisasi: ' + err.message, 'error');
                 }
@@ -484,20 +769,27 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                     signal: singleCtrl.signal,
-                    body: JSON.stringify({ transactions: [target], cash_movements: [] })
+                    body: JSON.stringify({ transactions: [target], cash_movements: [], offline_shifts: [] })
                 });
                 clearTimeout(singleTimeout);
                 const json = await res.json();
-                if (json.success) {
-                    const remaining = pendingTrxs.filter(t => t.offline_id !== offlineId);
-                    safeSetJson(STORAGE_KEYS.OFFLINE_TRANSACTIONS, remaining);
+                const trxItemRes = json.results && Array.isArray(json.results.transactions)
+                    ? json.results.transactions.find(r => r.offline_id === offlineId)
+                    : null;
 
-                    // Update history
+                if (res.ok && json.success && trxItemRes && (trxItemRes.status === 'SYNCED' || trxItemRes.status === 'ALREADY_SYNCED')) {
+                    if (window.PosDb && typeof window.PosDb.transactions?.removeSynced === 'function') {
+                        await window.PosDb.transactions.removeSynced([offlineId]);
+                    }
+                    state.cachedTransactions = state.cachedTransactions.filter(t => t.offline_id !== offlineId);
+                    safeSetJson(STORAGE_KEYS.OFFLINE_TRANSACTIONS, state.cachedTransactions);
+
                     const historyList = safeGetJson(STORAGE_KEYS.TRANSACTIONS, []);
                     const histItem = historyList.find(t => t.offline_id === offlineId);
                     if (histItem) {
                         histItem.syncStatus = 'SYNCED';
                         histItem.isOffline = false;
+                        if (trxItemRes.server_id) histItem.rawId = trxItemRes.server_id;
                         safeSetJson(STORAGE_KEYS.TRANSACTIONS, historyList);
                     }
 
@@ -505,7 +797,8 @@
                     if (window.PosRealtime) window.PosRealtime.broadcast('transactions_updated');
                     this.showToast(`Transaksi ${target.invoice_number} berhasil disinkronkan!`, 'success');
                 } else {
-                    this.showToast(`Gagal: ${json.message}`, 'error');
+                    const errMsg = (trxItemRes && trxItemRes.message) || json.message || 'Gagal sinkronisasi item.';
+                    this.showToast(`Gagal: ${errMsg}`, 'error');
                 }
             } catch (e) {
                 this.showToast('Gagal terhubung ke server: ' + e.message, 'error');
@@ -546,8 +839,7 @@
         }
     };
 
-    // 4. Auto-Sync Event Listeners
-    // A. Online event (LAN restored / Wi-Fi reconnected)
+    // Auto-Sync Event Listeners
     window.addEventListener('online', () => {
         setTimeout(() => {
             if (PosOfflineSync.getPendingCount() > 0) {
@@ -556,7 +848,6 @@
         }, 1200);
     });
 
-    // B. Network health status transition event from pos-realtime.js
     window.addEventListener('pos:network-status', (e) => {
         if (e.detail && e.detail.isOnline) {
             if (PosOfflineSync.getPendingCount() > 0 && !state.isSyncing) {
@@ -565,24 +856,22 @@
         }
     });
 
-    // C. Periodic background auto-sync check (every 18 seconds)
     setInterval(() => {
         if (PosOfflineSync.isOnline() && PosOfflineSync.getPendingCount() > 0 && !state.isSyncing) {
             PosOfflineSync.syncAll({ isManual: false });
         }
     }, 18000);
 
-    // Initial count calculation
-    refreshCounts();
+    // Initial load from Dexie / localStorage
+    reloadFromDexie().then(() => {
+        setTimeout(() => {
+            if (PosOfflineSync.getPendingCount() > 0 && !state.isSyncing && PosOfflineSync.isOnline()) {
+                PosOfflineSync.syncAll({ isManual: false });
+            }
+        }, 2000);
+    });
 
-    // D. Initial auto-sync check on page load if pending transactions exist
-    setTimeout(() => {
-        if (PosOfflineSync.getPendingCount() > 0 && !state.isSyncing) {
-            PosOfflineSync.syncAll({ isManual: false });
-        }
-    }, 2000);
-
-    // 5. Register Alpine Store
+    // Register Alpine Store
     function initOfflineAlpineStore() {
         if (!window.Alpine) return;
 
@@ -590,14 +879,15 @@
             window.Alpine.store('offlineSync', {
                 pendingCount: state.pendingCount,
                 pendingMovementsCount: state.pendingMovementsCount,
-                totalPending: state.pendingCount + state.pendingMovementsCount,
+                pendingShiftsCount: state.pendingShiftsCount,
+                totalPending: state.pendingCount + state.pendingMovementsCount + state.pendingShiftsCount,
                 isSyncing: false,
                 lastSyncTime: state.lastSyncTime,
                 modalOpen: false,
-                pendingTransactions: PosOfflineSync.getPendingTransactions(),
+                pendingTransactions: state.cachedTransactions,
 
                 refresh() {
-                    refreshCounts();
+                    reloadFromDexie();
                 },
 
                 syncNow() {

@@ -24,7 +24,7 @@ class ConsignmentController extends Controller
         $search = trim($request->query('search', ''));
         $status = trim($request->query('status', ''));
 
-        $query = Supplier::withCount('products');
+        $query = Supplier::consignment()->withCount('products');
 
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
@@ -42,10 +42,10 @@ class ConsignmentController extends Controller
 
         // Summary metrics
         $summary = [
-            'total_partners' => Supplier::count(),
-            'active_partners' => Supplier::where('status', 'AKTIF')->count(),
+            'total_partners' => Supplier::consignment()->count(),
+            'active_partners' => Supplier::consignment()->where('status', 'AKTIF')->count(),
             'total_consignment_skus' => Product::where('is_consignment', true)->count(),
-            'average_commission' => round((float) Supplier::avg('commission_percent'), 1),
+            'average_commission' => round((float) Supplier::consignment()->avg('commission_percent'), 1),
         ];
 
         return response()->json([
@@ -96,8 +96,10 @@ class ConsignmentController extends Controller
 
                 $partner = Supplier::create(array_merge($validated, [
                     'name' => $cleanName,
+                    'pic_name' => $validated['owner_name'] ?? null,
                     'code' => $code,
                     'status' => 'AKTIF',
+                    'supplier_type' => Supplier::TYPE_CONSIGNMENT,
                 ]));
 
                 return ['duplicate' => false, 'partner' => $partner];

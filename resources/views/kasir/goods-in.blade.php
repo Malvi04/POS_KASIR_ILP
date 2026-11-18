@@ -31,7 +31,9 @@
         this.documents = localDocs;
 
         try {
-            const res = await fetch('/api/goods-receipts', { headers: { 'Accept': 'application/json' } });
+            const branch = this.activeSession?.storeLocation || this.selectedBranch || localStorage.getItem('pos_kasir_branch') || '';
+            const q = branch ? ('?branch=' + encodeURIComponent(branch)) : '';
+            const res = await fetch('/api/goods-receipts' + q, { headers: { 'Accept': 'application/json' } });
             if (res.ok) {
                 const json = await res.json();
                 if (json.success && Array.isArray(json.data)) {
@@ -72,7 +74,9 @@
 
     async refreshDocsFromServer() {
         try {
-            const res = await fetch('/api/goods-receipts', { headers: { 'Accept': 'application/json' } });
+            const branch = this.activeSession?.storeLocation || this.selectedBranch || localStorage.getItem('pos_kasir_branch') || '';
+            const q = branch ? ('?branch=' + encodeURIComponent(branch)) : '';
+            const res = await fetch('/api/goods-receipts' + q, { headers: { 'Accept': 'application/json' } });
             if (res.ok) {
                 const json = await res.json();
                 if (json.success && Array.isArray(json.data)) {
@@ -217,13 +221,16 @@
             original.receiverName = (this.activeSession?.cashierName || localStorage.getItem('pos_user_name') || 'Kasir') + ' (Kasir)';
             original.generalNotes = this.verifyNotes.trim() || (hasVariance ? 'Penerimaan diverifikasi dengan catatan selisih/kondisi.' : 'Penerimaan fisik barang transfer lengkap dan sesuai.');
 
-            // Update master inventory stock via API
+            // Update Stock Toko via API (wajib sukses sebelum memperbarui state lokal)
             if (original.id && typeof original.id === 'number') {
                 try {
-                    await fetch('/api/goods-receipts/' + original.id + '/verify', {
+                    const branch = this.activeSession?.storeLocation || this.selectedBranch || localStorage.getItem('pos_kasir_branch') || '';
+                    const res = await fetch('/api/goods-receipts/' + original.id + '/verify', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                         body: JSON.stringify({
+                            branch: branch,
+                            location_id: this.activeSession?.locationId || null,
                             receiver_name: original.receiverName,
                             notes: original.generalNotes,
                             items: (original.items || []).map(it => ({
@@ -234,13 +241,26 @@
                             }))
                         })
                     });
+                    const json = await res.json().catch(() => ({}));
+                    if (!res.ok || !json.success) {
+                        this.showToastNotice(json.message || 'Gagal memverifikasi dokumen penerimaan di server.');
+                        return;
+                    }
+                    if (json.data) {
+                        Object.assign(original, json.data);
+                    }
                 } catch (e) {
                     console.warn('API sync receipt error', e);
+                    this.showToastNotice('Gagal menghubungi server untuk verifikasi penerimaan.');
+                    return;
                 }
             }
 
-            this.updateInventoryStock(original.items);
             this.saveDocs();
+            window.dispatchEvent(new CustomEvent('pos-inventory-synced'));
+            if (window.PosRealtime) {
+                window.PosRealtime.broadcast('inventory_updated', { source: 'goods_in_verified' });
+            }
 
             this.showVerifyModal = false;
             this.showToastNotice(`Dokumen ${original.docNo} berhasil dikonfirmasi (${original.status === 'DITERIMA_LENGKAP' ? 'Lengkap Sesuai' : 'Ada Selisih Fisik'}) dan stok produk telah diperbarui!`);

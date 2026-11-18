@@ -15,6 +15,9 @@ class GoodsReceiptItem extends Model
         'qty_received',
         'actual_unit_cost',
         'condition',
+        'expired_date',
+        'batch_number',
+        'batch_allocations',
         'ownership_type',
         'notes',
     ];
@@ -23,6 +26,8 @@ class GoodsReceiptItem extends Model
         'qty_sent' => 'decimal:2',
         'qty_received' => 'decimal:2',
         'actual_unit_cost' => 'decimal:2',
+        'expired_date' => 'date',
+        'batch_allocations' => 'array',
     ];
 
     public function goodsReceipt(): BelongsTo

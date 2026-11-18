@@ -5,14 +5,17 @@ namespace App\Http\Controllers\Api\Kasir;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Shared\NotificationController;
 use App\Models\AppSetting;
+use App\Models\CashMovement;
 use App\Models\CashierShift;
 use App\Models\Member;
 use App\Models\Product;
 use App\Models\Transaction;
 use App\Models\TransactionItem;
 use App\Models\User;
+use App\Services\LocationStockService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
@@ -25,8 +28,11 @@ class TransactionController extends Controller
     public function checkout(Request $request): JsonResponse
     {
         $validated = $request->validate([
+            'offline_id' => 'nullable|string|max:120',
             'shift_id' => 'nullable|integer|exists:cashier_shifts,id',
             'terminal_code' => 'required|string|max:20',
+            'location_id' => 'nullable|integer|exists:locations,id',
+            'branch' => 'nullable|string|max:100',
             'cashier_nik' => 'nullable|string|max:50',
             'cashier_name' => 'nullable|string|max:100',
             'payment_method' => 'required|in:TUNAI,QRIS,TRANSFER,KREDIT,CAMPURAN',
@@ -47,10 +53,41 @@ class TransactionController extends Controller
         ]);
 
         return DB::transaction(function () use ($validated, $request) {
+            // 0. Idempotency check by client-supplied offline_id (prevents duplicate on lost response retry)
+            if (!empty($validated['offline_id'])) {
+                $dupTrx = Transaction::where('offline_id', $validated['offline_id'])->first();
+                if ($dupTrx) {
+                    return response()->json([
+                        'success' => true,
+                        'duplicate' => true,
+                        'message' => "Transaksi [{$dupTrx->invoice_number}] sudah tercatat sebelumnya.",
+                        'data' => [
+                            'id' => $dupTrx->id,
+                            'invoice_number' => $dupTrx->invoice_number,
+                            'terminal_code' => $dupTrx->terminal_code,
+                            'cashier_name' => $dupTrx->cashier_name,
+                            'payment_method' => $dupTrx->payment_method,
+                            'grand_total' => (float) $dupTrx->grand_total,
+                            'change_returned' => (float) $dupTrx->change_returned,
+                            'created_at' => $dupTrx->created_at?->toIso8601String(),
+                        ],
+                    ], 200);
+                }
+            }
+
+            $authUser = Auth::user();
+
             // 1. Verify Active Shift
             $shift = null;
             if (!empty($validated['shift_id'])) {
                 $shift = CashierShift::lockForUpdate()->find($validated['shift_id']);
+                if ($shift && $shift->terminal_code !== $validated['terminal_code']) {
+                    return response()->json([
+                        'success' => false,
+                        'error_code' => 'SHIFT_TERMINAL_MISMATCH',
+                        'message' => "Shift {$shift->shift_code} berada di terminal {$shift->terminal_code}, bukan {$validated['terminal_code']}.",
+                    ], 422);
+                }
             }
             if (!$shift || $shift->status !== 'OPEN') {
                 $shift = CashierShift::where('terminal_code', $validated['terminal_code'])
@@ -68,8 +105,59 @@ class TransactionController extends Controller
                 ], 422);
             }
 
-            $user = User::where('nik', $validated['cashier_nik'] ?? $shift->cashier_nik)->first();
-            $cashierName = $validated['cashier_name'] ?? $shift->cashier_name;
+            if ($authUser && $authUser->isKasir()) {
+                $ownsShift = ($shift->user_id && $shift->user_id === $authUser->id)
+                    || ($shift->cashier_nik && ($shift->cashier_nik === $authUser->nik || $shift->cashier_nik === $authUser->username));
+                if (!$ownsShift) {
+                    return response()->json([
+                        'success' => false,
+                        'error_code' => 'SHIFT_FORBIDDEN',
+                        'message' => "Anda tidak diizinkan menggunakan sesi shift milik kasir lain ({$shift->cashier_name}).",
+                    ], 403);
+                }
+            }
+
+            $user = ($authUser && $authUser->isKasir())
+                ? $authUser
+                : User::where('nik', $validated['cashier_nik'] ?? $shift->cashier_nik)->first();
+            $cashierName = ($authUser && $authUser->isKasir())
+                ? $authUser->name
+                : ($validated['cashier_name'] ?? $shift->cashier_name);
+
+            $stockService = app(LocationStockService::class);
+            $terminalExpected = $stockService->resolveExpectedLocationForTerminal($shift->terminal_code);
+            $storeLocation = $stockService->resolveLocation(
+                $validated['location_id'] ?? $shift->location_id,
+                $validated['branch'] ?? $shift->branch,
+                $shift->terminal_code,
+                $user,
+                'STORE'
+            );
+
+            if ((!empty($validated['location_id']) || !empty($validated['branch'])) && $terminalExpected && $storeLocation && $terminalExpected->id !== $storeLocation->id) {
+                return response()->json([
+                    'success' => false,
+                    'error_code' => 'TERMINAL_LOCATION_MISMATCH',
+                    'message' => "Terminal {$shift->terminal_code} terdaftar di {$terminalExpected->name}, tidak sesuai dengan lokasi {$storeLocation->name}.",
+                ], 422);
+            }
+
+            if ($authUser && $authUser->isKasir()) {
+                $locToVerify = $storeLocation ?: $terminalExpected;
+                if ($locToVerify && !$stockService->isUserAllowedInLocation($authUser, $locToVerify)) {
+                    return response()->json([
+                        'success' => false,
+                        'error_code' => 'LOCATION_FORBIDDEN',
+                        'message' => "Akun Kasir Anda tidak diizinkan bertransaksi pada lokasi {$locToVerify->name}.",
+                    ], 403);
+                }
+            }
+
+            $useStoreStock = $storeLocation !== null && (
+                $request->filled('location_id')
+                || $request->filled('branch')
+                || $stockService->hasStoreStocks()
+            );
 
             // 2. Member validation if member_nik is passed
             $member = null;
@@ -119,13 +207,45 @@ class TransactionController extends Controller
                     $itemUnit = $rawItem['unit'] ?? $product->unit;
                     $baseQtyToDeduct = $product->convertToBaseUnits($itemUnit, $qty);
 
-                    // Check stock in base unit
-                    if ($product->stock < $baseQtyToDeduct) {
-                        return response()->json([
-                            'success' => false,
-                            'error_code' => 'STOCK_INSUFFICIENT',
-                            'message' => "Stok produk [{$product->name}] tidak mencukupi. Sisa stok: {$product->stock} {$product->unit}, permintaan: {$qty} {$itemUnit} ({$baseQtyToDeduct} {$product->unit}).",
-                        ], 422);
+                    $primaryBatchId = null;
+                    $batchAllocations = null;
+
+                    if ($useStoreStock && $storeLocation) {
+                        $deductRes = $stockService->deductStock($product->id, $storeLocation->id, $baseQtyToDeduct, [
+                            'movement_type' => 'SALE_OUT',
+                            'reference_type' => Transaction::class,
+                            'user_id' => $user?->id,
+                            'notes' => "Penjualan POS {$shift->terminal_code} ({$storeLocation->name})",
+                        ]);
+
+                        if (!$deductRes['success']) {
+                            return response()->json([
+                                'success' => false,
+                                'error_code' => $deductRes['error_code'] ?? 'STOCK_INSUFFICIENT',
+                                'message' => "[{$product->name}] " . ($deductRes['message'] ?? 'Stok toko tidak mencukupi.'),
+                            ], 422);
+                        }
+
+                        $primaryBatchId = $deductRes['primary_batch_id'] ?? null;
+                        $batchAllocations = !empty($deductRes['allocations']) ? $deductRes['allocations'] : null;
+                        $product->refresh();
+                    } else {
+                        // Legacy compatibility mode (no Stock Toko rows initialized yet)
+                        if ($product->stock < $baseQtyToDeduct) {
+                            return response()->json([
+                                'success' => false,
+                                'error_code' => 'STOCK_INSUFFICIENT',
+                                'message' => "Stok produk [{$product->name}] tidak mencukupi. Sisa stok: {$product->stock} {$product->unit}, permintaan: {$qty} {$itemUnit} ({$baseQtyToDeduct} {$product->unit}).",
+                            ], 422);
+                        }
+
+                        $product->stock -= $baseQtyToDeduct;
+                        if ($product->stock <= 0) {
+                            $product->status = 'HABIS';
+                        } elseif ($product->stock <= $product->min_stock) {
+                            $product->status = 'STOK_RENDAH';
+                        }
+                        $product->save();
                     }
 
                     // Auto-Discount Expired (H-14 warning rule)
@@ -146,21 +266,14 @@ class TransactionController extends Controller
                         $lineTax = round($lineSubtotal * ($itemRate / 100), 2);
                     }
 
-                    // Deduct stock accurately in base units (Multi-Satuan Unit Conversion)
-                    $product->stock -= $baseQtyToDeduct;
-                    if ($product->stock <= 0) {
-                        $product->status = 'HABIS';
-                    } elseif ($product->stock <= $product->min_stock) {
-                        $product->status = 'STOK_RENDAH';
-                    }
-                    $product->save();
-
                     $subtotal += $lineSubtotal;
                     $discountTotal += $lineDiscount;
                     $taxTotal += $lineTax;
 
                     $processedItems[] = [
                         'product_id' => $product->id,
+                        'stock_batch_id' => $primaryBatchId,
+                        'batch_allocations' => $batchAllocations,
                         'sku' => $product->sku,
                         'barcode' => $product->barcode,
                         'product_name' => $product->name,
@@ -272,10 +385,13 @@ class TransactionController extends Controller
 
             $transaction = Transaction::create([
                 'invoice_number' => $invoiceNumber,
+                'offline_id' => $validated['offline_id'] ?? null,
                 'shift_id' => $shift->id,
                 'user_id' => $user?->id,
                 'cashier_name' => $cashierName,
                 'terminal_code' => $shift->terminal_code,
+                'location_id' => $storeLocation?->id,
+                'branch' => $storeLocation?->name ?? $shift->branch,
                 'member_id' => $member?->id,
                 'member_nik' => $member?->nik,
                 'member_name' => $member?->name,
@@ -405,19 +521,35 @@ class TransactionController extends Controller
     public function syncOffline(Request $request): JsonResponse
     {
         $validated = $request->validate([
+            'offline_shifts' => 'nullable|array',
+            'offline_shifts.*.offline_id' => 'required|string|max:120',
+            'offline_shifts.*.action' => 'required|in:OPEN,CLOSE',
+            'offline_shifts.*.shift_code' => 'nullable|string|max:80',
+            'offline_shifts.*.terminal_code' => 'required|string|max:50',
+            'offline_shifts.*.location_id' => 'nullable|integer|exists:locations,id',
+            'offline_shifts.*.branch' => 'nullable|string|max:100',
+            'offline_shifts.*.cashier_nik' => 'nullable|string|max:50',
+            'offline_shifts.*.cashier_name' => 'nullable|string|max:100',
+            'offline_shifts.*.opening_cash' => 'nullable|numeric|min:0',
+            'offline_shifts.*.actual_cash' => 'nullable|numeric|min:0',
+            'offline_shifts.*.closing_notes' => 'nullable|string|max:500',
+            'offline_shifts.*.opened_at' => 'nullable|string',
+            'offline_shifts.*.closed_at' => 'nullable|string',
             'transactions' => 'nullable|array',
-            'transactions.*.offline_id' => 'required|string',
-            'transactions.*.invoice_number' => 'required|string',
-            'transactions.*.terminal_code' => 'required|string',
-            'transactions.*.cashier_nik' => 'nullable|string',
-            'transactions.*.cashier_name' => 'nullable|string',
+            'transactions.*.offline_id' => 'required|string|max:120',
+            'transactions.*.invoice_number' => 'required|string|max:100',
+            'transactions.*.terminal_code' => 'required|string|max:50',
+            'transactions.*.location_id' => 'nullable|integer|exists:locations,id',
+            'transactions.*.branch' => 'nullable|string|max:100',
+            'transactions.*.cashier_nik' => 'nullable|string|max:50',
+            'transactions.*.cashier_name' => 'nullable|string|max:100',
             'transactions.*.payment_method' => 'required|string',
             'transactions.*.cash_received' => 'nullable|numeric|min:0',
             'transactions.*.change_returned' => 'nullable|numeric|min:0',
-            'transactions.*.payment_reference' => 'nullable|string',
+            'transactions.*.payment_reference' => 'nullable|string|max:120',
             'transactions.*.split_cash' => 'nullable|numeric|min:0',
             'transactions.*.split_non_cash' => 'nullable|numeric|min:0',
-            'transactions.*.member_nik' => 'nullable|string',
+            'transactions.*.member_nik' => 'nullable|string|max:50',
             'transactions.*.created_at' => 'nullable|string',
             'transactions.*.subtotal' => 'nullable|numeric|min:0',
             'transactions.*.discount_total' => 'nullable|numeric|min:0',
@@ -425,63 +557,332 @@ class TransactionController extends Controller
             'transactions.*.grand_total' => 'required|numeric|min:0',
             'transactions.*.items' => 'required|array|min:1',
             'cash_movements' => 'nullable|array',
-            'cash_movements.*.offline_id' => 'required|string',
-            'cash_movements.*.terminal_code' => 'required|string',
+            'cash_movements.*.offline_id' => 'required|string|max:120',
+            'cash_movements.*.shift_code' => 'nullable|string|max:80',
+            'cash_movements.*.terminal_code' => 'required|string|max:50',
+            'cash_movements.*.location_id' => 'nullable|integer|exists:locations,id',
+            'cash_movements.*.branch' => 'nullable|string|max:100',
+            'cash_movements.*.cashier_nik' => 'nullable|string|max:50',
             'cash_movements.*.type' => 'required|string',
-            'cash_movements.*.amount' => 'required|numeric|min:0',
-            'cash_movements.*.reason' => 'nullable|string',
+            'cash_movements.*.amount' => 'required|numeric|min:1',
+            'cash_movements.*.reason' => 'nullable|string|max:255',
             'cash_movements.*.created_at' => 'nullable|string',
         ]);
 
+        $authUser = Auth::user();
+        $stockService = app(LocationStockService::class);
+        $shiftsToSync = $validated['offline_shifts'] ?? [];
         $transactionsToSync = $validated['transactions'] ?? [];
         $movementsToSync = $validated['cash_movements'] ?? [];
 
-        $syncedTransactions = [];
-        $duplicateTransactions = [];
-        $syncedMovements = [];
+        // Pre-flight identity & location security guard across all items before mutating DB
+        foreach (array_merge($shiftsToSync, $transactionsToSync, $movementsToSync) as $payloadItem) {
+            $authError = $this->validateOfflineSyncPayloadAuth($authUser, $payloadItem, $stockService);
+            if ($authError !== null) {
+                return $authError;
+            }
+        }
 
-        DB::beginTransaction();
+        $openShifts = array_values(array_filter($shiftsToSync, fn ($s) => strtoupper($s['action'] ?? '') === 'OPEN'));
+        $closeShifts = array_values(array_filter($shiftsToSync, fn ($s) => strtoupper($s['action'] ?? '') === 'CLOSE'));
+
+        $shiftResults = [];
+        foreach ($openShifts as $shiftData) {
+            $shiftResults[] = $this->syncOfflineShiftItem($shiftData, $authUser, $stockService);
+        }
+
+        $trxResults = [];
+        foreach ($transactionsToSync as $trxData) {
+            $trxResults[] = $this->syncOfflineTransactionItem($trxData, $authUser, $stockService);
+        }
+
+        $movResults = [];
+        foreach ($movementsToSync as $movData) {
+            $movResults[] = $this->syncOfflineCashMovementItem($movData, $authUser, $stockService);
+        }
+
+        foreach ($closeShifts as $shiftData) {
+            $shiftResults[] = $this->syncOfflineShiftItem($shiftData, $authUser, $stockService);
+        }
+
+        $syncedCount = count(array_filter($trxResults, fn ($r) => $r['status'] === 'SYNCED'));
+        $duplicateCount = count(array_filter($trxResults, fn ($r) => $r['status'] === 'ALREADY_SYNCED'));
+        $failedCount = count(array_filter($trxResults, fn ($r) => $r['status'] === 'FAILED'))
+            + count(array_filter($movResults, fn ($r) => $r['status'] === 'FAILED'))
+            + count(array_filter($shiftResults, fn ($r) => $r['status'] === 'FAILED'));
+
+        if ($syncedCount > 0) {
+            try {
+                NotificationController::notify(
+                    role: 'MANAGER',
+                    title: "Sinkronisasi Offline Selesai: {$syncedCount} Transaksi",
+                    message: "Sistem berhasil menyinkronkan {$syncedCount} transaksi kasir yang tercatat saat offline ke database server utama.",
+                    category: 'SALES',
+                    link: '/kasir/transactions',
+                    icon: 'cloud_sync',
+                    color: 'emerald',
+                    referenceId: 'SYNC-' . date('YmdHis')
+                );
+            } catch (\Throwable $e) {}
+        }
+
+        return response()->json([
+            'success' => true,
+            'partial' => $failedCount > 0,
+            'message' => "Sinkronisasi diproses ({$syncedCount} transaksi baru, {$duplicateCount} duplikat, {$failedCount} gagal).",
+            'synced_count' => $syncedCount,
+            'duplicate_count' => $duplicateCount,
+            'failed_count' => $failedCount,
+            'results' => [
+                'shifts' => $shiftResults,
+                'transactions' => $trxResults,
+                'cash_movements' => $movResults,
+            ],
+        ]);
+    }
+
+    /**
+     * Ensure authenticated Kasir cannot forge cashier identity, terminal, or store location during offline sync.
+     */
+    protected function validateOfflineSyncPayloadAuth(?User $authUser, array $item, LocationStockService $stockService): ?JsonResponse
+    {
+        $terminalCode = $item['terminal_code'] ?? '';
+        $terminalExpected = $stockService->resolveExpectedLocationForTerminal($terminalCode);
+        $explicitLoc = (!empty($item['location_id']) || !empty($item['branch']))
+            ? $stockService->resolveLocation($item['location_id'] ?? null, $item['branch'] ?? null, null, null, 'STORE')
+            : null;
+
+        if ((!empty($item['location_id']) || !empty($item['branch'])) && $terminalExpected && $explicitLoc && $terminalExpected->id !== $explicitLoc->id) {
+            return response()->json([
+                'success' => false,
+                'error_code' => 'TERMINAL_LOCATION_MISMATCH',
+                'message' => "Terminal {$terminalCode} terdaftar di {$terminalExpected->name}, tidak cocok dengan lokasi {$explicitLoc->name}.",
+            ], 422);
+        }
+
+        if ($authUser && $authUser->isKasir()) {
+            if (!empty($item['cashier_nik']) && $item['cashier_nik'] !== $authUser->nik && $item['cashier_nik'] !== $authUser->username) {
+                return response()->json([
+                    'success' => false,
+                    'error_code' => 'IDENTITY_MISMATCH',
+                    'message' => "Identitas kasir pada payload sinkronisasi ({$item['cashier_nik']}) tidak sesuai dengan sesi akun Anda ({$authUser->nik}).",
+                ], 403);
+            }
+
+            $targetLoc = $explicitLoc ?: $terminalExpected;
+            if ($targetLoc && !$stockService->isUserAllowedInLocation($authUser, $targetLoc)) {
+                return response()->json([
+                    'success' => false,
+                    'error_code' => 'LOCATION_FORBIDDEN',
+                    'message' => "Akun Kasir Anda tidak diizinkan menyinkronkan data untuk lokasi {$targetLoc->name}.",
+                ], 403);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Process a single offline shift OPEN or CLOSE item idempotently.
+     */
+    protected function syncOfflineShiftItem(array $shiftData, ?User $authUser, LocationStockService $stockService): array
+    {
+        $offlineId = $shiftData['offline_id'];
+        $action = strtoupper($shiftData['action']);
+        $terminalCode = $shiftData['terminal_code'];
+
         try {
-            foreach ($transactionsToSync as $trxData) {
-                $invoiceNumber = $trxData['invoice_number'];
+            return DB::transaction(function () use ($shiftData, $offlineId, $action, $terminalCode, $authUser, $stockService) {
+                if ($action === 'OPEN') {
+                    $existingByOffId = CashierShift::where('offline_id', $offlineId)->first();
+                    if (!$existingByOffId && !empty($shiftData['shift_code'])) {
+                        $existingByOffId = CashierShift::where('shift_code', $shiftData['shift_code'])->first();
+                    }
+                    if ($existingByOffId) {
+                        return [
+                            'offline_id' => $offlineId,
+                            'shift_code' => $existingByOffId->shift_code,
+                            'server_id' => $existingByOffId->id,
+                            'action' => 'OPEN',
+                            'status' => 'ALREADY_SYNCED',
+                        ];
+                    }
 
-                // 1. Deduplication Guard: Check if transaction already synced
-                $existing = Transaction::where('invoice_number', $invoiceNumber)->first();
-                if ($existing) {
-                    $duplicateTransactions[] = [
-                        'offline_id' => $trxData['offline_id'],
-                        'invoice_number' => $invoiceNumber,
-                        'server_id' => $existing->id,
-                        'status' => 'ALREADY_SYNCED',
+                    $openOnTerminal = CashierShift::where('terminal_code', $terminalCode)->where('status', 'OPEN')->first();
+                    if ($openOnTerminal) {
+                        return [
+                            'offline_id' => $offlineId,
+                            'shift_code' => $openOnTerminal->shift_code,
+                            'server_id' => $openOnTerminal->id,
+                            'action' => 'OPEN',
+                            'status' => 'ALREADY_SYNCED',
+                        ];
+                    }
+
+                    $user = ($authUser && $authUser->isKasir())
+                        ? $authUser
+                        : ((!empty($shiftData['cashier_nik']) ? User::where('nik', $shiftData['cashier_nik'])->first() : null) ?? $authUser);
+
+                    $resolvedLoc = $stockService->resolveLocation(
+                        $shiftData['location_id'] ?? null,
+                        $shiftData['branch'] ?? null,
+                        $terminalCode,
+                        $user,
+                        'STORE'
+                    );
+
+                    $shiftCode = !empty($shiftData['shift_code'])
+                        ? $shiftData['shift_code']
+                        : ('CS-' . date('Ymd') . '-' . strtoupper(Str::slug($terminalCode, '')) . '-' . Str::upper(Str::random(4)));
+
+                    $openingCash = (float) ($shiftData['opening_cash'] ?? 0);
+                    $openedAt = !empty($shiftData['opened_at']) ? Carbon::parse($shiftData['opened_at']) : now();
+
+                    $shift = CashierShift::create([
+                        'shift_code' => $shiftCode,
+                        'offline_id' => $offlineId,
+                        'terminal_code' => $terminalCode,
+                        'location_id' => $resolvedLoc?->id,
+                        'branch' => $resolvedLoc?->name ?? ($shiftData['branch'] ?? $user?->branch ?? 'Toko Pusat'),
+                        'user_id' => $user?->id,
+                        'cashier_nik' => $user?->nik ?? ($shiftData['cashier_nik'] ?? 'OFFLINE'),
+                        'cashier_name' => $user?->name ?? ($shiftData['cashier_name'] ?? 'Kasir Offline'),
+                        'opening_cash' => $openingCash,
+                        'cash_sales_total' => 0,
+                        'qris_sales_total' => 0,
+                        'credit_sales_total' => 0,
+                        'total_sales' => 0,
+                        'transaction_count' => 0,
+                        'cash_in' => 0,
+                        'cash_out' => 0,
+                        'expected_cash' => $openingCash,
+                        'status' => 'OPEN',
+                        'opened_at' => $openedAt,
+                    ]);
+
+                    return [
+                        'offline_id' => $offlineId,
+                        'shift_code' => $shift->shift_code,
+                        'server_id' => $shift->id,
+                        'action' => 'OPEN',
+                        'status' => 'SYNCED',
                     ];
-                    continue;
                 }
 
-                // 2. Identify or Allocate Shift
-                $terminalCode = $trxData['terminal_code'];
-                $shift = CashierShift::where('terminal_code', $terminalCode)
-                    ->where('status', 'OPEN')
-                    ->latest('id')
-                    ->lockForUpdate()
-                    ->first();
-
+                // action === 'CLOSE'
+                $shift = !empty($shiftData['shift_code'])
+                    ? CashierShift::where('shift_code', $shiftData['shift_code'])->lockForUpdate()->first()
+                    : null;
                 if (!$shift) {
                     $shift = CashierShift::where('terminal_code', $terminalCode)
+                        ->where('status', 'OPEN')
                         ->latest('id')
                         ->lockForUpdate()
                         ->first();
                 }
 
                 if (!$shift) {
-                    $user = (!empty($trxData['cashier_nik']) ? User::where('nik', $trxData['cashier_nik'])->first() : null)
-                        ?? \Illuminate\Support\Facades\Auth::user();
+                    return [
+                        'offline_id' => $offlineId,
+                        'action' => 'CLOSE',
+                        'status' => 'FAILED',
+                        'message' => "Shift aktif pada terminal {$terminalCode} tidak ditemukan untuk ditutup.",
+                    ];
+                }
+
+                if ($shift->status === 'CLOSED') {
+                    return [
+                        'offline_id' => $offlineId,
+                        'shift_code' => $shift->shift_code,
+                        'server_id' => $shift->id,
+                        'action' => 'CLOSE',
+                        'status' => 'ALREADY_SYNCED',
+                    ];
+                }
+
+                $actualCash = (float) ($shiftData['actual_cash'] ?? $shift->expected_cash);
+                $shift->closeShift($actualCash, $shiftData['closing_notes'] ?? null);
+                if (!empty($shiftData['closed_at'])) {
+                    $shift->closed_at = Carbon::parse($shiftData['closed_at']);
+                    $shift->save();
+                }
+
+                return [
+                    'offline_id' => $offlineId,
+                    'shift_code' => $shift->shift_code,
+                    'server_id' => $shift->id,
+                    'action' => 'CLOSE',
+                    'status' => 'SYNCED',
+                ];
+            });
+        } catch (\Throwable $e) {
+            return [
+                'offline_id' => $offlineId,
+                'action' => $action,
+                'status' => 'FAILED',
+                'message' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Process a single offline transaction atomically with idempotency and location-scoped FEFO/FIFO deduction.
+     */
+    protected function syncOfflineTransactionItem(array $trxData, ?User $authUser, LocationStockService $stockService): array
+    {
+        $offlineId = $trxData['offline_id'];
+        $invoiceNumber = $trxData['invoice_number'];
+
+        try {
+            return DB::transaction(function () use ($trxData, $offlineId, $invoiceNumber, $authUser, $stockService) {
+                $existing = Transaction::where('offline_id', $offlineId)
+                    ->orWhere('invoice_number', $invoiceNumber)
+                    ->first();
+                if ($existing) {
+                    return [
+                        'offline_id' => $offlineId,
+                        'invoice_number' => $existing->invoice_number,
+                        'server_id' => $existing->id,
+                        'status' => 'ALREADY_SYNCED',
+                    ];
+                }
+
+                $terminalCode = $trxData['terminal_code'];
+                $shift = CashierShift::where('terminal_code', $terminalCode)
+                    ->where('status', 'OPEN')
+                    ->latest('id')
+                    ->lockForUpdate()
+                    ->first()
+                    ?? CashierShift::where('terminal_code', $terminalCode)
+                        ->latest('id')
+                        ->lockForUpdate()
+                        ->first();
+
+                $resolvedUser = ($authUser && $authUser->isKasir())
+                    ? $authUser
+                    : ((!empty($trxData['cashier_nik']) ? User::where('nik', $trxData['cashier_nik'])->first() : null) ?? $authUser);
+
+                $storeLocation = $stockService->resolveLocation(
+                    $trxData['location_id'] ?? $shift?->location_id,
+                    $trxData['branch'] ?? $shift?->branch,
+                    $terminalCode,
+                    $resolvedUser,
+                    'STORE'
+                );
+
+                if (!$shift) {
                     $shiftCode = 'CS-' . date('Ymd') . '-' . strtoupper(Str::slug($terminalCode, '')) . '-OFFLINE';
+                    while (CashierShift::where('shift_code', $shiftCode)->exists()) {
+                        $shiftCode .= '-' . Str::upper(Str::random(3));
+                    }
                     $shift = CashierShift::create([
                         'shift_code' => $shiftCode,
                         'terminal_code' => $terminalCode,
-                        'user_id' => $user?->id,
-                        'cashier_nik' => $trxData['cashier_nik'] ?? ($user?->nik ?? 'OFFLINE'),
-                        'cashier_name' => $trxData['cashier_name'] ?? ($user?->name ?? 'Kasir Offline'),
+                        'location_id' => $storeLocation?->id,
+                        'branch' => $storeLocation?->name ?? ($trxData['branch'] ?? $resolvedUser?->branch ?? 'Toko Pusat'),
+                        'user_id' => $resolvedUser?->id,
+                        'cashier_nik' => $resolvedUser?->nik ?? ($trxData['cashier_nik'] ?? 'OFFLINE'),
+                        'cashier_name' => $resolvedUser?->name ?? ($trxData['cashier_name'] ?? 'Kasir Offline'),
                         'opening_cash' => 0,
                         'cash_sales_total' => 0,
                         'qris_sales_total' => 0,
@@ -496,18 +897,24 @@ class TransactionController extends Controller
                     ]);
                 }
 
-                $user = User::where('nik', $trxData['cashier_nik'] ?? $shift->cashier_nik)->first();
-                $cashierName = $trxData['cashier_name'] ?? $shift->cashier_name;
+                $cashierName = ($authUser && $authUser->isKasir())
+                    ? $authUser->name
+                    : ($trxData['cashier_name'] ?? $shift->cashier_name);
 
-                // 3. Member Validation
+                $useStoreStock = $storeLocation !== null && (
+                    !empty($trxData['location_id'])
+                    || !empty($trxData['branch'])
+                    || $stockService->hasStoreStocks()
+                );
+
                 $member = null;
                 if (!empty($trxData['member_nik'])) {
                     $member = Member::where('nik', $trxData['member_nik'])->lockForUpdate()->first();
                 }
 
-                // 4. Process Items & Deduct Stock
                 $processedItems = [];
                 $subtotal = 0;
+                $hasStockConflict = false;
 
                 foreach ($trxData['items'] as $rawItem) {
                     $product = null;
@@ -522,7 +929,6 @@ class TransactionController extends Controller
                     $unitPrice = (float) ($rawItem['price'] ?? 0);
                     $itemTotal = (float) ($rawItem['total'] ?? ($unitPrice * $qty));
 
-                    // If product not in master DB, auto-register fallback product so foreign key is satisfied
                     if (!$product) {
                         $fallbackSku = !empty($rawItem['sku']) ? $rawItem['sku'] : ('GEN-' . Str::upper(Str::random(6)));
                         $product = Product::firstOrCreate(
@@ -542,16 +948,46 @@ class TransactionController extends Controller
 
                     $itemUnit = $rawItem['unit'] ?? $product->unit;
                     $baseQty = $product->convertToBaseUnits($itemUnit, $qty);
-                    $product->stock = max(0, $product->stock - $baseQty);
-                    if ($product->stock <= 0) {
-                        $product->status = 'HABIS';
-                    } elseif ($product->stock <= $product->min_stock) {
-                        $product->status = 'STOK_RENDAH';
+                    $primaryBatchId = null;
+                    $batchAllocations = null;
+
+                    if ($useStoreStock && $storeLocation && \App\Models\ProductStock::where('product_id', $product->id)->where('location_id', $storeLocation->id)->exists()) {
+                        $beforeLocStock = (int) \App\Models\ProductStock::where('product_id', $product->id)
+                            ->where('location_id', $storeLocation->id)
+                            ->value('stock');
+                        if ($beforeLocStock < $baseQty) {
+                            $hasStockConflict = true;
+                        }
+                        $deductRes = $stockService->deductStock($product->id, $storeLocation->id, $baseQty, [
+                            'movement_type' => 'SALE_OUT',
+                            'allow_negative' => true,
+                            'reference_type' => Transaction::class,
+                            'reference_number' => $invoiceNumber,
+                            'user_id' => $resolvedUser?->id,
+                            'notes' => "Sinkronisasi offline {$invoiceNumber} ({$storeLocation->name})",
+                        ]);
+                        if ($deductRes['success']) {
+                            $primaryBatchId = $deductRes['primary_batch_id'] ?? null;
+                            $batchAllocations = !empty($deductRes['allocations']) ? $deductRes['allocations'] : null;
+                        }
+                        $product->refresh();
+                    } else {
+                        if ((int) $product->stock < $baseQty) {
+                            $hasStockConflict = true;
+                        }
+                        $product->stock = max(0, $product->stock - $baseQty);
+                        if ($product->stock <= 0) {
+                            $product->status = 'HABIS';
+                        } elseif ($product->stock <= $product->min_stock) {
+                            $product->status = 'STOK_RENDAH';
+                        }
+                        $product->save();
                     }
-                    $product->save();
 
                     $processedItems[] = [
                         'product_id' => $product->id,
+                        'stock_batch_id' => $primaryBatchId,
+                        'batch_allocations' => $batchAllocations,
                         'sku' => $product->sku,
                         'barcode' => $product->barcode,
                         'product_name' => $product->name,
@@ -573,13 +1009,15 @@ class TransactionController extends Controller
                 $method = strtoupper($trxData['payment_method']);
                 $createdAt = !empty($trxData['created_at']) ? Carbon::parse($trxData['created_at']) : now();
 
-                // 5. Create Transaction Record preserving offline invoice number & timestamps
                 $transaction = new Transaction([
                     'invoice_number' => $invoiceNumber,
+                    'offline_id' => $offlineId,
                     'shift_id' => $shift->id,
-                    'user_id' => $user?->id,
+                    'user_id' => $resolvedUser?->id,
                     'cashier_name' => $cashierName,
                     'terminal_code' => $shift->terminal_code,
+                    'location_id' => $storeLocation?->id,
+                    'branch' => $storeLocation?->name ?? $shift->branch,
                     'member_id' => $member?->id,
                     'member_nik' => $member?->nik,
                     'member_name' => $member?->name,
@@ -599,14 +1037,12 @@ class TransactionController extends Controller
                 $transaction->updated_at = now();
                 $transaction->save();
 
-                // 6. Save Transaction Items
                 foreach ($processedItems as $itemData) {
                     TransactionItem::create(array_merge($itemData, ['transaction_id' => $transaction->id]));
                 }
 
-                // 7. Member Kasbon if KREDIT
                 if ($method === 'KREDIT' && $member) {
-                    $branchName = $user?->branch ?? "Terminal {$shift->terminal_code}";
+                    $branchName = $storeLocation?->name ?? ($resolvedUser?->branch ?? "Terminal {$shift->terminal_code}");
                     $member->recordKasbon(
                         amount: $grandTotal,
                         invoiceNumber: $invoiceNumber,
@@ -617,7 +1053,6 @@ class TransactionController extends Controller
                     );
                 }
 
-                // 8. Update Shift Financial Figures
                 if ($method === 'TUNAI') {
                     $shift->cash_sales_total += $grandTotal;
                 } elseif ($method === 'QRIS' || $method === 'TRANSFER') {
@@ -632,76 +1067,112 @@ class TransactionController extends Controller
                 $shift->total_sales += $grandTotal;
                 $shift->transaction_count += 1;
                 $shift->expected_cash = $shift->calculateExpectedCash();
+                if ($shift->status === 'CLOSED' && $shift->actual_cash !== null) {
+                    $shift->variance = round((float) $shift->actual_cash - (float) $shift->expected_cash, 2);
+                }
                 $shift->save();
 
-                $syncedTransactions[] = [
-                    'offline_id' => $trxData['offline_id'],
+                return [
+                    'offline_id' => $offlineId,
                     'invoice_number' => $invoiceNumber,
                     'server_id' => $transaction->id,
                     'status' => 'SYNCED',
+                    'stock_conflict' => $hasStockConflict,
                 ];
-            }
+            });
+        } catch (\Throwable $e) {
+            return [
+                'offline_id' => $offlineId,
+                'invoice_number' => $invoiceNumber,
+                'status' => 'FAILED',
+                'message' => $e->getMessage(),
+            ];
+        }
+    }
 
-            // Process Cash Movements
-            foreach ($movementsToSync as $movData) {
-                $termCode = $movData['terminal_code'];
-                $shift = CashierShift::where('terminal_code', $termCode)->where('status', 'OPEN')->latest('id')->first()
-                    ?? CashierShift::where('terminal_code', $termCode)->latest('id')->first();
+    /**
+     * Process a single offline cash movement idempotently by offline_id.
+     */
+    protected function syncOfflineCashMovementItem(array $movData, ?User $authUser, LocationStockService $stockService): array
+    {
+        $offlineId = $movData['offline_id'];
 
-                if ($shift) {
-                    $isIncoming = in_array(strtoupper($movData['type']), ['IN', 'KAS_MASUK']);
-                    $amount = (float) $movData['amount'];
-                    if ($isIncoming) {
-                        $shift->cash_in += $amount;
-                    } else {
-                        $shift->cash_out += $amount;
-                    }
-                    $shift->expected_cash = $shift->calculateExpectedCash();
-                    $shift->save();
+        try {
+            return DB::transaction(function () use ($movData, $offlineId, $authUser, $stockService) {
+                $existing = CashMovement::where('offline_id', $offlineId)->first();
+                if ($existing) {
+                    return [
+                        'offline_id' => $offlineId,
+                        'server_id' => $existing->id,
+                        'status' => 'ALREADY_SYNCED',
+                    ];
                 }
 
-                $syncedMovements[] = [
-                    'offline_id' => $movData['offline_id'],
-                    'status' => 'SYNCED'
+                $termCode = $movData['terminal_code'];
+                $shift = !empty($movData['shift_code'])
+                    ? CashierShift::where('shift_code', $movData['shift_code'])->lockForUpdate()->first()
+                    : null;
+                if (!$shift) {
+                    $shift = CashierShift::where('terminal_code', $termCode)->where('status', 'OPEN')->latest('id')->lockForUpdate()->first()
+                        ?? CashierShift::where('terminal_code', $termCode)->latest('id')->lockForUpdate()->first();
+                }
+
+                if (!$shift) {
+                    return [
+                        'offline_id' => $offlineId,
+                        'status' => 'FAILED',
+                        'message' => "Tidak ditemukan sesi shift pada terminal {$termCode} untuk mutasi kas.",
+                    ];
+                }
+
+                $storeLoc = $stockService->resolveLocation(
+                    $movData['location_id'] ?? $shift->location_id,
+                    $movData['branch'] ?? $shift->branch,
+                    $termCode,
+                    $authUser,
+                    'STORE'
+                );
+
+                $amount = (float) $movData['amount'];
+                $type = strtoupper($movData['type']);
+                $isIncoming = in_array($type, ['IN', 'KAS_MASUK']);
+
+                $movement = CashMovement::create([
+                    'offline_id' => $offlineId,
+                    'shift_id' => $shift->id,
+                    'location_id' => $storeLoc?->id ?? $shift->location_id,
+                    'terminal_code' => $termCode,
+                    'type' => $type,
+                    'amount' => $amount,
+                    'reason' => $movData['reason'] ?? 'Mutasi Kas Offline',
+                    'user_id' => $authUser?->id ?? $shift->user_id,
+                    'cashier_nik' => $authUser?->nik ?? ($movData['cashier_nik'] ?? $shift->cashier_nik),
+                    'occurred_at' => !empty($movData['created_at']) ? Carbon::parse($movData['created_at']) : now(),
+                ]);
+
+                if ($isIncoming) {
+                    $shift->cash_in += $amount;
+                } else {
+                    $shift->cash_out += $amount;
+                }
+                $shift->expected_cash = $shift->calculateExpectedCash();
+                if ($shift->status === 'CLOSED' && $shift->actual_cash !== null) {
+                    $shift->variance = round((float) $shift->actual_cash - (float) $shift->expected_cash, 2);
+                }
+                $shift->save();
+
+                return [
+                    'offline_id' => $offlineId,
+                    'server_id' => $movement->id,
+                    'status' => 'SYNCED',
                 ];
-            }
-
-            DB::commit();
-
-            // Notify Manager
-            $totalCount = count($syncedTransactions);
-            if ($totalCount > 0) {
-                try {
-                    NotificationController::notify(
-                        role: 'MANAGER',
-                        title: "Sinkronisasi Offline Selesai: {$totalCount} Transaksi",
-                        message: "Sistem berhasil menyinkronkan {$totalCount} transaksi kasir yang tercatat saat offline ke database server utama.",
-                        category: 'SALES',
-                        link: '/kasir/transactions',
-                        icon: 'cloud_sync',
-                        color: 'emerald',
-                        referenceId: 'SYNC-' . date('YmdHis')
-                    );
-                } catch (\Throwable $e) {}
-            }
-
-            return response()->json([
-                'success' => true,
-                'message' => "Sinkronisasi berhasil diproses ({$totalCount} transaksi disinkronkan, " . count($duplicateTransactions) . " duplikat diabaikan).",
-                'synced_count' => $totalCount,
-                'duplicate_count' => count($duplicateTransactions),
-                'results' => [
-                    'transactions' => array_merge($syncedTransactions, $duplicateTransactions),
-                    'cash_movements' => $syncedMovements,
-                ],
-            ]);
-
+            });
         } catch (\Throwable $e) {
-            DB::rollBack();
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal memproses sinkronisasi offline: ' . $e->getMessage(),
-            ], 500);
+            return [
+                'offline_id' => $offlineId,
+                'status' => 'FAILED',
+                'message' => $e->getMessage(),
+            ];
         }
     }
 

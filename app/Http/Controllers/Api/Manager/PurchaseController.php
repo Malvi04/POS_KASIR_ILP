@@ -14,6 +14,7 @@ use App\Models\PurchaseItem;
 use App\Models\PurchasePriceHistory;
 use App\Models\StockBatch;
 use App\Models\Supplier;
+use App\Services\SupplierProductSyncService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -29,9 +30,14 @@ class PurchaseController extends Controller
      */
     public function meta(): JsonResponse
     {
-        $suppliers = Supplier::where('status', 'AKTIF')
+        $suppliers = Supplier::regular()
+            ->where('status', 'AKTIF')
             ->orderBy('name')
-            ->get(['id', 'code', 'name', 'phone', 'address', 'category']);
+            ->get(['id', 'code', 'name', 'company_name', 'phone', 'address', 'city', 'category', 'business_categories', 'status']);
+
+        $allSuppliers = Supplier::regular()
+            ->orderBy('name')
+            ->get(['id', 'code', 'name', 'status']);
 
         $products = Product::with('units')
             ->where('is_consignment', false)
@@ -79,6 +85,7 @@ class PurchaseController extends Controller
                 'warehouse_name' => $warehouse?->name ?? 'Gudang Pusat (DC)',
                 'warehouse_id' => $warehouse?->id,
                 'suppliers' => $suppliers,
+                'all_suppliers' => $allSuppliers,
                 'products' => $products,
             ],
         ]);
@@ -91,11 +98,17 @@ class PurchaseController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:150',
+            'company_name' => 'nullable|string|max:150',
             'owner_name' => 'nullable|string|max:100',
+            'pic_name' => 'nullable|string|max:100',
             'phone' => 'nullable|string|max:30',
+            'email' => 'nullable|email|max:150',
             'address' => 'nullable|string|max:500',
-            'category' => 'nullable|string|max:50',
-            'notes' => 'nullable|string|max:500',
+            'city' => 'nullable|string|max:100',
+            'category' => 'nullable|string|max:100',
+            'business_categories' => 'nullable|array',
+            'business_categories.*' => 'string|max:100',
+            'notes' => 'nullable|string|max:1000',
         ]);
 
         $cleanName = trim((string) preg_replace('/\s+/', ' ', $validated['name']));
@@ -126,17 +139,35 @@ class PurchaseController extends Controller
                     $code = 'SUP-' . str_pad((string) $nextNum, 3, '0', STR_PAD_LEFT);
                 }
 
+                $pic = $validated['pic_name'] ?? ($validated['owner_name'] ?? null);
+                $categories = collect($validated['business_categories'] ?? [])
+                    ->map(fn ($c) => trim((string) $c))
+                    ->filter(fn ($c) => $c !== '')
+                    ->unique(fn ($c) => mb_strtolower($c))
+                    ->values()
+                    ->all();
+                if (empty($categories) && !empty($validated['category'])) {
+                    $categories = [trim((string) $validated['category'])];
+                }
+                $categorySummary = !empty($categories) ? implode(', ', $categories) : 'Supplier Umum';
+
                 $supplier = Supplier::create([
                     'code' => $code,
                     'name' => $cleanName,
-                    'owner_name' => $validated['owner_name'] ?? null,
+                    'company_name' => $validated['company_name'] ?? null,
+                    'owner_name' => $pic,
+                    'pic_name' => $pic,
                     'phone' => $validated['phone'] ?? null,
+                    'email' => $validated['email'] ?? null,
                     'address' => $validated['address'] ?? null,
-                    'category' => $validated['category'] ?? 'Supplier Barang',
+                    'city' => $validated['city'] ?? null,
+                    'category' => mb_substr($categorySummary, 0, 250),
+                    'business_categories' => $categories,
                     'commission_percent' => 0,
                     'settlement_period' => 'BULANAN',
                     'status' => 'AKTIF',
-                    'notes' => $validated['notes'] ?? 'Supplier pembelian barang reguler',
+                    'supplier_type' => Supplier::TYPE_REGULAR,
+                    'notes' => $validated['notes'] ?? null,
                 ]);
 
                 return ['duplicate' => false, 'supplier' => $supplier];
@@ -307,6 +338,21 @@ class PurchaseController extends Controller
             'items.*.discount_amount' => 'nullable|numeric|min:0',
         ]);
 
+        // Enforce active & regular supplier rules (Rule 5 & Rule 13)
+        $supplier = Supplier::find((int) $validated['supplier_id']);
+        if (!$supplier || $supplier->supplier_type === Supplier::TYPE_CONSIGNMENT || str_starts_with((string) $supplier->code, 'UMKM-')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Mitra konsinyasi UMKM tidak dapat dipilih untuk transaksi pembelian reguler.',
+            ], 422);
+        }
+        if (strtoupper((string) $supplier->status) !== 'AKTIF') {
+            return response()->json([
+                'success' => false,
+                'message' => "Supplier [{$supplier->name}] berstatus Nonaktif dan tidak dapat digunakan untuk transaksi pembelian baru.",
+            ], 422);
+        }
+
         // Ensure normal purchase does not include consignment products
         $productIds = collect($validated['items'])->pluck('product_id')->unique()->all();
         $products = Product::with('units')->whereIn('id', $productIds)->get()->keyBy('id');
@@ -451,6 +497,20 @@ class PurchaseController extends Controller
             'items.*.purchase_price' => 'required|numeric|min:0',
             'items.*.discount_amount' => 'nullable|numeric|min:0',
         ]);
+
+        $supplier = Supplier::find((int) $validated['supplier_id']);
+        if (!$supplier || $supplier->supplier_type === Supplier::TYPE_CONSIGNMENT || str_starts_with((string) $supplier->code, 'UMKM-')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Mitra konsinyasi UMKM tidak dapat dipilih untuk transaksi pembelian reguler.',
+            ], 422);
+        }
+        if (($validated['status'] ?? $purchase->status) !== Purchase::STATUS_DIBATALKAN && strtoupper((string) $supplier->status) !== 'AKTIF') {
+            return response()->json([
+                'success' => false,
+                'message' => "Supplier [{$supplier->name}] berstatus Nonaktif dan tidak dapat digunakan untuk transaksi pembelian baru.",
+            ], 422);
+        }
 
         $productIds = collect($validated['items'])->pluck('product_id')->unique()->all();
         $products = Product::with('units')->whereIn('id', $productIds)->get()->keyBy('id');
@@ -687,10 +747,11 @@ class PurchaseController extends Controller
                     }
 
                     // 3. Create StockBatch for FIFO & FEFO
-                    StockBatch::create([
+                    $warehouseLocId = $purchase->location_id ?: $warehouse?->id;
+                    $createdBatch = StockBatch::create([
                         'batch_number' => $batchNumber,
                         'product_id' => $product->id,
-                        'location_id' => $purchase->location_id ?: $warehouse?->id,
+                        'location_id' => $warehouseLocId,
                         'supplier_id' => $purchase->supplier_id,
                         'purchase_id' => $purchase->id,
                         'goods_receipt_id' => $receipt->id,
@@ -704,10 +765,29 @@ class PurchaseController extends Controller
                         'notes' => $note !== '' ? $note : "Penerimaan {$receiptNo} ({$purchase->purchase_number})",
                     ]);
 
-                    // 4. Increment warehouse stock & update last_cost_price (keep price & member_price intact!)
-                    $product->stock = (int) $product->stock + $baseQtyAdded;
-                    $product->last_cost_price = $newBaseUnitCost;
-                    $product->cost_price = $newBaseUnitCost;
+                    // 3b. Sync Warehouse ProductStock (Gudang Pusat) without touching Store Stock
+                    if ($warehouseLocId) {
+                        app(\App\Services\LocationStockService::class)->addStock($product->id, $warehouseLocId, $baseQtyAdded, [
+                            'skip_batch' => true,
+                            'movement_type' => 'PURCHASE_IN',
+                            'reference_type' => Purchase::class,
+                            'reference_id' => $purchase->id,
+                            'reference_number' => $purchase->purchase_number,
+                            'user_id' => Auth::id(),
+                            'notes' => "Penerimaan pembelian {$receiptNo} (Batch {$createdBatch->batch_number})",
+                        ]);
+                        $product->refresh();
+                    }
+
+                    // 4. Increment warehouse stock & update global last_cost_price from latest valid receipt (keep price & member_price intact!)
+                    $syncService = app(SupplierProductSyncService::class);
+                    $latestGlobalCost = $syncService->resolveGlobalLatestCostPrice($product->id) ?? $newBaseUnitCost;
+
+                    if (!$warehouseLocId) {
+                        $product->stock = (int) $product->stock + $baseQtyAdded;
+                    }
+                    $product->last_cost_price = $latestGlobalCost;
+                    $product->cost_price = $latestGlobalCost;
 
                     // FEFO: if new batch has expired_date and is earlier than current product expired_date (or product had none)
                     if ($batchExpDate) {
@@ -720,6 +800,9 @@ class PurchaseController extends Controller
                         ? 'HABIS'
                         : ($product->stock <= (int) $product->min_stock ? 'STOK_RENDAH' : 'TERSEDIA');
                     $product->save();
+
+                    // 4b. Auto-build / update supplier_products relationship & supplier-specific last purchase price
+                    $syncService->syncFromReceipt($purchase, $receipt, $product, $grItem, $receivedAt);
 
                     // 5. Append immutable PurchasePriceHistory record
                     $priceDiff = round($newBaseUnitCost - $previousPrice, 2);

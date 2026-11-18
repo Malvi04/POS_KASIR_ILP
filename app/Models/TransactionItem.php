@@ -13,6 +13,8 @@ class TransactionItem extends Model
     protected $fillable = [
         'transaction_id',
         'product_id',
+        'stock_batch_id',
+        'batch_allocations',
         'sku',
         'barcode',
         'product_name',
@@ -36,7 +38,13 @@ class TransactionItem extends Model
         'clearance_discount_percent' => 'float',
         'discount_amount' => 'float',
         'total_price' => 'float',
+        'batch_allocations' => 'array',
     ];
+
+    public function stockBatch(): BelongsTo
+    {
+        return $this->belongsTo(StockBatch::class);
+    }
 
     public function transaction(): BelongsTo
     {

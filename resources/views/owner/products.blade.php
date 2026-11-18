@@ -848,6 +848,7 @@ function ownerProductsApp() {
                             price: Number(p.price) || 0,
                             memberPrice: Number(p.member_price || p.price) || 0,
                             rackLocation: p.rack_location || '-',
+                            branchStock: (p.branch_stock && typeof p.branch_stock === 'object') ? p.branch_stock : {},
                             status: Number(p.stock) <= 0 ? 'HABIS' : (Number(p.stock) <= Number(p.min_stock || 10) ? 'STOK_RENDAH' : 'TERSEDIA')
                         }));
                         const dedup = this.deduplicateProducts(formatted);
@@ -862,18 +863,8 @@ function ownerProductsApp() {
         },
 
         ensureBranchStock(p) {
-            const total = Number(p.stock) || 0;
             if (!p.branchStock || typeof p.branchStock !== 'object') {
-                const gdg = Math.round(total * 0.5);
-                const pusat = Math.round(total * 0.25);
-                const cabA = Math.round(total * 0.15);
-                const cabB = Math.max(0, total - gdg - pusat - cabA);
-                p.branchStock = {
-                    'GDG-001': gdg,
-                    'CAB-001': pusat,
-                    'CAB-002': cabA,
-                    'CAB-003': cabB
-                };
+                p.branchStock = {};
             }
             return p;
         },
@@ -930,6 +921,7 @@ function ownerProductsApp() {
                             price: Number(p.price) || 0,
                             memberPrice: Number(p.member_price || p.price) || 0,
                             rackLocation: p.rack_location || '-',
+                            branchStock: (p.branch_stock && typeof p.branch_stock === 'object') ? p.branch_stock : {},
                             status: Number(p.stock) <= 0 ? 'HABIS' : (Number(p.stock) <= Number(p.min_stock || 10) ? 'STOK_RENDAH' : 'TERSEDIA')
                         }));
                         const existingSkus = new Set(this.products.map(p => p.sku));

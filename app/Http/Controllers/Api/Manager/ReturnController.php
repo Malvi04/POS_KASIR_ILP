@@ -141,9 +141,16 @@ class ReturnController extends Controller
             ], 422);
         }
 
-        $cabang = Location::where('type', 'STORE')->first() ?: Location::where('type', 'BRANCH')->first() ?: Location::first();
-        $dc = Location::where('type', 'WAREHOUSE')->first() ?: Location::where('type', 'DC')->first() ?: Location::first();
         $user = Auth::user();
+        $stockService = app(\App\Services\LocationStockService::class);
+        $cabang = $stockService->resolveLocation(
+            $request->integer('from_location_id') ?: null,
+            $request->input('branch'),
+            null,
+            $user,
+            'STORE'
+        ) ?: Location::where('type', 'STORE')->first() ?: Location::where('type', 'BRANCH')->first() ?: Location::first();
+        $dc = $stockService->getWarehouseLocation() ?: Location::where('type', 'DC')->first() ?: Location::first();
 
         $price = (float) $product->cost_price;
         $qty = (float)$validated['qty'];
@@ -181,8 +188,19 @@ class ReturnController extends Controller
                     'claim_price' => $price,
                 ]);
 
-                // Reduce store stock since item is being returned to DC
-                if ($product->stock >= $qty) {
+                // Reduce store stock at origin location since item is being returned to DC
+                $intQty = (int) round($qty);
+                if ($cabang && \App\Models\ProductStock::where('product_id', $product->id)->where('location_id', $cabang->id)->exists()) {
+                    $stockService->deductStock($product->id, $cabang->id, $intQty, [
+                        'movement_type' => 'RETURN_OUT',
+                        'allow_negative' => true,
+                        'reference_type' => StoreReturnHeader::class,
+                        'reference_id' => $header->id,
+                        'reference_number' => $header->return_number,
+                        'user_id' => $user?->id,
+                        'notes' => "Retur toko ke gudang ({$header->return_number})",
+                    ]);
+                } elseif ($product->stock >= $qty) {
                     $product->decrement('stock', $qty);
                 }
             }
@@ -231,13 +249,35 @@ class ReturnController extends Controller
      */
     public function updateStatus(Request $request, int $id): JsonResponse
     {
-        $header = StoreReturnHeader::findOrFail($id);
+        $header = StoreReturnHeader::with('items')->findOrFail($id);
 
         $validated = $request->validate([
             'status' => 'required|in:cek_fisik,disetujui,ditolak,selesai',
         ]);
 
-        $header->update(['status' => $validated['status']]);
+        $oldStatus = $header->status;
+        $newStatus = $validated['status'];
+
+        // If return is rejected by supervisor/warehouse, restore deducted store stock
+        if ($oldStatus !== 'ditolak' && $newStatus === 'ditolak') {
+            $stockService = app(\App\Services\LocationStockService::class);
+            if ($header->from_location_id) {
+                foreach ($header->items as $item) {
+                    $intQty = (int) round((float) $item->qty);
+                    if ($intQty > 0 && $item->product_id) {
+                        $stockService->addStock($item->product_id, $header->from_location_id, $intQty, [
+                            'movement_type' => 'RETURN_REJECTED_IN',
+                            'reference_type' => StoreReturnHeader::class,
+                            'reference_id' => $header->id,
+                            'reference_number' => $header->return_number,
+                            'notes' => "Pengembalian stok toko akibat retur ditolak ({$header->return_number})",
+                        ]);
+                    }
+                }
+            }
+        }
+
+        $header->update(['status' => $newStatus]);
 
         try {
             $readableStatus = strtoupper(str_replace('_', ' ', $validated['status']));
@@ -265,7 +305,27 @@ class ReturnController extends Controller
      */
     public function destroy(int $id): JsonResponse
     {
-        $header = StoreReturnHeader::findOrFail($id);
+        $header = StoreReturnHeader::with('items')->findOrFail($id);
+
+        // Restore store stock if draft/unapproved return is deleted
+        if (in_array($header->status, ['cek_fisik', 'draft'], true)) {
+            $stockService = app(\App\Services\LocationStockService::class);
+            if ($header->from_location_id) {
+                foreach ($header->items as $item) {
+                    $intQty = (int) round((float) $item->qty);
+                    if ($intQty > 0 && $item->product_id) {
+                        $stockService->addStock($item->product_id, $header->from_location_id, $intQty, [
+                            'movement_type' => 'RETURN_CANCELLED_IN',
+                            'reference_type' => StoreReturnHeader::class,
+                            'reference_id' => $header->id,
+                            'reference_number' => $header->return_number,
+                            'notes' => "Pengembalian stok toko akibat pembatalan dokumen retur ({$header->return_number})",
+                        ]);
+                    }
+                }
+            }
+        }
+
         $header->delete();
 
         return response()->json([

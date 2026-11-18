@@ -43,4 +43,29 @@ class Location extends Model
     {
         return $this->hasMany(StockTransfer::class, 'to_location_id');
     }
+
+    public function productStocks(): HasMany
+    {
+        return $this->hasMany(ProductStock::class);
+    }
+
+    public function stockBatches(): HasMany
+    {
+        return $this->hasMany(StockBatch::class);
+    }
+
+    public function stockMovements(): HasMany
+    {
+        return $this->hasMany(StockMovement::class);
+    }
+
+    public function scopeStores($query)
+    {
+        return $query->where('type', '!=', 'WAREHOUSE');
+    }
+
+    public function scopeWarehouses($query)
+    {
+        return $query->where('type', 'WAREHOUSE');
+    }
 }

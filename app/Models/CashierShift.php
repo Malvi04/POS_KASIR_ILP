@@ -13,7 +13,10 @@ class CashierShift extends Model
 
     protected $fillable = [
         'shift_code',
+        'offline_id',
         'terminal_code',
+        'location_id',
+        'branch',
         'user_id',
         'cashier_nik',
         'cashier_name',

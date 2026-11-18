@@ -15,20 +15,9 @@ class EnsureApiAuthenticated
      */
     public function handle(Request $request, Closure $next, ?string $requiredRole = null): Response
     {
-        // 1. Identify authenticated user from Web Session, Sanctum, or Staff Header
+        // 1. Identify authenticated user solely from Web Session or Sanctum token.
+        // Do NOT trust client-supplied cashier_nik or X-Staff-Id headers without session auth.
         $user = Auth::user();
-
-        if (!$user && $request->filled('cashier_nik')) {
-            $user = User::where('nik', $request->input('cashier_nik'))->first();
-            if ($user && $user->is_active) {
-                Auth::setUser($user);
-            }
-        } elseif (!$user && $request->header('X-Staff-Id')) {
-            $user = User::where('id', $request->header('X-Staff-Id'))->where('is_active', true)->first();
-            if ($user) {
-                Auth::setUser($user);
-            }
-        }
 
         // 2. Allow unit/feature testing environment fallback if test didn't invoke actingAs
         if (!$user && app()->runningUnitTests() && !$request->hasHeader('X-Security-Test')) {

@@ -66,11 +66,16 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
+    <!-- Dexie.js (IndexedDB) Offline Storage Engine & Migration -->
+    <script src="/js/vendor/dexie.min.js?v=2.2"></script>
+    <script src="/js/db/pos-db.js?v=2.2"></script>
+    <script src="/js/db/pos-migration.js?v=2.2"></script>
+
     <!-- Modular Cacheable Scripts (Non-blocking & Defer) -->
     <script src="/js/excel-export.js" defer></script>
-    <script src="/js/pos-realtime.js?v=2.1" defer></script>
-    <script src="/js/pos-offline-sync.js?v=2.1" defer></script>
-    <script src="/js/cashier-core.js?v=2.1" defer></script>
+    <script src="/js/pos-realtime.js?v=2.2" defer></script>
+    <script src="/js/pos-offline-sync.js?v=2.2" defer></script>
+    <script src="/js/cashier-core.js?v=2.2" defer></script>
 
     <!-- Local Alpine.js -->
     <script defer src="/js/alpine.min.js"></script>
@@ -117,7 +122,7 @@
             window.addEventListener('load', function () {
                 if ('caches' in window) {
                     caches.keys().then(function (keys) {
-                        keys.filter(function (k) { return k.indexOf('pos-ilp-') === 0 && k.indexOf('-v3') === -1; })
+                        keys.filter(function (k) { return k.indexOf('pos-ilp-') === 0 && (k.indexOf('-v1') !== -1 || k.indexOf('-v2') !== -1); })
                             .forEach(function (k) { caches.delete(k); });
                     }).catch(function () {});
                 }

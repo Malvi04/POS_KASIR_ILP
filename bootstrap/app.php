@@ -20,6 +20,9 @@ return Application::configure(basePath: dirname(__DIR__))
             \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
             \Illuminate\Session\Middleware\StartSession::class,
         ]);
+        $middleware->api(append: [
+            \App\Http\Middleware\HandleIdempotencyKey::class,
+        ]);
         $middleware->alias([
             'auth.web' => \App\Http\Middleware\EnsureWebAuthenticated::class,
             'auth.api' => \App\Http\Middleware\EnsureApiAuthenticated::class,

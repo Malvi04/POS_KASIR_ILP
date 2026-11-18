@@ -7,11 +7,14 @@ use App\Events\CashierShiftEvent;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Shared\NotificationController;
 use App\Models\Attendance;
+use App\Models\CashMovement;
 use App\Models\CashierShift;
 use App\Models\User;
+use App\Services\LocationStockService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -50,6 +53,8 @@ class ShiftController extends Controller
                 'id' => $shift->id,
                 'shift_code' => $shift->shift_code,
                 'terminal_code' => $shift->terminal_code,
+                'location_id' => $shift->location_id,
+                'branch' => $shift->branch,
                 'cashier_name' => $shift->cashier_name,
                 'cashier_nik' => $shift->cashier_nik,
                 'opening_cash' => (float) $shift->opening_cash,
@@ -84,6 +89,8 @@ class ShiftController extends Controller
                     'id' => $s->id,
                     'shift_code' => $s->shift_code,
                     'terminal_code' => $s->terminal_code,
+                    'location_id' => $s->location_id,
+                    'branch' => $s->branch,
                     'cashier_name' => $s->cashier_name,
                     'cashier_nik' => $s->cashier_nik,
                     'opening_cash' => (float) $s->opening_cash,
@@ -109,9 +116,45 @@ class ShiftController extends Controller
             'cashier_nik' => 'required|string|max:50',
             'cashier_name' => 'required|string|max:100',
             'opening_cash' => 'required|numeric|min:0',
+            'location_id' => 'nullable|integer|exists:locations,id',
             'branch' => 'nullable|string|max:100',
             'pin' => 'nullable|string',
         ]);
+
+        $authUser = Auth::user();
+        $stockService = app(LocationStockService::class);
+        $terminalExpected = $stockService->resolveExpectedLocationForTerminal($validated['terminal_code']);
+        $resolvedLoc = $stockService->resolveLocation(
+            $validated['location_id'] ?? null,
+            $validated['branch'] ?? null,
+            $validated['terminal_code'],
+            $authUser,
+            'STORE'
+        );
+
+        // Validate terminal vs explicit requested location mismatch
+        if ((!empty($validated['location_id']) || !empty($validated['branch'])) && $terminalExpected && $resolvedLoc && $terminalExpected->id !== $resolvedLoc->id) {
+            return response()->json([
+                'success' => false,
+                'message' => "Terminal {$validated['terminal_code']} terdaftar di {$terminalExpected->name}, tidak sesuai dengan lokasi {$resolvedLoc->name}.",
+            ], 422);
+        }
+
+        if ($authUser && $authUser->isKasir()) {
+            $locToCheck = $resolvedLoc ?: $terminalExpected;
+            if ($locToCheck && !$stockService->isUserAllowedInLocation($authUser, $locToCheck)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Akun Anda tidak diizinkan membuka shift pada lokasi {$locToCheck->name}.",
+                ], 403);
+            }
+            if (empty($validated['pin']) && $validated['cashier_nik'] !== $authUser->nik && $validated['cashier_nik'] !== $authUser->username) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Kasir tidak diizinkan membuka shift atas nama kasir lain tanpa verifikasi PIN.',
+                ], 403);
+            }
+        }
 
         if (!empty($validated['pin'])) {
             $user = User::where('nik', $validated['cashier_nik'])
@@ -140,7 +183,7 @@ class ShiftController extends Controller
 
         $user = User::where('nik', $validated['cashier_nik'])
             ->orWhere('username', $validated['cashier_nik'])
-            ->first();
+            ->first() ?? $authUser;
 
         $baseCode = 'CS-' . date('Ymd') . '-' . strtoupper(Str::slug($validated['terminal_code'], ''));
         $counter = CashierShift::whereDate('created_at', today())->count() + 1;
@@ -153,6 +196,8 @@ class ShiftController extends Controller
         $shift = CashierShift::create([
             'shift_code' => $shiftCode,
             'terminal_code' => $validated['terminal_code'],
+            'location_id' => $resolvedLoc?->id,
+            'branch' => $resolvedLoc?->name ?? ($validated['branch'] ?? $user?->branch ?? 'Toko Pusat'),
             'user_id' => $user?->id,
             'cashier_nik' => $validated['cashier_nik'],
             'cashier_name' => $validated['cashier_name'],
@@ -262,6 +307,18 @@ class ShiftController extends Controller
             ], 404);
         }
 
+        $authUser = Auth::user();
+        if ($authUser && $authUser->isKasir()) {
+            $ownsShift = ($shift->user_id && $shift->user_id === $authUser->id)
+                || ($shift->cashier_nik && ($shift->cashier_nik === $authUser->nik || $shift->cashier_nik === $authUser->username));
+            if (!$ownsShift) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Anda tidak diizinkan menutup sesi shift milik kasir lain ({$shift->cashier_name}).",
+                ], 403);
+            }
+        }
+
         $shift->closeShift((float) $validated['actual_cash'], $validated['closing_notes'] ?? null);
 
         // Update Jam Keluar Absensi Karyawan di PostgreSQL
@@ -343,12 +400,33 @@ class ShiftController extends Controller
     public function cashMovement(Request $request): JsonResponse
     {
         $validated = $request->validate([
+            'offline_id' => 'nullable|string|max:120',
             'shift_id' => 'nullable|integer|exists:cashier_shifts,id',
             'terminal_code' => 'nullable|string|max:50',
             'type' => 'required|in:IN,OUT,KAS_MASUK,PENGELUARAN_TUNAI,RETUR_TUNAI,CASH_DROP',
             'amount' => 'required|numeric|min:1',
             'reason' => 'nullable|string|max:255',
         ]);
+
+        if (!empty($validated['offline_id'])) {
+            $dup = CashMovement::where('offline_id', $validated['offline_id'])->first();
+            if ($dup) {
+                $existingShift = $dup->shift;
+                return response()->json([
+                    'success' => true,
+                    'duplicate' => true,
+                    'message' => 'Mutasi kas sudah tercatat sebelumnya (idempotent).',
+                    'data' => [
+                        'shift_id' => $existingShift?->id,
+                        'shift_code' => $existingShift?->shift_code,
+                        'terminal_code' => $dup->terminal_code,
+                        'expected_cash' => (float) ($existingShift?->expected_cash ?? 0),
+                        'cash_in' => (float) ($existingShift?->cash_in ?? 0),
+                        'cash_out' => (float) ($existingShift?->cash_out ?? 0),
+                    ],
+                ]);
+            }
+        }
 
         $query = CashierShift::where('status', 'OPEN');
         if (!empty($validated['shift_id'])) {
@@ -365,15 +443,45 @@ class ShiftController extends Controller
             ], 422);
         }
 
-        $isIncoming = in_array($validated['type'], ['IN', 'KAS_MASUK']);
-        if ($isIncoming) {
-            $shift->cash_in += $validated['amount'];
-        } else {
-            $shift->cash_out += $validated['amount'];
+        $authUser = Auth::user();
+        if ($authUser && $authUser->isKasir()) {
+            $ownsShift = ($shift->user_id && $shift->user_id === $authUser->id)
+                || ($shift->cashier_nik && ($shift->cashier_nik === $authUser->nik || $shift->cashier_nik === $authUser->username));
+            if (!$ownsShift) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Anda tidak diizinkan mencatat mutasi kas pada shift milik kasir lain ({$shift->cashier_name}).",
+                ], 403);
+            }
         }
 
-        $shift->expected_cash = $shift->calculateExpectedCash();
-        $shift->save();
+        $isIncoming = in_array($validated['type'], ['IN', 'KAS_MASUK']);
+        DB::transaction(function () use ($shift, $validated, $isIncoming, $authUser) {
+            $lockedShift = CashierShift::lockForUpdate()->find($shift->id);
+            CashMovement::create([
+                'offline_id' => $validated['offline_id'] ?? null,
+                'shift_id' => $lockedShift->id,
+                'location_id' => $lockedShift->location_id,
+                'terminal_code' => $lockedShift->terminal_code,
+                'type' => strtoupper($validated['type']),
+                'amount' => (float) $validated['amount'],
+                'reason' => $validated['reason'] ?? null,
+                'user_id' => $authUser?->id ?? $lockedShift->user_id,
+                'cashier_nik' => $authUser?->nik ?? $lockedShift->cashier_nik,
+                'occurred_at' => now(),
+            ]);
+
+            if ($isIncoming) {
+                $lockedShift->cash_in += $validated['amount'];
+            } else {
+                $lockedShift->cash_out += $validated['amount'];
+            }
+
+            $lockedShift->expected_cash = $lockedShift->calculateExpectedCash();
+            $lockedShift->save();
+        });
+
+        $shift->refresh();
 
         return response()->json([
             'success' => true,

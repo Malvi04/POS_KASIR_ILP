@@ -22,6 +22,7 @@ class WebRoutesSmokeTest extends TestCase
                 'role' => 'Manager',
                 'pin' => '123456',
                 'branch' => 'Pusat',
+                'is_active' => true,
                 'password' => Hash::make('password'),
             ]
         );

@@ -9,7 +9,7 @@
            userName: @js($authUser?->name ?? 'Manager'),
            userBranch: @js($authUser?->branch ?? 'Pusat'),
            openMenus: {
-               persediaan: {{ in_array($active, ['inventory', 'pembelian_barang', 'stock_opname', 'kirim_barang']) ? 'true' : 'false' }},
+               persediaan: {{ in_array($active, ['inventory', 'suppliers', 'pembelian_barang', 'stock_opname', 'kirim_barang']) ? 'true' : 'false' }},
                retur: {{ in_array($active, ['retur', 'retur_masuk']) ? 'true' : 'false' }},
                anggota: {{ in_array($active, ['members', 'member_detail']) ? 'true' : 'false' }}
            },
@@ -51,18 +51,22 @@
                         @click="openMenus.persediaan = !openMenus.persediaan"
                         :aria-expanded="openMenus.persediaan ? 'true' : 'false'"
                         aria-controls="submenu-persediaan"
-                        class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-colors text-[13px] {{ in_array($active, ['inventory', 'pembelian_barang', 'stock_opname', 'kirim_barang']) ? 'bg-[#eef2ff] text-[#0052cc] font-bold' : 'text-gray-600 hover:bg-gray-200 font-semibold' }} cursor-pointer">
+                        class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-colors text-[13px] {{ in_array($active, ['inventory', 'suppliers', 'pembelian_barang', 'stock_opname', 'kirim_barang']) ? 'bg-[#eef2ff] text-[#0052cc] font-bold' : 'text-gray-600 hover:bg-gray-200 font-semibold' }} cursor-pointer">
                     <div class="flex items-center gap-3">
-                        <span class="material-symbols-rounded text-[20px] {{ in_array($active, ['inventory', 'pembelian_barang', 'stock_opname', 'kirim_barang']) ? 'filled' : '' }}">inventory_2</span>
+                        <span class="material-symbols-rounded text-[20px] {{ in_array($active, ['inventory', 'suppliers', 'pembelian_barang', 'stock_opname', 'kirim_barang']) ? 'filled' : '' }}">inventory_2</span>
                         <span>Persediaan</span>
                     </div>
                     <span class="material-symbols-rounded text-[18px] transition-transform duration-200 text-gray-400"
                           :class="openMenus.persediaan ? 'rotate-180 text-[#0052cc]' : ''">expand_more</span>
                 </button>
-                <div id="submenu-persediaan" @if(!in_array($active, ['inventory', 'pembelian_barang', 'stock_opname', 'kirim_barang'])) x-cloak @endif x-show="openMenus.persediaan" x-transition.origin.top class="flex flex-col gap-1 pl-8 pr-1 py-1">
+                <div id="submenu-persediaan" @if(!in_array($active, ['inventory', 'suppliers', 'pembelian_barang', 'stock_opname', 'kirim_barang'])) x-cloak @endif x-show="openMenus.persediaan" x-transition.origin.top class="flex flex-col gap-1 pl-8 pr-1 py-1">
                     <a :href="getNavUrl('{{ url('/inventory') }}')" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12.5px] transition-colors {{ $active === 'inventory' ? 'bg-[#0052cc] text-white font-bold' : 'text-gray-600 hover:bg-gray-200 font-medium' }}">
                         <span class="w-1.5 h-1.5 rounded-full {{ $active === 'inventory' ? 'bg-white' : 'bg-gray-400' }}"></span>
                         <span>Master Produk &amp; Stok</span>
+                    </a>
+                    <a :href="getNavUrl('{{ url('/suppliers') }}')" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12.5px] transition-colors {{ $active === 'suppliers' ? 'bg-[#0052cc] text-white font-bold' : 'text-gray-600 hover:bg-gray-200 font-medium' }}">
+                        <span class="w-1.5 h-1.5 rounded-full {{ $active === 'suppliers' ? 'bg-white' : 'bg-gray-400' }}"></span>
+                        <span>Master Supplier</span>
                     </a>
                     <a :href="getNavUrl('{{ url('/pembelian-barang') }}')" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12.5px] transition-colors {{ $active === 'pembelian_barang' ? 'bg-[#0052cc] text-white font-bold' : 'text-gray-600 hover:bg-gray-200 font-medium' }}">
                         <span class="w-1.5 h-1.5 rounded-full {{ $active === 'pembelian_barang' ? 'bg-white' : 'bg-gray-400' }}"></span>

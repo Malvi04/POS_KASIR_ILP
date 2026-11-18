@@ -10,6 +10,7 @@ use App\Models\Product;
 use App\Models\Transaction;
 use App\Models\TransactionItem;
 use App\Models\User;
+use App\Services\LocationStockService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -25,6 +26,7 @@ class AccountingReportController extends Controller
     {
         $period = $request->query('period', 'monthly'); // daily, weekly, monthly, custom
         $branch = $request->query('branch', 'all');
+        $locationIdFilter = $request->integer('location_id') ?: null;
         $shiftId = $request->query('shift_id');
         $cashierNik = $request->query('cashier_nik');
 
@@ -45,15 +47,11 @@ class AccountingReportController extends Controller
             $endDate = $request->query('end_date', $today->toDateString());
         }
 
-        // Build Base Query
+        // Build Base Query (never filter branch using terminal_code LIKE heuristic)
         $query = Transaction::query()
             ->whereDate('created_at', '>=', $startDate)
             ->whereDate('created_at', '<=', $endDate)
             ->whereIn('status', ['SUCCESS', 'COMPLETED']);
-
-        if ($branch !== 'all') {
-            $query->where('terminal_code', 'LIKE', "%{$branch}%");
-        }
 
         if ($shiftId) {
             $query->where('shift_id', $shiftId);
@@ -65,21 +63,35 @@ class AccountingReportController extends Controller
             });
         }
 
-        $transactions = $query->with('items')->orderByDesc('created_at')->get();
+        $rawTransactions = $query->with(['items', 'location', 'shift'])->orderByDesc('created_at')->get();
+        $stockService = app(LocationStockService::class);
+        $locations = Location::where('type', '!=', 'WAREHOUSE')->orderBy('code')->get();
+        $filterResolution = $stockService->resolveReportFilterLocation($branch, $locationIdFilter);
+        $filterRequested = $filterResolution['requested'];
+        $filterLoc = $filterResolution['location'];
 
-        // 1. Overall Summary Metrics
-        $totalGrossSales = (float) $transactions->sum('subtotal');
-        $totalDiscounts = (float) $transactions->sum('discount_total');
-        $totalTax = (float) $transactions->sum('tax_total');
-        $totalGrandTotal = (float) $transactions->sum('grand_total');
+        $partitioned = $stockService->partitionTransactionsByStoreLocation(
+            $rawTransactions,
+            $locations,
+            $filterLoc,
+            $filterRequested
+        );
+        $transactions = $partitioned['store_transactions'];
+        $byLocationId = $partitioned['by_location_id'];
+
+        // 1. Overall Summary Metrics (strictly from mapped store transactions -> matches sum of branch_breakdown)
+        $totalGrossSales = round((float) $transactions->sum('subtotal'), 2);
+        $totalDiscounts = round((float) $transactions->sum('discount_total'), 2);
+        $totalTax = round((float) $transactions->sum('tax_total'), 2);
+        $totalGrandTotal = round((float) $transactions->sum('grand_total'), 2);
         $trxCount = $transactions->count();
         $averageBasket = $trxCount > 0 ? round($totalGrandTotal / $trxCount, 2) : 0;
 
         // Payment Method Breakdown
-        $cashSales = (float) $transactions->where('payment_method', 'TUNAI')->sum('grand_total');
-        $qrisSales = (float) $transactions->where('payment_method', 'QRIS')->sum('grand_total');
-        $creditSales = (float) $transactions->where('payment_method', 'KREDIT')->sum('grand_total');
-        $mixedSales = (float) $transactions->where('payment_method', 'CAMPURAN')->sum('grand_total');
+        $cashSales = round((float) $transactions->where('payment_method', 'TUNAI')->sum('grand_total'), 2);
+        $qrisSales = round((float) $transactions->where('payment_method', 'QRIS')->sum('grand_total'), 2);
+        $creditSales = round((float) $transactions->where('payment_method', 'KREDIT')->sum('grand_total'), 2);
+        $mixedSales = round((float) $transactions->where('payment_method', 'CAMPURAN')->sum('grand_total'), 2);
 
         // 2. Breakdown Per-Shift Kasir (Batch load shifts to eliminate N+1 queries)
         $shiftsData = [];
@@ -103,29 +115,20 @@ class AccountingReportController extends Controller
             ];
         }
 
-        // 3. Breakdown Per-Cabang (Real PostgreSQL Location & Transaction Aggregation)
-        $locations = Location::where('type', '!=', 'WAREHOUSE')->orderBy('code')->get();
-        $txUserIds = $transactions->pluck('user_id')->filter()->unique()->all();
-        $userBranches = empty($txUserIds) ? collect() : User::whereIn('id', $txUserIds)->pluck('branch', 'id');
-
+        // 3. Breakdown Per-Cabang (Authoritative location_id & explicit historical fallback)
         $branchBreakdown = [];
         foreach ($locations as $idx => $loc) {
             $bName = $loc->name;
             $bCode = $loc->code ?: ('BR-' . str_pad((string) ($idx + 1), 3, '0', STR_PAD_LEFT));
-            $bTxs = $transactions->filter(function ($tx) use ($idx, $bName, $bCode, $userBranches) {
-                $term = strtolower((string) $tx->terminal_code);
-                $uBranch = strtolower((string) ($userBranches[$tx->user_id] ?? ''));
-                return ($uBranch !== '' && (str_contains($uBranch, strtolower($bName)) || str_contains(strtolower($bName), $uBranch))) ||
-                       str_contains($term, strtolower($bCode)) ||
-                       str_contains($term, 'cabang-' . ($idx + 1)) ||
-                       str_contains($term, 'pos-0' . ($idx + 1)) ||
-                       str_contains($term, strtolower($bName));
-            });
+            $bTxs = ($filterRequested && (!$filterLoc || $filterLoc->id !== $loc->id))
+                ? collect()
+                : ($byLocationId[$loc->id] ?? collect());
 
             $bCount = $bTxs->count();
-            $bRevenue = (float) $bTxs->sum('grand_total');
+            $bRevenue = round((float) $bTxs->sum('grand_total'), 2);
 
             $branchBreakdown[] = [
+                'location_id' => $loc->id,
                 'branch_code' => $bCode,
                 'branch_name' => $bName,
                 'transaction_count' => $bCount,
@@ -153,6 +156,7 @@ class AccountingReportController extends Controller
                 'start_date' => $startDate,
                 'end_date' => $endDate,
                 'branch' => $branch,
+                'location_id' => $locationIdFilter,
                 'shift_id' => $shiftId,
             ],
             'summary' => [
@@ -171,10 +175,14 @@ class AccountingReportController extends Controller
             ],
             'shifts_breakdown' => $shiftsData,
             'branch_breakdown' => $branchBreakdown,
+            'excluded_warehouse_transactions' => $stockService->summarizeExcludedTransactions($partitioned['warehouse_transactions']),
+            'unmapped_transactions' => $stockService->summarizeExcludedTransactions($partitioned['unmapped_transactions']),
             'daily_trends' => $dailyTrends,
-            'recent_transactions' => $transactions->take(20)->map(fn($t) => [
+            'recent_transactions' => $transactions->take(20)->map(fn ($t) => [
                 'id' => $t->id,
                 'invoice_number' => $t->invoice_number,
+                'location_id' => $t->location_id,
+                'branch' => $t->location?->name ?? $t->branch,
                 'cashier_name' => $t->cashier_name,
                 'terminal_code' => $t->terminal_code,
                 'payment_method' => $t->payment_method,
@@ -194,31 +202,38 @@ class AccountingReportController extends Controller
         $startDate = $request->query('start_date', Carbon::now()->startOfMonth()->toDateString());
         $endDate = $request->query('end_date', Carbon::now()->toDateString());
         $branch = $request->query('branch', 'all');
+        $locationIdFilter = $request->integer('location_id') ?: null;
 
-        $query = Transaction::query()
+        $rawTransactions = Transaction::query()
             ->whereDate('created_at', '>=', $startDate)
             ->whereDate('created_at', '<=', $endDate)
-            ->where('status', 'SUCCESS');
+            ->whereIn('status', ['SUCCESS', 'COMPLETED'])
+            ->with(['items', 'location', 'shift'])
+            ->get();
 
-        if ($branch !== 'all') {
-            $query->where('terminal_code', 'LIKE', "%{$branch}%");
-        }
+        $stockService = app(LocationStockService::class);
+        $locations = Location::where('type', '!=', 'WAREHOUSE')->orderBy('code')->get();
+        $filterResolution = $stockService->resolveReportFilterLocation($branch, $locationIdFilter);
+        $partitioned = $stockService->partitionTransactionsByStoreLocation(
+            $rawTransactions,
+            $locations,
+            $filterResolution['location'],
+            $filterResolution['requested']
+        );
+        $transactions = $partitioned['store_transactions'];
 
-        $transactions = $query->with('items')->get();
-
-        $grossSales = (float) $transactions->sum('subtotal');
-        $totalDiscounts = (float) $transactions->sum('discount_total');
-        $netSales = $grossSales - $totalDiscounts;
-        $totalTax = (float) $transactions->sum('tax_total');
+        $grossSales = round((float) $transactions->sum('subtotal'), 2);
+        $totalDiscounts = round((float) $transactions->sum('discount_total'), 2);
+        $netSales = round($grossSales - $totalDiscounts, 2);
+        $totalTax = round((float) $transactions->sum('tax_total'), 2);
 
         // Detailed COGS & UMKM Consignment Calculation
         $regularCogs = 0.0;
         $regularSales = 0.0;
         $consignmentSales = 0.0;
-        $umkmPartnerShare = 0.0; // Hak titipan UMKM
-        $cooperativeCommission = 0.0; // Hak komisi koperasi
+        $umkmPartnerShare = 0.0;
+        $cooperativeCommission = 0.0;
 
-        // Preload products for rapid lookup
         $allProducts = Product::all()->keyBy('id');
 
         foreach ($transactions as $tx) {
@@ -243,13 +258,8 @@ class AccountingReportController extends Controller
             }
         }
 
-        // Laba Kotor (Gross Profit):
-        // (Penjualan Reguler - HPP Reguler) + Pendapatan Komisi Titipan UMKM
         $regularGrossProfit = max(0, $regularSales - $regularCogs);
         $totalGrossProfit = $regularGrossProfit + $cooperativeCommission;
-
-        // Laba Bersih Operasional (Net Profit):
-        // Gross Profit - Discounts (and operational costs if any)
         $netProfit = max(0, $totalGrossProfit - $totalDiscounts);
         $profitMarginPercent = ($grossSales > 0) ? round(($netProfit / $grossSales) * 100, 2) : 0;
 
@@ -259,7 +269,10 @@ class AccountingReportController extends Controller
                 'start_date' => $startDate,
                 'end_date' => $endDate,
                 'branch' => $branch,
+                'location_id' => $locationIdFilter,
             ],
+            'excluded_warehouse_transactions' => $stockService->summarizeExcludedTransactions($partitioned['warehouse_transactions']),
+            'unmapped_transactions' => $stockService->summarizeExcludedTransactions($partitioned['unmapped_transactions']),
             'statement' => [
                 // 1. Revenues
                 'gross_sales' => $grossSales,
@@ -270,8 +283,8 @@ class AccountingReportController extends Controller
 
                 // 2. Cost of Goods Sold & UMKM Sharing
                 'regular_cogs' => $regularCogs,
-                'umkm_partner_share' => $umkmPartnerShare, // Dana titipan yang harus disetorkan ke UMKM
-                'cooperative_commission_earned' => $cooperativeCommission, // Bagi hasil milik Koperasi
+                'umkm_partner_share' => $umkmPartnerShare,
+                'cooperative_commission_earned' => $cooperativeCommission,
 
                 // 3. Profitability
                 'regular_gross_profit' => $regularGrossProfit,

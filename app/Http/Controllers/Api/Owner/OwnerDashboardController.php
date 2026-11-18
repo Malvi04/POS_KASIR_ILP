@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api\Owner;
 use App\Http\Controllers\Controller;
 use App\Models\Location;
 use App\Models\Product;
+use App\Models\ProductStock;
 use App\Models\Transaction;
+use App\Services\LocationStockService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,48 +20,34 @@ class OwnerDashboardController extends Controller
     public function summary(Request $request): JsonResponse
     {
         $today = Carbon::today();
-        $cacheKey = 'owner_dashboard_summary_' . $today->toDateString();
+        $startDate = $request->query('start_date', $request->query('date', $today->toDateString()));
+        $endDate = $request->query('end_date', $request->query('date', $today->toDateString()));
+        $cacheKey = 'owner_dashboard_summary_' . $startDate . '_' . $endDate;
+        $cacheTtl = app()->runningUnitTests() ? 0 : 15;
 
-        $data = \Illuminate\Support\Facades\Cache::remember($cacheKey, 15, function () use ($today) {
-            // 1. Transactions Today
-            $todayTrxs = Transaction::whereDate('created_at', $today)
-                ->whereIn('status', ['SUCCESS', 'COMPLETED'])
-                ->with('items')
-                ->get();
-
-            $totalSalesToday = (float) $todayTrxs->sum('grand_total');
-            $totalTrxToday = $todayTrxs->count();
-
-            // Estimate COGS in a single batch query (No N+1 loop)
-            $neededSkus = [];
-            foreach ($todayTrxs as $tx) {
-                foreach ($tx->items as $item) {
-                    if (empty($item->cost_price) && !empty($item->sku)) {
-                        $neededSkus[$item->sku] = true;
-                    }
-                }
-            }
-            $skuCosts = empty($neededSkus) ? [] : Product::whereIn('sku', array_keys($neededSkus))->pluck('cost_price', 'sku')->all();
-
-            $totalCogsToday = 0.0;
-            foreach ($todayTrxs as $tx) {
-                foreach ($tx->items as $item) {
-                    $cost = $item->cost_price ?? null;
-                    if (!$cost) {
-                        $cost = $skuCosts[$item->sku] ?? 0.0;
-                    }
-                    $totalCogsToday += ((float) $cost * (int) ($item->quantity ?? $item->qty ?? 1));
-                }
-            }
-            $totalProfitToday = max(0, $totalSalesToday - $totalCogsToday);
-
-            // 2. Locations / Branches
-            $locations = Location::all();
-
-            $stores = $locations->where('type', '!=', 'WAREHOUSE');
+        $computeSummary = function () use ($startDate, $endDate) {
+            $stockService = app(LocationStockService::class);
+            $locations = Location::orderBy('code')->get();
+            $stores = $locations->where('type', '!=', 'WAREHOUSE')->values();
             $warehouse = $locations->firstWhere('type', 'WAREHOUSE') ?? $locations->first();
 
-            // Calculate branch sales
+            // 1. Transactions in period (no join duplicates; partitioned by official location_id)
+            $rawTrxs = Transaction::whereDate('created_at', '>=', $startDate)
+                ->whereDate('created_at', '<=', $endDate)
+                ->whereIn('status', ['SUCCESS', 'COMPLETED'])
+                ->with(['items', 'location', 'shift'])
+                ->get();
+
+            $partitioned = $stockService->partitionTransactionsByStoreLocation($rawTrxs, $stores);
+            $storeTrxs = $partitioned['store_transactions'];
+            $byLocationId = $partitioned['by_location_id'];
+
+            $totalSalesToday = round((float) $storeTrxs->sum('grand_total'), 2);
+            $totalTrxToday = $storeTrxs->count();
+            $totalCogsToday = $stockService->calculateTransactionsCogs($storeTrxs);
+            $totalProfitToday = max(0, round($totalSalesToday - $totalCogsToday, 2));
+
+            // 2. Branch breakdown strictly keyed by store location_id
             $branchSalesMap = [];
             $palette = [
                 ['dot' => 'bg-[#0052cc]', 'bar' => 'bg-[#0052cc]'],
@@ -68,21 +56,15 @@ class OwnerDashboardController extends Controller
                 ['dot' => 'bg-purple-500', 'bar' => 'bg-purple-500'],
             ];
 
-            $idx = 0;
-            foreach ($stores as $store) {
-                // Check transactions matching branch/terminal
-                $branchTrxs = $todayTrxs->filter(function ($tx) use ($store) {
-                    return (isset($tx->terminal_code) && stripos($tx->terminal_code, $store->name) !== false) ||
-                           (isset($tx->branch) && stripos($tx->branch, $store->name) !== false) ||
-                           (isset($tx->branch_id) && $tx->branch_id == $store->id);
-                });
-
-                $rev = (float) $branchTrxs->sum('grand_total');
+            foreach ($stores->values() as $idx => $store) {
+                $branchTrxs = $byLocationId[$store->id] ?? collect();
+                $rev = round((float) $branchTrxs->sum('grand_total'), 2);
                 $cnt = $branchTrxs->count();
                 $color = $palette[$idx % count($palette)];
 
                 $branchSalesMap[] = [
                     'id' => $store->id,
+                    'location_id' => $store->id,
                     'code' => $store->code,
                     'name' => $store->name,
                     'type' => 'Cabang Toko',
@@ -96,34 +78,63 @@ class OwnerDashboardController extends Controller
                     'colorDot' => $color['dot'],
                     'barColor' => $color['bar'],
                 ];
-                $idx++;
             }
 
-            // 3. Critical Products (Low Stock) - Fast targeted query with index
-            $criticalQuery = Product::where(function ($q) {
-                $q->whereColumn('stock', '<=', 'min_stock')
-                  ->orWhere('stock', '<=', 10);
-            })->orderBy('stock', 'asc');
-
-            $lowStockCount = (clone $criticalQuery)->count();
+            // 3. Critical Products (Location-aware ProductStock when active, fallback to Stock Master when empty)
             $totalProductsCount = Product::count();
-            $criticalItems = (clone $criticalQuery)->take(5)->get(['sku', 'name', 'category', 'stock', 'min_stock', 'unit'])->map(function ($p) {
-                return [
-                    'sku' => $p->sku,
-                    'nama' => $p->name,
-                    'vendor' => $p->category ?? 'Vendor Utama',
-                    'stok' => (int) $p->stock,
-                    'min' => (int) ($p->min_stock ?? 10),
-                    'unit' => $p->unit ?? 'Pcs',
-                    'status' => (int) $p->stock <= 0 ? 'Habis' : 'Menipis',
-                ];
-            })->values();
+            $hasLocStocks = ProductStock::exists();
+            if ($hasLocStocks) {
+                $criticalStocksQuery = ProductStock::with(['product', 'location'])
+                    ->whereHas('product')
+                    ->whereHas('location')
+                    ->where(function ($q) {
+                        $q->where('stock', '<=', 0)
+                          ->orWhereRaw('stock <= COALESCE(min_stock, (SELECT min_stock FROM products WHERE products.id = product_stocks.product_id), 10)');
+                    })
+                    ->orderBy('stock', 'asc');
+                $lowStockCount = (clone $criticalStocksQuery)->count();
+                $criticalItems = (clone $criticalStocksQuery)->take(5)->get()->map(function ($ps) {
+                    $p = $ps->product;
+                    $minStock = (int) ($ps->min_stock ?? $p->min_stock ?? 10);
+                    return [
+                        'sku' => $p->sku,
+                        'nama' => $p->name,
+                        'location' => $ps->location?->name ?? '-',
+                        'location_code' => $ps->location?->code ?? '-',
+                        'vendor' => $p->category ?? 'Vendor Utama',
+                        'stok' => (int) $ps->stock,
+                        'min' => $minStock,
+                        'unit' => $p->unit ?? 'Pcs',
+                        'status' => (int) $ps->stock <= 0 ? 'Habis' : 'Menipis',
+                    ];
+                })->values();
+            } else {
+                $criticalQuery = Product::where(function ($q) {
+                    $q->whereColumn('stock', '<=', 'min_stock')
+                      ->orWhere('stock', '<=', 10);
+                })->orderBy('stock', 'asc');
+                $lowStockCount = (clone $criticalQuery)->count();
+                $criticalItems = (clone $criticalQuery)->take(5)->get(['sku', 'name', 'category', 'stock', 'min_stock', 'unit'])->map(function ($p) {
+                    return [
+                        'sku' => $p->sku,
+                        'nama' => $p->name,
+                        'vendor' => $p->category ?? 'Vendor Utama',
+                        'stok' => (int) $p->stock,
+                        'min' => (int) ($p->min_stock ?? 10),
+                        'unit' => $p->unit ?? 'Pcs',
+                        'status' => (int) $p->stock <= 0 ? 'Habis' : 'Menipis',
+                    ];
+                })->values();
+            }
 
             return [
+                'period' => ['start_date' => $startDate, 'end_date' => $endDate],
                 'total_sales_today' => $totalSalesToday,
                 'total_trx_today' => $totalTrxToday,
                 'total_profit_today' => $totalProfitToday,
                 'branches' => $branchSalesMap,
+                'excluded_warehouse_transactions' => $stockService->summarizeExcludedTransactions($partitioned['warehouse_transactions']),
+                'unmapped_transactions' => $stockService->summarizeExcludedTransactions($partitioned['unmapped_transactions']),
                 'warehouse' => $warehouse ? [
                     'id' => $warehouse->id,
                     'code' => $warehouse->code,
@@ -146,7 +157,11 @@ class OwnerDashboardController extends Controller
                 'total_products' => $totalProductsCount,
                 'total_branches' => $stores->count(),
             ];
-        });
+        };
+
+        $data = $cacheTtl > 0
+            ? \Illuminate\Support\Facades\Cache::remember($cacheKey, $cacheTtl, $computeSummary)
+            : $computeSummary();
 
         return response()->json([
             'success' => true,

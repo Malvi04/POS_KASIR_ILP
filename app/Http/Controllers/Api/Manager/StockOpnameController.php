@@ -80,8 +80,16 @@ class StockOpnameController extends Controller
                 'notes' => $validated['notes'] ?? 'Stock opname berkala',
             ]);
 
-            // Snapshot products without locking store sales
+            // Snapshot products without locking store sales (scoped to branch location if Stock Toko exists)
+            $stockService = app(\App\Services\LocationStockService::class);
+            $opnameLoc = $stockService->resolveLocation(null, $opname->branch);
+            $hasLocStocks = $opnameLoc && \App\Models\ProductStock::where('location_id', $opnameLoc->id)->exists();
+
             $productQuery = Product::query();
+            if ($hasLocStocks) {
+                $productQuery->with(['productStocks' => fn ($sq) => $sq->where('location_id', $opnameLoc->id)])
+                    ->whereHas('productStocks', fn ($sq) => $sq->where('location_id', $opnameLoc->id)->where('is_active', true));
+            }
             if (!empty($validated['category']) && $validated['category'] !== 'Semua') {
                 $productQuery->where('category', $validated['category']);
             }
@@ -89,13 +97,14 @@ class StockOpnameController extends Controller
             $now = now();
             $rows = [];
             foreach ($products as $p) {
+                $sysStock = $hasLocStocks ? (int) ($p->stockAtLocation($opnameLoc->id)?->stock ?? 0) : (int) $p->stock;
                 $rows[] = [
                     'stock_opname_id' => $opname->id,
                     'product_id' => $p->id,
                     'product_sku' => $p->sku,
                     'product_name' => $p->name,
-                    'system_stock' => (int) $p->stock,
-                    'physical_stock' => (int) $p->stock, // Initialized with system stock
+                    'system_stock' => $sysStock,
+                    'physical_stock' => $sysStock, // Initialized with system stock
                     'variance' => 0,
                     'unit_cost' => (float) $p->cost_price,
                     'variance_value' => 0,
@@ -238,19 +247,48 @@ class StockOpnameController extends Controller
             $varianceCount = 0;
             $totalVarianceValue = 0;
 
+            $stockService = app(\App\Services\LocationStockService::class);
+            $opnameLoc = $stockService->resolveLocation(null, $opname->branch);
+
             foreach ($items as $item) {
                 if ($item->is_audited && $item->variance !== 0) {
-                    $product = Product::lockForUpdate()->find($item->product_id);
-                    if ($product) {
-                        $product->stock = $item->physical_stock;
-                        if ($product->stock <= 0) {
-                            $product->status = 'HABIS';
-                        } elseif ($product->stock <= $product->min_stock) {
-                            $product->status = 'STOK_RENDAH';
-                        } else {
-                            $product->status = 'TERSEDIA';
+                    $locPs = $opnameLoc
+                        ? \App\Models\ProductStock::where('product_id', $item->product_id)->where('location_id', $opnameLoc->id)->first()
+                        : null;
+
+                    if ($opnameLoc && $locPs) {
+                        $delta = (int) $item->physical_stock - (int) $locPs->stock;
+                        if ($delta > 0) {
+                            $stockService->addStock($item->product_id, $opnameLoc->id, $delta, [
+                                'movement_type' => 'OPNAME_ADJ',
+                                'reference_type' => StockOpname::class,
+                                'reference_id' => $opname->id,
+                                'reference_number' => $opname->opname_code,
+                                'notes' => "Stock Opname {$opname->opname_code} ({$opname->branch})",
+                            ]);
+                        } elseif ($delta < 0) {
+                            $stockService->deductStock($item->product_id, $opnameLoc->id, abs($delta), [
+                                'movement_type' => 'OPNAME_ADJ',
+                                'allow_negative' => true,
+                                'reference_type' => StockOpname::class,
+                                'reference_id' => $opname->id,
+                                'reference_number' => $opname->opname_code,
+                                'notes' => "Stock Opname {$opname->opname_code} ({$opname->branch})",
+                            ]);
                         }
-                        $product->save();
+                    } else {
+                        $product = Product::lockForUpdate()->find($item->product_id);
+                        if ($product) {
+                            $product->stock = $item->physical_stock;
+                            if ($product->stock <= 0) {
+                                $product->status = 'HABIS';
+                            } elseif ($product->stock <= $product->min_stock) {
+                                $product->status = 'STOK_RENDAH';
+                            } else {
+                                $product->status = 'TERSEDIA';
+                            }
+                            $product->save();
+                        }
                     }
                     $varianceCount++;
                     $totalVarianceValue += $item->variance_value;

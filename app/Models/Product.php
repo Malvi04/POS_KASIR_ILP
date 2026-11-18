@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Product extends Model
@@ -78,6 +79,25 @@ class Product extends Model
         return $this->belongsTo(Supplier::class);
     }
 
+    public function supplierProducts(): HasMany
+    {
+        return $this->hasMany(SupplierProduct::class);
+    }
+
+    public function supplyingSuppliers(): BelongsToMany
+    {
+        return $this->belongsToMany(Supplier::class, 'supplier_products')
+            ->withPivot([
+                'first_purchase_at',
+                'last_purchase_at',
+                'last_purchase_price',
+                'last_purchase_id',
+                'total_transactions',
+                'supply_status',
+            ])
+            ->withTimestamps();
+    }
+
     public function units(): HasMany
     {
         return $this->hasMany(ProductUnit::class);
@@ -86,6 +106,25 @@ class Product extends Model
     public function stockBatches(): HasMany
     {
         return $this->hasMany(StockBatch::class);
+    }
+
+    public function productStocks(): HasMany
+    {
+        return $this->hasMany(ProductStock::class);
+    }
+
+    public function stockMovements(): HasMany
+    {
+        return $this->hasMany(StockMovement::class);
+    }
+
+    public function stockAtLocation(int $locationId): ?ProductStock
+    {
+        if ($this->relationLoaded('productStocks')) {
+            return $this->productStocks->firstWhere('location_id', $locationId);
+        }
+
+        return $this->productStocks()->where('location_id', $locationId)->first();
     }
 
     public function priceHistories(): HasMany

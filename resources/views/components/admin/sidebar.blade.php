@@ -38,6 +38,13 @@
                 <span>Products &amp; Stok</span>
             </a>
 
+            <!-- 3b. Master Supplier (Monitoring) -->
+            <a href="{{ url('/owner/suppliers') }}" 
+               class="flex items-center gap-3.5 px-3.5 py-2.5 transition-all text-[13px] {{ $active === 'suppliers' ? 'bg-[#eef4ff] text-[#0052cc] font-bold border-r-4 border-[#0052cc] rounded-l-xl rounded-r-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 font-medium rounded-xl' }}">
+                <span class="material-symbols-rounded text-[21px] {{ $active === 'suppliers' ? 'filled' : '' }}">store</span>
+                <span>Master Supplier</span>
+            </a>
+
             <!-- 4. Members / Anggota -->
             <a href="{{ url('/owner/members') }}" 
                class="flex items-center gap-3.5 px-3.5 py-2.5 transition-all text-[13px] {{ $active === 'members' ? 'bg-[#eef4ff] text-[#0052cc] font-bold border-r-4 border-[#0052cc] rounded-l-xl rounded-r-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 font-medium rounded-xl' }}">

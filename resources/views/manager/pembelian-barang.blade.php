@@ -9,6 +9,7 @@
 
     // Shared Metadata
     suppliers: [],
+    allSuppliers: [],
     products: [],
     warehouseName: 'Gudang Pusat (DC)',
     nextPurchaseNumber: '',
@@ -174,6 +175,7 @@
                 const json = await res.json();
                 if (json.success && json.data) {
                     this.suppliers = json.data.suppliers || [];
+                    this.allSuppliers = json.data.all_suppliers || this.suppliers;
                     this.products = json.data.products || [];
                     this.warehouseName = json.data.warehouse_name || 'Gudang Pusat (DC)';
                     this.nextPurchaseNumber = json.data.next_purchase_number || ('PO-' + new Date().getFullYear() + '-0001');
@@ -544,6 +546,11 @@
                 if (!exists) {
                     this.suppliers.push(json.data);
                     this.suppliers.sort((a, b) => a.name.localeCompare(b.name));
+                }
+                const existsAll = this.allSuppliers.some(s => Number(s.id) === Number(json.data.id));
+                if (!existsAll) {
+                    this.allSuppliers.push(json.data);
+                    this.allSuppliers.sort((a, b) => a.name.localeCompare(b.name));
                 }
                 this.form.supplier_id = String(json.data.id);
                 this.newSupplier = { name: '', owner_name: '', phone: '', address: '', category: 'Supplier Barang' };
@@ -1013,8 +1020,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                             @change="listFilters.page = 1; loadPurchases();"
                                             class="appearance-none w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 pr-9 text-xs text-gray-700 font-semibold focus:outline-none focus:border-[#0052cc] cursor-pointer">
                                         <option value="all">Semua Supplier</option>
-                                        <template x-for="sup in suppliers" :key="sup.id">
-                                            <option :value="sup.id" x-text="sup.name"></option>
+                                        <template x-for="sup in allSuppliers" :key="sup.id">
+                                            <option :value="sup.id" x-text="sup.name + (sup.status === 'NONAKTIF' ? ' (Nonaktif)' : '')"></option>
                                         </template>
                                     </select>
                                     <span class="material-symbols-rounded absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-[18px]">expand_more</span>
@@ -1600,8 +1607,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         @change="priceFilters.page = 1; loadPriceHistory();"
                                         class="appearance-none w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 pr-9 text-xs text-gray-700 font-semibold focus:outline-none focus:border-[#0052cc] cursor-pointer">
                                     <option value="all">Semua Supplier</option>
-                                    <template x-for="sup in suppliers" :key="sup.id">
-                                        <option :value="sup.id" x-text="sup.name"></option>
+                                    <template x-for="sup in allSuppliers" :key="sup.id">
+                                        <option :value="sup.id" x-text="sup.name + (sup.status === 'NONAKTIF' ? ' (Nonaktif)' : '')"></option>
                                     </template>
                                 </select>
                                 <span class="material-symbols-rounded absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-[18px]">expand_more</span>

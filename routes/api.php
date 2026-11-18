@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\Manager\ReturnController;
 use App\Http\Controllers\Api\Manager\SettingsController;
 use App\Http\Controllers\Api\Manager\StockCorrectionController;
 use App\Http\Controllers\Api\Manager\StockOpnameController;
+use App\Http\Controllers\Api\Manager\SupplierController;
 use App\Http\Controllers\Api\Manager\UserManagementController;
 use App\Http\Controllers\Api\Owner\AuditLogController;
 use App\Http\Controllers\Api\Owner\BranchController;
@@ -54,12 +55,12 @@ Route::get('/health', function () {
 Route::prefix('auth')->group(function () {
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
     Route::match(['get', 'post'], '/logout', [AuthController::class, 'logout']);
-    Route::get('/me', [AuthController::class, 'me']);
+    Route::get('/me', [AuthController::class, 'me'])->middleware('auth.api');
     Route::get('/cashiers', [AuthController::class, 'cashiers']);
 });
 
 // 1. Shift & Modal Kasir (Opening Cash & Audit Closing)
-Route::prefix('shift')->group(function () {
+Route::prefix('shift')->middleware('auth.api')->group(function () {
     Route::get('/current', [ShiftController::class, 'current']);
     Route::get('/active-shifts', [ShiftController::class, 'activeShifts']);
     Route::post('/open', [ShiftController::class, 'open']);
@@ -68,20 +69,21 @@ Route::prefix('shift')->group(function () {
 });
 
 // 2. POS Products & Fast Search (Auto-Discount Barang Expired)
-Route::prefix('pos/products')->group(function () {
+Route::prefix('pos/products')->middleware('auth.api')->group(function () {
     Route::get('/search', [ProductController::class, 'search']);
+    Route::get('/sync', [ProductController::class, 'syncCatalog']);
     Route::get('/barcode/{barcode}', [ProductController::class, 'lookupBarcode']);
     Route::get('/categories', [ProductController::class, 'categories']);
 });
 
 // 3. Member Validation & Credit Kasbon Potong Gaji
-Route::prefix('pos/members')->group(function () {
+Route::prefix('pos/members')->middleware('auth.api')->group(function () {
     Route::get('/search', [MemberController::class, 'search']);
     Route::get('/validate/{nik}', [MemberController::class, 'validateNik']);
 });
 
 // 4. Pending Transaksi (Hold Bill / Recall)
-Route::prefix('pos')->group(function () {
+Route::prefix('pos')->middleware('auth.api')->group(function () {
     Route::get('/held-bills', [HeldBillController::class, 'index']);
     Route::post('/hold', [HeldBillController::class, 'hold']);
     Route::post('/recall/{id}', [HeldBillController::class, 'recall']);
@@ -89,7 +91,7 @@ Route::prefix('pos')->group(function () {
 });
 
 // 5. Checkout & Multi-Type Payment
-Route::prefix('pos')->group(function () {
+Route::prefix('pos')->middleware('auth.api')->group(function () {
     Route::get('/transactions', [TransactionController::class, 'index']);
     Route::post('/checkout', [TransactionController::class, 'checkout']);
     Route::post('/sync-offline', [TransactionController::class, 'syncOffline']);
@@ -97,7 +99,7 @@ Route::prefix('pos')->group(function () {
 });
 
 // 6. Otorisasi Void / Pembatalan Transaction (Anti-Fraud Control)
-Route::prefix('pos/void')->group(function () {
+Route::prefix('pos/void')->middleware('auth.api')->group(function () {
     Route::post('/authorize', [VoidController::class, 'authorizeSupervisor'])->middleware('throttle:pin-auth');
     Route::post('/item', [VoidController::class, 'voidItem']);
     Route::post('/transaction', [VoidController::class, 'voidTransaction']);
@@ -114,7 +116,7 @@ Route::prefix('pos/void')->group(function () {
 */
 
 // Master Data Anggota Multi-Cabang
-Route::prefix('members')->group(function () {
+Route::prefix('members')->middleware('auth.api')->group(function () {
     Route::get('/', [MemberManagementController::class, 'index']);
     Route::post('/', [MemberManagementController::class, 'store']);
     Route::post('/bulk-limit', [MemberManagementController::class, 'bulkUpdateLimit']);
@@ -127,7 +129,7 @@ Route::prefix('members')->group(function () {
 });
 
 // Laporan Piutang & Kasbon Anggota (Payroll Debt PT ILP)
-Route::prefix('reports/member-debts')->group(function () {
+Route::prefix('reports/member-debts')->middleware('auth.api:manager')->group(function () {
     Route::get('/', [MemberDebtReportController::class, 'index']);
     Route::get('/export-csv', [MemberDebtReportController::class, 'exportCsv']);
     Route::get('/export-excel', [MemberDebtReportController::class, 'exportExcel']);
@@ -146,23 +148,25 @@ Route::prefix('reports/member-debts')->group(function () {
 */
 
 // Master Inventaris & Produk (Multi-Satuan & Stok)
-Route::prefix('products')->group(function () {
+Route::prefix('products')->middleware('auth.api')->group(function () {
     Route::get('/', [ProductController::class, 'index']);
-    Route::post('/', [ProductController::class, 'store']);
-    Route::put('/{id}', [ProductController::class, 'update']);
-    Route::delete('/{id}', [ProductController::class, 'destroy']);
-    Route::post('/{id}/units', [ProductController::class, 'addUnit']);
-    Route::delete('/{id}/units/{unitId}', [ProductController::class, 'removeUnit']);
+    Route::middleware('auth.api:manager')->group(function () {
+        Route::post('/', [ProductController::class, 'store']);
+        Route::put('/{id}', [ProductController::class, 'update']);
+        Route::delete('/{id}', [ProductController::class, 'destroy']);
+        Route::post('/{id}/units', [ProductController::class, 'addUnit']);
+        Route::delete('/{id}/units/{unitId}', [ProductController::class, 'removeUnit']);
 
-    // Import & Export Excel Master Produk (Standard 36 Kolom ILP)
-    Route::post('/import/validate', [ProductImportExportController::class, 'validateAndPreview']);
-    Route::post('/import/process', [ProductImportExportController::class, 'processImport']);
-    Route::get('/export/excel', [ProductImportExportController::class, 'export']);
-    Route::get('/export/template', [ProductImportExportController::class, 'downloadTemplate']);
+        // Import & Export Excel Master Produk (Standard 36 Kolom ILP)
+        Route::post('/import/validate', [ProductImportExportController::class, 'validateAndPreview']);
+        Route::post('/import/process', [ProductImportExportController::class, 'processImport']);
+        Route::get('/export/excel', [ProductImportExportController::class, 'export']);
+        Route::get('/export/template', [ProductImportExportController::class, 'downloadTemplate']);
+    });
 });
 
 // Konsinyasi UMKM (Mitra & Bagi Hasil)
-Route::prefix('consignment')->group(function () {
+Route::prefix('consignment')->middleware('auth.api:manager')->group(function () {
     Route::get('/partners', [ConsignmentController::class, 'indexPartners']);
     Route::post('/partners', [ConsignmentController::class, 'storePartner']);
     Route::put('/partners/{id}', [ConsignmentController::class, 'updatePartner']);
@@ -172,7 +176,7 @@ Route::prefix('consignment')->group(function () {
 });
 
 // Stock Opname
-Route::prefix('inventory/stock-opname')->group(function () {
+Route::prefix('inventory/stock-opname')->middleware('auth.api:manager')->group(function () {
     Route::get('/', [StockOpnameController::class, 'index']);
     Route::post('/', [StockOpnameController::class, 'store']);
     Route::get('/{id}', [StockOpnameController::class, 'show']);
@@ -238,7 +242,7 @@ Route::prefix('inventory/stock-corrections')->middleware('auth.api:manager')->gr
 });
 
 // Otorisasi Diskon Manual Kasir (Supervisor / Manager)
-Route::prefix('pos/discount')->group(function () {
+Route::prefix('pos/discount')->middleware('auth.api')->group(function () {
     Route::post('/authorize', [DiscountAuthorizationController::class, 'authorizeDiscount'])->middleware('throttle:pin-auth');
 });
 
@@ -252,7 +256,7 @@ Route::prefix('pos/discount')->group(function () {
 | 4. Laporan Rekonsiliasi Kas (Cash Count / Shift Closing)
 | 5. Pengaturan Pajak (Tax / Non-Tax Products Management & Checkout PPN)
 */
-Route::prefix('reports')->group(function () {
+Route::prefix('reports')->middleware('auth.api:manager')->group(function () {
     Route::get('/sales', [AccountingReportController::class, 'sales']);
     Route::get('/profit-loss', [AccountingReportController::class, 'profitLoss']);
     Route::get('/fast-moving', [AccountingReportController::class, 'fastMoving']);
@@ -260,13 +264,13 @@ Route::prefix('reports')->group(function () {
 });
 
 // Tax / Non-Tax Products Management
-Route::prefix('products')->group(function () {
+Route::prefix('products')->middleware('auth.api:manager')->group(function () {
     Route::get('/tax/list', [AccountingReportController::class, 'productTaxList']);
     Route::put('/{id}/tax-status', [AccountingReportController::class, 'updateProductTax']);
 });
 
 // Kupon BBM & Voucher Operasional (ERD Kupon BBM)
-Route::prefix('coupons')->group(function () {
+Route::prefix('coupons')->middleware('auth.api')->group(function () {
     Route::get('/', [CouponController::class, 'index']);
     Route::post('/', [CouponController::class, 'store']);
     Route::put('/{id}', [CouponController::class, 'update']);
@@ -285,10 +289,10 @@ Route::prefix('coupons')->group(function () {
 */
 
 // Dashboard Manager (dipakai oleh halaman manager/dashboard)
-Route::get('/manager/dashboard-summary', [ManagerDashboardController::class, 'summary']);
+Route::get('/manager/dashboard-summary', [ManagerDashboardController::class, 'summary'])->middleware('auth.api:manager');
 
 // Promosi & Aturan Diskon
-Route::prefix('promotions')->group(function () {
+Route::prefix('promotions')->middleware('auth.api:manager')->group(function () {
     Route::get('/', [PromotionController::class, 'index']);
     Route::post('/', [PromotionController::class, 'store']);
     Route::get('/settings', [PromotionController::class, 'getSettings']);
@@ -298,7 +302,7 @@ Route::prefix('promotions')->group(function () {
 });
 
 // Retur Barang Toko
-Route::prefix('returns')->group(function () {
+Route::prefix('returns')->middleware('auth.api')->group(function () {
     Route::get('/', [ReturnController::class, 'index']);
     Route::post('/', [ReturnController::class, 'store']);
     Route::put('/{id}/status', [ReturnController::class, 'updateStatus']);
@@ -306,7 +310,7 @@ Route::prefix('returns')->group(function () {
 });
 
 // Absensi & Shift Karyawan / Kasir
-Route::prefix('attendance')->group(function () {
+Route::prefix('attendance')->middleware('auth.api')->group(function () {
     Route::get('/', [AttendanceController::class, 'index']);
     Route::post('/', [AttendanceController::class, 'store']);
     Route::get('/leaves', [AttendanceController::class, 'leaves']);
@@ -316,7 +320,7 @@ Route::prefix('attendance')->group(function () {
 });
 
 // Penerimaan Barang Masuk (Transfer Gudang DC / Supplier)
-Route::prefix('goods-receipts')->group(function () {
+Route::prefix('goods-receipts')->middleware('auth.api')->group(function () {
     Route::get('/', [GoodsReceiptController::class, 'index']);
     Route::post('/', [GoodsReceiptController::class, 'store']);
     Route::post('/{id}/verify', [GoodsReceiptController::class, 'verify']);
@@ -336,8 +340,23 @@ Route::prefix('purchases')->middleware('auth.api:manager')->group(function () {
     Route::post('/{id}/receive', [PurchaseController::class, 'receive']);
 });
 
+// Master Supplier & Relasi Produk Pemasok (Manager Gudang CRUD, Owner Read-Only)
+Route::prefix('suppliers')->middleware('auth.api:manager')->group(function () {
+    Route::get('/meta', [SupplierController::class, 'meta']);
+    Route::get('/', [SupplierController::class, 'index']);
+    Route::post('/', [SupplierController::class, 'store']);
+    Route::get('/{id}', [SupplierController::class, 'show']);
+    Route::put('/{id}', [SupplierController::class, 'update']);
+    Route::patch('/{id}/status', [SupplierController::class, 'toggleStatus']);
+    Route::delete('/{id}', [SupplierController::class, 'destroy']);
+    Route::get('/{id}/products', [SupplierController::class, 'suppliedProducts']);
+    Route::patch('/{id}/products/{productId}/status', [SupplierController::class, 'toggleSupplyStatus']);
+    Route::get('/{id}/purchases', [SupplierController::class, 'purchaseHistory']);
+    Route::get('/{id}/price-history', [SupplierController::class, 'priceHistory']);
+});
+
 // Sistem Notifikasi Realtime Berdasarkan Role
-Route::prefix('notifications')->group(function () {
+Route::prefix('notifications')->middleware('auth.api')->group(function () {
     Route::get('/', [NotificationController::class, 'index']);
     Route::post('/', [NotificationController::class, 'store']);
     Route::post('/mark-read/{id?}', [NotificationController::class, 'markAsRead']);

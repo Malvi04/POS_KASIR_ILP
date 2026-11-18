@@ -200,16 +200,39 @@ class VoidController extends Controller
                 ], 422);
             }
 
-            // 1. Restore product stock
+            // 1. Restore product stock (location-aware when ProductStock is active at transaction location)
+            $stockService = app(\App\Services\LocationStockService::class);
             foreach ($transaction->items as $item) {
                 if ($item->product_id) {
-                    $product = Product::lockForUpdate()->find($item->product_id);
-                    if ($product) {
-                        $product->stock += $item->qty;
-                        if ($product->stock > $product->min_stock) {
-                            $product->status = $product->is_near_expired ? 'NEAR_EXPIRED' : 'TERSEDIA';
+                    $hasLocStock = $transaction->location_id && \App\Models\ProductStock::where('product_id', $item->product_id)
+                        ->where('location_id', $transaction->location_id)
+                        ->exists();
+
+                    if ($hasLocStock) {
+                        $stockService->restoreVoidStock(
+                            $item->product_id,
+                            $transaction->location_id,
+                            (int) $item->qty,
+                            is_array($item->batch_allocations) ? $item->batch_allocations : [],
+                            $item->stock_batch_id,
+                            [
+                                'movement_type' => 'VOID_IN',
+                                'reference_type' => Transaction::class,
+                                'reference_id' => $transaction->id,
+                                'reference_number' => $transaction->invoice_number,
+                                'user_id' => $supervisor->id,
+                                'notes' => "Void nota {$transaction->invoice_number}: {$validated['reason']}",
+                            ]
+                        );
+                    } else {
+                        $product = Product::lockForUpdate()->find($item->product_id);
+                        if ($product) {
+                            $product->stock += $item->qty;
+                            if ($product->stock > $product->min_stock) {
+                                $product->status = $product->is_near_expired ? 'NEAR_EXPIRED' : 'TERSEDIA';
+                            }
+                            $product->save();
                         }
-                        $product->save();
                     }
                 }
             }

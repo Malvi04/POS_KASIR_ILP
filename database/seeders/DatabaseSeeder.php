@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\AppSetting;
 use App\Models\ChartOfAccount;
+use App\Models\Location;
 use App\Models\ProductCategory;
 use App\Models\Unit;
 use App\Models\User;
@@ -130,6 +131,21 @@ class DatabaseSeeder extends Seeder
         ];
         foreach ($coas as $coa) {
             ChartOfAccount::updateOrCreate(['account_code' => $coa['account_code']], $coa);
+        }
+
+        // ---------------------------------------------------------------------
+        // 5. Standard Facility Locations (Gudang Pusat, Toko Pusat, Cabang A, Cabang B)
+        // ---------------------------------------------------------------------
+        if (!app()->runningUnitTests() && Location::count() === 0) {
+            $defaultLocations = [
+                ['code' => 'GDG-001', 'name' => 'Gudang Pusat', 'type' => 'WAREHOUSE', 'status' => 'AKTIF', 'is_active' => true],
+                ['code' => 'CAB-001', 'name' => 'Toko Pusat', 'type' => 'STORE', 'status' => 'AKTIF', 'is_active' => true],
+                ['code' => 'CAB-002', 'name' => 'Cabang A', 'type' => 'STORE', 'status' => 'AKTIF', 'is_active' => true],
+                ['code' => 'CAB-003', 'name' => 'Cabang B', 'type' => 'STORE', 'status' => 'AKTIF', 'is_active' => true],
+            ];
+            foreach ($defaultLocations as $loc) {
+                Location::firstOrCreate(['code' => $loc['code']], $loc);
+            }
         }
     }
 }

@@ -63,7 +63,13 @@
 
     async initProducts() {
         try {
-            const res = await fetch('/api/products?per_page=100', { headers: { 'Accept': 'application/json' } });
+            const branch = this.activeSession?.storeLocation || this.selectedBranch || localStorage.getItem('pos_kasir_branch') || 'Pusat';
+            const params = new URLSearchParams({
+                per_page: '100',
+                branch: branch,
+                only_registered: '1'
+            });
+            const res = await fetch('/api/products?' + params.toString(), { headers: { 'Accept': 'application/json' } });
             if (res.ok) {
                 const json = await res.json();
                 const items = json.data || (Array.isArray(json) ? json : []);
@@ -100,7 +106,15 @@
 
     saveProductsToStorage() {
         try {
+            const branch = this.activeSession?.storeLocation || this.selectedBranch || localStorage.getItem('pos_kasir_branch') || 'Pusat';
+            const slug = String(branch).toLowerCase().replace(/[^a-z0-9]+/g, '_');
+            localStorage.setItem(`pos_ilp_stock_toko_${slug}_v1`, JSON.stringify(this.products));
             localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(this.products));
+            localStorage.setItem('pos_ilp_inventory_catalog_meta_v1', JSON.stringify({
+                branch: branch,
+                total: this.products.length,
+                synced_at: new Date().toISOString()
+            }));
             window.dispatchEvent(new CustomEvent('pos-inventory-synced', { detail: { count: this.products.length } }));
         } catch (e) {
             console.error('Failed to save inventory products:', e);

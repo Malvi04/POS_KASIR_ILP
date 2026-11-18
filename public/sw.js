@@ -11,16 +11,20 @@
  *  - Versi cache dinaikkan agar cache lama yang rusak otomatis dihapus.
  */
 
-const CACHE_NAME = 'pos-ilp-cache-v3.2';
-const PAGES_CACHE = 'pos-ilp-pages-v3.2';
+const CACHE_NAME = 'pos-ilp-cache-v4.0';
+const PAGES_CACHE = 'pos-ilp-pages-v4.0';
 
 const PRECACHE_STATIC = [
     '/fonts/material-symbols-rounded.woff2',
     '/fonts/inter-latin.woff2',
+    '/js/vendor/dexie.min.js?v=2.2',
+    '/js/vendor/dexie.min.js',
+    '/js/db/pos-db.js?v=2.2',
+    '/js/db/pos-migration.js?v=2.2',
     '/js/alpine.min.js',
-    '/js/cashier-core.js?v=2.1',
-    '/js/pos-realtime.js?v=2.1',
-    '/js/pos-offline-sync.js?v=2.1',
+    '/js/cashier-core.js?v=2.2',
+    '/js/pos-realtime.js?v=2.2',
+    '/js/pos-offline-sync.js?v=2.2',
     '/js/excel-export.js',
     '/manifest.json',
     '/favicon.ico'
@@ -135,6 +139,8 @@ self.addEventListener('fetch', (event) => {
     // B. Aset statis: Cache-First untuk asset versioned/build/font agar navigasi tidak memicu revalidation storm
     const isImmutableStatic = url.pathname.startsWith('/build/') ||
         url.pathname.startsWith('/fonts/') ||
+        url.pathname.includes('dexie') ||
+        url.pathname.includes('/js/db/') ||
         (url.pathname.startsWith('/js/') && (url.search.includes('v=') || url.pathname.endsWith('alpine.min.js') || url.pathname.endsWith('xlsx.full.min.js')));
 
     if (isImmutableStatic) {

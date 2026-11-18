@@ -42,20 +42,76 @@
         return { unique, hasDuplicates };
     },
 
-    async initProducts() {
-        // 1. Instant Render (0ms): Load cached local inventory immediately so grid is never blank
+    getActiveBranch() {
+        const raw = this.activeSession?.storeLocation || this.selectedBranch || localStorage.getItem('pos_kasir_branch') || 'Pusat';
+        return this.normalizeBranchName ? this.normalizeBranchName(raw) : raw;
+    },
+    getActiveTerminal() {
+        return this.activeSession?.terminalLabel || (this.formatShiftLabel ? this.formatShiftLabel(this.selectedShift) : 'POS-01');
+    },
+    getBranchCacheKey(branch) {
+        const slug = String(branch || 'pusat').toLowerCase().replace(/[^a-z0-9]+/g, '_');
+        return `pos_ilp_stock_toko_${slug}_v1`;
+    },
+    getCatalogMeta() {
         try {
-            const raw = localStorage.getItem('pos_ilp_inventory_products_v1');
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    const result = this.deduplicateProducts(parsed);
+            const raw = localStorage.getItem('pos_ilp_inventory_catalog_meta_v1');
+            return raw ? JSON.parse(raw) : null;
+        } catch (e) {
+            return null;
+        }
+    },
+    isCatalogSyncing: false,
+
+    async initProducts() {
+        const branch = this.getActiveBranch();
+        const terminal = this.getActiveTerminal();
+        const branchKey = this.getBranchCacheKey(branch);
+
+        // 1. Instant Render from Dexie.js (IndexedDB) or location-isolated Stock Toko cache ONLY (never mix branches)
+        let loadedFromBranchCache = false;
+        try {
+            if (window.PosDb && typeof window.PosDb.products?.getByLocation === 'function') {
+                await window.PosDb.init();
+                const locId = this.activeSession?.locationId || (branch.includes('1') ? 2 : (branch.includes('2') ? 3 : 1));
+                const dexieProds = await window.PosDb.products.getByLocation(locId, { limit: 100 });
+                if (Array.isArray(dexieProds) && dexieProds.length > 0) {
+                    const result = this.deduplicateProducts(dexieProds);
                     this.products = result.unique;
+                    loadedFromBranchCache = true;
                 }
             }
-        } catch (e) {}
+            if (!loadedFromBranchCache) {
+                const branchRaw = localStorage.getItem(branchKey);
+                if (branchRaw) {
+                    const parsed = JSON.parse(branchRaw);
+                    if (Array.isArray(parsed)) {
+                        const result = this.deduplicateProducts(parsed);
+                        this.products = result.unique;
+                        loadedFromBranchCache = true;
+                    }
+                }
+            }
+            if (!loadedFromBranchCache) {
+                const meta = this.getCatalogMeta();
+                const legacyRaw = localStorage.getItem('pos_ilp_inventory_products_v1');
+                if (legacyRaw && meta && meta.branch && this.normalizeBranchName(meta.branch) === branch) {
+                    const parsed = JSON.parse(legacyRaw);
+                    if (Array.isArray(parsed)) {
+                        const result = this.deduplicateProducts(parsed);
+                        this.products = result.unique;
+                        loadedFromBranchCache = true;
+                    }
+                } else if (!meta || (meta.branch && this.normalizeBranchName(meta.branch) !== branch)) {
+                    // Location changed: never display another branch's cached catalog
+                    this.products = [];
+                }
+            }
+        } catch (e) {
+            this.products = [];
+        }
 
-        // 2. Background Revalidate: Fetch fresh catalog silently without blocking UI
+        // 2. Online Fetch: Initial view strictly capped at 100 items from Stock Toko of active branch
         const isOffline = (window.Alpine && window.Alpine.store && window.Alpine.store('network') && !window.Alpine.store('network').isOnline)
             || (window.PosOfflineSync && typeof window.PosOfflineSync.isOnline === 'function' && !window.PosOfflineSync.isOnline())
             || !navigator.onLine;
@@ -63,9 +119,17 @@
         if (!isOffline) {
             try {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 1800);
+                const timeoutId = setTimeout(() => controller.abort(), 2500);
+                const params = new URLSearchParams({
+                    branch: branch,
+                    terminal_code: terminal,
+                    limit: '100'
+                });
+                if (this.activeSession?.locationId) {
+                    params.set('location_id', String(this.activeSession.locationId));
+                }
 
-                const res = await fetch('/api/pos/products/search?limit=500', {
+                const res = await fetch('/api/pos/products/search?' + params.toString(), {
                     headers: { 'Accept': 'application/json' },
                     signal: controller.signal
                 });
@@ -75,15 +139,114 @@
                     const json = await res.json();
                     if (json.success && Array.isArray(json.data)) {
                         const result = this.deduplicateProducts(json.data);
-                        this.products = result.unique;
-                        try {
-                            localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(result.unique.slice(0, 200)));
-                        } catch (e) {}
+                        this.products = result.unique.slice(0, 100);
+                        if (json.location && json.location.id && this.activeSession) {
+                            this.activeSession.locationId = json.location.id;
+                        }
+                        // Incremental paginated sync of full Stock Toko for offline readiness
+                        this.syncStoreCatalogIncremental(branch, terminal, json.location || null);
                     }
                 }
             } catch (e) {
-                // Silent fallback
+                // Silent fallback to branch cache
             }
+        }
+    },
+
+    async syncStoreCatalogIncremental(expectedBranch, terminal, initialLocation = null) {
+        if (this.isCatalogSyncing) return;
+        this.isCatalogSyncing = true;
+        try {
+            let afterId = 0;
+            let hasMore = true;
+            let pageGuard = 0;
+            const accumulated = [];
+            let resolvedLoc = initialLocation;
+
+            while (hasMore && pageGuard < 200) {
+                pageGuard++;
+                if (this.getActiveBranch() !== expectedBranch) {
+                    // Branch switched mid-sync: abort without overwriting cache
+                    return;
+                }
+
+                const params = new URLSearchParams({
+                    branch: expectedBranch,
+                    terminal_code: terminal,
+                    per_page: '100',
+                    after_id: String(afterId)
+                });
+                if (resolvedLoc && resolvedLoc.id) {
+                    params.set('location_id', String(resolvedLoc.id));
+                }
+
+                const res = await fetch('/api/pos/products/sync?' + params.toString(), {
+                    headers: { 'Accept': 'application/json' }
+                });
+                if (!res.ok) {
+                    // Abort cleanly without deleting previous verified cache
+                    return;
+                }
+                const json = await res.json();
+                if (!json.success || !Array.isArray(json.data)) {
+                    return;
+                }
+                if (json.location) {
+                    resolvedLoc = json.location;
+                }
+                accumulated.push(...json.data);
+                hasMore = Boolean(json.has_more && json.next_after_id);
+                afterId = json.next_after_id || 0;
+            }
+
+            // Verify branch didn't change before swapping cache
+            if (this.getActiveBranch() !== expectedBranch) {
+                return;
+            }
+
+            const deduped = this.deduplicateProducts(accumulated).unique;
+            const branchKey = this.getBranchCacheKey(expectedBranch);
+            const locId = resolvedLoc?.id || (expectedBranch.includes('1') ? 2 : (expectedBranch.includes('2') ? 3 : 1));
+            const meta = {
+                branch: expectedBranch,
+                location_id: locId,
+                location_code: resolvedLoc?.code || null,
+                location_name: resolvedLoc?.name || expectedBranch,
+                total: deduped.length,
+                partial: false,
+                quota_exceeded: false,
+                synced_at: new Date().toISOString()
+            };
+
+            // 1. Primary Storage: Dexie.js (IndexedDB)
+            if (window.PosDb && typeof window.PosDb.products?.bulkUpsert === 'function') {
+                try {
+                    await window.PosDb.products.bulkUpsert(locId, deduped);
+                    const cats = [...new Set(deduped.map(p => p.category).filter(Boolean))];
+                    await window.PosDb.categories.bulkUpsert(locId, cats);
+                    await window.PosDb.meta.set('catalog_meta_' + locId, meta);
+                    if (resolvedLoc) {
+                        await window.PosDb.locations.save(resolvedLoc);
+                    }
+                } catch (dexieErr) {
+                    console.warn('[StockTokoSync] Dexie catalog write warning:', dexieErr);
+                }
+            }
+
+            // 2. Secondary fallback mirror to localStorage (truncated to avoid quota error)
+            try {
+                localStorage.setItem(branchKey, JSON.stringify(deduped.slice(0, 150)));
+                localStorage.setItem('pos_ilp_inventory_catalog_meta_v1', JSON.stringify(meta));
+            } catch (storageErr) {
+                // Non-fatal because Dexie is storing the authoritative offline catalog
+            }
+            if (deduped.length > 0 || this.products.length === 0) {
+                this.products = deduped.slice(0, 100);
+            }
+        } catch (e) {
+            console.warn('[StockTokoSync] Incremental sync paused, keeping previous verified cache:', e);
+        } finally {
+            this.isCatalogSyncing = false;
         }
     },
 
@@ -103,12 +266,12 @@
         return ['Semua', ...Array.from(catMap.values())];
     },
 
-    displayLimit: 48,
+    displayLimit: 100,
     get visibleProducts() {
         return (this.filteredProducts || []).slice(0, this.displayLimit);
     },
     loadMoreProducts() {
-        this.displayLimit += 48;
+        this.displayLimit += 100;
     },
 
     get filteredProducts() {
@@ -136,7 +299,7 @@
     searchTimer: null,
     isSearchingServer: false,
     onSearchInput() {
-        this.displayLimit = 48;
+        this.displayLimit = 100;
         const q = (this.searchQuery || '').trim();
         if (this.searchTimer) clearTimeout(this.searchTimer);
         if (q.length >= 2) {
@@ -147,8 +310,19 @@
     },
     async searchServerProducts(q) {
         if (!q || q.length < 2) return;
-        // Skip server search if offline to prevent lag; local filteredProducts handles it
+        // Skip server search if offline to prevent lag; search Dexie IndexedDB cache instead
         if ((window.Alpine && window.Alpine.store && window.Alpine.store('network') && !window.Alpine.store('network').isOnline) || !navigator.onLine) {
+            if (window.PosDb && typeof window.PosDb.products?.search === 'function') {
+                const locId = this.activeSession?.locationId || 1;
+                const localMatches = await window.PosDb.products.search(locId, q, this.selectedCategory, 50);
+                if (localMatches && localMatches.length > 0) {
+                    const existingSkus = new Set((this.products || []).map(p => p.sku));
+                    const newItems = localMatches.filter(p => !existingSkus.has(p.sku));
+                    if (newItems.length > 0) {
+                        this.products = [...newItems, ...this.products];
+                    }
+                }
+            }
             return;
         }
 
@@ -157,7 +331,18 @@
         const timeoutId = setTimeout(() => controller.abort(), 1500);
 
         try {
-            const res = await fetch(`/api/pos/products/search?q=${encodeURIComponent(q)}&limit=100`, {
+            const branch = this.getActiveBranch();
+            const terminal = this.getActiveTerminal();
+            const params = new URLSearchParams({
+                q: q,
+                branch: branch,
+                terminal_code: terminal,
+                limit: '100'
+            });
+            if (this.activeSession?.locationId) {
+                params.set('location_id', String(this.activeSession.locationId));
+            }
+            const res = await fetch(`/api/pos/products/search?${params.toString()}`, {
                 headers: { 'Accept': 'application/json' },
                 signal: controller.signal
             });
@@ -209,6 +394,10 @@
 
     addToCart(p) {
         if (!p) return;
+        if ((Number(p.stock) || 0) <= 0) {
+            this.triggerPosToast(`Stok [${p.name}] HABIS di Stock Toko lokasi ini.`, 'error');
+            return;
+        }
         const targetSku = (p.sku || '').trim().toUpperCase();
         const targetBarcode = (p.barcode || '').trim();
 
@@ -363,7 +552,7 @@
         if (!this.searchQuery.trim()) return;
         const q = this.searchQuery.trim();
 
-        // 1. Try local exact barcode match
+        // 1. Try local exact barcode match in memory
         const exactBarcode = this.products.find(p => p.barcode === q);
         if (exactBarcode) {
             this.addToCart(exactBarcode);
@@ -371,9 +560,37 @@
             return;
         }
 
-        // 2. Instant Barcode Scanner API Lookup
+        // 1b. Fast IndexedDB (Dexie) lookup by barcode & SKU for large offline catalogs
+        if (window.PosDb && typeof window.PosDb.products?.findByBarcode === 'function') {
+            const locId = this.activeSession?.locationId || (this.getActiveBranch().includes('1') ? 2 : (this.getActiveBranch().includes('2') ? 3 : 1));
+            const dexieProd = await window.PosDb.products.findByBarcode(locId, q);
+            if (dexieProd) {
+                this.addToCart(dexieProd);
+                if (!this.products.find(p => p.sku === dexieProd.sku)) {
+                    this.products.unshift(dexieProd);
+                }
+                this.searchQuery = '';
+                return;
+            }
+            const dexieSkuProd = await window.PosDb.products.findBySku(locId, q);
+            if (dexieSkuProd) {
+                this.addToCart(dexieSkuProd);
+                if (!this.products.find(p => p.sku === dexieSkuProd.sku)) {
+                    this.products.unshift(dexieSkuProd);
+                }
+                this.searchQuery = '';
+                return;
+            }
+        }
+
+        // 2. Instant Barcode Scanner API Lookup (scoped to active store location)
         try {
-            const res = await fetch(`/api/pos/products/barcode/${encodeURIComponent(q)}`, {
+            const branch = this.getActiveBranch();
+            const terminal = this.getActiveTerminal();
+            const bParams = new URLSearchParams({ branch, terminal_code: terminal });
+            if (this.activeSession?.locationId) bParams.set('location_id', String(this.activeSession.locationId));
+
+            const res = await fetch(`/api/pos/products/barcode/${encodeURIComponent(q)}?${bParams.toString()}`, {
                 headers: { 'Accept': 'application/json' }
             });
             if (res.ok) {
@@ -397,10 +614,15 @@
             return;
         }
 
-        // 4. Fallback search on server for catalog with 18,000+ products
+        // 4. Fallback search on server scoped to active store Stock Toko
         if (matches.length === 0) {
             try {
-                const res = await fetch(`/api/pos/products/search?q=${encodeURIComponent(q)}&limit=20`, {
+                const branch = this.getActiveBranch();
+                const terminal = this.getActiveTerminal();
+                const sParams = new URLSearchParams({ q, branch, terminal_code: terminal, limit: '20' });
+                if (this.activeSession?.locationId) sParams.set('location_id', String(this.activeSession.locationId));
+
+                const res = await fetch(`/api/pos/products/search?${sParams.toString()}`, {
                     headers: { 'Accept': 'application/json' }
                 });
                 if (res.ok) {
@@ -680,7 +902,7 @@
             return;
         }
 
-        const trxRecord = window.PosOfflineSync.processOfflineTransaction({
+        const res = window.PosOfflineSync.processOfflineTransaction({
             payload: payload,
             cart: this.cart,
             activeSession: this.activeSession,
@@ -690,6 +912,13 @@
             selectedMember: this.selectedMember
         });
 
+        if (!res || !res.success) {
+            this.triggerPosToast((res && res.error) ? res.error : 'Gagal menyimpan transaksi offline. Keranjang tetap dipertahankan.', 'error');
+            return;
+        }
+
+        const trxRecord = res.trxRecord || res;
+
         // Deduct local active products array
         this.cart.forEach(cartItem => {
             const p = this.products.find(it => (cartItem.barcode && it.barcode === cartItem.barcode) || (cartItem.sku && it.sku === cartItem.sku));
@@ -698,7 +927,7 @@
             }
         });
 
-        // Clear Cart
+        // Clear Cart ONLY after offline queue write succeeded
         this.cart = [];
         this.saveCart();
 
@@ -718,8 +947,15 @@
             return;
         }
 
+        const clientOfflineId = (window.PosOfflineSync && typeof window.PosOfflineSync.generateUuid === 'function')
+            ? ('off_' + window.PosOfflineSync.generateUuid())
+            : ('off_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6));
+
         const payload = {
+            offline_id: clientOfflineId,
             terminal_code: this.activeSession?.terminalLabel || localStorage.getItem('pos_active_terminal_label') || '',
+            location_id: this.activeSession?.locationId || null,
+            branch: this.getActiveBranch(),
             cashier_nik: (this.activeOperator && this.activeOperator.nik) ? this.activeOperator.nik : (this.activeSession?.cashierNik || localStorage.getItem('pos_portal_logged_in_nik') || ''),
             cashier_name: (this.activeOperator && this.activeOperator.name) ? this.activeOperator.name : (this.activeSession?.cashierName || localStorage.getItem('pos_user_name') || ''),
             payment_method: method.toUpperCase(),

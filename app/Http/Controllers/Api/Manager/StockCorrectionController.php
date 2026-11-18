@@ -69,7 +69,13 @@ class StockCorrectionController extends Controller
         }
 
         $product = Product::findOrFail($validated['product_id']);
-        $stockBefore = (int) $product->stock;
+        $stockService = app(\App\Services\LocationStockService::class);
+        $targetLocation = $stockService->resolveLocation(null, $validated['branch']);
+        $locPs = $targetLocation
+            ? \App\Models\ProductStock::where('product_id', $product->id)->where('location_id', $targetLocation->id)->first()
+            : null;
+
+        $stockBefore = $locPs ? (int) $locPs->stock : (int) $product->stock;
         $qty = (int) $validated['qty'];
 
         if ($validated['type'] === 'SUBTRACT') {
@@ -82,17 +88,35 @@ class StockCorrectionController extends Controller
 
         DB::beginTransaction();
         try {
-            // Update product stock
-            $product->stock = $stockAfter;
-            // Update product status
-            if ($stockAfter <= 0) {
-                $product->status = 'HABIS';
-            } elseif ($stockAfter <= $product->min_stock) {
-                $product->status = 'STOK_RENDAH';
+            if ($targetLocation && $locPs) {
+                $delta = $stockAfter - $stockBefore;
+                if ($delta > 0) {
+                    $stockService->addStock($product->id, $targetLocation->id, $delta, [
+                        'movement_type' => 'CORRECTION',
+                        'user_id' => $supervisor->id,
+                        'notes' => "Koreksi stok {$validated['branch']}: {$validated['reason']}",
+                    ]);
+                } elseif ($delta < 0) {
+                    $stockService->deductStock($product->id, $targetLocation->id, abs($delta), [
+                        'movement_type' => 'CORRECTION',
+                        'allow_negative' => true,
+                        'user_id' => $supervisor->id,
+                        'notes' => "Koreksi stok {$validated['branch']}: {$validated['reason']}",
+                    ]);
+                }
+                $product->refresh();
             } else {
-                $product->status = 'TERSEDIA';
+                // Legacy global product stock update
+                $product->stock = $stockAfter;
+                if ($stockAfter <= 0) {
+                    $product->status = 'HABIS';
+                } elseif ($stockAfter <= $product->min_stock) {
+                    $product->status = 'STOK_RENDAH';
+                } else {
+                    $product->status = 'TERSEDIA';
+                }
+                $product->save();
             }
-            $product->save();
 
             // Record correction audit log
             $correctionCode = 'SC-' . date('Ymd') . '-' . strtoupper(substr(uniqid(), -5));

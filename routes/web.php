@@ -106,6 +106,14 @@ Route::middleware(['auth.web:owner'])->group(function () {
         return view('owner.umkm-partners');
     })->name('owner.umkm-partners');
 
+    Route::get('/owner/suppliers', function () {
+        return view('owner.suppliers');
+    })->name('owner.suppliers');
+
+    Route::get('/owner/suppliers/{id}', function ($id) {
+        return view('owner.supplier-detail', ['supplierId' => (int) $id]);
+    })->whereNumber('id')->name('owner.supplier-detail');
+
     Route::get('/owner/reports', function () {
         return view('owner.reports');
     })->name('owner.reports');
@@ -160,6 +168,14 @@ Route::middleware(['auth.web:manager'])->group(function () {
     Route::get('/manager/pembelian-barang', function () {
         return view('manager.pembelian-barang');
     })->name('manager.pembelian-barang');
+
+    Route::get('/manager/suppliers', function () {
+        return view('manager.suppliers');
+    })->name('manager.suppliers');
+
+    Route::get('/manager/suppliers/{id}', function ($id) {
+        return view('manager.supplier-detail', ['supplierId' => (int) $id]);
+    })->whereNumber('id')->name('manager.supplier-detail');
 
     Route::get('/manager/products/export', [App\Http\Controllers\Api\Manager\ProductImportExportController::class, 'export'])->name('manager.products.export');
     Route::get('/manager/products/template', [App\Http\Controllers\Api\Manager\ProductImportExportController::class, 'downloadTemplate'])->name('manager.products.template');
@@ -311,6 +327,20 @@ Route::middleware(['auth.web:manager'])->group(function () {
     Route::get('/pembelian-barang', function () {
         return view('manager.pembelian-barang');
     })->name('pembelian-barang');
+
+    Route::get('/suppliers', function () {
+        if (request('role') === 'owner') {
+            return view('owner.suppliers');
+        }
+        return view('manager.suppliers');
+    })->name('suppliers');
+
+    Route::get('/suppliers/{id}', function ($id) {
+        if (request('role') === 'owner') {
+            return view('owner.supplier-detail', ['supplierId' => (int) $id]);
+        }
+        return view('manager.supplier-detail', ['supplierId' => (int) $id]);
+    })->whereNumber('id')->name('supplier-detail');
 });
 
 /*
