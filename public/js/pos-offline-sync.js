@@ -129,7 +129,12 @@
 
         isOnline() {
             if (window.Alpine && window.Alpine.store && window.Alpine.store('network')) {
-                return !!window.Alpine.store('network').isOnline;
+                const net = window.Alpine.store('network');
+                // Fully online ONLY when browser has network AND server is reachable
+                return !!(net.isOnline && (net.isServerConnected !== false));
+            }
+            if (window.posNetworkHealth && typeof window.posNetworkHealth.isServerConnected === 'boolean') {
+                return !!(window.posNetworkHealth.isBrowserOnline && window.posNetworkHealth.isServerConnected);
             }
             return typeof navigator !== 'undefined' ? navigator.onLine : true;
         },

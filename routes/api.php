@@ -32,6 +32,7 @@ use App\Http\Controllers\Api\Shared\MemberController;
 use App\Http\Controllers\Api\Shared\NotificationController;
 use App\Http\Controllers\Api\Shared\ProductController;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -42,13 +43,52 @@ use Illuminate\Support\Facades\Route;
 | Connected to PostgreSQL database with high-performance indexing.
 */
 
-// Health Check
+// Health Check (Lightweight, non-cached, server availability & internet probe)
 Route::get('/health', function () {
+    try {
+        DB::connection()->getPdo();
+        $dbStatus = 'connected';
+    } catch (\Throwable $e) {
+        $dbStatus = 'unreachable';
+    }
+
+    $isOk = ($dbStatus === 'connected');
+
+    // Cached internet probe (TTL 15s) so health checks never stall the single-threaded PHP worker
+    static $lastInternetCheck = null;
+    static $lastCheckTime = 0;
+    $now = time();
+
+    if ($lastInternetCheck !== null && ($now - $lastCheckTime) < 15) {
+        $hasInternet = $lastInternetCheck;
+    } else {
+        $hasInternet = false;
+        // Non-blocking fast socket check with short 0.2s timeout
+        $fp = @fsockopen('1.1.1.1', 53, $errno, $errstr, 0.2);
+        if ($fp) {
+            fclose($fp);
+            $hasInternet = true;
+        } else {
+            $fp2 = @fsockopen('8.8.8.8', 53, $errno, $errstr, 0.2);
+            if ($fp2) {
+                fclose($fp2);
+                $hasInternet = true;
+            }
+        }
+        $lastInternetCheck = $hasInternet;
+        $lastCheckTime = $now;
+    }
+
     return response()->json([
-        'status' => 'ok',
+        'status' => $isOk ? 'ok' : 'degraded',
         'database' => 'postgresql',
+        'db_status' => $dbStatus,
+        'has_internet' => $hasInternet,
         'timestamp' => now()->toIso8601String(),
-    ]);
+    ], $isOk ? 200 : 503)
+      ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+      ->header('Pragma', 'no-cache')
+      ->header('Expires', '0');
 });
 
 // Authentication (Kasir, Manager, Owner)
@@ -157,7 +197,7 @@ Route::prefix('products')->middleware('auth.api')->group(function () {
         Route::post('/{id}/units', [ProductController::class, 'addUnit']);
         Route::delete('/{id}/units/{unitId}', [ProductController::class, 'removeUnit']);
 
-        // Import & Export Excel Master Produk (Standard 36 Kolom ILP)
+        // Import & Export Excel Master Produk (Standard 25 Kolom ILP)
         Route::post('/import/validate', [ProductImportExportController::class, 'validateAndPreview']);
         Route::post('/import/process', [ProductImportExportController::class, 'processImport']);
         Route::get('/export/excel', [ProductImportExportController::class, 'export']);

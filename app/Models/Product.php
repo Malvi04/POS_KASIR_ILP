@@ -24,6 +24,10 @@ class Product extends Model
         'last_cost_price',
         'price',
         'member_price',
+        'min_qty1',
+        'min_qty2',
+        'min_qty3',
+        'harga_level1',
         'stock',
         'min_stock',
         'reorder_point',
@@ -33,6 +37,10 @@ class Product extends Model
         'clearance_discount_percent',
         'markup_percent',
         'status',
+        'ko_sup',
+        'act',
+        'masa',
+        'dump',
         'is_consignment',
         'supplier_id',
         'commission_percent',
@@ -45,6 +53,10 @@ class Product extends Model
         'last_cost_price' => 'float',
         'price' => 'float',
         'member_price' => 'float',
+        'min_qty1' => 'float',
+        'min_qty2' => 'float',
+        'min_qty3' => 'float',
+        'harga_level1' => 'float',
         'stock' => 'integer',
         'min_stock' => 'integer',
         'reorder_point' => 'integer',
@@ -248,5 +260,13 @@ class Product extends Model
             return max(0, $base - $discount);
         }
         return $base;
+    }
+
+    public function getHargaLevel1Attribute($value): ?float
+    {
+        if ($value !== null && (float) $value > 0) {
+            return (float) $value;
+        }
+        return $this->member_price !== null ? (float) $this->member_price : (float) $this->price;
     }
 }

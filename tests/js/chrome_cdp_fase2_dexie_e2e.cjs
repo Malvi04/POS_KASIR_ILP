@@ -129,6 +129,18 @@ class CDPClient {
         await sleep(1500);
 
         await cdp.eval(`(async () => {
+            const form = document.getElementById('form-kasir');
+            if (window.Alpine && form) {
+                try {
+                    const data = window.Alpine.$data(form);
+                    if (data && typeof data.handleSubmit === 'function') {
+                        data.identifierInput = 'kasir1';
+                        data.portalPassword = 'kasir123';
+                        await data.handleSubmit();
+                        return;
+                    }
+                } catch (e) {}
+            }
             const u = document.getElementById('kasir-identifier');
             const p = document.getElementById('kasir-password');
             if (u && p) {
@@ -136,9 +148,8 @@ class CDPClient {
                 u.dispatchEvent(new Event('input', { bubbles: true }));
                 p.value = 'kasir123';
                 p.dispatchEvent(new Event('input', { bubbles: true }));
-                const form = document.getElementById('form-kasir');
-                const btn = form.querySelector('button[type="submit"]');
-                if (btn) setTimeout(() => btn.click(), 50);
+                const btn = form ? form.querySelector('button[type="submit"]') : null;
+                if (btn) btn.click();
             }
         })()`);
 
@@ -260,6 +271,27 @@ class CDPClient {
         const isOnlineBrowser = await cdp.eval('navigator.onLine');
         assert.strictEqual(isOnlineBrowser, false, 'Browser network condition set to OFFLINE');
         recordPass('Network successfully severed (OFFLINE mode)');
+
+        // Hotfix 3.0.1 Verification: Ensure offline event immediately drives wsConnected & isOnline to false
+        await cdp.eval(`(() => {
+            window.dispatchEvent(new Event('offline'));
+        })()`);
+        await sleep(400);
+
+        const offlineStatusCheck = await cdp.eval(`(() => {
+            const net = window.Alpine?.store('network');
+            return {
+                isOnline: net?.isOnline,
+                wsConnected: net?.wsConnected,
+                wsStatus: net?.wsStatus,
+                isBrowserOnline: net?.isBrowserOnline
+            };
+        })()`);
+
+        assert.strictEqual(offlineStatusCheck.isOnline, false, 'Store isOnline is false when offline');
+        assert.strictEqual(offlineStatusCheck.wsConnected, false, 'Store wsConnected is FALSE when offline (Reverb bug fixed)');
+        assert.strictEqual(offlineStatusCheck.wsStatus, 'disconnected', 'Store wsStatus is disconnected when offline');
+        recordPass('Hotfix 3.0.1: wsConnected & isOnline immediately false on offline cut (Reverb disconnected)');
 
         // STEP 5: Perform Offline Transaction
         console.log('\nSTEP 5: Perform Offline Checkout in Dexie');
@@ -438,7 +470,7 @@ class CDPClient {
                 const form = document.querySelector('#form-manager form');
                 if (form) {
                     const btn = form.querySelector('button[type="submit"]');
-                    if (btn) setTimeout(() => btn.click(), 50);
+                    if (btn) btn.click();
                 }
             }
         })()`);
@@ -462,7 +494,7 @@ class CDPClient {
                 const form = document.querySelector('#form-owner form');
                 if (form) {
                     const btn = form.querySelector('button[type="submit"]');
-                    if (btn) setTimeout(() => btn.click(), 50);
+                    if (btn) btn.click();
                 }
             }
         })()`);

@@ -11,20 +11,20 @@
  *  - Versi cache dinaikkan agar cache lama yang rusak otomatis dihapus.
  */
 
-const CACHE_NAME = 'pos-ilp-cache-v4.0';
-const PAGES_CACHE = 'pos-ilp-pages-v4.0';
+const CACHE_NAME = 'pos-ilp-cache-v4.3';
+const PAGES_CACHE = 'pos-ilp-pages-v4.3';
 
 const PRECACHE_STATIC = [
     '/fonts/material-symbols-rounded.woff2',
     '/fonts/inter-latin.woff2',
-    '/js/vendor/dexie.min.js?v=2.2',
+    '/js/vendor/dexie.min.js?v=3.0.3',
     '/js/vendor/dexie.min.js',
-    '/js/db/pos-db.js?v=2.2',
-    '/js/db/pos-migration.js?v=2.2',
+    '/js/db/pos-db.js?v=3.0.3',
+    '/js/db/pos-migration.js?v=3.0.3',
     '/js/alpine.min.js',
-    '/js/cashier-core.js?v=2.2',
-    '/js/pos-realtime.js?v=2.2',
-    '/js/pos-offline-sync.js?v=2.2',
+    '/js/cashier-core.js?v=3.0.3',
+    '/js/pos-realtime.js?v=3.0.3',
+    '/js/pos-offline-sync.js?v=3.0.3',
     '/js/excel-export.js',
     '/manifest.json',
     '/favicon.ico'

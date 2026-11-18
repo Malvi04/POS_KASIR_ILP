@@ -11,6 +11,38 @@
     selectedProduct: null,
     showScannerModal: false,
     scannerInput: '',
+    tableMode: 'standard', // 'standard' | 'ilp_25'
+    selectedBranch: 'all', // 'all' (Produk Master), 'CAB-001' (Cabang Pusat), 'CAB-002' (Cabang A), 'CAB-003' (Cabang B)
+
+    getBranchName(code) {
+        if (code === 'all') return 'Produk Master';
+        if (code === 'CAB-001') return 'Cabang Pusat';
+        if (code === 'CAB-002') return 'Cabang A';
+        if (code === 'CAB-003') return 'Cabang B';
+        if (code === 'GDG-001') return 'Gudang Pusat';
+        return code;
+    },
+
+    getProductStock(p, branchCode = null) {
+        const b = branchCode || this.selectedBranch;
+        if (!p) return 0;
+        if (b === 'all') {
+            return Number(p.masterStock !== undefined ? p.masterStock : p.stock) || 0;
+        }
+        if (p.branchStock && p.branchStock[b] !== undefined) {
+            return Number(p.branchStock[b]) || 0;
+        }
+        return 0;
+    },
+
+    getProductStatus(p, branchCode = null) {
+        const st = this.getProductStock(p, branchCode);
+        const min = Number(p.minStock ?? p.stockMin) || 5;
+        if (p.act === 'N' || p.status === 'NONAKTIF') return 'NONAKTIF';
+        if (st <= 0) return 'HABIS';
+        if (st <= min) return 'STOK_RENDAH';
+        return 'TERSEDIA';
+    },
 
     // Toast Notification
     toastMessage: '',
@@ -75,22 +107,40 @@
                 if (Array.isArray(items)) {
                     const mapped = items.map(p => ({
                         id: p.id,
+                        ilp_id: p.ilp_id || String(p.id),
                         sku: p.sku,
                         barcode: p.barcode,
                         name: p.name,
                         brand: p.supplier_name || 'Lokal',
                         category: p.category || 'Umum',
-                        rackLocation: p.rack_location || 'Lorong Toko',
-                        stock: p.stock ?? 0,
-                        minStock: p.min_stock ?? 10,
                         unit: p.unit || 'Pcs',
-                        costPrice: p.cost_price ?? 0,
-                        lastCostPrice: p.last_cost_price ?? p.cost_price ?? 0,
-                        price: p.price ?? p.original_price ?? 0,
-                        memberPrice: p.member_price ?? p.original_member_price ?? p.price ?? 0,
+                        costPrice: Number(p.cost_price) || 0,
+                        lastCostPrice: Number(p.last_cost_price ?? p.cost_price) || 0,
+                        price: Number(p.price ?? p.original_price) || 0,
+                        memberPrice: Number(p.member_price ?? p.original_member_price ?? p.price) || 0,
+                        minQty1: p.min_qty1 !== null && p.min_qty1 !== undefined ? Number(p.min_qty1) : 1,
+                        minQty2: p.min_qty2 !== null && p.min_qty2 !== undefined ? Number(p.min_qty2) : null,
+                        minQty3: p.min_qty3 !== null && p.min_qty3 !== undefined ? Number(p.min_qty3) : null,
+                        hargaLevel1: Number(p.harga_level1 ?? p.member_price ?? p.price) || 0,
+                        disc: Number(p.clearance_discount_percent) || 0,
+                        minStock: Number(p.min_stock) || 5,
+                        stockMin: Number(p.min_stock) || 5,
+                        reorder: Number(p.reorder_point ?? ((p.min_stock || 5) * 2)),
+                        ppnOut: Number(p.tax_rate) || 11,
+                        ppnChk: (p.is_taxable !== false && p.ppn_chk !== 'N') ? 'Y' : 'N',
+                        statusBarang: p.status || 'TERSEDIA',
+                        koSup: p.ko_sup || (p.supplier_code || ''),
+                        act: p.act || 'Y',
+                        masa: p.masa || '',
+                        expiredDate: p.expired_date || '',
+                        up: Number(p.markup_percent) || 0,
+                        dump: p.dump || '',
+                        rackLocation: p.rack_location || 'Lorong Toko',
+                        branchStock: (p.branch_stock && typeof p.branch_stock === 'object') ? p.branch_stock : {},
+                        masterStock: Number(p.master_stock !== undefined ? p.master_stock : p.stock) || 0,
+                        stock: Number(p.stock) || 0,
                         status: p.stock_status || this.calculateStatus(p.stock, p.min_stock, p.expired_date),
                         batchLot: 'LOT-' + p.sku,
-                        expiredDate: p.expired_date || '',
                         suppliedBy: Array.isArray(p.supplied_by) ? p.supplied_by : []
                     }));
                     const result = this.deduplicateProducts(mapped);
@@ -133,8 +183,10 @@
                 const matchBrand = (p.brand || '').toLowerCase().includes(q);
                 const matchBarcode = (p.barcode || '').includes(q);
                 const matchSku = (p.sku || '').toLowerCase().includes(q);
+                const matchIlpId = (p.ilp_id || '').toLowerCase().includes(q);
                 const matchRack = (p.rackLocation || '').toLowerCase().includes(q);
-                return matchName || matchBrand || matchBarcode || matchSku || matchRack;
+                const matchKoSup = (p.koSup || '').toLowerCase().includes(q);
+                return matchName || matchBrand || matchBarcode || matchSku || matchIlpId || matchRack || matchKoSup;
             }
             return true;
         });
@@ -163,23 +215,42 @@
                 if (Array.isArray(items)) {
                     const mapped = items.map(p => ({
                         id: p.id,
+                        ilp_id: p.ilp_id || String(p.id),
                         sku: p.sku,
                         barcode: p.barcode,
                         name: p.name,
                         brand: p.supplier_name || p.brand || p.category || 'Lokal',
                         category: p.category || 'Kebutuhan Pokok',
-                        stock: Number(p.stock) || 0,
-                        minStock: Number(p.min_stock) || 10,
                         unit: p.unit || 'Pcs',
                         costPrice: Number(p.cost_price) || 0,
                         lastCostPrice: Number(p.last_cost_price ?? p.cost_price) || 0,
                         price: Number(p.price ?? p.original_price) || 0,
                         memberPrice: Number(p.member_price ?? p.original_member_price ?? p.price) || 0,
+                        minQty1: p.min_qty1 !== null && p.min_qty1 !== undefined ? Number(p.min_qty1) : 1,
+                        minQty2: p.min_qty2 !== null && p.min_qty2 !== undefined ? Number(p.min_qty2) : null,
+                        minQty3: p.min_qty3 !== null && p.min_qty3 !== undefined ? Number(p.min_qty3) : null,
+                        hargaLevel1: Number(p.harga_level1 ?? p.member_price ?? p.price) || 0,
+                        disc: Number(p.clearance_discount_percent) || 0,
+                        minStock: Number(p.min_stock) || 5,
+                        stockMin: Number(p.min_stock) || 5,
+                        reorder: Number(p.reorder_point ?? ((p.min_stock || 5) * 2)),
+                        ppnOut: Number(p.tax_rate) || 11,
+                        ppnChk: (p.is_taxable !== false && p.ppn_chk !== 'N') ? 'Y' : 'N',
+                        statusBarang: p.status || 'TERSEDIA',
+                        koSup: p.ko_sup || (p.supplier_code || ''),
+                        act: p.act || 'Y',
+                        masa: p.masa || '',
+                        expiredDate: p.expired_date || '',
+                        up: Number(p.markup_percent) || 0,
+                        dump: p.dump || '',
                         rackLocation: p.rack_location || 'Lorong Toko',
+                        branchStock: (p.branch_stock && typeof p.branch_stock === 'object') ? p.branch_stock : {},
+                        masterStock: Number(p.master_stock !== undefined ? p.master_stock : p.stock) || 0,
+                        stock: Number(p.stock) || 0,
                         status: p.stock_status || this.calculateStatus(p.stock, p.min_stock, p.expired_date),
+                        batchLot: 'LOT-' + p.sku,
                         isConsignment: Boolean(p.is_consignment),
                         supplier: p.supplier || null,
-                        expiredDate: p.expired_date || '',
                         suppliedBy: Array.isArray(p.supplied_by) ? p.supplied_by : []
                     }));
                     const existingSkus = new Set((this.products || []).map(p => p.sku));
@@ -229,10 +300,12 @@
         this.validationErrorDetails = null;
         this.duplicateAction = 'update';
         this.importResult = null;
+        const f = document.getElementById('excelFileInput') || (this.$refs && this.$refs.excelFileInput);
+        if (f) f.value = '';
     },
 
     onFileSelected(event) {
-        const file = event.target.files[0];
+        const file = event.target.files && event.target.files[0];
         if (file) {
             this.importFile = file;
             this.importFileName = file.name;
@@ -263,11 +336,11 @@
             if (res.ok && json.success) {
                 this.validationData = json.data;
                 this.importStep = 'preview';
-                this.triggerToast('Struktur 36 kolom Excel valid! Menampilkan pratinjau data...', 'success');
+                this.triggerToast('Struktur 25 kolom Excel valid! Menampilkan pratinjau data...', 'success');
             } else {
                 this.validationErrorDetails = json.details || { message: json.message || 'Format file tidak sesuai standar ILP.' };
                 this.importStep = 'invalid_structure';
-                this.triggerToast(json.message || 'Struktur file Excel tidak sesuai standar ILP (36 Kolom).', 'error');
+                this.triggerToast(json.message || 'Struktur file Excel tidak sesuai standar ILP (25 Kolom).', 'error');
             }
         } catch (e) {
             console.error('Validation error:', e);
@@ -306,12 +379,12 @@
                 await this.initProducts();
                 this.triggerToast('Import master produk berhasil diselesaikan!', 'success');
             } else {
-                alert('Gagal memproses import: ' + (json.message || 'Terjadi kesalahan sistem.'));
+                this.triggerToast('Gagal memproses import: ' + (json.message || 'Terjadi kesalahan sistem.'), 'error');
                 this.importStep = 'preview';
             }
         } catch (e) {
             console.error('Import execution error:', e);
-            alert('Terjadi kesalahan jaringan saat import: ' + e.message);
+            this.triggerToast('Terjadi kesalahan jaringan saat import: ' + e.message, 'error');
             this.importStep = 'preview';
         }
     },
@@ -330,7 +403,7 @@
 
     downloadILPTemplate() {
         window.location.href = '/manager/products/template';
-        this.triggerToast('Mengunduh Template Excel Master Barang ILP (36 Kolom)...', 'info');
+        this.triggerToast('Mengunduh Template Excel Master Barang ILP (25 Kolom)...', 'info');
     },
 
     get totalItems() {
@@ -338,7 +411,7 @@
     },
 
     get lowStockCount() {
-        return this.products.filter(p => p.status === 'STOK_RENDAH').length;
+        return this.products.filter(p => this.getProductStatus(p) === 'STOK_RENDAH').length;
     },
 
     get nearExpiredCount() {
@@ -346,11 +419,11 @@
     },
 
     get outOfStockCount() {
-        return this.products.filter(p => p.status === 'HABIS').length;
+        return this.products.filter(p => this.getProductStatus(p) === 'HABIS').length;
     },
 
     get totalInventoryValue() {
-        return this.products.reduce((acc, p) => acc + ((Number(p.stock) || 0) * (Number(p.price) || 0)), 0);
+        return this.products.reduce((acc, p) => acc + (this.getProductStock(p) * (Number(p.costPrice || p.price) || 0)), 0);
     },
 
     calculateStatus(stock, minStock, expiredDate) {
@@ -1049,6 +1122,63 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
             <!-- ========================================== -->
             <div x-show="inventoryTab === 'normal'" class="space-y-6">
 
+                <!-- Quick Branch Selector Tabs (Produk Master, Cabang Pusat, Cabang A, Cabang B) -->
+                <div class="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden">
+                    <div class="px-5 pt-3.5 border-b border-gray-100 flex items-center gap-2 overflow-x-auto bg-slate-50/70">
+                        <button type="button" 
+                                @click="selectedBranch = 'all'; currentPage = 1;"
+                                class="px-4 py-2.5 text-xs font-bold transition-all border-b-2 inline-flex items-center gap-2 whitespace-nowrap cursor-pointer"
+                                :class="selectedBranch === 'all' ? 'border-[#0052cc] text-[#0052cc] bg-white rounded-t-xl shadow-2xs' : 'border-transparent text-slate-600 hover:text-slate-900'">
+                            <span class="material-symbols-rounded text-[16px]">all_inclusive</span>
+                            <span>Produk Master (Semua Cabang)</span>
+                        </button>
+
+                        <button type="button" 
+                                @click="selectedBranch = 'CAB-001'; currentPage = 1;"
+                                class="px-4 py-2.5 text-xs font-bold transition-all border-b-2 inline-flex items-center gap-2 whitespace-nowrap cursor-pointer"
+                                :class="selectedBranch === 'CAB-001' ? 'border-[#0052cc] text-[#0052cc] bg-white rounded-t-xl shadow-2xs' : 'border-transparent text-slate-600 hover:text-slate-900'">
+                            <span class="material-symbols-rounded text-[16px]">storefront</span>
+                            <span>Cabang Pusat</span>
+                        </button>
+
+                        <button type="button" 
+                                @click="selectedBranch = 'CAB-002'; currentPage = 1;"
+                                class="px-4 py-2.5 text-xs font-bold transition-all border-b-2 inline-flex items-center gap-2 whitespace-nowrap cursor-pointer"
+                                :class="selectedBranch === 'CAB-002' ? 'border-[#0052cc] text-[#0052cc] bg-white rounded-t-xl shadow-2xs' : 'border-transparent text-slate-600 hover:text-slate-900'">
+                            <span class="material-symbols-rounded text-[16px]">storefront</span>
+                            <span>Cabang A</span>
+                        </button>
+
+                        <button type="button" 
+                                @click="selectedBranch = 'CAB-003'; currentPage = 1;"
+                                class="px-4 py-2.5 text-xs font-bold transition-all border-b-2 inline-flex items-center gap-2 whitespace-nowrap cursor-pointer"
+                                :class="selectedBranch === 'CAB-003' ? 'border-[#0052cc] text-[#0052cc] bg-white rounded-t-xl shadow-2xs' : 'border-transparent text-slate-600 hover:text-slate-900'">
+                            <span class="material-symbols-rounded text-[16px]">storefront</span>
+                            <span>Cabang B</span>
+                        </button>
+                    </div>
+
+                    <!-- Context Info Callout -->
+                    <div class="px-5 py-2.5 bg-blue-50/50 border-b border-blue-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-slate-600">
+                        <div class="flex items-center gap-1.5">
+                            <span class="material-symbols-rounded text-[16px] text-[#0052cc]">info</span>
+                            <span x-show="selectedBranch === 'all'">
+                                <strong>Katalog Master Koperasi:</strong> Menampilkan total stok konsolidasi seluruh cabang dan struktur tabel master produk.
+                            </span>
+                            <span x-show="selectedBranch === 'CAB-001'">
+                                <strong>Inventaris Cabang Pusat:</strong> Menampilkan saldo stok fisik dan status barang khusus gerai ritel Cabang Pusat (Toko Pusat).
+                            </span>
+                            <span x-show="selectedBranch === 'CAB-002'">
+                                <strong>Inventaris Cabang A:</strong> Menampilkan saldo stok fisik dan status barang khusus gerai ritel Cabang A.
+                            </span>
+                            <span x-show="selectedBranch === 'CAB-003'">
+                                <strong>Inventaris Cabang B:</strong> Menampilkan saldo stok fisik dan status barang khusus gerai ritel Cabang B.
+                            </span>
+                        </div>
+                        <span class="font-bold text-[#0052cc] shrink-0" x-text="'Tampilan Aktif: ' + getBranchName(selectedBranch)"></span>
+                    </div>
+                </div>
+
                 <!-- Filter, Search Bar & Import/Export Actions Toolbar -->
                 <div class="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-gray-200 shadow-xs">
                     <div class="flex flex-col sm:flex-row items-center gap-3 flex-1">
@@ -1058,7 +1188,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             <input type="text"
                                    x-model="searchQuery"
                                    @input="onSearchInput()"
-                                   placeholder="Cari nama produk, barcode, SKU, brand, atau rak..."
+                                   placeholder="Cari nama produk, barcode, SKU, ID, atau kategori..."
                                    class="w-full pl-11 pr-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 text-[13px] shadow-xs transition-all font-medium bg-slate-50/50">
                         </div>
 
@@ -1080,9 +1210,9 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <div class="flex flex-wrap items-center gap-2.5 shrink-0">
                         <!-- Tombol Import Excel -->
                         <button type="button"
-                                @click="openImportModal()"
+                                @click.stop="openImportModal()"
                                 class="h-10 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
-                                title="Import data master produk massal dari file Excel ILP (36 Kolom)">
+                                title="Import data master produk massal dari file Excel ILP (25 Kolom)">
                             <span class="material-symbols-rounded text-[18px]">upload_file</span>
                             <span>Import Excel</span>
                         </button>
@@ -1091,7 +1221,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <button type="button"
                                 @click="exportExcelData()"
                                 class="h-10 px-4 bg-white hover:bg-slate-50 text-slate-700 border border-gray-300 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
-                                title="Export seluruh master produk database ke file Excel 36 kolom ILP">
+                                title="Export seluruh master produk database ke file Excel 25 kolom ILP">
                             <span class="material-symbols-rounded text-[18px]">download</span>
                             <span>Export Excel</span>
                         </button>
@@ -1117,7 +1247,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
 
                     <div class="bg-white rounded-2xl border border-amber-200 p-5 shadow-xs flex flex-col justify-between relative overflow-hidden border-l-4 border-l-amber-500">
-                        <span class="text-[11px] font-bold text-amber-700 tracking-wider uppercase">STOK RENDAH</span>
+                        <span class="text-[11px] font-bold text-amber-700 tracking-wider uppercase">STOK RENDAH (<span x-text="selectedBranch === 'all' ? 'MASTER' : getBranchName(selectedBranch)"></span>)</span>
                         <div class="flex items-center justify-between mt-3 relative z-10">
                             <span class="text-3xl font-black text-amber-500 tracking-tight" x-text="lowStockCount">0</span>
                             <span class="material-symbols-rounded text-amber-500 text-[26px]">warning</span>
@@ -1133,7 +1263,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
 
                     <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs flex flex-col justify-between">
-                        <span class="text-[11px] font-bold text-gray-500 tracking-wider uppercase">NILAI INVENTARIS</span>
+                        <span class="text-[11px] font-bold text-gray-500 tracking-wider uppercase">NILAI INVENTARIS (<span x-text="selectedBranch === 'all' ? 'MASTER' : getBranchName(selectedBranch)"></span>)</span>
                         <div class="flex items-center justify-between mt-3">
                             <span class="text-[22px] font-black text-gray-800 tracking-tight font-mono" x-text="formatRupiah(totalInventoryValue)">Rp 0</span>
                             <span class="text-[12px] font-bold text-gray-400">IDR</span>
@@ -1143,141 +1273,242 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
                 <!-- Master Products Data Table -->
                 <div class="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden flex flex-col">
-                    <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-                        <div class="flex items-center gap-2">
+                    <div class="px-6 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gray-50/50">
+                        <div class="flex items-center gap-2 flex-wrap">
                             <span class="material-symbols-rounded text-[20px] text-[#0052cc]">inventory</span>
                             <h2 class="text-sm font-bold text-gray-900">Tabel Master Data Barang</h2>
+                            <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-[#0052cc]" x-text="getBranchName(selectedBranch)"></span>
                         </div>
-                        <span class="text-xs text-gray-500 font-medium" x-text="'Menampilkan ' + paginatedProducts.length + ' dari ' + filteredProducts.length + ' produk'"></span>
+                        <div class="flex items-center gap-3">
+                            <!-- Toggle Button: Mode Standar vs Format 25 Kolom Lengkap ILP -->
+                            <button type="button" 
+                                    @click="tableMode = (tableMode === 'standard' ? 'ilp_25' : 'standard')"
+                                    class="px-3 py-1.5 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                                    :class="tableMode === 'ilp_25' ? 'bg-[#0052cc] text-white border-[#0052cc] shadow-2xs' : 'bg-white text-slate-700 border-gray-300 hover:bg-slate-50'">
+                                <span class="material-symbols-rounded text-[16px]">view_column</span>
+                                <span x-text="tableMode === 'ilp_25' ? 'Format 25 Kolom ILP (Aktif)' : 'Tampilkan 25 Kolom Lengkap'"></span>
+                            </button>
+                            <span class="text-xs text-gray-500 font-medium whitespace-nowrap" x-text="'Menampilkan ' + paginatedProducts.length + ' dari ' + filteredProducts.length + ' produk'"></span>
+                        </div>
                     </div>
 
-                    <div class="overflow-x-auto min-w-0 w-full">
-                        <table class="w-full text-left border-collapse min-w-[1050px]">
-                            <thead>
-                                <tr class="bg-gray-50/80 border-b border-gray-200 text-gray-600 font-bold tracking-wider uppercase text-[11px] whitespace-nowrap">
-                                    <th class="px-6 py-3.5 text-left w-[260px]">PRODUK &amp; BRAND</th>
-                                    <th class="px-4 py-3.5 text-left w-[160px]">BARCODE / SKU</th>
-                                    <th class="px-4 py-3.5 text-left w-[130px]">KATEGORI</th>
-                                    <th class="px-4 py-3.5 text-left w-[130px]">LOKASI RAK</th>
-                                    <th class="px-4 py-3.5 text-center w-[110px]">STOK TOKO</th>
-                                    <th class="px-4 py-3.5 text-right w-[140px]">HARGA JUAL</th>
-                                    <th class="px-4 py-3.5 text-center w-[120px]">STATUS</th>
-                                    <th class="px-6 py-3.5 text-center w-[110px]">AKSI</th>
-                                </tr>
-                            </thead>
-                            <tbody class="text-[13px] divide-y divide-gray-100 font-medium text-slate-700">
-                                <template x-for="p in paginatedProducts" :key="p.sku">
-                                    <tr class="hover:bg-blue-50/30 transition-colors">
-                                        <!-- 1. Nama & Brand -->
-                                        <td class="px-6 py-3.5">
-                                            <div class="flex flex-col">
-                                                <span class="font-bold text-gray-900 text-[13.5px]" x-text="p.name"></span>
-                                                <span class="text-[11px] text-gray-400 mt-0.5" x-text="p.brand || 'Lokal'"></span>
-                                            </div>
-                                        </td>
-
-                                        <!-- 2. Barcode & SKU -->
-                                        <td class="px-4 py-3.5 font-mono text-[12px] whitespace-nowrap">
-                                            <div class="flex flex-col">
-                                                <span class="font-bold text-gray-800" x-text="p.barcode || '-'"></span>
-                                                <span class="text-[10px] text-gray-400" x-text="p.sku"></span>
-                                            </div>
-                                        </td>
-
-                                        <!-- 3. Kategori -->
-                                        <td class="px-4 py-3.5 whitespace-nowrap">
-                                            <span class="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-700 text-xs font-semibold" x-text="p.category || 'Umum'"></span>
-                                        </td>
-
-                                        <!-- 4. Rak -->
-                                        <td class="px-4 py-3.5 text-xs text-gray-600 whitespace-nowrap" x-text="p.rackLocation || '-'"></td>
-
-                                        <!-- 5. Stok -->
-                                        <td class="px-4 py-3.5 text-center whitespace-nowrap">
-                                            <span class="inline-block px-2.5 py-1 rounded-lg text-xs font-bold font-mono"
-                                                  :class="p.stock <= 0 ? 'bg-rose-50 text-rose-600 border border-rose-200' : (p.stock <= p.minStock ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200')"
-                                                  x-text="p.stock + ' ' + (p.unit || 'Pcs')"></span>
-                                        </td>
-
-                                        <!-- 6. Harga -->
-                                        <td class="px-4 py-3.5 text-right font-mono whitespace-nowrap">
-                                            <div class="flex flex-col items-end">
-                                                <span class="font-bold text-gray-900 text-[13px]" x-text="formatRupiah(p.price)"></span>
-                                                <template x-if="p.memberPrice && p.memberPrice < p.price">
-                                                    <span class="text-[10.5px] text-[#0052cc] font-semibold" x-text="'Mbr: ' + formatRupiah(p.memberPrice)"></span>
-                                                </template>
-                                                <template x-if="(p.lastCostPrice ?? p.costPrice ?? 0) > 0">
-                                                    <span class="text-[10px] text-slate-400 font-medium" x-text="'Beli: ' + formatRupiah(p.lastCostPrice ?? p.costPrice)"></span>
-                                                </template>
-                                            </div>
-                                        </td>
-
-                                        <!-- 7. Status -->
-                                        <td class="px-4 py-3.5 text-center whitespace-nowrap">
-                                            <template x-if="p.status === 'HABIS' || p.stock <= 0">
-                                                <span class="px-2.5 py-1 rounded-full text-[10.5px] font-bold bg-rose-50 text-rose-700 border border-rose-200">Habis</span>
-                                            </template>
-                                            <template x-if="p.status === 'STOK_RENDAH' && p.stock > 0">
-                                                <span class="px-2.5 py-1 rounded-full text-[10.5px] font-bold bg-amber-50 text-amber-700 border border-amber-200">Stok Rendah</span>
-                                            </template>
-                                            <template x-if="p.status === 'NEAR_EXPIRED'">
-                                                <span class="px-2.5 py-1 rounded-full text-[10.5px] font-bold bg-red-50 text-[#e11d48] border border-red-200">Dekat Exp</span>
-                                            </template>
-                                            <template x-if="p.status === 'TERSEDIA' && p.stock > p.minStock">
-                                                <span class="px-2.5 py-1 rounded-full text-[10.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Tersedia</span>
-                                            </template>
-                                            <template x-if="p.status === 'NONAKTIF'">
-                                                <span class="px-2.5 py-1 rounded-full text-[10.5px] font-bold bg-gray-100 text-gray-500 border border-gray-200">Nonaktif</span>
-                                            </template>
-                                        </td>
-
-                                        <!-- 8. Aksi -->
-                                        <td class="px-6 py-3.5 text-center whitespace-nowrap">
-                                            <div class="inline-flex items-center justify-center gap-1.5">
-                                                <button type="button"
-                                                        @click="openDetail(p)"
-                                                        title="Lihat Detail Produk"
-                                                        class="p-1.5 text-gray-400 hover:text-[#0052cc] hover:bg-blue-50 rounded-lg transition-colors cursor-pointer">
-                                                    <span class="material-symbols-rounded text-[18px]">visibility</span>
-                                                </button>
-                                                <button type="button"
-                                                        @click="openEditModal(p)"
-                                                        title="Edit Data Produk"
-                                                        class="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer">
-                                                    <span class="material-symbols-rounded text-[18px]">edit</span>
-                                                </button>
-                                                <button type="button"
-                                                        @click="openDeleteModal(p)"
-                                                        title="Hapus Produk"
-                                                        class="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer">
-                                                    <span class="material-symbols-rounded text-[18px]">delete</span>
-                                                </button>
-                                            </div>
-                                        </td>
+                    <!-- MODE 1: FORMAT 25 KOLOM STANDAR ILP (Full 25 Columns View) -->
+                    <template x-if="tableMode === 'ilp_25'">
+                        <div class="overflow-x-auto min-w-0 w-full">
+                            <table class="w-full text-left border-collapse text-[12px] whitespace-nowrap" style="min-width: 2400px;">
+                                <thead>
+                                    <tr class="bg-gray-100/80 border-b border-gray-200 text-gray-700 font-bold tracking-wider text-[11px] uppercase">
+                                        <th class="px-3 py-3.5 text-center w-12 sticky left-0 bg-gray-100 z-10 shadow-r">NO</th>
+                                        <th class="px-4 py-3.5 text-left font-mono text-[#0052cc]">1. Barang - ID</th>
+                                        <th class="px-4 py-3.5 text-left font-mono">2. Barang - Kode</th>
+                                        <th class="px-4 py-3.5 text-left font-mono">3. Barang - KodeBar</th>
+                                        <th class="px-4 py-3.5 text-left">4. Barang - Kel</th>
+                                        <th class="px-5 py-3.5 text-left">5. Barang - Nama</th>
+                                        <th class="px-3 py-3.5 text-center">6. Barang - Unit1</th>
+                                        <th class="px-4 py-3.5 text-right font-mono">7. Barang - HargaBeli</th>
+                                        <th class="px-4 py-3.5 text-right font-mono text-emerald-700">8. Barang - HargaJualK1</th>
+                                        <th class="px-3 py-3.5 text-center font-mono">9. MinQty1</th>
+                                        <th class="px-3 py-3.5 text-center font-mono">10. MinQty2</th>
+                                        <th class="px-3 py-3.5 text-center font-mono">11. MinQty3</th>
+                                        <th class="px-4 py-3.5 text-right font-mono text-[#0052cc]">12. Barang - HargaLevel1</th>
+                                        <th class="px-3 py-3.5 text-center font-mono">13. Barang - Disc</th>
+                                        <th class="px-3 py-3.5 text-center font-mono text-amber-700">14. Barang - StockMin</th>
+                                        <th class="px-3 py-3.5 text-center font-mono text-blue-700">15. Barang - ReOrder</th>
+                                        <th class="px-3 py-3.5 text-center font-mono">16. Barang - PPN_Out</th>
+                                        <th class="px-3 py-3.5 text-center font-mono">17. Barang - PPNChk</th>
+                                        <th class="px-4 py-3.5 text-right font-mono">18. Barang - HrgBeliTerakhir</th>
+                                        <th class="px-3 py-3.5 text-center">19. Barang - StatusBarang</th>
+                                        <th class="px-3 py-3.5 text-center font-mono">20. Barang - KoSup</th>
+                                        <th class="px-3 py-3.5 text-center font-mono">21. Barang - Act</th>
+                                        <th class="px-3 py-3.5 text-center font-mono">22. Barang - Masa</th>
+                                        <th class="px-3 py-3.5 text-center font-mono">23. Barang - Kadaluarsa</th>
+                                        <th class="px-3 py-3.5 text-center font-mono">24. Barang - Up</th>
+                                        <th class="px-4 py-3.5 text-left">25. Barang - Dump</th>
+                                        <th class="px-4 py-3.5 text-center font-mono bg-blue-50/70 text-[#0052cc]">
+                                            <span x-text="selectedBranch === 'all' ? 'STOK MASTER' : ('STOK ' + getBranchName(selectedBranch).toUpperCase())"></span>
+                                        </th>
+                                        <th class="px-4 py-3.5 text-center sticky right-0 bg-gray-100 z-10 shadow-l">AKSI</th>
                                     </tr>
-                                </template>
-
-                                <template x-if="filteredProducts.length === 0">
-                                    <tr>
-                                        <td colspan="8" class="px-6 py-12 text-center">
-                                            <div class="flex flex-col items-center justify-center max-w-sm mx-auto space-y-3">
-                                                <div class="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center text-gray-400">
-                                                    <span class="material-symbols-rounded text-[28px]">search_off</span>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100 font-medium text-slate-700">
+                                    <template x-for="(p, idx) in paginatedProducts" :key="p.sku">
+                                        <tr class="hover:bg-blue-50/40 transition-colors">
+                                            <td class="px-3 py-3 text-center text-gray-400 font-mono sticky left-0 bg-white" x-text="((currentPage - 1) * pageSize) + idx + 1"></td>
+                                            <td class="px-4 py-3 font-mono font-bold text-[#0052cc]" x-text="p.ilp_id || p.id"></td>
+                                            <td class="px-4 py-3 font-mono font-bold text-gray-900" x-text="p.sku"></td>
+                                            <td class="px-4 py-3 font-mono text-gray-700" x-text="p.barcode || '-'"></td>
+                                            <td class="px-4 py-3 text-gray-800" x-text="p.category || '-'"></td>
+                                            <td class="px-5 py-3 font-bold text-gray-900 max-w-[220px] truncate" :title="p.name" x-text="p.name"></td>
+                                            <td class="px-3 py-3 text-center text-gray-800 font-bold" x-text="p.unit || 'Pcs'"></td>
+                                            <td class="px-4 py-3 text-right font-mono" x-text="formatRupiah(p.costPrice)"></td>
+                                            <td class="px-4 py-3 text-right font-mono font-bold text-emerald-700" x-text="formatRupiah(p.price)"></td>
+                                            <td class="px-3 py-3 text-center font-mono" x-text="p.minQty1 ?? 1"></td>
+                                            <td class="px-3 py-3 text-center font-mono" x-text="p.minQty2 ?? '-'"></td>
+                                            <td class="px-3 py-3 text-center font-mono" x-text="p.minQty3 ?? '-'"></td>
+                                            <td class="px-4 py-3 text-right font-mono font-bold text-[#0052cc]" x-text="formatRupiah(p.hargaLevel1 || p.memberPrice || p.price)"></td>
+                                            <td class="px-3 py-3 text-center font-mono" x-text="(p.disc ?? 0) + '%'"></td>
+                                            <td class="px-3 py-3 text-center font-mono font-bold text-amber-700" x-text="p.minStock ?? p.stockMin ?? 5"></td>
+                                            <td class="px-3 py-3 text-center font-mono font-bold text-blue-700" x-text="p.reorder ?? 10"></td>
+                                            <td class="px-3 py-3 text-center font-mono" x-text="(p.ppnOut ?? 11) + '%'"></td>
+                                            <td class="px-3 py-3 text-center font-mono font-bold" :class="p.ppnChk === 'Y' ? 'text-emerald-700' : 'text-slate-500'" x-text="p.ppnChk || 'Y'"></td>
+                                            <td class="px-4 py-3 text-right font-mono text-slate-800" x-text="formatRupiah(p.lastCostPrice ?? p.costPrice)"></td>
+                                            <td class="px-3 py-3 text-center font-bold" x-text="p.statusBarang || p.status || 'TERSEDIA'"></td>
+                                            <td class="px-3 py-3 text-center font-mono" x-text="p.koSup || '-'"></td>
+                                            <td class="px-3 py-3 text-center font-mono font-bold" :class="p.act === 'Y' ? 'text-emerald-700' : 'text-rose-700'" x-text="p.act || 'Y'"></td>
+                                            <td class="px-3 py-3 text-center font-mono" x-text="p.masa ? p.masa + ' Hari' : '-'"></td>
+                                            <td class="px-3 py-3 text-center font-mono" x-text="p.expiredDate || '-'"></td>
+                                            <td class="px-3 py-3 text-center font-mono" x-text="(p.up ?? 0) + '%'"></td>
+                                            <td class="px-4 py-3 text-slate-500 italic max-w-[150px] truncate" :title="p.dump" x-text="p.dump || '-'"></td>
+                                            <td class="px-4 py-3 text-center font-mono font-black bg-blue-50/40 text-[#0052cc]" x-text="getProductStock(p) + ' ' + (p.unit || 'Pcs')"></td>
+                                            <td class="px-4 py-3 text-center sticky right-0 bg-white shadow-l">
+                                                <div class="inline-flex items-center justify-center gap-1">
+                                                    <button type="button" @click="openDetail(p)" title="Lihat Tabel Detail Lengkap" class="p-1 text-gray-400 hover:text-[#0052cc] rounded cursor-pointer">
+                                                        <span class="material-symbols-rounded text-[18px]">visibility</span>
+                                                    </button>
+                                                    <button type="button" @click="openEditModal(p)" title="Edit Produk" class="p-1 text-gray-400 hover:text-amber-600 rounded cursor-pointer">
+                                                        <span class="material-symbols-rounded text-[18px]">edit</span>
+                                                    </button>
+                                                    <button type="button" @click="openDeleteModal(p)" title="Hapus Produk" class="p-1 text-gray-400 hover:text-rose-600 rounded cursor-pointer">
+                                                        <span class="material-symbols-rounded text-[18px]">delete</span>
+                                                    </button>
                                                 </div>
-                                                <h4 class="text-sm font-bold text-gray-800">Tidak Ada Produk Ditemukan</h4>
-                                                <p class="text-xs text-gray-500">Tidak ada produk yang sesuai dengan filter pencarian.</p>
-                                                <button type="button"
-                                                        @click="searchQuery = ''; selectedCategory = 'all'; currentPage = 1;"
-                                                        class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-gray-700 rounded-xl text-xs font-bold transition-all cursor-pointer">
-                                                    Reset Filter
-                                                </button>
-                                            </div>
-                                        </td>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </template>
+
+                    <!-- MODE 2: STANDAR CARD TABLE (Default Clean View) -->
+                    <template x-if="tableMode === 'standard'">
+                        <div class="overflow-x-auto min-w-0 w-full">
+                            <table class="w-full text-left border-collapse min-w-[1080px]">
+                                <thead>
+                                    <tr class="bg-gray-50/80 border-b border-gray-200 text-gray-600 font-bold tracking-wider uppercase text-[11px] whitespace-nowrap">
+                                        <th class="px-6 py-3.5 text-left w-[260px]">PRODUK &amp; ID</th>
+                                        <th class="px-4 py-3.5 text-left w-[170px]">BARCODE &amp; KODE</th>
+                                        <th class="px-4 py-3.5 text-left w-[130px]">KATEGORI &amp; RAK</th>
+                                        <th class="px-4 py-3.5 text-center w-[130px]">
+                                            <span x-text="selectedBranch === 'all' ? 'STOK MASTER' : ('STOK ' + getBranchName(selectedBranch).toUpperCase())"></span>
+                                        </th>
+                                        <th class="px-4 py-3.5 text-right w-[150px]">HARGA JUAL</th>
+                                        <th class="px-4 py-3.5 text-center w-[120px]">STATUS</th>
+                                        <th class="px-6 py-3.5 text-center w-[110px]">AKSI</th>
                                     </tr>
-                                </template>
-                            </tbody>
-                        </table>
-                    </div>
+                                </thead>
+                                <tbody class="text-[13px] divide-y divide-gray-100 font-medium text-slate-700">
+                                    <template x-for="p in paginatedProducts" :key="p.sku">
+                                        <tr class="hover:bg-blue-50/30 transition-colors">
+                                            <!-- 1. Nama, Brand & ID -->
+                                            <td class="px-6 py-3.5">
+                                                <div class="flex flex-col">
+                                                    <span class="font-bold text-gray-900 text-[13.5px]" x-text="p.name"></span>
+                                                    <div class="flex items-center gap-2 mt-0.5 text-[11px] text-gray-400">
+                                                        <span class="font-mono text-[#0052cc] font-bold" x-text="'ID: ' + (p.ilp_id || p.id)"></span>
+                                                        <span>&bull;</span>
+                                                        <span x-text="p.brand || 'Lokal'"></span>
+                                                    </div>
+                                                </div>
+                                            </td>
+
+                                            <!-- 2. Barcode & SKU -->
+                                            <td class="px-4 py-3.5 font-mono text-[12px] whitespace-nowrap">
+                                                <div class="flex flex-col">
+                                                    <span class="font-bold text-gray-800" x-text="p.barcode || '-'"></span>
+                                                    <span class="text-[10px] text-gray-400" x-text="'Kode: ' + p.sku"></span>
+                                                </div>
+                                            </td>
+
+                                            <!-- 3. Kategori & Rak -->
+                                            <td class="px-4 py-3.5 whitespace-nowrap">
+                                                <div class="flex flex-col">
+                                                    <span class="px-2 py-0.5 rounded-lg bg-gray-100 text-gray-700 text-xs font-semibold w-fit" x-text="p.category || 'Umum'"></span>
+                                                    <span class="text-[10.5px] text-gray-400 mt-0.5" x-text="p.rackLocation || 'Lorong Toko'"></span>
+                                                </div>
+                                            </td>
+
+                                            <!-- 4. Stok (Branch-Aware) -->
+                                            <td class="px-4 py-3.5 text-center whitespace-nowrap">
+                                                <div class="flex flex-col items-center">
+                                                    <span class="inline-block px-2.5 py-1 rounded-lg text-xs font-bold font-mono"
+                                                          :class="getProductStock(p) <= 0 ? 'bg-rose-50 text-rose-600 border border-rose-200' : (getProductStock(p) <= (p.minStock || 5) ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200')"
+                                                          x-text="getProductStock(p) + ' ' + (p.unit || 'Pcs')"></span>
+                                                    <template x-if="selectedBranch !== 'all'">
+                                                        <span class="text-[10px] text-gray-400 font-mono mt-0.5" x-text="'Master: ' + (p.masterStock ?? p.stock)"></span>
+                                                    </template>
+                                                </div>
+                                            </td>
+
+                                            <!-- 5. Harga -->
+                                            <td class="px-4 py-3.5 text-right font-mono whitespace-nowrap">
+                                                <div class="flex flex-col items-end">
+                                                    <span class="font-bold text-gray-900 text-[13px]" x-text="formatRupiah(p.price)"></span>
+                                                    <template x-if="p.hargaLevel1 || p.memberPrice">
+                                                        <span class="text-[10.5px] text-[#0052cc] font-semibold" x-text="'Lvl 1: ' + formatRupiah(p.hargaLevel1 || p.memberPrice)"></span>
+                                                    </template>
+                                                    <template x-if="(p.lastCostPrice ?? p.costPrice ?? 0) > 0">
+                                                        <span class="text-[10px] text-slate-400 font-medium" x-text="'Beli: ' + formatRupiah(p.lastCostPrice ?? p.costPrice)"></span>
+                                                    </template>
+                                                </div>
+                                            </td>
+
+                                            <!-- 6. Status -->
+                                            <td class="px-4 py-3.5 text-center whitespace-nowrap">
+                                                <span class="px-2.5 py-1 rounded-full text-[10.5px] font-bold border"
+                                                      :class="getProductStatus(p) === 'HABIS' ? 'bg-rose-50 text-rose-700 border-rose-200' : (getProductStatus(p) === 'STOK_RENDAH' ? 'bg-amber-50 text-amber-700 border-amber-200' : (getProductStatus(p) === 'NONAKTIF' ? 'bg-gray-100 text-gray-500 border-gray-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'))"
+                                                      x-text="getProductStatus(p)">
+                                                </span>
+                                            </td>
+
+                                            <!-- 7. Aksi -->
+                                            <td class="px-6 py-3.5 text-center whitespace-nowrap">
+                                                <div class="inline-flex items-center justify-center gap-1.5">
+                                                    <button type="button"
+                                                            @click="openDetail(p)"
+                                                            title="Lihat Tabel Detail Lengkap 25 Kolom"
+                                                            class="p-1.5 text-gray-400 hover:text-[#0052cc] hover:bg-blue-50 rounded-lg transition-colors cursor-pointer">
+                                                        <span class="material-symbols-rounded text-[18px]">visibility</span>
+                                                    </button>
+                                                    <button type="button"
+                                                            @click="openEditModal(p)"
+                                                            title="Edit Data Produk"
+                                                            class="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer">
+                                                        <span class="material-symbols-rounded text-[18px]">edit</span>
+                                                    </button>
+                                                    <button type="button"
+                                                            @click="openDeleteModal(p)"
+                                                            title="Hapus Produk"
+                                                            class="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer">
+                                                        <span class="material-symbols-rounded text-[18px]">delete</span>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </template>
+
+                                    <template x-if="filteredProducts.length === 0">
+                                        <tr>
+                                            <td colspan="8" class="px-6 py-12 text-center">
+                                                <div class="flex flex-col items-center justify-center max-w-sm mx-auto space-y-3">
+                                                    <div class="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center text-gray-400">
+                                                        <span class="material-symbols-rounded text-[28px]">search_off</span>
+                                                    </div>
+                                                    <h4 class="text-sm font-bold text-gray-800">Tidak Ada Produk Ditemukan</h4>
+                                                    <p class="text-xs text-gray-500">Tidak ada produk yang sesuai dengan filter pencarian.</p>
+                                                    <button type="button"
+                                                            @click="searchQuery = ''; selectedCategory = 'all'; currentPage = 1;"
+                                                            class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-gray-700 rounded-xl text-xs font-bold transition-all cursor-pointer">
+                                                        Reset Filter
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </template>
 
                     <!-- Pagination Footer -->
                     <div class="border-t border-gray-200 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3 bg-white text-xs text-gray-500">
@@ -2227,16 +2458,16 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
             <div x-show="showDetailModal"
                  @click.away="showDetailModal = false"
                  x-transition.scale.origin.bottom
-                 class="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden border border-gray-200 flex flex-col">
+                 class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden border border-gray-200 flex flex-col">
 
-                <div class="px-6 py-5 border-b border-gray-100 flex items-center justify-between bg-slate-50">
+                <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-slate-50 shrink-0">
                     <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-xl bg-blue-50 text-[#0052cc] flex items-center justify-center font-bold">
+                        <div class="w-10 h-10 rounded-xl bg-blue-50 text-[#0052cc] flex items-center justify-center font-bold shrink-0">
                             <span class="material-symbols-rounded text-[22px]">inventory_2</span>
                         </div>
                         <div>
                             <h3 class="text-base font-black text-gray-900" x-text="selectedProduct?.name"></h3>
-                            <span class="font-mono text-xs text-gray-500" x-text="'Barcode: ' + selectedProduct?.barcode + ' • SKU: ' + selectedProduct?.sku"></span>
+                            <span class="font-mono text-xs text-gray-500" x-text="'ID: ' + (selectedProduct?.ilp_id || selectedProduct?.id) + ' • Barcode: ' + (selectedProduct?.barcode || '-') + ' • Kode: ' + selectedProduct?.sku"></span>
                         </div>
                     </div>
                     <button @click="showDetailModal = false" class="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer">
@@ -2244,58 +2475,94 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </button>
                 </div>
 
-                <div class="p-6 space-y-4 text-xs">
-                    <div class="grid grid-cols-2 gap-3">
-                        <div class="p-4 bg-slate-50 rounded-xl border border-gray-200">
-                            <span class="text-[10px] font-bold text-gray-400 uppercase block mb-1">LOKASI RAK / LORONG</span>
-                            <div class="flex items-center gap-1.5 text-gray-900 font-bold text-sm">
-                                <span class="material-symbols-rounded text-[18px] text-[#0052cc]">shelves</span>
-                                <span x-text="selectedProduct?.rackLocation || 'Rak Display'"></span>
+                <div class="p-6 space-y-4 text-xs overflow-y-auto flex-1">
+                    <!-- 1. SEBARAN STOK MULTI-CABANG (Produk Master, Cabang Pusat, Cabang A, Cabang B) -->
+                    <div class="p-4 bg-slate-50 rounded-xl border border-gray-200 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-black uppercase text-gray-800 tracking-wider flex items-center gap-1.5">
+                                <span class="material-symbols-rounded text-[16px] text-[#0052cc]">hub</span>
+                                <span>Sebaran Stok Multi-Cabang</span>
+                            </span>
+                            <span class="text-[11px] font-mono font-bold text-[#0052cc]" x-text="'Total Master: ' + (selectedProduct?.masterStock ?? selectedProduct?.stock ?? 0) + ' ' + (selectedProduct?.unit || 'Pcs')"></span>
+                        </div>
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                            <!-- Produk Master -->
+                            <div class="p-2.5 rounded-lg bg-blue-50/70 border border-blue-200">
+                                <span class="text-[10px] font-bold text-[#0052cc] uppercase block">Produk Master</span>
+                                <div class="text-base font-black text-[#0052cc] font-mono mt-0.5" x-text="(selectedProduct?.masterStock ?? selectedProduct?.stock ?? 0) + ' ' + (selectedProduct?.unit || 'Pcs')"></div>
+                                <span class="text-[9.5px] text-gray-400">Total Konsolidasi</span>
+                            </div>
+                            <!-- Cabang Pusat -->
+                            <div class="p-2.5 rounded-lg bg-white border border-gray-200">
+                                <span class="text-[10px] font-bold text-gray-700 uppercase block">Cabang Pusat</span>
+                                <div class="text-base font-black text-gray-900 font-mono mt-0.5" x-text="getProductStock(selectedProduct, 'CAB-001') + ' ' + (selectedProduct?.unit || 'Pcs')"></div>
+                                <span class="text-[9.5px] text-gray-400">Toko Pusat</span>
+                            </div>
+                            <!-- Cabang A -->
+                            <div class="p-2.5 rounded-lg bg-white border border-gray-200">
+                                <span class="text-[10px] font-bold text-gray-700 uppercase block">Cabang A</span>
+                                <div class="text-base font-black text-gray-900 font-mono mt-0.5" x-text="getProductStock(selectedProduct, 'CAB-002') + ' ' + (selectedProduct?.unit || 'Pcs')"></div>
+                                <span class="text-[9.5px] text-gray-400">Unit Ritel A</span>
+                            </div>
+                            <!-- Cabang B -->
+                            <div class="p-2.5 rounded-lg bg-white border border-gray-200">
+                                <span class="text-[10px] font-bold text-gray-700 uppercase block">Cabang B</span>
+                                <div class="text-base font-black text-gray-900 font-mono mt-0.5" x-text="getProductStock(selectedProduct, 'CAB-003') + ' ' + (selectedProduct?.unit || 'Pcs')"></div>
+                                <span class="text-[9.5px] text-gray-400">Unit Ritel B</span>
                             </div>
                         </div>
+                    </div>
 
-                        <div class="p-4 bg-slate-50 rounded-xl border border-gray-200">
-                            <span class="text-[10px] font-bold text-gray-400 uppercase block mb-1">SISA STOK AKTIF</span>
-                            <div class="flex items-baseline gap-2">
-                                <span class="text-xl font-black text-gray-900" x-text="selectedProduct?.stock + ' ' + (selectedProduct?.unit || 'Pcs')"></span>
-                                <span class="text-[10px] text-gray-400 font-medium" x-text="'(Buffer: ' + selectedProduct?.minStock + ')'"></span>
-                            </div>
+                    <!-- 2. TABEL LENGKAP DETAIL BARANG (STANDAR 25 KOLOM MASTER PRODUK ILP) -->
+                    <div class="border border-gray-200 rounded-xl overflow-hidden shadow-2xs">
+                        <div class="px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                            <span class="text-xs font-black uppercase text-gray-700 tracking-wider flex items-center gap-1.5">
+                                <span class="material-symbols-rounded text-[16px] text-emerald-600">table_rows</span>
+                                <span>Tabel Detail Barang (Struktur 25 Kolom Master Produk)</span>
+                            </span>
+                            <span class="text-[10.5px] font-mono text-gray-400">25 Kolom Terstandarisasi</span>
+                        </div>
+                        <div class="max-h-72 overflow-y-auto">
+                            <table class="w-full text-left text-xs border-collapse">
+                                <thead class="bg-slate-100 text-slate-600 font-bold sticky top-0 border-b border-gray-200 text-[11px]">
+                                    <tr>
+                                        <th class="py-2 px-3 w-12 text-center">No</th>
+                                        <th class="py-2 px-4 w-52">Nama Kolom (Field)</th>
+                                        <th class="py-2 px-4">Nilai Data Produk</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100 font-medium text-slate-800">
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">1</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - ID</td><td class="py-2 px-4 font-mono font-bold text-slate-900" x-text="selectedProduct?.ilp_id || selectedProduct?.id || '-'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">2</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Kode</td><td class="py-2 px-4 font-mono font-bold text-slate-900" x-text="selectedProduct?.sku || '-'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">3</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - KodeBar</td><td class="py-2 px-4 font-mono font-bold text-slate-900" x-text="selectedProduct?.barcode || '-'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">4</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Kel</td><td class="py-2 px-4 text-slate-800" x-text="selectedProduct?.category || '-'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">5</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Nama</td><td class="py-2 px-4 font-bold text-slate-900" x-text="selectedProduct?.name || '-'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">6</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Unit1</td><td class="py-2 px-4 font-bold text-slate-800" x-text="selectedProduct?.unit || 'Pcs'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">7</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - HargaBeli</td><td class="py-2 px-4 font-mono font-bold text-slate-800" x-text="formatRupiah(selectedProduct?.costPrice)"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">8</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - HargaJualK1</td><td class="py-2 px-4 font-mono font-bold text-emerald-700" x-text="formatRupiah(selectedProduct?.price)"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">9</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - MinQty1</td><td class="py-2 px-4 font-mono" x-text="selectedProduct?.minQty1 ?? 1"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">10</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - MinQty2</td><td class="py-2 px-4 font-mono" x-text="selectedProduct?.minQty2 ?? '-'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">11</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - MinQty3</td><td class="py-2 px-4 font-mono" x-text="selectedProduct?.minQty3 ?? '-'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">12</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - HargaLevel1</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]" x-text="formatRupiah(selectedProduct?.hargaLevel1 || selectedProduct?.memberPrice || selectedProduct?.price)"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">13</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Disc</td><td class="py-2 px-4 font-mono" x-text="(selectedProduct?.disc ?? 0) + '%'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">14</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - StockMin</td><td class="py-2 px-4 font-mono font-bold text-amber-700" x-text="(selectedProduct?.minStock ?? selectedProduct?.stockMin ?? 5) + ' ' + (selectedProduct?.unit || 'Pcs')"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">15</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - ReOrder</td><td class="py-2 px-4 font-mono font-bold text-blue-700" x-text="(selectedProduct?.reorder ?? 10) + ' ' + (selectedProduct?.unit || 'Pcs')"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">16</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - PPN_Out</td><td class="py-2 px-4 font-mono" x-text="(selectedProduct?.ppnOut ?? 11) + '%'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">17</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - PPNChk</td><td class="py-2 px-4 font-mono font-bold" :class="selectedProduct?.ppnChk === 'Y' ? 'text-emerald-700' : 'text-slate-500'" x-text="selectedProduct?.ppnChk || 'Y'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">18</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - HrgBeliTerakhir</td><td class="py-2 px-4 font-mono font-bold text-slate-800" x-text="formatRupiah(selectedProduct?.lastCostPrice ?? selectedProduct?.costPrice)"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">19</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - StatusBarang</td><td class="py-2 px-4 font-bold" x-text="selectedProduct?.statusBarang || selectedProduct?.status || 'TERSEDIA'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">20</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - KoSup</td><td class="py-2 px-4 font-mono" x-text="selectedProduct?.koSup || '-'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">21</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Act</td><td class="py-2 px-4 font-mono font-bold" :class="selectedProduct?.act === 'Y' ? 'text-emerald-700' : 'text-rose-700'" x-text="selectedProduct?.act || 'Y'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">22</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Masa</td><td class="py-2 px-4 font-mono" x-text="selectedProduct?.masa ? selectedProduct.masa + ' Hari' : '-'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">23</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Kadaluarsa</td><td class="py-2 px-4 font-mono" x-text="selectedProduct?.expiredDate || '-'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">24</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Up</td><td class="py-2 px-4 font-mono" x-text="(selectedProduct?.up ?? 0) + '%'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">25</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Dump</td><td class="py-2 px-4 text-slate-600 italic" x-text="selectedProduct?.dump || '-'"></td></tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-3 gap-3 p-4 bg-blue-50/50 rounded-xl border border-blue-100">
-                        <div>
-                            <span class="text-[10px] font-bold text-gray-500 uppercase block">HARGA UMUM</span>
-                            <span class="text-base font-black text-gray-900 font-mono mt-0.5 block" x-text="formatRupiah(selectedProduct?.price)"></span>
-                            <span class="text-[10px] text-gray-500">Harga non-member</span>
-                        </div>
-                        <div>
-                            <span class="text-[10px] font-bold text-[#0052cc] uppercase block">HARGA ANGGOTA KOPKAR</span>
-                            <span class="text-base font-black text-[#0052cc] font-mono mt-0.5 block" x-text="formatRupiah(selectedProduct?.memberPrice || selectedProduct?.price)"></span>
-                            <span class="text-[10px] text-emerald-700 font-bold">Harga member toko</span>
-                        </div>
-                        <div>
-                            <span class="text-[10px] font-bold text-slate-500 uppercase block">HARGA BELI TERAKHIR</span>
-                            <span class="text-base font-black text-slate-800 font-mono mt-0.5 block" x-text="formatRupiah(selectedProduct?.lastCostPrice ?? selectedProduct?.costPrice ?? 0)"></span>
-                            <span class="text-[10px] text-slate-500">Update saat terima barang</span>
-                        </div>
-                    </div>
-
-                    <div class="p-4 bg-slate-50 rounded-xl border border-gray-200 space-y-2">
-                        <div class="flex items-center justify-between">
-                            <span class="text-gray-500 font-medium">Nomor Batch / Lot Produksi:</span>
-                            <span class="font-mono font-bold text-gray-800" x-text="selectedProduct?.batchLot || '-'"></span>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <span class="text-gray-500 font-medium">Batas Tanggal Kedaluwarsa:</span>
-                            <span class="font-bold text-gray-800" x-text="selectedProduct?.expiredDate || '-'"></span>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <span class="text-gray-500 font-medium">Kategori & Brand:</span>
-                            <span class="font-bold text-gray-800" x-text="(selectedProduct?.category || '-') + ' • ' + (selectedProduct?.brand || 'Lokal')"></span>
-                        </div>
-                    </div>
-
+                    <!-- 3. SUPPLIER PRODUK (Jika ada relasi supplier) -->
                     <template x-if="selectedProduct?.suppliedBy && selectedProduct.suppliedBy.length > 0">
                         <div class="p-4 bg-white rounded-xl border border-gray-200 space-y-2.5">
                             <div class="flex items-center justify-between">
@@ -2336,7 +2603,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
                 </div>
 
-                <div class="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-slate-50">
+                <div class="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-slate-50 shrink-0">
                     <button type="button"
                             @click="showDetailModal = false"
                             class="px-5 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-bold text-xs hover:bg-gray-100 transition-colors cursor-pointer">
@@ -2569,7 +2836,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
              class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-xs"
              style="display: none;">
             <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150"
-                 @click.outside="if (importStep !== 'processing') showImportModal = false">
+                 @click.away="if (importStep !== 'processing') showImportModal = false">
                 
                 <!-- Modal Header -->
                 <div class="px-6 py-4.5 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-between shrink-0">
@@ -2580,7 +2847,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <div>
                             <div class="flex items-center gap-2">
                                 <h3 class="text-base font-bold text-white">Import Master Produk Excel</h3>
-                                <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 border border-emerald-400/30 text-emerald-300">Format ILP 36 Kolom</span>
+                                <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 border border-emerald-400/30 text-emerald-300">Format ILP 25 Kolom</span>
                             </div>
                             <p class="text-xs text-slate-300 mt-0.5">Unggah dan sinkronisasi master barang resmi dari file export tim ILP</p>
                         </div>
@@ -2605,21 +2872,23 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <div class="p-4 bg-emerald-50/80 border border-emerald-200 rounded-xl text-emerald-950 flex items-start gap-3">
                             <span class="material-symbols-rounded text-emerald-600 text-[22px] shrink-0 mt-0.5">verified</span>
                             <div class="text-xs space-y-1">
-                                <span class="font-bold text-emerald-900 block text-sm">Standar Format Master Barang ILP</span>
+                                <span class="font-bold text-emerald-900 block text-sm">Standar Format Master Barang ILP (25 Kolom)</span>
                                 <p class="text-emerald-800 leading-relaxed">
-                                    File export dari tim ILP wajib memuat tepat <strong>36 kolom terstandarisasi</strong> (ID, Kode, Barcode, Kelompok, Rak, Multi-Satuan Unit 1-3, Konversi, Harga Beli, Harga Jual Level 1-4, PPN, dsb). Sistem akan memvalidasi nama seluruh kolom sebelum memproses data.
+                                    File Excel wajib memuat tepat <strong>25 kolom terstandarisasi</strong> (Barang - ID, Kode, KodeBar, Kel, Nama, Unit1, HargaBeli, HargaJualK1, MinQty1-3, HargaLevel1, Disc, StockMin, ReOrder, PPN_Out, PPNChk, HrgBeliTerakhir, StatusBarang, KoSup, Act, Masa, Kadaluarsa, Up, Dump).
                                 </p>
                             </div>
                         </div>
 
                         <!-- Drag and drop / File Picker Area -->
-                        <div class="border-2 border-dashed rounded-2xl p-8 text-center transition-all cursor-pointer relative"
+                        <div class="border-2 border-dashed rounded-2xl p-8 text-center transition-all cursor-pointer relative select-none"
                              :class="importFile ? 'border-emerald-400 bg-emerald-50/30' : 'border-slate-300 hover:border-[#0052cc] hover:bg-slate-50/50'"
-                             @click="$refs.excelFileInput.click()"
+                             @click="$refs.excelFileInput?.click()"
                              @dragover.prevent=""
                              @drop.prevent="if ($event.dataTransfer.files.length) { importFile = $event.dataTransfer.files[0]; importFileName = importFile.name; }">
                             <input type="file" 
+                                   id="excelFileInput"
                                    x-ref="excelFileInput" 
+                                   @click.stop=""
                                    @change="onFileSelected($event)" 
                                    accept=".xlsx,.xls,.csv" 
                                    class="hidden">
@@ -2633,7 +2902,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         <p class="text-sm font-bold text-slate-800">Pilih file Excel Master Barang atau tarik file ke sini</p>
                                         <p class="text-xs text-slate-400 mt-1">Mendukung format .XLSX, .XLS, atau .CSV (Maksimal 25MB)</p>
                                     </div>
-                                    <button type="button" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1.5 pointer-events-none">
+                                    <button type="button" @click.stop="$refs.excelFileInput?.click()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer">
                                         <span class="material-symbols-rounded text-[16px]">folder_open</span>
                                         <span>Telusuri File di Komputer</span>
                                     </button>
@@ -2653,7 +2922,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     </div>
                                     <div class="flex items-center gap-2">
                                         <button type="button" 
-                                                @click.stop="importFile = null; importFileName = '';" 
+                                                @click.stop="importFile = null; importFileName = ''; if ($refs.excelFileInput) $refs.excelFileInput.value = '';" 
                                                 class="px-3 py-1.5 rounded-lg text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer">
                                             Ganti File
                                         </button>
@@ -2666,13 +2935,13 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-100">
                             <div class="flex items-center gap-2 text-xs text-slate-500">
                                 <span class="material-symbols-rounded text-blue-600 text-[18px]">info</span>
-                                <span>Perlu contoh format struktur 36 kolom?</span>
+                                <span>Perlu contoh format struktur 25 kolom?</span>
                             </div>
                             <button type="button" 
                                     @click="downloadILPTemplate()"
                                     class="text-xs font-bold text-[#0052cc] hover:text-[#0043a8] hover:underline flex items-center gap-1 cursor-pointer">
                                 <span class="material-symbols-rounded text-[16px]">download</span>
-                                <span>Unduh Template Format Master ILP (36 Kolom)</span>
+                                <span>Unduh Template Format Master ILP (25 Kolom)</span>
                             </button>
                         </div>
                     </div>
@@ -2687,10 +2956,10 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             </div>
                             <div class="flex-1 space-y-2">
                                 <h4 class="font-bold text-rose-900 text-base">Format Kolom Excel Tidak Sesuai Standar ILP</h4>
-                                <p class="text-xs text-rose-800 leading-relaxed" x-text="validationErrorDetails?.message || 'Jumlah atau nama kolom file yang diunggah tidak sesuai dengan 36 kolom master barang ILP.'"></p>
+                                <p class="text-xs text-rose-800 leading-relaxed" x-text="validationErrorDetails?.message || 'Jumlah atau nama kolom file yang diunggah tidak sesuai dengan 25 kolom master barang ILP.'"></p>
                                 <div class="flex items-center gap-4 text-xs font-semibold text-rose-700 pt-1">
                                     <span>Kolom Terdeteksi: <strong class="font-mono text-sm" x-text="validationErrorDetails?.actual_count || 0"></strong></span>
-                                    <span>Kolom Wajib ILP: <strong class="font-mono text-sm" x-text="validationErrorDetails?.expected_count || 36"></strong></span>
+                                    <span>Kolom Wajib ILP: <strong class="font-mono text-sm" x-text="validationErrorDetails?.expected_count || 25"></strong></span>
                                 </div>
                             </div>
                         </div>
@@ -2739,7 +3008,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     <span class="material-symbols-rounded text-[22px]">check_circle</span>
                                 </div>
                                 <div>
-                                    <h4 class="font-bold text-emerald-950 text-sm">Struktur 36 Kolom Valid & Terverifikasi</h4>
+                                    <h4 class="font-bold text-emerald-950 text-sm">Struktur 25 Kolom Valid & Terverifikasi</h4>
                                     <p class="text-xs text-emerald-800" x-text="'File: ' + (validationData?.file_name || importFileName)"></p>
                                 </div>
                             </div>
@@ -2808,18 +3077,21 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <span class="text-[11px] font-mono text-slate-500" x-text="(validationData?.preview_rows?.length || 0) + ' baris ditampilkan'"></span>
                             </div>
                             <div class="max-h-60 overflow-y-auto">
-                                <table class="w-full text-left text-xs">
+                                <table class="w-full text-left text-xs whitespace-nowrap">
                                     <thead class="bg-slate-100 text-slate-600 font-bold sticky top-0 border-b border-slate-200">
                                         <tr>
                                             <th class="p-2.5 text-center">Baris</th>
-                                            <th class="p-2.5">SKU / Kode</th>
-                                            <th class="p-2.5">Barcode</th>
+                                            <th class="p-2.5 font-mono text-[#0052cc]">ID</th>
+                                            <th class="p-2.5 font-mono">SKU / Kode</th>
+                                            <th class="p-2.5 font-mono">Barcode</th>
+                                            <th class="p-2.5">Kelompok</th>
                                             <th class="p-2.5">Nama Produk</th>
-                                            <th class="p-2.5">Kategori</th>
-                                            <th class="p-2.5">Rak</th>
-                                            <th class="p-2.5">Satuan</th>
-                                            <th class="p-2.5 text-right">Harga Beli</th>
-                                            <th class="p-2.5 text-right">Harga Jual</th>
+                                            <th class="p-2.5 text-center">Unit1</th>
+                                            <th class="p-2.5 text-right font-mono">Harga Beli</th>
+                                            <th class="p-2.5 text-right font-mono text-emerald-700">Harga Jual K1</th>
+                                            <th class="p-2.5 text-right font-mono text-[#0052cc]">Harga Level 1</th>
+                                            <th class="p-2.5 text-center font-mono">Min Stok</th>
+                                            <th class="p-2.5 text-center font-mono">PPN</th>
                                             <th class="p-2.5 text-center">Status</th>
                                         </tr>
                                     </thead>
@@ -2827,14 +3099,17 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         <template x-for="pRow in validationData?.preview_rows || []" :key="pRow.row">
                                             <tr class="hover:bg-slate-50/80 font-medium" :class="pRow.has_error ? 'bg-rose-50/50' : ''">
                                                 <td class="p-2.5 text-center font-mono text-slate-400" x-text="pRow.row"></td>
+                                                <td class="p-2.5 font-mono font-bold text-[#0052cc]" x-text="pRow.ilp_id || '-'"></td>
                                                 <td class="p-2.5 font-mono font-bold text-slate-800" x-text="pRow.sku"></td>
                                                 <td class="p-2.5 font-mono text-slate-600" x-text="pRow.barcode"></td>
-                                                <td class="p-2.5 text-slate-800 max-w-[180px] truncate" :title="pRow.name" x-text="pRow.name"></td>
                                                 <td class="p-2.5 text-slate-600" x-text="pRow.category"></td>
-                                                <td class="p-2.5 text-slate-600 font-mono" x-text="pRow.rack"></td>
-                                                <td class="p-2.5 text-slate-600" x-text="pRow.unit"></td>
+                                                <td class="p-2.5 text-slate-800 max-w-[180px] truncate" :title="pRow.name" x-text="pRow.name"></td>
+                                                <td class="p-2.5 text-center text-slate-600 font-bold" x-text="pRow.unit"></td>
                                                 <td class="p-2.5 text-right font-mono" x-text="'Rp ' + (pRow.cost_price || 0).toLocaleString('id-ID')"></td>
                                                 <td class="p-2.5 text-right font-mono font-bold text-emerald-700" x-text="'Rp ' + (pRow.price || 0).toLocaleString('id-ID')"></td>
+                                                <td class="p-2.5 text-right font-mono font-bold text-[#0052cc]" x-text="'Rp ' + (pRow.harga_level1 || pRow.member_price || 0).toLocaleString('id-ID')"></td>
+                                                <td class="p-2.5 text-center font-mono text-slate-600" x-text="pRow.stock_min || 5"></td>
+                                                <td class="p-2.5 text-center font-mono font-bold" :class="pRow.ppn_chk === 'Y' ? 'text-emerald-700' : 'text-slate-400'" x-text="pRow.ppn_chk || 'Y'"></td>
                                                 <td class="p-2.5 text-center">
                                                     <template x-if="pRow.has_error">
                                                         <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700" :title="pRow.error_message">Error</span>
@@ -2947,7 +3222,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     class="h-10 px-5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-colors cursor-pointer">
                                 <span x-show="isUploading" class="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></span>
                                 <span class="material-symbols-rounded text-[18px]" x-show="!isUploading">fact_check</span>
-                                <span x-text="isUploading ? 'Memvalidasi 36 Kolom...' : 'Periksa & Validasi File'"></span>
+                                <span x-text="isUploading ? 'Memvalidasi 25 Kolom...' : 'Periksa & Validasi File'"></span>
                             </button>
                         </div>
                     </template>
@@ -2962,7 +3237,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <span>Unduh Format Template Resmi ILP</span>
                             </button>
                             <button type="button" 
-                                    @click="importStep = 'upload'; importFile = null; importFileName = '';" 
+                                    @click="importStep = 'upload'; importFile = null; importFileName = ''; if ($refs.excelFileInput) $refs.excelFileInput.value = '';" 
                                     class="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer inline-flex items-center gap-1.5">
                                 <span class="material-symbols-rounded text-[16px]">replay</span>
                                 <span>Unggah Ulang File Lain</span>
@@ -2980,7 +3255,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     Batal
                                 </button>
                                 <button type="button" 
-                                        @click="importStep = 'upload'; importFile = null; importFileName = '';" 
+                                        @click="importStep = 'upload'; importFile = null; importFileName = ''; if ($refs.excelFileInput) $refs.excelFileInput.value = '';" 
                                         class="px-4 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer">
                                     Ganti File
                                 </button>

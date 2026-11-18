@@ -489,15 +489,27 @@ class ProductController extends Controller
     {
         $validated = $request->validate([
             'sku' => 'nullable|string|max:50|unique:products,sku',
+            'ilp_id' => 'nullable|string|max:50',
             'barcode' => 'required|string|max:50|unique:products,barcode',
             'name' => 'required|string|max:150',
             'category' => 'required|string|max:50',
             'unit' => 'required|string|max:20',
             'cost_price' => 'required|numeric|min:0',
+            'last_cost_price' => 'nullable|numeric|min:0',
             'price' => 'required|numeric|min:0',
             'member_price' => 'nullable|numeric|min:0',
+            'min_qty1' => 'nullable|numeric|min:0',
+            'min_qty2' => 'nullable|numeric|min:0',
+            'min_qty3' => 'nullable|numeric|min:0',
+            'harga_level1' => 'nullable|numeric|min:0',
             'stock' => 'required|integer|min:0',
             'min_stock' => 'required|integer|min:0',
+            'reorder_point' => 'nullable|integer|min:0',
+            'markup_percent' => 'nullable|numeric|min:0',
+            'ko_sup' => 'nullable|string|max:50',
+            'act' => 'nullable|string|max:10',
+            'masa' => 'nullable|string|max:50',
+            'dump' => 'nullable|string',
             'is_taxable' => 'boolean',
             'tax_rate' => 'nullable|numeric|min:0',
             'expired_date' => 'nullable|date',
@@ -520,15 +532,27 @@ class ProductController extends Controller
 
             $product = Product::create([
                 'sku' => $sku,
+                'ilp_id' => $validated['ilp_id'] ?? null,
                 'barcode' => $validated['barcode'],
                 'name' => $validated['name'],
                 'category' => $validated['category'],
                 'unit' => $validated['unit'],
                 'cost_price' => (float) $validated['cost_price'],
+                'last_cost_price' => !empty($validated['last_cost_price']) ? (float) $validated['last_cost_price'] : (float) $validated['cost_price'],
                 'price' => (float) $validated['price'],
-                'member_price' => !empty($validated['member_price']) ? (float) $validated['member_price'] : (float) $validated['price'],
+                'member_price' => !empty($validated['member_price']) ? (float) $validated['member_price'] : (!empty($validated['harga_level1']) ? (float) $validated['harga_level1'] : (float) $validated['price']),
+                'min_qty1' => !empty($validated['min_qty1']) ? (float) $validated['min_qty1'] : 1.0,
+                'min_qty2' => !empty($validated['min_qty2']) ? (float) $validated['min_qty2'] : null,
+                'min_qty3' => !empty($validated['min_qty3']) ? (float) $validated['min_qty3'] : null,
+                'harga_level1' => !empty($validated['harga_level1']) ? (float) $validated['harga_level1'] : (!empty($validated['member_price']) ? (float) $validated['member_price'] : (float) $validated['price']),
                 'stock' => $initialStock,
                 'min_stock' => (int) $validated['min_stock'],
+                'reorder_point' => !empty($validated['reorder_point']) ? (int) $validated['reorder_point'] : ((int) $validated['min_stock'] * 2),
+                'markup_percent' => !empty($validated['markup_percent']) ? (float) $validated['markup_percent'] : 0.0,
+                'ko_sup' => $validated['ko_sup'] ?? null,
+                'act' => $validated['act'] ?? 'Y',
+                'masa' => $validated['masa'] ?? null,
+                'dump' => $validated['dump'] ?? null,
                 'is_taxable' => (bool) ($validated['is_taxable'] ?? true),
                 'tax_rate' => (float) ($validated['tax_rate'] ?? 11.0),
                 'expired_date' => $validated['expired_date'] ?? null,
@@ -590,14 +614,26 @@ class ProductController extends Controller
 
         $validated = $request->validate([
             'barcode' => "required|string|max:50|unique:products,barcode,{$id}",
+            'ilp_id' => 'nullable|string|max:50',
             'name' => 'required|string|max:150',
             'category' => 'required|string|max:50',
             'unit' => 'required|string|max:20',
             'cost_price' => 'required|numeric|min:0',
+            'last_cost_price' => 'nullable|numeric|min:0',
             'price' => 'required|numeric|min:0',
             'member_price' => 'nullable|numeric|min:0',
+            'min_qty1' => 'nullable|numeric|min:0',
+            'min_qty2' => 'nullable|numeric|min:0',
+            'min_qty3' => 'nullable|numeric|min:0',
+            'harga_level1' => 'nullable|numeric|min:0',
             'stock' => 'required|integer|min:0',
             'min_stock' => 'required|integer|min:0',
+            'reorder_point' => 'nullable|integer|min:0',
+            'markup_percent' => 'nullable|numeric|min:0',
+            'ko_sup' => 'nullable|string|max:50',
+            'act' => 'nullable|string|max:10',
+            'masa' => 'nullable|string|max:50',
+            'dump' => 'nullable|string',
             'is_taxable' => 'boolean',
             'tax_rate' => 'nullable|numeric|min:0',
             'expired_date' => 'nullable|date',
@@ -781,7 +817,12 @@ class ProductController extends Controller
             ? 'HABIS'
             : ($effectiveStock <= $effectiveMinStock ? 'STOK_RENDAH' : 'TERSEDIA');
 
-        $branchStock = [];
+        $branchStock = [
+            'GDG-001' => 0,
+            'CAB-001' => 0,
+            'CAB-002' => 0,
+            'CAB-003' => 0,
+        ];
         if ($p->relationLoaded('productStocks')) {
             foreach ($p->productStocks as $ps) {
                 if ($ps->location) {
@@ -792,11 +833,22 @@ class ProductController extends Controller
 
         return [
             'id' => $p->id,
+            'ilp_id' => $p->ilp_id ?: (string) $p->id,
             'sku' => $p->sku,
             'barcode' => $p->barcode,
             'name' => $p->name,
             'category' => $p->category,
             'unit' => $p->unit,
+            'min_qty1' => $p->min_qty1 !== null ? (float) $p->min_qty1 : 1.0,
+            'min_qty2' => $p->min_qty2 !== null ? (float) $p->min_qty2 : null,
+            'min_qty3' => $p->min_qty3 !== null ? (float) $p->min_qty3 : null,
+            'harga_level1' => $p->harga_level1 !== null ? (float) $p->harga_level1 : (float) ($p->member_price ?? $p->price),
+            'reorder_point' => $p->reorder_point !== null ? (int) $p->reorder_point : ((int) $p->min_stock * 2),
+            'markup_percent' => $p->markup_percent !== null ? (float) $p->markup_percent : 0.0,
+            'ko_sup' => $p->ko_sup ?: ($p->supplier?->code ?? ''),
+            'act' => $p->act ?: ($p->status === 'NONAKTIF' ? 'N' : 'Y'),
+            'masa' => $p->masa ?? '',
+            'dump' => $p->dump ?? '',
             'rack_location' => $p->rack_location ?? 'Lorong Umum',
             'cost_price' => (float) $p->cost_price,
             'last_cost_price' => $p->last_cost_price !== null ? (float) $p->last_cost_price : (float) $p->cost_price,
@@ -839,6 +891,7 @@ class ProductController extends Controller
             'supplier_id' => $p->supplier_id,
             'supplier_name' => $p->supplier?->name ?? ($p->is_consignment ? 'Mitra UMKM Lokal' : 'Internal Koperasi'),
             'commission_percent' => (float) $p->commission_percent,
+            'extra_attributes' => $p->extra_attributes ?? [],
             'supplied_by' => $p->relationLoaded('supplierProducts')
                 ? $p->supplierProducts
                     ->sortByDesc('last_purchase_at')

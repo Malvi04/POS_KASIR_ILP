@@ -64,7 +64,7 @@ class ProductImportExportController extends Controller
     }
 
     /**
-     * Export products to Excel matching standard 36 ILP columns.
+     * Export products to Excel matching standard 25 ILP columns.
      */
     public function export(Request $request): StreamedResponse
     {
@@ -72,7 +72,7 @@ class ProductImportExportController extends Controller
     }
 
     /**
-     * Download standard 36-column template.
+     * Download standard 25-column template.
      */
     public function downloadTemplate(): StreamedResponse
     {
