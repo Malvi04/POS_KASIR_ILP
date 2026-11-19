@@ -1103,14 +1103,6 @@ class="flex w-full h-full relative text-gray-800">
                     <span class="text-gray-800 font-black" x-text="activeOperator ? activeOperator.name : (activeSession?.cashierName || localStorage.getItem('pos_user_name') || '-')">-</span>
                 </a>
 
-                <!-- Ganti Operator Kasir -->
-                <button type="button"
-                        @click="openOperatorSwitchModal()"
-                        class="flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
-                        title="Pergantian operator kasir">
-                    <span class="material-symbols-rounded text-[16px]">switch_account</span>
-                    <span>Ganti Operator</span>
-                </button>
 
                 <!-- Kunci Layar Terminal -->
                 <button type="button"
@@ -1633,79 +1625,6 @@ class="flex w-full h-full relative text-gray-800">
         </div>
     </template>
 
-    <!-- MODAL 5: PERGANTIAN OPERATOR TERMINAL -->
-    <template x-if="operatorSwitchModal.open">
-        <div class="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-xs">
-            <div @click.away="operatorSwitchModal.open = false"
-                 class="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-gray-100 overflow-hidden flex flex-col">
-                <div class="px-6 py-4.5 border-b border-gray-100 flex items-center justify-between bg-slate-50/70">
-                    <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
-                            <span class="material-symbols-rounded text-[22px]">switch_account</span>
-                        </div>
-                        <div>
-                            <h3 class="text-base font-black text-gray-900">Ganti Operator Kasir</h3>
-                            <p class="text-xs text-gray-500 font-medium">Sesi keuangan terminal tetap berjalan aktif.</p>
-                        </div>
-                    </div>
-                    <button type="button" @click="operatorSwitchModal.open = false" class="text-gray-400 hover:text-gray-700 cursor-pointer p-1">
-                        <span class="material-symbols-rounded text-[20px]">close</span>
-                    </button>
-                </div>
-
-                <div class="p-6 space-y-4">
-                    <div class="p-3.5 rounded-xl bg-slate-50 border border-gray-200/90 text-xs space-y-2">
-                        <div class="flex items-center justify-between">
-                            <span class="text-gray-500 font-medium">Terminal &amp; Sesi:</span>
-                            <span class="font-bold text-gray-900" x-text="(activeSession?.terminalLabel || '-') + ' (' + (activeSession?.sessionId || '-') + ')'"></span>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <span class="text-gray-500 font-medium">Operator Aktif:</span>
-                            <span class="font-bold text-[#0052cc]" x-text="activeOperator ? activeOperator.name : activeSession.cashierName"></span>
-                        </div>
-                    </div>
-
-                    <div>
-                        <label class="block text-xs font-bold text-gray-700 mb-1.5">Kasir Pengganti</label>
-                        <select x-model="operatorSwitchModal.targetStaffId"
-                                class="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:bg-white focus:border-[#0052cc] outline-none cursor-pointer">
-                            <template x-for="st in getEligibleCashiersForSwitch()" :key="st.id">
-                                <option :value="st.id" x-text="st.name + (st.nik ? ' (NIK: ' + st.nik + ')' : '')"></option>
-                            </template>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label class="block text-xs font-bold text-gray-700 mb-1.5">Alasan Pergantian</label>
-                        <select x-model="operatorSwitchModal.reason"
-                                class="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-800 focus:bg-white focus:border-[#0052cc] outline-none cursor-pointer">
-                            <option value="Istirahat / Sholat">Istirahat / Sholat</option>
-                            <option value="Pergantian Shift Kerja">Pergantian Shift Kerja</option>
-                            <option value="Bantuan Antrean Kasir">Bantuan Antrean Kasir</option>
-                            <option value="Keperluan Operasional">Keperluan Operasional Lainnya</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label class="block text-xs font-bold text-gray-700 mb-1.5">PIN Kasir Pengganti</label>
-                        <input type="password"
-                               x-model="operatorSwitchModal.targetPin"
-                               @keydown.enter.prevent="submitOperatorSwitch()"
-                               placeholder="Masukkan PIN kasir pengganti..."
-                               class="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl font-mono text-xs font-bold text-gray-900 focus:bg-white focus:border-[#0052cc] outline-none">
-                    </div>
-                </div>
-
-                <div class="px-6 py-4 bg-slate-50 border-t border-gray-100 flex items-center justify-between">
-                    <button type="button" @click="operatorSwitchModal.open = false" class="px-4 py-2 bg-white border border-gray-300 rounded-xl text-xs font-bold text-gray-700 hover:bg-gray-100 cursor-pointer">Batal</button>
-                    <button type="button" @click="submitOperatorSwitch()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer">
-                        <span class="material-symbols-rounded text-[18px]">verified_user</span>
-                        <span>Konfirmasi Ganti Kasir</span>
-                    </button>
-                </div>
-            </div>
-        </div>
-    </template>
 
     <!-- MODAL 6: LAYAR KUNCI TERMINAL -->
     <template x-if="isTerminalLocked">
