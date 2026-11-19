@@ -28,21 +28,6 @@ function getSpeedQuality(latencyMs) {
 }
 
 function recordLatency(latencyMs) {
-    const hasInternet = (window.posNetworkHealth && typeof window.posNetworkHealth.hasInternet === 'boolean')
-        ? window.posNetworkHealth.hasInternet
-        : true;
-    const isBrowserOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
-
-    if (!hasInternet || !isBrowserOnline || !window.posReverbState.wsConnected) {
-        window.posReverbState.latency = null;
-        if (window.Alpine && window.Alpine.store && window.Alpine.store('network')) {
-            const net = window.Alpine.store('network');
-            net.latency = null;
-            net.wsLatency = null;
-        }
-        return;
-    }
-
     const quality = getSpeedQuality(latencyMs);
     window.posReverbState.latency = latencyMs;
     window.posReverbState.wsSpeedQuality = quality;
@@ -62,16 +47,6 @@ function recordLatency(latencyMs) {
 }
 
 function sendReverbPing() {
-    const hasInternet = (window.posNetworkHealth && typeof window.posNetworkHealth.hasInternet === 'boolean')
-        ? window.posNetworkHealth.hasInternet
-        : true;
-    const isBrowserOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
-
-    if (!hasInternet || !isBrowserOnline || !window.posReverbState.wsConnected) {
-        stopReverbPingMonitor();
-        return;
-    }
-
     if (!window.Echo || !window.Echo.connector || !window.Echo.connector.pusher) return;
     const pusher = window.Echo.connector.pusher;
     if (!pusher.connection || pusher.connection.state !== 'connected') return;
@@ -111,27 +86,11 @@ function stopReverbPingMonitor() {
 }
 
 function updateReverbStatus(state) {
-    const isBrowserOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
-    const isServerReachable = (window.posNetworkHealth && typeof window.posNetworkHealth.isServerConnected === 'boolean')
-        ? window.posNetworkHealth.isServerConnected
-        : true;
-    const hasInternet = (window.posNetworkHealth && typeof window.posNetworkHealth.hasInternet === 'boolean')
-        ? window.posNetworkHealth.hasInternet
-        : true;
-
-    // Force disconnected/unavailable if physical network is down, server is unreachable, OR internet is absent
-    let effectiveState = state;
-    if (!isBrowserOnline || !hasInternet) {
-        effectiveState = 'disconnected';
-    } else if (!isServerReachable && state === 'connected') {
-        effectiveState = 'unavailable';
-    }
-
-    const isConnected = effectiveState === 'connected' && isBrowserOnline && isServerReachable && hasInternet;
-    const isConnecting = effectiveState === 'connecting' && isBrowserOnline && isServerReachable && hasInternet;
+    const isConnected = state === 'connected';
+    const isConnecting = state === 'connecting';
     const isDisconnected = !isConnected && !isConnecting;
 
-    window.posReverbState.status = effectiveState;
+    window.posReverbState.status = state;
     window.posReverbState.wsConnected = isConnected;
     window.posReverbState.wsConnecting = isConnecting;
     window.posReverbState.wsDisconnected = isDisconnected;
@@ -139,7 +98,7 @@ function updateReverbStatus(state) {
     if (window.Alpine && window.Alpine.store && window.Alpine.store('network')) {
         const net = window.Alpine.store('network');
         net.wsConnected = isConnected;
-        net.wsStatus = effectiveState;
+        net.wsStatus = state;
         net.wsConnecting = isConnecting;
         if (isDisconnected) {
             net.latency = null;
@@ -148,7 +107,7 @@ function updateReverbStatus(state) {
     }
 
     window.dispatchEvent(new CustomEvent('pos:ws-status-changed', {
-        detail: { state: effectiveState, isConnected, isConnecting, isDisconnected }
+        detail: { state, isConnected, isConnecting, isDisconnected }
     }));
 
     if (isConnected) {
@@ -161,57 +120,24 @@ function updateReverbStatus(state) {
     }
 }
 
-// Instant physical network offline listener
-window.addEventListener('offline', () => {
-    console.warn('[Reverb/WebSocket] Physical network offline detected. Halting WebSocket.');
-    stopReverbPingMonitor();
-    if (window.Echo && window.Echo.connector && window.Echo.connector.pusher) {
-        try {
-            window.Echo.connector.pusher.disconnect();
-        } catch (e) {}
-    }
-    updateReverbStatus('disconnected');
-});
-
-// Physical network online listener
-window.addEventListener('online', () => {
-    console.log('[Reverb/WebSocket] Physical network online detected.');
-    updateReverbStatus('connecting');
-});
-
-// Server availability listener from pos-realtime health check probe
-window.addEventListener('pos:server-health-changed', (e) => {
-    const isServerOk = !!e.detail?.isServerConnected;
-    const isBrowserOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
-    const hasInternet = (typeof e.detail?.hasInternet === 'boolean') ? e.detail.hasInternet : true;
-
-    if (!isBrowserOnline || !isServerOk || !hasInternet) {
-        stopReverbPingMonitor();
-        if (window.Echo && window.Echo.connector && window.Echo.connector.pusher) {
-            try {
-                window.Echo.connector.pusher.disconnect();
-            } catch (e) {}
-        }
-        updateReverbStatus((!isBrowserOnline || !hasInternet) ? 'disconnected' : 'unavailable');
-    } else {
-        if (window.Echo && window.Echo.connector && window.Echo.connector.pusher) {
-            const curState = window.Echo.connector.pusher.connection.state;
-            if (curState !== 'connected' && curState !== 'connecting') {
-                try {
-                    window.Echo.connector.pusher.connect();
-                } catch (e) {}
-            }
-        }
-    }
-});
-
 try {
     const reverbKey = import.meta.env.VITE_REVERB_APP_KEY || 'poskasirilpkey123';
-    const rawHost = import.meta.env.VITE_REVERB_HOST || (typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1');
-    const reverbHost = rawHost === 'localhost' ? '127.0.0.1' : rawHost;
-    const reverbPort = import.meta.env.VITE_REVERB_PORT ? parseInt(import.meta.env.VITE_REVERB_PORT, 10) : 8080;
-    const reverbScheme = import.meta.env.VITE_REVERB_SCHEME || 'http';
-    const forceTLS = reverbScheme === 'https';
+    const isBrowser = typeof window !== 'undefined';
+    const browserHost = isBrowser && window.location.hostname ? window.location.hostname : '127.0.0.1';
+    const isLocalhost = browserHost === 'localhost' || browserHost === '127.0.0.1';
+
+    // In production/VPS, dynamically connect to current host via standard port 80/443 (proxied via Nginx)
+    // In local development, connect to 127.0.0.1:8080
+    const reverbHost = isLocalhost ? (import.meta.env.VITE_REVERB_HOST || '127.0.0.1') : browserHost;
+    const isHttps = isBrowser ? window.location.protocol === 'https:' : false;
+
+    let reverbPort = 8080;
+    if (isLocalhost) {
+        reverbPort = import.meta.env.VITE_REVERB_PORT ? parseInt(import.meta.env.VITE_REVERB_PORT, 10) : 8080;
+    } else {
+        reverbPort = window.location.port ? parseInt(window.location.port, 10) : (isHttps ? 443 : 80);
+    }
+    const forceTLS = isHttps;
 
     window.Echo = new Echo({
         broadcaster: 'reverb',
@@ -229,7 +155,7 @@ try {
         key: reverbKey,
         host: reverbHost,
         port: reverbPort,
-        scheme: reverbScheme,
+        scheme: isHttps ? 'https' : 'http',
     });
 
     // Real-time connection lifecycle event listeners
@@ -239,34 +165,10 @@ try {
         // 1. Precise state transition handling
         connection.bind('state_change', (states) => {
             console.log('[Reverb/WebSocket] State change:', states.previous, '->', states.current);
-            const hasInternet = (window.posNetworkHealth && typeof window.posNetworkHealth.hasInternet === 'boolean')
-                ? window.posNetworkHealth.hasInternet
-                : true;
-            const isBrowserOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
-
-            if ((!hasInternet || !isBrowserOnline) && states.current === 'connected') {
-                try { window.Echo.connector.pusher.disconnect(); } catch (e) {}
-                updateReverbStatus('disconnected');
-            } else {
-                updateReverbStatus(states.current);
-            }
+            updateReverbStatus(states.current);
         });
 
         connection.bind('connected', () => {
-            const hasInternet = (window.posNetworkHealth && typeof window.posNetworkHealth.hasInternet === 'boolean')
-                ? window.posNetworkHealth.hasInternet
-                : true;
-            const isBrowserOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
-
-            if (!hasInternet || !isBrowserOnline) {
-                console.warn('[Reverb/WebSocket] Pusher reported connected on loopback, but internet/physical network is down. Forcing disconnected.');
-                try {
-                    window.Echo.connector.pusher.disconnect();
-                } catch (e) {}
-                updateReverbStatus('disconnected');
-                return;
-            }
-
             console.log('[Reverb/WebSocket] Connected successfully to Reverb server.');
             updateReverbStatus('connected');
         });

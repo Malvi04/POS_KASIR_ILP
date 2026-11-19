@@ -59,30 +59,32 @@
             <!-- Network / Status Real-time Indicator -->
             <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all select-none"
                  :class="{
-                    'bg-emerald-50 text-emerald-700 border-emerald-200': ($store.network && $store.network.wsConnected),
-                    'bg-amber-50 text-amber-700 border-amber-200': ($store.network && !$store.network.wsConnected && $store.network.wsStatus === 'connecting'),
-                    'bg-rose-50 text-rose-700 border-rose-200': (!$store.network || (!$store.network.wsConnected && $store.network.wsStatus !== 'connecting'))
+                    'bg-emerald-50 text-emerald-700 border-emerald-200': ($store.network && ($store.network.wsConnected || $store.network.isOnline)),
+                    'bg-amber-50 text-amber-700 border-amber-200': ($store.network && !$store.network.wsConnected && $store.network.wsStatus === 'connecting' && $store.network.isOnline),
+                    'bg-rose-50 text-rose-700 border-rose-200': (!$store.network || (!$store.network.isOnline && !$store.network.wsConnected))
                  }"
                  :title="($store.network && $store.network.wsConnected) 
                     ? 'Koneksi Sistem POS & Reverb: Terhubung Real-time (' + ($store.network.latency || 0) + 'ms)' 
-                    : (($store.network && $store.network.wsStatus === 'connecting')
-                        ? 'Koneksi Sistem POS & Reverb: Menghubungkan...'
-                        : 'Koneksi Sistem POS & Reverb: Terputus / Mode Offline')">
+                    : (($store.network && $store.network.isOnline)
+                        ? 'Koneksi Sistem POS: Terhubung ke Server'
+                        : (($store.network && $store.network.wsStatus === 'connecting')
+                            ? 'Koneksi Sistem POS & Reverb: Menghubungkan...'
+                            : 'Koneksi Sistem POS & Reverb: Terputus / Mode Offline'))">
                 <span class="w-1.5 h-1.5 rounded-full" 
                       :class="{
-                        'bg-emerald-500 animate-pulse': ($store.network && $store.network.wsConnected),
-                        'bg-amber-500 animate-ping': ($store.network && !$store.network.wsConnected && $store.network.wsStatus === 'connecting'),
-                        'bg-rose-500': (!$store.network || (!$store.network.wsConnected && $store.network.wsStatus !== 'connecting'))
+                        'bg-emerald-500 animate-pulse': ($store.network && ($store.network.wsConnected || $store.network.isOnline)),
+                        'bg-amber-500 animate-ping': ($store.network && !$store.network.wsConnected && $store.network.wsStatus === 'connecting' && $store.network.isOnline),
+                        'bg-rose-500': (!$store.network || (!$store.network.isOnline && !$store.network.wsConnected))
                       }"></span>
                 <span class="material-symbols-rounded text-[14px]"
                       :class="{
-                        'text-emerald-600': ($store.network && $store.network.wsConnected),
-                        'text-amber-600 animate-spin': ($store.network && !$store.network.wsConnected && $store.network.wsStatus === 'connecting'),
-                        'text-rose-600': (!$store.network || (!$store.network.wsConnected && $store.network.wsStatus !== 'connecting'))
+                        'text-emerald-600': ($store.network && ($store.network.wsConnected || $store.network.isOnline)),
+                        'text-amber-600 animate-spin': ($store.network && !$store.network.wsConnected && $store.network.wsStatus === 'connecting' && $store.network.isOnline),
+                        'text-rose-600': (!$store.network || (!$store.network.isOnline && !$store.network.wsConnected))
                       }"
-                      x-text="($store.network && $store.network.wsConnected) ? 'wifi' : (($store.network && $store.network.wsStatus === 'connecting') ? 'sync' : 'wifi_off')">wifi</span>
-                <span x-text="($store.network && $store.network.wsConnected) ? 'Terhubung' : (($store.network && $store.network.wsStatus === 'connecting') ? 'Menghubungkan...' : 'Terputus')">Terhubung</span>
-                <template x-if="$store.network && $store.network.wsConnected && $store.network.latency !== undefined && $store.network.latency !== null">
+                      x-text="($store.network && ($store.network.wsConnected || $store.network.isOnline)) ? 'wifi' : (($store.network && $store.network.wsStatus === 'connecting') ? 'sync' : 'wifi_off')">wifi</span>
+                <span x-text="($store.network && $store.network.wsConnected) ? 'Terhubung' : (($store.network && $store.network.isOnline) ? 'Terhubung' : (($store.network && $store.network.wsStatus === 'connecting') ? 'Menghubungkan...' : 'Terputus'))">Terhubung</span>
+                <template x-if="$store.network && $store.network.latency !== undefined && $store.network.latency !== null">
                     <span class="text-[10px] font-mono hidden sm:inline font-bold transition-colors"
                           :class="{
                               'text-emerald-600': ($store.network.latency < 50),
