@@ -424,7 +424,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <span class="material-symbols-rounded text-[22px]" :class="(isLoading || $store.network?.isChecking) ? 'animate-spin text-[#0052cc]' : ''">autorenew</span>
                 </button>
                 <div class="h-6 w-px bg-gray-200"></div>
-                <x-realtime-network-badge labelOnline="API Terhubung" />
+                <x-realtime-network-badge />
             </div>
         </header>
 

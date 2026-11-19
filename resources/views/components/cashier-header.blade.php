@@ -35,51 +35,7 @@
 
         <div class="h-6 w-px bg-gray-200 mx-0.5"></div>
 
-        <!-- Real-time Network Status Pill Badge -->
-        <div @click="$store.offlineSync?.openModal()"
-             class="flex items-center gap-2 px-3 py-1.5 rounded-full border text-[11px] font-bold tracking-wide transition-all shadow-2xs select-none cursor-pointer hover:shadow-xs"
-             :class="{
-                'text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100/50': ($store.network && $store.network.wsConnected),
-                'text-amber-700 bg-amber-50 border-amber-200 hover:bg-amber-100/50': ($store.network && !$store.network.wsConnected && $store.network.wsStatus === 'connecting'),
-                'text-rose-700 bg-rose-50 border-rose-200 hover:bg-rose-100/50': (!$store.network || (!$store.network.wsConnected && $store.network.wsStatus !== 'connecting'))
-             }"
-             :title="($store.network && $store.network.wsConnected)
-                ? 'Koneksi POS: Terhubung Real-time (' + ($store.network.latency || 0) + 'ms). Klik untuk info sync.' 
-                : (($store.network && $store.network.wsStatus === 'connecting')
-                    ? 'Koneksi POS: Menghubungkan ke WebSocket Server...'
-                    : 'Koneksi POS: Terputus / Mode Offline Aktif. Transaksi tetap berjalan normal.')">
-            <!-- Pulsing Indicator Dot -->
-            <span class="w-2 h-2 rounded-full shrink-0"
-                  :class="{
-                    'bg-emerald-500 animate-pulse': ($store.network && $store.network.wsConnected),
-                    'bg-amber-500 animate-ping': ($store.network && !$store.network.wsConnected && $store.network.wsStatus === 'connecting'),
-                    'bg-rose-500': (!$store.network || (!$store.network.wsConnected && $store.network.wsStatus !== 'connecting'))
-                  }"></span>
-
-            <!-- Wifi / Wifi-Off Icon -->
-            <span class="material-symbols-rounded text-[18px] shrink-0"
-                  :class="{
-                    'text-emerald-600': ($store.network && $store.network.wsConnected),
-                    'text-amber-600 animate-spin': ($store.network && !$store.network.wsConnected && $store.network.wsStatus === 'connecting'),
-                    'text-rose-600': (!$store.network || (!$store.network.wsConnected && $store.network.wsStatus !== 'connecting'))
-                  }"
-                  x-text="($store.network && $store.network.wsConnected) ? 'wifi' : (($store.network && $store.network.wsStatus === 'connecting') ? 'sync' : 'wifi_off')">wifi</span>
-
-            <!-- Status Text -->
-            <span x-text="($store.network && $store.network.wsConnected) ? 'Terhubung' : (($store.network && $store.network.wsStatus === 'connecting') ? 'Menghubungkan...' : 'Terputus')">Terhubung</span>
-
-            <!-- Real-time Ping Latency (ms) with Speed Quality Indicator -->
-            <template x-if="$store.network && $store.network.wsConnected && $store.network.latency !== undefined && $store.network.latency !== null">
-                <span class="text-[10px] font-mono hidden sm:inline ml-0.5 font-bold transition-colors"
-                      :class="{
-                          'text-emerald-600': ($store.network.latency < 50),
-                          'text-teal-600': ($store.network.latency >= 50 && $store.network.latency < 150),
-                          'text-amber-600': ($store.network.latency >= 150 && $store.network.latency <= 300),
-                          'text-rose-600': ($store.network.latency > 300)
-                      }"
-                      :title="'Kecepatan WebSocket Reverb: ' + $store.network.latency + 'ms'"
-                      x-text="$store.network.latency + 'ms'"></span>
-            </template>
-        </div>
+        <!-- Real-time Network Status Pill Badge with Reverb Active indicator -->
+        <x-realtime-network-badge />
     </div>
 </header>

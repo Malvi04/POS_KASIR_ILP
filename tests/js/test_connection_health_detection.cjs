@@ -147,7 +147,7 @@ async function runAllScenarios() {
     assert.strictEqual(store.getBadgeIcon(), 'wifi', 'Badge icon is wifi');
     assert.strictEqual(store.isReverbBadgeVisible(), true, 'Reverb badge is visible');
     assert.strictEqual(store.getBadgeClass().includes('emerald'), true, 'Badge class is emerald green');
-    recordPass('Skenario 1 Passed: Wi-Fi aktif & server aktif -> Terhubung (Hijau/Emerald, Reverb WS aktif)');
+    recordPass('Skenario 1 Passed: Wi-Fi aktif & server aktif -> Terhubung (Hijau/Emerald, Reverb Active)');
 
     // -------------------------------------------------------------
     // SCENARIO 2: Wi-Fi diputus secara manual
@@ -164,7 +164,7 @@ async function runAllScenarios() {
     assert.strictEqual(store.getBadgeIcon(), 'wifi_off', 'Badge icon immediately becomes wifi_off');
     assert.strictEqual(store.isReverbBadgeVisible(), false, 'Reverb badge is immediately HIDDEN');
     assert.strictEqual(store.getBadgeClass().includes('rose'), true, 'Badge class is rose red');
-    recordPass('Skenario 2 Passed: Wi-Fi diputus -> Langsung Terputus (Merah/Rose, wifi_off, Reverb WS mati)');
+    recordPass('Skenario 2 Passed: Wi-Fi diputus -> Langsung Terputus (Merah/Rose, wifi_off, Reverb nonaktif)');
 
     // -------------------------------------------------------------
     // SCENARIO 3: Wi-Fi dinyalakan kembali
@@ -334,7 +334,7 @@ async function runAllScenarios() {
     assert.strictEqual(internetDropStore.latency, null, 'Latency display is hidden / null');
     assert.strictEqual(internetDropStore.getBadgeText(), 'Terputus', 'Badge text MUST show Terputus');
     assert.strictEqual(internetDropStore.getBadgeIcon(), 'wifi_off', 'Badge icon MUST show wifi_off');
-    assert.strictEqual(internetDropStore.isReverbBadgeVisible(), false, 'Reverb WS badge MUST be hidden');
+    assert.strictEqual(internetDropStore.isReverbBadgeVisible(), false, 'Reverb Active badge MUST be hidden');
     assert.strictEqual(internetDropStore.getBadgeClass().includes('rose'), true, 'Badge class MUST be red / rose');
     recordPass('Skenario 11 Passed: Wi-Fi mati / Tanpa Internet -> Reverb WebSocket dipaksa Terputus, Latensi disembunyikan, Warna Merah');
 
