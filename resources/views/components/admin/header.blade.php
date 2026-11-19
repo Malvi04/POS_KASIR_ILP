@@ -79,10 +79,10 @@
                 <span class="material-symbols-rounded text-[14px]"
                       :class="{
                         'text-emerald-600': ($store.network && ($store.network.wsConnected || $store.network.isOnline)),
-                        'text-amber-600 animate-spin': ($store.network && !$store.network.wsConnected && $store.network.wsStatus === 'connecting' && $store.network.isOnline),
+                        'text-amber-600': ($store.network && !$store.network.wsConnected && $store.network.wsStatus === 'connecting' && $store.network.isOnline),
                         'text-rose-600': (!$store.network || (!$store.network.isOnline && !$store.network.wsConnected))
                       }"
-                      x-text="($store.network && ($store.network.wsConnected || $store.network.isOnline)) ? 'wifi' : (($store.network && $store.network.wsStatus === 'connecting') ? 'sync' : 'wifi_off')">wifi</span>
+                      x-text="($store.network && ($store.network.wsConnected || $store.network.isOnline)) ? 'wifi' : 'wifi_off'">wifi</span>
                 <span x-text="($store.network && $store.network.wsConnected) ? 'Terhubung' : (($store.network && $store.network.isOnline) ? 'Terhubung' : (($store.network && $store.network.wsStatus === 'connecting') ? 'Menghubungkan...' : 'Terputus'))">Terhubung</span>
                 <template x-if="$store.network && $store.network.latency !== undefined && $store.network.latency !== null">
                     <span class="text-[10px] font-mono hidden sm:inline font-bold transition-colors"

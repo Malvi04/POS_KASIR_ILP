@@ -58,14 +58,14 @@
                     'bg-rose-500': (!$store.network || (!$store.network.isOnline && !$store.network.wsConnected))
                   }"></span>
 
-            <!-- Wifi / Wifi-Off Icon -->
+            <!-- Wifi / Wifi-Off Icon (Statis, tidak rotate saat sinkron) -->
             <span class="material-symbols-rounded text-[18px] shrink-0"
                   :class="{
                     'text-emerald-600': ($store.network && ($store.network.wsConnected || $store.network.isOnline)),
-                    'text-amber-600 animate-spin': ($store.network && !$store.network.wsConnected && $store.network.wsStatus === 'connecting' && $store.network.isOnline),
+                    'text-amber-600': ($store.network && !$store.network.wsConnected && $store.network.wsStatus === 'connecting' && $store.network.isOnline),
                     'text-rose-600': (!$store.network || (!$store.network.isOnline && !$store.network.wsConnected))
                   }"
-                  x-text="($store.network && ($store.network.wsConnected || $store.network.isOnline)) ? 'wifi' : (($store.network && $store.network.wsStatus === 'connecting') ? 'sync' : 'wifi_off')">wifi</span>
+                  x-text="($store.network && ($store.network.wsConnected || $store.network.isOnline)) ? 'wifi' : 'wifi_off'">wifi</span>
 
             <!-- Status Text -->
             <span x-text="($store.network && $store.network.wsConnected) ? 'Terhubung' : (($store.network && $store.network.isOnline) ? 'Terhubung' : (($store.network && $store.network.wsStatus === 'connecting') ? 'Menghubungkan...' : 'Terputus'))">Terhubung</span>

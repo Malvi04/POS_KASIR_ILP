@@ -431,88 +431,294 @@
         </div>
     </div>
 
-    <!-- MODAL 1: TAMBAH MASTER SKU BARU -->
+    <!-- MODAL 1: TAMBAH MASTER SKU BARU (STANDAR 25 KOLOM ILP) -->
     <template x-teleport="body">
         <div x-show="showCreateModal" 
              x-transition.opacity
              class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4"
              style="display: none;">
             <div @click.away="showCreateModal = false"
-                 class="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+                 class="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-4xl w-full p-6 space-y-4 max-h-[92vh] overflow-y-auto">
                 <div class="flex items-center justify-between pb-3 border-b border-slate-100">
-                    <div>
-                        <h3 class="text-base font-black text-slate-900 tracking-tight">Tambah Master SKU Baru</h3>
-                        <p class="text-xs text-slate-500 mt-0.5">Daftarkan SKU baru ke katalog master multi-cabang koperasi.</p>
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-2xl bg-blue-50 text-[#0052cc] flex items-center justify-center font-bold">
+                            <span class="material-symbols-rounded text-[22px]">add_circle</span>
+                        </div>
+                        <div>
+                            <h3 class="text-base font-black text-slate-900 tracking-tight">Tambah Master SKU Baru (Standar 25 Kolom ILP)</h3>
+                            <p class="text-xs text-slate-500 mt-0.5">Daftarkan SKU baru dengan form master lengkap sesuai struktur detail barang ILP.</p>
+                        </div>
                     </div>
-                    <button type="button" @click="showCreateModal = false" class="text-slate-400 hover:text-slate-600">
+                    <button type="button" @click="showCreateModal = false" class="text-slate-400 hover:text-slate-600 cursor-pointer">
                         <span class="material-symbols-rounded text-[20px]">close</span>
                     </button>
                 </div>
 
                 <form @submit.prevent="saveNewProduct()" class="space-y-4 text-xs">
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">SKU Produk *</label>
-                            <input type="text" x-model="formProduct.sku" required placeholder="PRD-011" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-mono font-bold text-slate-800 focus:bg-white focus:border-[#0052cc] focus:outline-none">
+                    <!-- SECTION 1: IDENTITAS & MASTER BARANG -->
+                    <div class="p-4 bg-slate-50/70 rounded-2xl border border-slate-200/80 space-y-3">
+                        <div class="flex items-center justify-between border-b border-slate-200/70 pb-2">
+                            <span class="text-[11px] font-black uppercase text-slate-800 tracking-wider flex items-center gap-1.5">
+                                <span class="material-symbols-rounded text-[17px] text-[#0052cc]">badge</span>
+                                <span>1. Identitas &amp; Master Barang (ILP)</span>
+                            </span>
+                            <span class="text-[10.5px] font-mono text-slate-400">Kolom 1-6, 19, 21</span>
                         </div>
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">Barcode EAN-13 *</label>
-                            <input type="text" x-model="formProduct.barcode" required placeholder="8991234567890" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-mono text-slate-800 focus:bg-white focus:border-[#0052cc] focus:outline-none">
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div class="md:col-span-3">
+                                <label class="block font-bold text-slate-700 mb-1">Nama Produk Lengkap <span class="text-rose-500">*</span></label>
+                                <input type="text" x-model="formProduct.name" required placeholder="Contoh: Kopi Bubuk Robusta 250g" class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-800 focus:border-[#0052cc] focus:outline-none font-medium">
+                            </div>
+
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">Barcode EAN-13 <span class="text-rose-500">*</span></label>
+                                <div class="flex gap-2">
+                                    <input type="text" x-model="formProduct.barcode" required placeholder="899..." class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 font-mono font-bold text-slate-800 focus:border-[#0052cc] focus:outline-none">
+                                    <button type="button" @click="formProduct.barcode = '899' + Math.floor(1000000000 + Math.random() * 9000000000)" class="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-bold text-[11px] shrink-0 cursor-pointer">
+                                        Acak
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">SKU Produk <span class="text-rose-500">*</span></label>
+                                <input type="text" x-model="formProduct.sku" required placeholder="PRD-011" class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 font-mono font-bold text-slate-800 uppercase focus:border-[#0052cc] focus:outline-none">
+                            </div>
+
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">Barang - ID (ILP)</label>
+                                <input type="text" x-model="formProduct.ilp_id" placeholder="ILP-011" class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 font-mono text-slate-800 focus:border-[#0052cc] focus:outline-none">
+                            </div>
+
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">Kategori Produk <span class="text-rose-500">*</span></label>
+                                <input type="text" x-model="formProduct.category" required placeholder="Minuman / Snack / Sembako" class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-800 focus:border-[#0052cc] focus:outline-none font-semibold">
+                            </div>
+
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">Satuan Unit</label>
+                                <select x-model="formProduct.unit" class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-800 focus:border-[#0052cc] focus:outline-none font-semibold">
+                                    <option value="Pcs">Pcs</option>
+                                    <option value="Botol">Botol</option>
+                                    <option value="Pack">Pack</option>
+                                    <option value="Karton">Karton</option>
+                                    <option value="Kaleng">Kaleng</option>
+                                    <option value="Sachet">Sachet</option>
+                                    <option value="Kg">Kg</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">Brand / Produsen</label>
+                                <input type="text" x-model="formProduct.brand" placeholder="Contoh: Indofood / Lokal" class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-800 focus:border-[#0052cc] focus:outline-none">
+                            </div>
+
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">Status Barang</label>
+                                <select x-model="formProduct.statusBarang" class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-800 focus:border-[#0052cc] focus:outline-none font-bold">
+                                    <option value="TERSEDIA">TERSEDIA</option>
+                                    <option value="STOK_RENDAH">STOK_RENDAH</option>
+                                    <option value="HABIS">HABIS</option>
+                                    <option value="NONAKTIF">NONAKTIF</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">Status Aktif (Barang - Act)</label>
+                                <select x-model="formProduct.act" class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-800 focus:border-[#0052cc] focus:outline-none font-bold">
+                                    <option value="Y">Y - Aktif (Bisa Transaksi)</option>
+                                    <option value="N">N - Nonaktif</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
 
-                    <div>
-                        <label class="block font-bold text-slate-700 mb-1">Nama Produk Lengkap *</label>
-                        <input type="text" x-model="formProduct.name" required placeholder="Contoh: Kopi Bubuk Robusta 250g" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 focus:bg-white focus:border-[#0052cc] focus:outline-none font-medium">
+                    <!-- SECTION 2: HARGA BELI, PPN & MARGIN -->
+                    <div class="p-4 bg-amber-50/40 rounded-2xl border border-amber-200/70 space-y-3">
+                        <div class="flex items-center justify-between border-b border-amber-200/60 pb-2">
+                            <span class="text-[11px] font-black uppercase text-amber-900 tracking-wider flex items-center gap-1.5">
+                                <span class="material-symbols-rounded text-[17px] text-amber-700">payments</span>
+                                <span>2. Harga Beli, PPN &amp; Margin</span>
+                            </span>
+                            <span class="text-[10.5px] font-mono text-amber-700/70">Kolom 7, 16, 17, 18, 24, 13</span>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">Harga Beli Pokok (HPP) <span class="text-rose-500">*</span></label>
+                                <div class="relative">
+                                    <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold font-mono">Rp</span>
+                                    <input type="number" min="0" step="100" x-model.number="formProduct.costPrice" @input="if(formProduct.costPrice > 0 && formProduct.price >= formProduct.costPrice) { formProduct.up = Number((((formProduct.price - formProduct.costPrice)/formProduct.costPrice)*100).toFixed(1)); }" class="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-white border border-slate-200 font-mono font-bold text-slate-800 focus:border-[#0052cc] focus:outline-none">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">Harga Beli Terakhir (HrgBeliTerakhir)</label>
+                                <div class="relative">
+                                    <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold font-mono">Rp</span>
+                                    <input type="number" min="0" step="100" x-model.number="formProduct.lastCostPrice" class="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-white border border-slate-200 font-mono font-bold text-slate-800 focus:border-[#0052cc] focus:outline-none">
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block font-bold text-slate-700 mb-1">Kena PPN?</label>
+                                    <select x-model="formProduct.ppnChk" @change="formProduct.ppnOut = (formProduct.ppnChk === 'Y' ? 11 : 0)" class="w-full px-3 py-2.5 rounded-xl bg-white border border-slate-200 font-bold text-slate-800 focus:border-[#0052cc] focus:outline-none">
+                                        <option value="Y">Y - Kena PPN</option>
+                                        <option value="N">N - Non PPN</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block font-bold text-slate-700 mb-1">Tarif PPN (%)</label>
+                                    <div class="relative">
+                                        <input type="number" min="0" max="100" x-model.number="formProduct.ppnOut" class="w-full px-3 py-2.5 rounded-xl bg-white border border-slate-200 font-mono font-bold text-slate-800 focus:border-[#0052cc] focus:outline-none">
+                                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">%</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">Markup Keuntungan (Barang - Up %)</label>
+                                <div class="relative">
+                                    <input type="number" step="0.5" x-model.number="formProduct.up" @input="if(formProduct.costPrice > 0 && formProduct.up > 0) { formProduct.price = Math.round(formProduct.costPrice * (1 + (formProduct.up/100))); if(!formProduct.memberPrice) formProduct.memberPrice = formProduct.price; }" class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 font-mono font-bold text-slate-800 focus:border-[#0052cc] focus:outline-none">
+                                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">%</span>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">Diskon Cuci Gudang (Barang - Disc %)</label>
+                                <div class="relative">
+                                    <input type="number" min="0" max="100" x-model.number="formProduct.disc" class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 font-mono font-bold text-slate-800 focus:border-[#0052cc] focus:outline-none">
+                                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">%</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">Brand / Produsen</label>
-                            <input type="text" x-model="formProduct.brand" placeholder="Contoh: Indofood / Mitra Bu Eni" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 focus:bg-white focus:border-[#0052cc] focus:outline-none">
+                    <!-- SECTION 3: STRUKTUR HARGA JUAL & GROSIR / TINGKAT -->
+                    <div class="p-4 bg-blue-50/50 rounded-2xl border border-blue-200/80 space-y-3">
+                        <div class="flex items-center justify-between border-b border-blue-200/70 pb-2">
+                            <span class="text-[11px] font-black uppercase text-[#0052cc] tracking-wider flex items-center gap-1.5">
+                                <span class="material-symbols-rounded text-[17px]">price_change</span>
+                                <span>3. Struktur Harga Jual &amp; Ketentuan Grosir / Level</span>
+                            </span>
+                            <span class="text-[10.5px] font-mono text-blue-600/70">Kolom 8, 9, 10, 11, 12</span>
                         </div>
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">Kategori Produk *</label>
-                            <input type="text" x-model="formProduct.category" required placeholder="Minuman / Snack / Sembako" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 focus:bg-white focus:border-[#0052cc] focus:outline-none">
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">Harga Jual Umum (HargaJualK1) <span class="text-rose-500">*</span></label>
+                                <div class="relative">
+                                    <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold font-mono">Rp</span>
+                                    <input type="number" x-model.number="formProduct.price" min="0" required class="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-white border border-slate-200 font-mono font-bold text-slate-800 focus:border-[#0052cc] focus:outline-none">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block font-bold text-[#0052cc] mb-1">Harga Anggota Koperasi (HargaLevel1)</label>
+                                <div class="relative">
+                                    <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#0052cc] font-bold font-mono">Rp</span>
+                                    <input type="number" x-model.number="formProduct.memberPrice" min="0" placeholder="Opsional" class="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-white border border-slate-200 font-mono font-bold text-[#0052cc] focus:border-[#0052cc] focus:outline-none">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-3 gap-3 pt-2 border-t border-blue-100">
+                            <div>
+                                <label class="block font-bold text-slate-600 mb-1">Min Qty 1 (Default)</label>
+                                <input type="number" min="1" x-model.number="formProduct.minQty1" class="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 font-mono font-bold text-xs">
+                            </div>
+                            <div>
+                                <label class="block font-bold text-slate-600 mb-1">Min Qty 2 (Grosir 2)</label>
+                                <input type="number" min="1" x-model.number="formProduct.minQty2" placeholder="Opsional" class="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 font-mono text-xs">
+                            </div>
+                            <div>
+                                <label class="block font-bold text-slate-600 mb-1">Min Qty 3 (Grosir 3)</label>
+                                <input type="number" min="1" x-model.number="formProduct.minQty3" placeholder="Opsional" class="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 font-mono text-xs">
+                            </div>
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-3 gap-3">
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">Stok Total Master *</label>
-                            <input type="number" x-model.number="formProduct.stock" min="0" required class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-mono font-bold text-slate-800 focus:bg-white focus:border-[#0052cc] focus:outline-none">
+                    <!-- SECTION 4: INVENTARIS, BUFFER STOK & LOKASI DISPLAY -->
+                    <div class="p-4 bg-emerald-50/40 rounded-2xl border border-emerald-200/70 space-y-3">
+                        <div class="flex items-center justify-between border-b border-emerald-200/60 pb-2">
+                            <span class="text-[11px] font-black uppercase text-emerald-900 tracking-wider flex items-center gap-1.5">
+                                <span class="material-symbols-rounded text-[17px] text-emerald-700">warehouse</span>
+                                <span>4. Inventaris, Buffer Stok &amp; Lokasi Display</span>
+                            </span>
+                            <span class="text-[10.5px] font-mono text-emerald-700/70">Kolom 14, 15 &amp; Rak</span>
                         </div>
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">Batas Min Stok *</label>
-                            <input type="number" x-model.number="formProduct.minStock" min="0" required class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-mono text-slate-800 focus:bg-white focus:border-[#0052cc] focus:outline-none">
-                        </div>
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">Satuan</label>
-                            <input type="text" x-model="formProduct.unit" placeholder="Pcs / Botol / Pack" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 focus:bg-white focus:border-[#0052cc] focus:outline-none">
+
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">Stok Fisik Total <span class="text-rose-500">*</span></label>
+                                <input type="number" x-model.number="formProduct.stock" min="0" required class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 font-mono font-bold text-slate-800 focus:border-[#0052cc] focus:outline-none">
+                            </div>
+
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">Buffer Min Stok (StockMin) <span class="text-rose-500">*</span></label>
+                                <input type="number" x-model.number="formProduct.minStock" min="0" required class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 font-mono font-bold text-slate-800 focus:border-[#0052cc] focus:outline-none">
+                            </div>
+
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">Titik ReOrder</label>
+                                <input type="number" min="0" x-model.number="formProduct.reorder" placeholder="20" class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 font-mono font-bold text-slate-800 focus:border-[#0052cc] focus:outline-none">
+                            </div>
+
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">Lokasi Rak Display</label>
+                                <input type="text" x-model="formProduct.rackLocation" placeholder="Lorong A - Rak 01" class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-800 focus:border-[#0052cc] focus:outline-none">
+                            </div>
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">Harga Jual Umum (Rp) *</label>
-                            <input type="number" x-model.number="formProduct.price" min="0" required class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-mono font-bold text-slate-800 focus:bg-white focus:border-[#0052cc] focus:outline-none">
+                    <!-- SECTION 5: PEMASOK, BATCH & KEDALUWARSA -->
+                    <div class="p-4 bg-purple-50/40 rounded-2xl border border-purple-200/70 space-y-3">
+                        <div class="flex items-center justify-between border-b border-purple-200/60 pb-2">
+                            <span class="text-[11px] font-black uppercase text-purple-900 tracking-wider flex items-center gap-1.5">
+                                <span class="material-symbols-rounded text-[17px] text-purple-700">inventory</span>
+                                <span>5. Pemasok, Kedaluwarsa &amp; Keterangan</span>
+                            </span>
+                            <span class="text-[10.5px] font-mono text-purple-700/70">Kolom 20, 22, 23, 25 &amp; Batch</span>
                         </div>
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">Harga Anggota Koperasi (Rp)</label>
-                            <input type="number" x-model.number="formProduct.memberPrice" min="0" placeholder="Opsional (Khusus Koperasi)" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-mono font-bold text-[#0052cc] focus:bg-white focus:border-[#0052cc] focus:outline-none">
-                        </div>
-                    </div>
 
-                    <div>
-                        <label class="block font-bold text-slate-700 mb-1">Lokasi Rak / Lorong</label>
-                        <input type="text" x-model="formProduct.rackLocation" placeholder="Lorong A - Rak 01" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 focus:bg-white focus:border-[#0052cc] focus:outline-none">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">Kode Supplier (KoSup)</label>
+                                <input type="text" x-model="formProduct.koSup" placeholder="SUP-001" class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 font-mono text-slate-800 focus:border-[#0052cc] focus:outline-none">
+                            </div>
+
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">Nomor Batch / Lot</label>
+                                <input type="text" x-model="formProduct.batchLot" placeholder="BATCH-202611-01" class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 font-mono text-slate-800 focus:border-[#0052cc] focus:outline-none">
+                            </div>
+
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">Tanggal Kedaluwarsa</label>
+                                <input type="date" x-model="formProduct.expiredDate" class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-800 focus:border-[#0052cc] focus:outline-none">
+                            </div>
+
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">Masa Garansi / Retur</label>
+                                <div class="relative">
+                                    <input type="text" x-model="formProduct.masa" placeholder="30" class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 font-mono text-slate-800 focus:border-[#0052cc] focus:outline-none">
+                                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">Hari</span>
+                                </div>
+                            </div>
+
+                            <div class="md:col-span-2">
+                                <label class="block font-bold text-slate-700 mb-1">Keterangan / Dump</label>
+                                <input type="text" x-model="formProduct.dump" placeholder="Catatan spesifikasi atau varian produk" class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-800 focus:border-[#0052cc] focus:outline-none">
+                            </div>
+                        </div>
                     </div>
 
                     <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
-                        <button type="button" :disabled="isSavingProduct" @click="showCreateModal = false" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                        <button type="button" :disabled="isSavingProduct" @click="showCreateModal = false" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">
                             Batal
                         </button>
-                        <button type="submit" :disabled="isSavingProduct" class="px-5 py-2 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold transition-colors shadow-2xs flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <button type="submit" :disabled="isSavingProduct" class="px-5 py-2 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold transition-colors shadow-2xs flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">
                             <span x-show="isSavingProduct" class="material-symbols-rounded text-[15px] animate-spin">progress_activity</span>
                             <span x-text="isSavingProduct ? 'Menyimpan...' : 'Simpan Master SKU'"></span>
                         </button>
@@ -1224,6 +1430,7 @@ function ownerProductsApp() {
         formProduct: {
             sku: '',
             barcode: '',
+            ilp_id: '',
             name: '',
             brand: '',
             category: 'Kebutuhan Pokok',
@@ -1232,7 +1439,25 @@ function ownerProductsApp() {
             unit: 'Pcs',
             price: 0,
             memberPrice: 0,
-            rackLocation: ''
+            rackLocation: '',
+            statusBarang: 'TERSEDIA',
+            act: 'Y',
+            costPrice: 0,
+            lastCostPrice: 0,
+            ppnChk: 'Y',
+            ppnOut: 11,
+            up: 0,
+            disc: 0,
+            hargaLevel1: 0,
+            minQty1: 1,
+            minQty2: '',
+            minQty3: '',
+            reorder: 20,
+            koSup: '',
+            batchLot: '',
+            expiredDate: '',
+            masa: '',
+            dump: ''
         },
         formEditProduct: {},
 
@@ -1498,6 +1723,7 @@ function ownerProductsApp() {
             this.formProduct = {
                 sku: '',
                 barcode: '',
+                ilp_id: '',
                 name: '',
                 brand: '',
                 category: 'Kebutuhan Pokok',
@@ -1506,7 +1732,25 @@ function ownerProductsApp() {
                 unit: 'Pcs',
                 price: 0,
                 memberPrice: 0,
-                rackLocation: ''
+                rackLocation: '',
+                statusBarang: 'TERSEDIA',
+                act: 'Y',
+                costPrice: 0,
+                lastCostPrice: 0,
+                ppnChk: 'Y',
+                ppnOut: 11,
+                up: 0,
+                disc: 0,
+                hargaLevel1: 0,
+                minQty1: 1,
+                minQty2: '',
+                minQty3: '',
+                reorder: 20,
+                koSup: '',
+                batchLot: '',
+                expiredDate: '',
+                masa: '',
+                dump: ''
             };
             this.showCreateModal = true;
         },
@@ -1531,8 +1775,40 @@ function ownerProductsApp() {
             }
 
             this.isSavingProduct = true;
+            const f = this.formProduct;
             const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('prd-' + Date.now());
             try {
+                const apiPayload = {
+                    sku: cleanSku,
+                    ilp_id: (f.ilp_id || '').trim() || null,
+                    barcode: cleanBarcode,
+                    name: f.name.trim(),
+                    brand: (f.brand || '').trim() || 'Lokal Mandiri',
+                    category: f.category || 'Kebutuhan Pokok',
+                    unit: f.unit || 'Pcs',
+                    cost_price: Number(f.costPrice) || 0,
+                    last_cost_price: Number(f.lastCostPrice) || Number(f.costPrice) || 0,
+                    price: Number(f.price) || 0,
+                    member_price: Number(f.memberPrice || f.price) || 0,
+                    harga_level1: Number(f.hargaLevel1 || f.memberPrice || f.price) || 0,
+                    min_qty1: Number(f.minQty1) || 1,
+                    min_qty2: f.minQty2 !== '' && f.minQty2 !== null && f.minQty2 !== undefined ? Number(f.minQty2) : null,
+                    min_qty3: f.minQty3 !== '' && f.minQty3 !== null && f.minQty3 !== undefined ? Number(f.minQty3) : null,
+                    stock: Number(f.stock) || 0,
+                    min_stock: Number(f.minStock) || 0,
+                    reorder_point: Number(f.reorder) || ((Number(f.minStock) || 10) * 2),
+                    markup_percent: Number(f.up) || 0,
+                    clearance_discount_percent: Number(f.disc) || 0,
+                    is_taxable: f.ppnChk === 'Y',
+                    tax_rate: f.ppnChk === 'Y' ? (Number(f.ppnOut) || 11) : 0,
+                    ko_sup: (f.koSup || '').trim() || null,
+                    act: f.act || 'Y',
+                    masa: (f.masa || '').trim() || null,
+                    dump: (f.dump || '').trim() || null,
+                    rack_location: (f.rackLocation || '').trim() || 'Display Rak',
+                    expired_date: f.expiredDate || null
+                };
+
                 const res = await fetch('/api/products', {
                     method: 'POST',
                     headers: {
@@ -1541,20 +1817,7 @@ function ownerProductsApp() {
                         'X-CSRF-TOKEN': '{{ csrf_token() }}',
                         'X-Idempotency-Key': idemKey
                     },
-                    body: JSON.stringify({
-                        sku: cleanSku,
-                        barcode: cleanBarcode,
-                        name: this.formProduct.name,
-                        brand: this.formProduct.brand,
-                        category: this.formProduct.category || 'Kebutuhan Pokok',
-                        unit: this.formProduct.unit || 'Pcs',
-                        cost_price: Math.round(Number(this.formProduct.price) * 0.75),
-                        price: Number(this.formProduct.price),
-                        member_price: Number(this.formProduct.memberPrice || this.formProduct.price),
-                        stock: Number(this.formProduct.stock),
-                        min_stock: Number(this.formProduct.minStock),
-                        rack_location: this.formProduct.rackLocation || ''
-                    })
+                    body: JSON.stringify(apiPayload)
                 });
                 if (res.ok) {
                     if (typeof triggerToast === 'function') triggerToast(`Master SKU '${this.formProduct.name}' berhasil disimpan ke database.`, 'success');
@@ -1597,6 +1860,7 @@ function ownerProductsApp() {
             }
 
             try {
+                const editCostPrice = this.formEditProduct.cost_price ?? this.formEditProduct.costPrice ?? Math.round(Number(this.formEditProduct.price) * 0.75);
                 const res = await fetch(`/api/products/${this.selectedProduct.id}`, {
                     method: 'PUT',
                     headers: {
@@ -1610,7 +1874,7 @@ function ownerProductsApp() {
                         barcode: cleanBarcode,
                         category: this.formEditProduct.category,
                         unit: this.formEditProduct.unit,
-                        cost_price: Math.round(Number(this.formEditProduct.price) * 0.75),
+                        cost_price: Number(editCostPrice),
                         price: Number(this.formEditProduct.price),
                         member_price: Number(this.formEditProduct.memberPrice || this.formEditProduct.price),
                         stock: Number(this.formEditProduct.stock),

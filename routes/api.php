@@ -43,6 +43,14 @@ use Illuminate\Support\Facades\Route;
 | Connected to PostgreSQL database with high-performance indexing.
 */
 
+// Ultra-fast zero-overhead Ping endpoint for accurate real-time latency measurement (<5ms)
+Route::get('/ping', function () {
+    return response()->json([
+        'status' => 'pong',
+        't' => microtime(true)
+    ]);
+});
+
 // Health Check (Lightweight, non-cached, server availability & internet probe)
 Route::get('/health', function () {
     try {

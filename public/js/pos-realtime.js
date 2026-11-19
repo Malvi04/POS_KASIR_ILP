@@ -327,22 +327,32 @@
         let httpLatency = null;
 
         try {
-            const [clientInternetRes, serverRes] = await Promise.allSettled([
-                probeInternet(2000),
-                fetch('/api/health?_t=' + Date.now(), {
-                    method: 'GET',
-                    cache: 'no-store',
-                    headers: {
-                        'Accept': 'application/json',
-                        'Cache-Control': 'no-cache, no-store, must-revalidate',
-                        'Pragma': 'no-cache'
-                    },
-                    signal: activeCheckController.signal
-                }).then(async res => {
-                    if (!res.ok) return { ok: false, data: null };
+            let serverRtt = null;
+            const serverProbe = (async () => {
+                const sStart = performance.now();
+                try {
+                    const res = await fetch('/api/health?_t=' + Date.now(), {
+                        method: 'GET',
+                        cache: 'no-store',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Cache-Control': 'no-cache, no-store, must-revalidate',
+                            'Pragma': 'no-cache'
+                        },
+                        signal: activeCheckController.signal
+                    });
+                    serverRtt = Math.max(1, Math.round(performance.now() - sStart));
+                    if (!res.ok) return { ok: false, data: null, latency: serverRtt };
                     const data = await res.json().catch(() => null);
-                    return { ok: true, data };
-                }).catch(() => ({ ok: false, data: null }))
+                    return { ok: true, data, latency: serverRtt };
+                } catch (e) {
+                    return { ok: false, data: null, latency: null };
+                }
+            })();
+
+            const [clientInternetRes, serverRes] = await Promise.allSettled([
+                probeInternet(1500),
+                serverProbe
             ]);
 
             clearTimeout(timeoutId);
@@ -354,7 +364,7 @@
                 if (data && data.status === 'ok') {
                     serverOk = true;
                     serverHasInternet = !!data.has_internet;
-                    httpLatency = Math.max(1, Math.round(performance.now() - startTime));
+                    httpLatency = serverRes.value.latency || serverRtt || 5;
                 }
             }
         } catch (err) {

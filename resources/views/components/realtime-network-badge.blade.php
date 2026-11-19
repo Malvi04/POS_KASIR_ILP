@@ -27,14 +27,14 @@
             'bg-rose-500': (!$store.network || (!$store.network.isOnline && !$store.network.wsConnected))
           }"></span>
 
-    <!-- Wifi Icon -->
+    <!-- Wifi Icon (Statis, tidak rotate saat sinkronisasi) -->
     <span class="material-symbols-rounded text-[18px] shrink-0"
           :class="{
             'text-emerald-600': ($store.network && ($store.network.wsConnected || $store.network.isOnline)),
-            'text-amber-600 animate-spin': ($store.network && !$store.network.wsConnected && $store.network.wsStatus === 'connecting' && $store.network.isOnline),
+            'text-amber-600': ($store.network && !$store.network.wsConnected && $store.network.wsStatus === 'connecting' && $store.network.isOnline),
             'text-rose-600': (!$store.network || (!$store.network.isOnline && !$store.network.wsConnected))
           }"
-          x-text="($store.network && ($store.network.wsConnected || $store.network.isOnline)) ? 'wifi' : (($store.network && $store.network.wsStatus === 'connecting') ? 'sync' : 'wifi_off')">wifi</span>
+          x-text="($store.network && ($store.network.wsConnected || $store.network.isOnline)) ? 'wifi' : 'wifi_off'">wifi</span>
 
     <!-- Text Status -->
     <span x-text="($store.network && $store.network.wsConnected) ? '{{ $labelOnline }}' : (($store.network && $store.network.isOnline) ? '{{ $labelOnline }}' : (($store.network && $store.network.wsStatus === 'connecting') ? '{{ $labelConnecting }}' : '{{ $labelOffline }}'))">{{ $labelOnline }}</span>

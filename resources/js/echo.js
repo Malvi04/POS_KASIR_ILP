@@ -46,14 +46,59 @@ function recordLatency(latencyMs) {
     }));
 }
 
+function hookRawWebSocket() {
+    try {
+        const socket = window.Echo?.connector?.pusher?.connection?.transport?.socket;
+        if (socket && !socket.__reverbPingHooked) {
+            socket.__reverbPingHooked = true;
+            socket.addEventListener('message', (e) => {
+                try {
+                    const data = typeof e.data === 'string' ? JSON.parse(e.data) : null;
+                    if (data && (data.event === 'pusher:pong' || data.event === 'pong')) {
+                        if (isPinging && pingStartTime) {
+                            const rtt = Math.max(1, Math.round(performance.now() - pingStartTime));
+                            isPinging = false;
+                            pingStartTime = null;
+                            recordLatency(rtt);
+                        }
+                    }
+                } catch (err) {}
+            });
+        }
+    } catch (err) {}
+}
+
+async function measureFallbackHttpPing() {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+    const t0 = performance.now();
+    try {
+        const res = await fetch('/api/ping?_t=' + Date.now(), {
+            method: 'GET',
+            cache: 'no-store',
+            headers: { 'Accept': 'application/json' }
+        });
+        if (res.ok) {
+            const rtt = Math.max(1, Math.round(performance.now() - t0));
+            const lastPingAge = Date.now() - (window.posReverbState.lastPingAt || 0);
+            if (lastPingAge > 2500 || window.posReverbState.latency === null) {
+                recordLatency(rtt);
+            }
+        }
+    } catch (err) {}
+}
+
 function sendReverbPing() {
     if (!window.Echo || !window.Echo.connector || !window.Echo.connector.pusher) return;
     const pusher = window.Echo.connector.pusher;
     if (!pusher.connection || pusher.connection.state !== 'connected') return;
 
-    // Reset hung ping if previous pong exceeded 2.5s
-    if (isPinging && pingStartTime && performance.now() - pingStartTime > 2500) {
+    hookRawWebSocket();
+
+    // Reset hung ping if previous pong exceeded 2s
+    if (isPinging && pingStartTime && performance.now() - pingStartTime > 2000) {
         isPinging = false;
+        // Fallback to instant server HTTP ping
+        measureFallbackHttpPing();
     }
 
     if (isPinging) return;
@@ -62,18 +107,26 @@ function sendReverbPing() {
     pingStartTime = performance.now();
 
     try {
-        pusher.send_event('pusher:ping', {});
+        const socket = pusher.connection?.transport?.socket;
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ event: 'pusher:ping', data: {} }));
+        } else {
+            pusher.send_event('pusher:ping', {});
+        }
     } catch (err) {
         isPinging = false;
+        measureFallbackHttpPing();
     }
 }
 
 function startReverbPingMonitor() {
     stopReverbPingMonitor();
+    hookRawWebSocket();
     sendReverbPing();
+    measureFallbackHttpPing();
     pingTimer = setInterval(() => {
         sendReverbPing();
-    }, 1000);
+    }, 1500);
 }
 
 function stopReverbPingMonitor() {
@@ -170,6 +223,7 @@ try {
 
         connection.bind('connected', () => {
             console.log('[Reverb/WebSocket] Connected successfully to Reverb server.');
+            hookRawWebSocket();
             updateReverbStatus('connected');
         });
 
