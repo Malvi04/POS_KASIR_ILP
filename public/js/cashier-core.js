@@ -826,10 +826,11 @@
                     };
 
                     const curTerm = this.formatShiftLabel(this.selectedShift);
-                    const [users, shiftRes, curRes] = await Promise.all([
+                    const [users, shiftRes, curRes, histRes] = await Promise.all([
                         getCachedCashiers().catch(() => []),
                         fetchWithTimeout('/api/shift/active-shifts').catch(() => null),
                         fetchWithTimeout(`/api/shift/current?terminal_code=${encodeURIComponent(curTerm)}`).catch(() => null),
+                        fetchWithTimeout('/api/shift/history?limit=30').catch(() => null),
                     ]);
 
                     // 1. Sync live cashier staff strictly from DB response
@@ -935,6 +936,24 @@
                                     this.activeSession.cashIn = d.cash_in;
                                     this.activeSession.cashOut = d.cash_out;
                                     this.persistAllState();
+                                }
+                            }
+                        }
+                    } catch (e) {}
+
+                    // 4. Sync live session history from DB
+                    try {
+                        if (histRes && histRes.ok) {
+                            const histJson = await histRes.json();
+                            if (histJson.success && Array.isArray(histJson.data)) {
+                                const dbSessions = histJson.data;
+                                const existingIds = new Set(this.sessionHistory.map(s => s.sessionId || s.id));
+                                const missing = dbSessions.filter(s => s.sessionId && !existingIds.has(s.sessionId));
+                                if (missing.length > 0) {
+                                    this.sessionHistory = [...this.sessionHistory, ...missing];
+                                    try {
+                                        localStorage.setItem('pos_ilp_session_history_v1', JSON.stringify(this.sessionHistory.slice(0, 50)));
+                                    } catch (e) {}
                                 }
                             }
                         }

@@ -496,4 +496,65 @@ class ShiftController extends Controller
             ],
         ]);
     }
+
+    /**
+     * Get shift history for the authenticated cashier or terminal.
+     */
+    public function history(Request $request): JsonResponse
+    {
+        $terminal = $request->query('terminal_code');
+        $cashierNik = $request->query('cashier_nik');
+        $limit = max(5, min(100, (int) $request->query('limit', 20)));
+
+        $query = CashierShift::with('location')->orderBy('id', 'desc');
+        if ($terminal) {
+            $query->where('terminal_code', $terminal);
+        }
+        if ($cashierNik) {
+            $query->where('cashier_nik', $cashierNik);
+        }
+
+        $shifts = $query->take($limit)->get();
+
+        return response()->json([
+            'success' => true,
+            'count' => $shifts->count(),
+            'data' => $shifts->map(function ($s) {
+                return [
+                    'id' => $s->id,
+                    'shift_code' => $s->shift_code,
+                    'sessionId' => $s->shift_code,
+                    'terminal_code' => $s->terminal_code,
+                    'terminalLabel' => $s->terminal_code,
+                    'location_id' => $s->location_id,
+                    'branch' => $s->location?->name ?? $s->branch ?? 'Toko Pusat',
+                    'cashier_name' => $s->cashier_name,
+                    'cashier_nik' => $s->cashier_nik,
+                    'cashierId' => $s->cashier_nik,
+                    'opening_cash' => (float) $s->opening_cash,
+                    'openingCash' => (float) $s->opening_cash,
+                    'cash_sales_total' => (float) $s->cash_sales_total,
+                    'qris_sales_total' => (float) $s->qris_sales_total,
+                    'credit_sales_total' => (float) $s->credit_sales_total,
+                    'total_sales' => (float) $s->total_sales,
+                    'transaction_count' => (int) $s->transaction_count,
+                    'cash_in' => (float) $s->cash_in,
+                    'cash_out' => (float) $s->cash_out,
+                    'expected_cash' => (float) ($s->expected_cash ?? $s->calculateExpectedCash()),
+                    'expectedClosingCash' => (float) ($s->expected_cash ?? $s->calculateExpectedCash()),
+                    'actual_cash' => (float) ($s->actual_cash ?? 0),
+                    'actualClosingCash' => (float) ($s->actual_cash ?? 0),
+                    'variance' => (float) ($s->variance ?? 0),
+                    'cashVariance' => (float) ($s->variance ?? 0),
+                    'variance_status' => $s->variance_status,
+                    'closing_notes' => $s->closing_notes,
+                    'status' => $s->status,
+                    'startedAt' => $s->opened_at ? $s->opened_at->format('H:i') : '-',
+                    'endedAt' => $s->closed_at ? $s->closed_at->format('H:i') : '-',
+                    'opened_at' => $s->opened_at ? $s->opened_at->toIso8601String() : null,
+                    'closed_at' => $s->closed_at ? $s->closed_at->toIso8601String() : null,
+                ];
+            }),
+        ]);
+    }
 }

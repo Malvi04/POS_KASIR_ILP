@@ -66,10 +66,10 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
-    <!-- Dexie.js (IndexedDB) Offline Storage Engine & Migration -->
-    <script src="/js/vendor/dexie.min.js?v=3.0.3"></script>
-    <script src="/js/db/pos-db.js?v=3.0.3"></script>
-    <script src="/js/db/pos-migration.js?v=3.0.3"></script>
+    <!-- Dexie.js (IndexedDB) Offline Storage Engine & Migration (Non-blocking & Defer) -->
+    <script src="/js/vendor/dexie.min.js?v=3.0.3" defer></script>
+    <script src="/js/db/pos-db.js?v=3.0.3" defer></script>
+    <script src="/js/db/pos-migration.js?v=3.0.3" defer></script>
 
     <!-- Modular Cacheable Scripts (Non-blocking & Defer) -->
     <script src="/js/excel-export.js" defer></script>
@@ -115,6 +115,80 @@
                 }
                 return 'req-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
             };
+
+            // Instant Speculative Link Prefetcher (Accelerate page transitions on hover/touch)
+            const prefetchedUrls = new Set();
+            const currentOrigin = window.location.origin;
+
+            function prefetchPage(url) {
+                if (!url) return;
+                try {
+                    const parsed = new URL(url, currentOrigin);
+                    if (parsed.origin !== currentOrigin) return;
+                    if (parsed.pathname === window.location.pathname && parsed.search === window.location.search) return;
+                    if (
+                        parsed.pathname.startsWith('/api/') ||
+                        parsed.pathname.includes('logout') ||
+                        parsed.pathname.includes('/export') ||
+                        parsed.pathname.includes('/template') ||
+                        parsed.pathname.includes('/download') ||
+                        prefetchedUrls.has(parsed.href)
+                    ) {
+                        return;
+                    }
+
+                    prefetchedUrls.add(parsed.href);
+                    const link = document.createElement('link');
+                    link.rel = 'prefetch';
+                    link.href = parsed.href;
+                    link.as = 'document';
+                    document.head.appendChild(link);
+                } catch (e) {}
+            }
+
+            let hoverTimer = null;
+            document.addEventListener('mouseover', function (e) {
+                const a = e.target.closest('a');
+                if (!a || !a.href) return;
+                if (hoverTimer) clearTimeout(hoverTimer);
+                hoverTimer = setTimeout(function () {
+                    prefetchPage(a.href);
+                }, 40);
+            }, { passive: true });
+
+            document.addEventListener('touchstart', function (e) {
+                const a = e.target.closest('a');
+                if (a && a.href) prefetchPage(a.href);
+            }, { passive: true });
+
+            document.addEventListener('mousedown', function (e) {
+                const a = e.target.closest('a');
+                if (a && a.href) prefetchPage(a.href);
+            }, { passive: true });
+
+            // Instant Top-bar Feedback on Navigation Click
+            document.addEventListener('click', function (e) {
+                const a = e.target.closest('a');
+                if (!a || !a.href) return;
+                if (a.target && a.target !== '_self') return;
+                if (a.hasAttribute('download')) return;
+                if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+
+                try {
+                    const parsed = new URL(a.href, currentOrigin);
+                    if (parsed.origin === currentOrigin && (parsed.pathname !== window.location.pathname || parsed.search !== window.location.search)) {
+                        let bar = document.getElementById('top-nav-loader');
+                        if (!bar) {
+                            bar = document.createElement('div');
+                            bar.id = 'top-nav-loader';
+                            bar.style.cssText = 'position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#0052cc,#38bdf8);z-index:99999;transition:width 0.2s ease-out;pointer-events:none;width:0%;';
+                            document.body.appendChild(bar);
+                        }
+                        bar.style.width = '40%';
+                        setTimeout(() => { if (bar) bar.style.width = '80%'; }, 80);
+                    }
+                } catch (err) {}
+            }, { passive: true });
         })();
 
         // Register Offline PWA Service Worker and purge legacy v2 caches that caused stale redirects

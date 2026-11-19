@@ -103,6 +103,7 @@ Route::prefix('auth')->group(function () {
 Route::prefix('shift')->middleware('auth.api')->group(function () {
     Route::get('/current', [ShiftController::class, 'current']);
     Route::get('/active-shifts', [ShiftController::class, 'activeShifts']);
+    Route::get('/history', [ShiftController::class, 'history']);
     Route::post('/open', [ShiftController::class, 'open']);
     Route::post('/close', [ShiftController::class, 'close']);
     Route::post('/cash-movement', [ShiftController::class, 'cashMovement']);

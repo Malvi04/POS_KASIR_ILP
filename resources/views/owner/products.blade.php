@@ -785,10 +785,12 @@
 
                         <!-- Drag and drop / File Picker Area -->
                         <div class="border-2 border-dashed rounded-2xl p-8 text-center transition-all cursor-pointer relative select-none"
-                             :class="importFile ? 'border-emerald-400 bg-emerald-50/30' : 'border-slate-300 hover:border-[#0052cc] hover:bg-slate-50/50'"
-                             @click="$refs.excelFileInputOwner?.click()"
-                             @dragover.prevent=""
-                             @drop.prevent="if ($event.dataTransfer.files.length) { importFile = $event.dataTransfer.files[0]; importFileName = importFile.name; }">
+                             :class="importFile ? 'border-emerald-400 bg-emerald-50/30' : (isDragging ? 'border-[#0052cc] bg-blue-50/50' : 'border-slate-300 hover:border-[#0052cc] hover:bg-slate-50/50')"
+                             @click="triggerFileInput()"
+                             @dragenter.prevent="isDragging = true"
+                             @dragover.prevent="isDragging = true"
+                             @dragleave.prevent="isDragging = false"
+                             @drop.prevent="handleFileDrop($event)">
                             <input type="file" 
                                    id="excelFileInputOwner"
                                    x-ref="excelFileInputOwner" 
@@ -798,7 +800,7 @@
                                    class="hidden">
 
                             <template x-if="!importFile">
-                                <div class="space-y-3">
+                                <div class="space-y-3 pointer-events-none">
                                     <div class="w-14 h-14 mx-auto rounded-2xl bg-blue-50 text-[#0052cc] flex items-center justify-center">
                                         <span class="material-symbols-rounded text-[32px]">cloud_upload</span>
                                     </div>
@@ -806,7 +808,7 @@
                                         <p class="text-sm font-bold text-slate-800">Pilih file Excel Master Barang atau tarik file ke sini</p>
                                         <p class="text-xs text-slate-400 mt-1">Mendukung format .XLSX, .XLS, atau .CSV (Maksimal 25MB)</p>
                                     </div>
-                                    <button type="button" @click.stop="$refs.excelFileInputOwner?.click()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer">
+                                    <button type="button" @click.stop="triggerFileInput()" class="pointer-events-auto px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer">
                                         <span class="material-symbols-rounded text-[16px]">folder_open</span>
                                         <span>Telusuri File di Komputer</span>
                                     </button>
@@ -826,7 +828,7 @@
                                     </div>
                                     <div class="flex items-center gap-2">
                                         <button type="button" 
-                                                @click.stop="importFile = null; importFileName = ''; if ($refs.excelFileInputOwner) $refs.excelFileInputOwner.value = '';" 
+                                                @click.stop="resetFileInput()" 
                                                 class="px-3 py-1.5 rounded-lg text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer">
                                             Ganti File
                                         </button>
@@ -1097,7 +1099,7 @@
                                 <span>Unduh Format Template Resmi ILP</span>
                             </button>
                             <button type="button" 
-                                    @click="importStep = 'upload'; importFile = null; importFileName = ''; if ($refs.excelFileInputOwner) $refs.excelFileInputOwner.value = '';" 
+                                    @click="importStep = 'upload'; resetFileInput();" 
                                     class="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer inline-flex items-center gap-1.5">
                                 <span class="material-symbols-rounded text-[16px]">replay</span>
                                 <span>Unggah Ulang File Lain</span>
@@ -1115,7 +1117,7 @@
                                     Batal
                                 </button>
                                 <button type="button" 
-                                        @click="importStep = 'upload'; importFile = null; importFileName = ''; if ($refs.excelFileInputOwner) $refs.excelFileInputOwner.value = '';" 
+                                        @click="importStep = 'upload'; resetFileInput();" 
                                         class="px-4 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer">
                                     Ganti File
                                 </button>
@@ -1649,11 +1651,29 @@ function ownerProductsApp() {
             this.importFile = null;
             this.importFileName = '';
             this.isUploading = false;
+            this.isDragging = false;
             this.validationData = null;
             this.validationErrorDetails = null;
             this.duplicateAction = 'update';
             this.importResult = null;
-            const f = document.getElementById('excelFileInputOwner') || (this.$refs && this.$refs.excelFileInputOwner);
+            this.$nextTick(() => {
+                const f = document.getElementById('excelFileInputOwner');
+                if (f) f.value = '';
+            });
+        },
+
+        triggerFileInput() {
+            const f = document.getElementById('excelFileInputOwner');
+            if (f) {
+                f.click();
+            }
+        },
+
+        resetFileInput() {
+            this.importFile = null;
+            this.importFileName = '';
+            this.isDragging = false;
+            const f = document.getElementById('excelFileInputOwner');
             if (f) f.value = '';
         },
 
@@ -1662,6 +1682,15 @@ function ownerProductsApp() {
             if (file) {
                 this.importFile = file;
                 this.importFileName = file.name;
+            }
+        },
+
+        handleFileDrop(event) {
+            this.isDragging = false;
+            const files = event.dataTransfer ? event.dataTransfer.files : null;
+            if (files && files.length > 0) {
+                this.importFile = files[0];
+                this.importFileName = files[0].name;
             }
         },
 

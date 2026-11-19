@@ -242,7 +242,7 @@ Route::middleware(['auth.web:manager'])->group(function () {
     */
     Route::get('/dashboard', function () {
         if (request('role') === 'owner') {
-            return redirect('/owner');
+            return view('owner.dashboard');
         }
         return view('manager.dashboard');
     })->name('dashboard');

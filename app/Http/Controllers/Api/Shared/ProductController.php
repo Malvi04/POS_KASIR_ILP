@@ -669,7 +669,26 @@ class ProductController extends Controller
         }
 
         $name = $product->name;
-        $product->delete();
+
+        DB::transaction(function () use ($product, $id) {
+            // Nullify references in historical tables to prevent foreign key errors and preserve history
+            DB::table('transaction_items')->where('product_id', $id)->update(['product_id' => null]);
+            DB::table('stock_opname_items')->where('product_id', $id)->update(['product_id' => null]);
+            DB::table('sales_return_items')->where('product_id', $id)->update(['product_id' => null]);
+            DB::table('coupon_units')->where('product_id', $id)->update(['product_id' => null]);
+
+            // Clean up child dependencies safely
+            $product->units()->delete();
+            $product->productStocks()->delete();
+            $product->supplierProducts()->delete();
+            $product->stockBatches()->delete();
+            $product->stockMovements()->delete();
+            $product->priceHistories()->delete();
+
+            $product->delete();
+        });
+
+        \Illuminate\Support\Facades\Cache::forget('products_kpi_summary_' . Carbon::today()->toDateString());
 
         return response()->json([
             'success' => true,

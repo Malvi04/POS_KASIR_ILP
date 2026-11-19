@@ -5,7 +5,7 @@
 @section('content')
 <div x-data="{
     ...cashierOpeningData(),
-    periodFilter: 'today',
+    periodFilter: 'all',
     selectedSessionFilter: 'all',
     selectedMethodFilter: 'all',
     selectedStatusFilter: 'all',
@@ -16,7 +16,7 @@
 
     async initReports() {
         try {
-            const res = await fetch('/api/pos/transactions?per_page=100', {
+            const res = await fetch('/api/pos/transactions?per_page=100&date=all', {
                 headers: { 'Accept': 'application/json' }
             });
             if (res.ok) {
@@ -35,7 +35,9 @@
                         tax: Number(t.tax || 0),
                         total: Number(t.total || 0),
                         status: t.status || 'SELESAI',
-                        date: t.date || new Date().toISOString().split('T')[0]
+                        statusCode: t.statusCode || t.status || 'SUCCESS',
+                        date: t.date_iso || t.rawDate || (t.date && t.date.includes('-') ? t.date : ''),
+                        displayDate: t.date || '-'
                     }));
                     return;
                 }
@@ -53,8 +55,8 @@
 
         return this.transactions.filter(t => {
             // Period filter
-            if (this.periodFilter === 'today' && t.date !== todayStr) return false;
-            if (this.periodFilter === 'yesterday' && t.date !== yestStr) return false;
+            if (this.periodFilter === 'today' && t.date && t.date !== todayStr) return false;
+            if (this.periodFilter === 'yesterday' && t.date && t.date !== yestStr) return false;
 
             // Session filter
             if (this.selectedSessionFilter === 'active' && this.activeSession && t.sessionId !== this.activeSession.sessionId) return false;
@@ -64,7 +66,12 @@
             if (this.selectedMethodFilter !== 'all' && t.method !== this.selectedMethodFilter) return false;
 
             // Status filter
-            if (this.selectedStatusFilter !== 'all' && t.status !== this.selectedStatusFilter) return false;
+            if (this.selectedStatusFilter !== 'all') {
+                const isSuccess = t.status === 'SELESAI' || t.status === 'SUCCESS' || t.statusCode === 'SUCCESS';
+                const isVoided = t.status === 'DIBATALKAN' || t.status === 'VOIDED' || t.statusCode === 'VOIDED';
+                if (this.selectedStatusFilter === 'SELESAI' && !isSuccess) return false;
+                if (this.selectedStatusFilter === 'DIBATALKAN' && !isVoided) return false;
+            }
 
             // Search query
             if (this.searchQuery) {
@@ -80,25 +87,25 @@
 
     get totalFilteredOmzet() {
         return this.filteredTransactions
-            .filter(t => t.status === 'SELESAI')
+            .filter(t => t.status === 'SELESAI' || t.status === 'SUCCESS' || t.statusCode === 'SUCCESS')
             .reduce((sum, t) => sum + t.total, 0);
     },
 
     get totalFilteredCash() {
         return this.filteredTransactions
-            .filter(t => t.status === 'SELESAI')
+            .filter(t => t.status === 'SELESAI' || t.status === 'SUCCESS' || t.statusCode === 'SUCCESS')
             .reduce((sum, t) => sum + (t.cashPortion || 0), 0);
     },
 
     get totalFilteredNonCash() {
         return this.filteredTransactions
-            .filter(t => t.status === 'SELESAI' && t.method !== 'TUNAI')
+            .filter(t => (t.status === 'SELESAI' || t.status === 'SUCCESS' || t.statusCode === 'SUCCESS') && t.method !== 'TUNAI')
             .reduce((sum, t) => sum + (t.nonCashPortion || (t.method !== 'CAMPURAN' ? t.total : 0)), 0);
     },
 
     get totalFilteredCredit() {
         return this.filteredTransactions
-            .filter(t => t.status === 'SELESAI' && t.method === 'KREDIT ANGGOTA')
+            .filter(t => (t.status === 'SELESAI' || t.status === 'SUCCESS' || t.statusCode === 'SUCCESS') && t.method === 'KREDIT ANGGOTA')
             .reduce((sum, t) => sum + t.total, 0);
     }
 }"

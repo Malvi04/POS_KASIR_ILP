@@ -12,7 +12,35 @@
 
     async initSessions() {
         try {
-            const res = await fetch('/api/reports/cash-reconciliation', { headers: { 'Accept': 'application/json' } });
+            // Coba ambil dari endpoint shift history (dapat diakses kasir tanpa role manager)
+            let res = await fetch('/api/shift/history?limit=50', { headers: { 'Accept': 'application/json' } });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && Array.isArray(json.data)) {
+                    this.pastSessions = json.data.map(h => ({
+                        id: h.shift_code || h.sessionId || '-',
+                        date: h.opened_at ? new Date(h.opened_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-',
+                        shift: 'Shift Kasir',
+                        terminal: h.terminal_code || '-',
+                        cashier: h.cashier_name || '-',
+                        openingFloat: Number(h.opening_cash || 0),
+                        cashSales: Number(h.cash_sales_total || 0),
+                        nonCashSales: Number(h.qris_sales_total || 0),
+                        cashOut: Number(h.cash_out || 0),
+                        expectedCash: Number(h.expected_cash || 0),
+                        actualCash: Number(h.actual_cash ?? h.expected_cash ?? 0),
+                        variance: Number(h.variance || 0),
+                        varianceStatus: h.variance_status || 'SESUAI',
+                        notes: h.closing_notes || 'Penutupan shift kasir.',
+                        status: h.status || 'CLOSED',
+                        verifiedBy: 'Supervisor Toko'
+                    }));
+                    return;
+                }
+            }
+
+            // Fallback ke endpoint rekonsiliasi kas (jika akun memiliki peran supervisor/manager)
+            res = await fetch('/api/reports/cash-reconciliation', { headers: { 'Accept': 'application/json' } });
             if (res.ok) {
                 const json = await res.json();
                 if (json.success && json.data && Array.isArray(json.data.shifts)) {

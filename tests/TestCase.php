@@ -9,6 +9,18 @@ abstract class TestCase extends BaseTestCase
 {
     use RefreshDatabase;
 
+    public function createApplication()
+    {
+        putenv('APP_ENV=testing');
+        $_ENV['APP_ENV'] = 'testing';
+        $_SERVER['APP_ENV'] = 'testing';
+
+        $app = parent::createApplication();
+        $app['config']->set('database.connections.pgsql.database', 'pos_kasir_ilp_test');
+
+        return $app;
+    }
+
     protected function setUp(): void
     {
         parent::setUp();

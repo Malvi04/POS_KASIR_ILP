@@ -28,12 +28,17 @@
         }
 
         try {
-            const res = await fetch('/api/pos/transactions?per_page=100', { headers: { 'Accept': 'application/json' } });
+            const res = await fetch('/api/pos/transactions?per_page=100&date=all', { headers: { 'Accept': 'application/json' } });
             if (res.ok) {
                 const json = await res.json();
                 if (json.success && Array.isArray(json.data)) {
-                    const myName = (this.activeOperator ? this.activeOperator.name : (this.activeSession?.cashierName || localStorage.getItem('pos_user_name') || '')).toLowerCase();
-                    const filtered = myName ? json.data.filter(t => !t.cashier || t.cashier.toLowerCase() === myName) : json.data;
+                    const myName = (this.activeOperator?.name || this.activeSession?.cashierName || localStorage.getItem('pos_user_name') || '').toLowerCase().trim();
+                    const myNik = (this.activeOperator?.nik || this.activeSession?.cashierNik || localStorage.getItem('pos_portal_logged_in_nik') || '').toLowerCase().trim();
+                    const filtered = myName ? json.data.filter(t => {
+                        if (!t.cashier) return true;
+                        const tc = t.cashier.toLowerCase().trim();
+                        return tc === myName || (myName && tc.includes(myName)) || (myNik && t.cashierNik && t.cashierNik.toLowerCase() === myNik);
+                    }) : json.data;
                     this.myTransactions = filtered.map(t => ({
                         id: t.id,
                         time: t.time,
@@ -43,7 +48,8 @@
                         total: Number(t.total || 0),
                         discount: Number(t.discount || 0),
                         itemCount: Array.isArray(t.items) ? t.items.length : 1,
-                        status: t.status || 'SELESAI'
+                        status: t.status || 'SELESAI',
+                        statusCode: t.statusCode || t.status || 'SUCCESS'
                     }));
                 }
             }
@@ -80,7 +86,7 @@
     },
 
     getMethodStats(methodKey) {
-        const completed = this.myTransactions.filter(t => t.status === 'SELESAI');
+        const completed = this.myTransactions.filter(t => t.status === 'SELESAI' || t.status === 'SUCCESS' || t.statusCode === 'SUCCESS');
         let matched = [];
         if (methodKey === 'TUNAI') {
             matched = completed.filter(t => t.method === 'TUNAI');
@@ -99,18 +105,18 @@
 
     get expectedCashLiability() {
         const cashFromTrx = this.myTransactions
-            .filter(t => t.status === 'SELESAI')
+            .filter(t => t.status === 'SELESAI' || t.status === 'SUCCESS' || t.statusCode === 'SUCCESS')
             .reduce((sum, t) => sum + Number(t.cashPortion || (t.method === 'TUNAI' ? t.total : 0)), 0);
         const opening = Number(this.activeSession?.openingCash || 0);
         return opening + cashFromTrx - this.totalRefundAmount;
     },
 
     get totalMySales() {
-        return this.myTransactions.filter(t => t.status === 'SELESAI').reduce((sum, t) => sum + t.total, 0);
+        return this.myTransactions.filter(t => t.status === 'SELESAI' || t.status === 'SUCCESS' || t.statusCode === 'SUCCESS').reduce((sum, t) => sum + t.total, 0);
     },
 
     get totalMyTrxCount() {
-        return this.myTransactions.filter(t => t.status === 'SELESAI').length;
+        return this.myTransactions.filter(t => t.status === 'SELESAI' || t.status === 'SUCCESS' || t.statusCode === 'SUCCESS').length;
     },
 
     get avgBasketSize() {

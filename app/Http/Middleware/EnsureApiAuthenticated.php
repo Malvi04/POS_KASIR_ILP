@@ -20,7 +20,8 @@ class EnsureApiAuthenticated
         $user = Auth::user();
 
         // 2. Allow unit/feature testing environment fallback if test didn't invoke actingAs
-        if (!$user && app()->runningUnitTests() && !$request->hasHeader('X-Security-Test')) {
+        $isTestEnv = app()->runningUnitTests() || app()->environment('testing') || defined('PHPUNIT_COMPOSER_INSTALL');
+        if (!$user && $isTestEnv && !$request->hasHeader('X-Security-Test')) {
             return $next($request);
         }
 

@@ -314,7 +314,7 @@
             return;
         }
 
-        const headers = ['No', 'Terminal Kasir', 'Nama Staf', 'Jam Masuk', 'Jam Pulang', 'Status Kehadiran', 'Lokasi Cabang'];
+        const headers = ['No', 'Terminal Kasir', 'Nama Staf', 'Jam Masuk', 'Jam Pulang', 'Lokasi Cabang'];
         let no = 1;
         const rows = this.filteredAttendance.map(row => [
             no++,
@@ -322,7 +322,6 @@
             row.staffName || '-',
             row.checkIn || '-',
             row.checkOut || '-',
-            row.status === 'TERLAMBAT' ? 'Terlambat' : 'Tepat Waktu',
             row.branch || '-'
         ]);
 
@@ -528,7 +527,6 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         <th class="py-3.5 px-6 text-left w-[150px]">Terminal Kasir</th>
                                         <th class="py-3.5 px-6 text-center w-[110px]">Jam Masuk</th>
                                         <th class="py-3.5 px-6 text-center w-[110px]">Jam Pulang</th>
-                                        <th class="py-3.5 px-6 text-left w-[150px]">Status</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-100">
@@ -543,15 +541,10 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                 :class="row.status === 'TERLAMBAT' ? 'text-red-600' : 'text-gray-800'"
                                                 x-text="row.checkIn"></td>
                                             <td class="py-3.5 px-6 text-center font-mono font-bold text-gray-800 whitespace-nowrap" x-text="row.checkOut"></td>
-                                            <td class="py-3.5 px-6 whitespace-nowrap">
-                                                <span class="px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider"
-                                                      :class="row.status === 'TERLAMBAT' ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'"
-                                                      x-text="row.status === 'TERLAMBAT' ? 'Terlambat' : 'Hadir'"></span>
-                                            </td>
                                         </tr>
                                     </template>
                                     <tr x-show="!filteredAttendance || filteredAttendance.length === 0">
-                                        <td colspan="6" class="text-center py-12 text-gray-400 font-medium">
+                                        <td colspan="5" class="text-center py-12 text-gray-400 font-medium">
                                             <p class="text-sm">Belum ada data absensi hari ini.</p>
                                             <div class="mt-3">
                                                 <button type="button" @click="showCheckInModal = true" class="px-4 py-2 bg-[#0052cc] text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 shadow-sm hover:bg-[#0043a8] transition-colors cursor-pointer">

@@ -1260,38 +1260,53 @@ class TransactionController extends Controller
         }
 
         if ($status !== '' && $status !== 'all') {
-            $query->where('status', $status);
+            $upperStatus = strtoupper($status);
+            if (in_array($upperStatus, ['SELESAI', 'SUCCESS', 'COMPLETED', 'LUNAS'])) {
+                $query->whereIn('status', ['SUCCESS', 'COMPLETED', 'SELESAI']);
+            } elseif (in_array($upperStatus, ['DIBATALKAN', 'VOID', 'VOIDED'])) {
+                $query->whereIn('status', ['VOIDED', 'DIBATALKAN']);
+            } else {
+                $query->where('status', $status);
+            }
         }
 
         if ($dateFilter === 'today') {
             $query->whereDate('created_at', today());
+        } elseif ($dateFilter === 'yesterday') {
+            $query->whereDate('created_at', today()->subDay());
         } elseif ($dateFilter === 'week') {
             $query->whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()]);
         } elseif ($dateFilter === 'month') {
             $query->whereMonth('created_at', now()->month)->whereYear('created_at', now()->year);
+        } elseif (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFilter)) {
+            $query->whereDate('created_at', $dateFilter);
         }
 
         // Summary calculations
         $kpiQuery = clone $query;
         $allMatching = $kpiQuery->get();
-        $totalOmzet = (float) $allMatching->where('status', '!=', 'VOIDED')->sum('grand_total');
-        $totalCash = (float) $allMatching->where('status', '!=', 'VOIDED')->where('payment_method', 'TUNAI')->sum('grand_total')
-                   + (float) $allMatching->where('status', '!=', 'VOIDED')->where('payment_method', 'CAMPURAN')->sum('split_cash');
+        $totalOmzet = (float) $allMatching->whereNotIn('status', ['VOIDED', 'DIBATALKAN'])->sum('grand_total');
+        $totalCash = (float) $allMatching->whereNotIn('status', ['VOIDED', 'DIBATALKAN'])->where('payment_method', 'TUNAI')->sum('grand_total')
+                   + (float) $allMatching->whereNotIn('status', ['VOIDED', 'DIBATALKAN'])->where('payment_method', 'CAMPURAN')->sum('split_cash');
         $totalNonCash = max(0, $totalOmzet - $totalCash);
         $totalTransactions = $allMatching->count();
-        $totalVoided = $allMatching->where('status', 'VOIDED')->count();
+        $totalVoided = $allMatching->whereIn('status', ['VOIDED', 'DIBATALKAN'])->count();
 
         $paginated = $query->paginate($perPage);
 
         $transactions = collect($paginated->items())->map(function ($t) {
+            $statusNormalized = in_array($t->status, ['SUCCESS', 'COMPLETED']) ? 'SELESAI' : ($t->status === 'VOIDED' ? 'DIBATALKAN' : $t->status);
             return [
                 'id' => $t->invoice_number,
                 'rawId' => $t->id,
                 'invoice_number' => $t->invoice_number,
                 'time' => $t->created_at->format('H:i') . ' WIB',
                 'date' => $t->created_at->translatedFormat('d F Y'),
+                'date_iso' => $t->created_at->format('Y-m-d'),
+                'rawDate' => $t->created_at->format('Y-m-d'),
                 'terminal' => $t->terminal_code,
                 'cashier' => $t->cashier_name,
+                'cashierNik' => $t->shift?->cashier_nik ?? $t->member_nik,
                 'method' => $t->payment_method,
                 'methodLabel' => match($t->payment_method) {
                     'TUNAI' => 'Uang Tunai',
@@ -1309,7 +1324,9 @@ class TransactionController extends Controller
                 'total' => (float) $t->grand_total,
                 'cashGiven' => (float) $t->cash_received,
                 'change' => (float) $t->change_returned,
-                'status' => $t->status,
+                'status' => $statusNormalized,
+                'statusCode' => $t->status,
+                'rawStatus' => $t->status,
                 'syncStatus' => 'SYNCED',
                 'member' => $t->member ? [
                     'nik' => $t->member->nik,

@@ -8,7 +8,7 @@
     searchQuery: '',
     methodFilter: 'all',
     statusFilter: 'all',
-    dateFilter: 'today',
+    dateFilter: 'all',
     showDetailModal: false,
     selectedTrx: null,
     toastMessage: '',
@@ -69,28 +69,34 @@
     get filteredTransactions() {
         return this.transactions.filter(t => {
             if (this.methodFilter !== 'all' && t.method !== this.methodFilter) return false;
-            if (this.statusFilter !== 'all' && t.status !== this.statusFilter) return false;
+            if (this.statusFilter !== 'all') {
+                const isSuccess = t.status === 'SELESAI' || t.status === 'SUCCESS' || t.statusCode === 'SUCCESS';
+                const isVoided = t.status === 'DIBATALKAN' || t.status === 'VOIDED' || t.statusCode === 'VOIDED';
+                if (this.statusFilter === 'SELESAI' && !isSuccess) return false;
+                if (this.statusFilter === 'DIBATALKAN' && !isVoided) return false;
+            }
             if (this.searchQuery.trim() !== '') {
                 const q = this.searchQuery.toLowerCase();
                 const matchId = (t.id || '').toLowerCase().includes(q);
+                const matchInvoice = (t.invoice_number || '').toLowerCase().includes(q);
                 const matchCashier = (t.cashier || '').toLowerCase().includes(q);
-                const matchItems = Array.isArray(t.items) && t.items.some(it => (it.name || '').toLowerCase().includes(q));
-                return matchId || matchCashier || matchItems;
+                const matchItems = Array.isArray(t.items) && t.items.some(it => (it.name || '').toLowerCase().includes(q) || (it.sku || '').toLowerCase().includes(q));
+                return matchId || matchInvoice || matchCashier || matchItems;
             }
             return true;
         });
     },
 
     get totalOmzet() {
-        return this.transactions.filter(t => t.status === 'SELESAI').reduce((a, b) => a + Number(b.total), 0);
+        return this.transactions.filter(t => t.status === 'SELESAI' || t.status === 'SUCCESS' || t.statusCode === 'SUCCESS').reduce((a, b) => a + Number(b.total), 0);
     },
 
     get totalCash() {
-        return this.transactions.filter(t => t.status === 'SELESAI').reduce((a, b) => a + Number(b.cashPortion), 0);
+        return this.transactions.filter(t => t.status === 'SELESAI' || t.status === 'SUCCESS' || t.statusCode === 'SUCCESS').reduce((a, b) => a + Number(b.cashPortion), 0);
     },
 
     get totalNonCash() {
-        return this.transactions.filter(t => t.status === 'SELESAI').reduce((a, b) => a + Number(b.nonCashPortion), 0);
+        return this.transactions.filter(t => t.status === 'SELESAI' || t.status === 'SUCCESS' || t.statusCode === 'SUCCESS').reduce((a, b) => a + Number(b.nonCashPortion), 0);
     },
 
     openDetail(t) {
@@ -228,6 +234,20 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
 
                     <div class="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                        <!-- Periode Filter -->
+                        <div class="relative">
+                            <select x-model="dateFilter"
+                                    @change="initTransactions()"
+                                    class="appearance-none bg-white border border-gray-200 rounded-xl px-4 py-2.5 pr-10 text-[13px] text-gray-700 focus:outline-none focus:border-[#0052cc] shadow-xs font-semibold cursor-pointer">
+                                <option value="all">Semua Periode</option>
+                                <option value="today">Hari Ini</option>
+                                <option value="yesterday">Kemarin</option>
+                                <option value="week">Minggu Ini</option>
+                                <option value="month">Bulan Ini</option>
+                            </select>
+                            <span class="material-symbols-rounded absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-[20px]">calendar_today</span>
+                        </div>
+
                         <!-- Method Filter -->
                         <div class="relative">
                             <select x-model="methodFilter"
@@ -357,13 +377,13 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                             <span>Offline (Pending)</span>
                                                         </span>
                                                     </template>
-                                                    <template x-if="t.status === 'SELESAI' && !(t.syncStatus === 'PENDING_SYNC' || t.isOffline)">
+                                                    <template x-if="(t.status === 'SELESAI' || t.status === 'SUCCESS' || t.statusCode === 'SUCCESS') && !(t.syncStatus === 'PENDING_SYNC' || t.isOffline)">
                                                         <span class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full whitespace-nowrap">
                                                             <span class="material-symbols-rounded text-[13px]">cloud_done</span>
                                                             <span>Tersinkron</span>
                                                         </span>
                                                     </template>
-                                                    <template x-if="t.status === 'DIBATALKAN'">
+                                                    <template x-if="t.status === 'DIBATALKAN' || t.status === 'VOIDED' || t.statusCode === 'VOIDED'">
                                                         <span class="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-0.5 rounded-full whitespace-nowrap">
                                                             <span class="material-symbols-rounded text-[13px]">cancel</span>
                                                             <span>Dibatalkan</span>
