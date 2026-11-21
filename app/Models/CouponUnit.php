@@ -10,7 +10,11 @@ class CouponUnit extends Model
 {
     protected $fillable = [
         'product_id',
-        'category', // bbm, beras, galon, pulsa
+        'location_id',
+        'branch',
+        'quota',
+        'allocated_by',
+        'category', // bbm, beras, galon, pulsa, produk
         'serial_number',
         'recipient_name',
         'recipient_nik',
@@ -29,6 +33,16 @@ class CouponUnit extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function location(): BelongsTo
+    {
+        return $this->belongsTo(Location::class);
+    }
+
+    public function allocatedByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'allocated_by');
     }
 
     public function redemptions(): HasMany

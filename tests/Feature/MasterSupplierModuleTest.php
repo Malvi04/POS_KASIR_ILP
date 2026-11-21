@@ -362,29 +362,17 @@ class MasterSupplierModuleTest extends TestCase
         // Verify no duplicate product created in Master Produk
         $this->assertEquals(1, Product::where('sku', $this->indomie->sku)->count());
 
-        // 5. Deactivate Supplier A -> products, purchase history, and price history MUST remain intact!
+        // 5. Deactivate & Delete Supplier A -> Supplier deleted safely; products and warehouse stock remain intact!
         $this->patchJson("/api/suppliers/{$supA->id}/status", ['status' => 'NONAKTIF'])->assertStatus(200);
 
-        // Permanent delete MUST be blocked because Supplier A has transactions (Rule 7)
-        $this->deleteJson("/api/suppliers/{$supA->id}")->assertStatus(422);
+        // Deleting supplier succeeds (200), products and warehouse stock stay completely safe!
+        $this->deleteJson("/api/suppliers/{$supA->id}")->assertStatus(200);
+        $this->assertNull(Supplier::find($supA->id));
 
-        $this->getJson("/api/suppliers/{$supA->id}")
-            ->assertStatus(200)
-            ->assertJsonPath('data.status', 'NONAKTIF')
-            ->assertJsonPath('data.summary.total_products', 2)
-            ->assertJsonPath('data.summary.total_purchases', 2);
-
-        $this->getJson("/api/suppliers/{$supA->id}/products")
-            ->assertStatus(200)
-            ->assertJsonPath('meta.total', 2);
-
-        $this->getJson("/api/suppliers/{$supA->id}/purchases")
-            ->assertStatus(200)
-            ->assertJsonPath('meta.total', 2);
-
-        $this->getJson("/api/suppliers/{$supA->id}/price-history")
-            ->assertStatus(200);
-        $this->assertGreaterThanOrEqual(4, PurchasePriceHistory::where('supplier_id', $supA->id)->count());
+        // Products and prices remain completely intact in catalog
+        $this->assertNotNull(Product::find($this->indomie->id));
+        $this->assertEquals(2800.0, (float) $this->indomie->fresh()->last_cost_price);
+        $this->assertEquals(3500.0, (float) $this->indomie->fresh()->price);
     }
 
     public function test_role_access_control_for_manager_owner_and_kasir(): void

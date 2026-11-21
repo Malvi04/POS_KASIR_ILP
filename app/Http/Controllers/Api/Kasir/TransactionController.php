@@ -1199,6 +1199,7 @@ class TransactionController extends Controller
                 'id' => $transaction->id,
                 'invoice_number' => $transaction->invoice_number,
                 'terminal_code' => $transaction->terminal_code,
+                'branch' => $transaction->branch,
                 'cashier_name' => $transaction->cashier_name,
                 'payment_method' => $transaction->payment_method,
                 'payment_reference' => $transaction->payment_reference,
@@ -1270,14 +1271,16 @@ class TransactionController extends Controller
             }
         }
 
-        if ($dateFilter === 'today') {
+        if ($dateFilter === 'today' || $dateFilter === 'harian') {
             $query->whereDate('created_at', today());
         } elseif ($dateFilter === 'yesterday') {
             $query->whereDate('created_at', today()->subDay());
-        } elseif ($dateFilter === 'week') {
+        } elseif ($dateFilter === 'week' || $dateFilter === 'mingguan') {
             $query->whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()]);
-        } elseif ($dateFilter === 'month') {
+        } elseif ($dateFilter === 'month' || $dateFilter === 'bulanan') {
             $query->whereMonth('created_at', now()->month)->whereYear('created_at', now()->year);
+        } elseif ($dateFilter === 'year' || $dateFilter === 'tahunan') {
+            $query->whereYear('created_at', now()->year);
         } elseif (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFilter)) {
             $query->whereDate('created_at', $dateFilter);
         }

@@ -4,7 +4,85 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    @php
+        $reqPath = request()->path();
+        $reqRoleParam = strtolower(trim((string) request()->query('role', '')));
+        if ($reqRoleParam === 'owner' || str_starts_with($reqPath, 'owner') || in_array($reqPath, ['cabang', 'audit-log'], true)) {
+            $posActiveRoleSlot = 'owner';
+        } elseif ($reqRoleParam === 'kasir' || str_starts_with($reqPath, 'pos') || str_starts_with($reqPath, 'kasir') || str_starts_with($reqPath, 'cashier') || in_array($reqPath, ['select-shift', 'proses-kredit', 'cetak-struk', 'kupon'], true)) {
+            $posActiveRoleSlot = 'kasir';
+        } elseif (str_starts_with($reqPath, 'manager') || in_array($reqPath, ['dashboard', 'inventory', 'members', 'member-detail', 'umkm-partners', 'promosi', 'absensi', 'reports', 'kelola-akun', 'settings', 'stock-opname', 'retur', 'retur-masuk', 'kirim-barang', 'pembelian-barang', 'suppliers'], true) || str_starts_with($reqPath, 'suppliers/')) {
+            $posActiveRoleSlot = 'manager';
+        } else {
+            $posActiveRoleSlot = '';
+        }
+        $posServerAuthUser = auth()->user();
+    @endphp
+    <meta name="pos-active-role" content="{{ $posActiveRoleSlot }}">
     <title>@yield('title', 'POS System - PT Indo Lampung Perkasa')</title>
+
+    <script>
+        (function () {
+            const serverRole = @js($posActiveRoleSlot);
+            let activeRole = serverRole;
+            try {
+                if (serverRole) {
+                    sessionStorage.setItem('pos_tab_role', serverRole);
+                } else {
+                    activeRole = sessionStorage.getItem('pos_tab_role') || '';
+                }
+            } catch (e) {}
+            window.POS_ACTIVE_ROLE = activeRole;
+
+            @if($posActiveRoleSlot === 'kasir' && $posServerAuthUser)
+            try {
+                const kasirUser = @js([
+                    'id' => $posServerAuthUser->id,
+                    'name' => $posServerAuthUser->name,
+                    'username' => $posServerAuthUser->username,
+                    'nik' => $posServerAuthUser->nik,
+                    'branch' => $posServerAuthUser->branch,
+                ]);
+                if (kasirUser && kasirUser.id) {
+                    localStorage.setItem('pos_portal_logged_in_staff_id', String(kasirUser.id));
+                    localStorage.setItem('pos_kasir_staff_id', String(kasirUser.id));
+                    if (kasirUser.name) {
+                        localStorage.setItem('pos_portal_logged_in_staff_name', kasirUser.name);
+                        localStorage.setItem('pos_user_name', kasirUser.name);
+                    }
+                    if (kasirUser.username) localStorage.setItem('pos_portal_logged_in_username', kasirUser.username);
+                    if (kasirUser.nik) localStorage.setItem('pos_portal_logged_in_nik', kasirUser.nik);
+                }
+            } catch (e) {}
+            @endif
+
+            if (typeof window.fetch === 'function' && !window.__posFetchWrapped) {
+                window.__posFetchWrapped = true;
+                const originalFetch = window.fetch.bind(window);
+                window.fetch = function (input, init) {
+                    try {
+                        let roleHeader = window.POS_ACTIVE_ROLE || '';
+                        if (!roleHeader) {
+                            try { roleHeader = sessionStorage.getItem('pos_tab_role') || ''; } catch (e) {}
+                        }
+                        if (roleHeader) {
+                            const urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+                            const isSameOrigin = !urlStr || urlStr.startsWith('/') || urlStr.startsWith(window.location.origin);
+                            if (isSameOrigin) {
+                                init = init ? Object.assign({}, init) : {};
+                                const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined) || {});
+                                if (!headers.has('X-POS-Role')) {
+                                    headers.set('X-POS-Role', roleHeader);
+                                }
+                                init.headers = headers;
+                            }
+                        }
+                    } catch (e) {}
+                    return originalFetch(input, init);
+                };
+            }
+        })();
+    </script>
 
     <!-- Preload Self-Hosted Critical Fonts (Zero external latency, zero text-icon flash) -->
     <link rel="preload" href="/fonts/material-symbols-rounded.woff2" as="font" type="font/woff2" crossorigin>
@@ -75,7 +153,7 @@
     <script src="/js/excel-export.js" defer></script>
     <script src="/js/pos-realtime.js?v=3.0.3" defer></script>
     <script src="/js/pos-offline-sync.js?v=3.0.3" defer></script>
-    <script src="/js/cashier-core.js?v=3.0.3" defer></script>
+    <script src="/js/cashier-core.js?v={{ file_exists(public_path('js/cashier-core.js')) ? filemtime(public_path('js/cashier-core.js')) : '3.1.0' }}" defer></script>
 
     <!-- Local Alpine.js -->
     <script defer src="/js/alpine.min.js"></script>

@@ -30,10 +30,20 @@ class MemberController extends Controller
             'count' => $members->count(),
             'data' => $members->map(fn($m) => [
                 'id' => $m->id,
+                'customer_id' => $m->customer_id ?? (string) $m->id,
                 'member_code' => $m->member_code,
+                'kode_out' => $m->kode_out ?? '',
                 'nik' => $m->nik,
                 'name' => $m->name,
                 'department' => $m->department,
+                'division' => $m->division ?? $m->department,
+                'address' => $m->address ?? '',
+                'phone' => $m->phone ?? '',
+                'fax' => $m->fax ?? '',
+                'contact' => $m->contact ?? '',
+                'tempo_bayar' => $m->tempo_bayar ?? '',
+                'idtk' => $m->idtk ?? '',
+                'no_rekening' => $m->no_rekening ?? '',
                 'branch' => $m->branch ?? '-',
                 'credit_limit' => (float) $m->credit_limit,
                 'current_debt' => (float) $m->current_debt,
@@ -45,7 +55,7 @@ class MemberController extends Controller
     }
 
     /**
-     * Instant lookup and credit validation by NIK.
+     * Instant lookup and credit validation by NIK or Kode Anggota.
      * Rejects or allows according to credit ceiling and status.
      */
     public function validateNik(Request $request, string $nik): JsonResponse
@@ -53,7 +63,9 @@ class MemberController extends Controller
         $nik = trim($nik);
         $amount = (float) $request->query('amount', 0);
 
-        $member = Member::where('nik', $nik)->first();
+        $member = Member::where('nik', $nik)
+            ->orWhere('member_code', $nik)
+            ->first();
 
         if (!$member) {
             return response()->json([

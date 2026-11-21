@@ -153,8 +153,8 @@
                         @click="selectedLocation = 'all'"
                         class="px-4 py-2.5 text-xs font-bold transition-all border-b-2 inline-flex items-center gap-2 whitespace-nowrap cursor-pointer"
                         :class="selectedLocation === 'all' ? 'border-[#0052cc] text-[#0052cc] bg-white rounded-t-xl shadow-2xs' : 'border-transparent text-slate-600 hover:text-slate-900'">
-                    <span class="material-symbols-rounded text-[16px]">all_inclusive</span>
-                    <span>Produk Master (Semua Cabang)</span>
+                    <span class="material-symbols-rounded text-[16px]">warehouse</span>
+                    <span>Produk Master (Stok Gudang)</span>
                 </button>
 
                 <button type="button" 
@@ -1553,6 +1553,7 @@ function ownerProductsApp() {
                             dump: p.dump || '',
                             rackLocation: p.rack_location || '-',
                             branchStock: (p.branch_stock && typeof p.branch_stock === 'object') ? p.branch_stock : {},
+                            allocatedBranches: Array.isArray(p.allocated_branches) ? p.allocated_branches : Object.keys(p.branch_stock || {}),
                             status: Number(p.stock) <= 0 ? 'HABIS' : (Number(p.stock) <= Number(p.min_stock || 10) ? 'STOK_RENDAH' : 'TERSEDIA')
                         }));
                         const dedup = this.deduplicateProducts(formatted);
@@ -1584,7 +1585,7 @@ function ownerProductsApp() {
                 case 'CAB-001': return 'Cabang Pusat (Toko Pusat)';
                 case 'CAB-002': return 'Cabang A';
                 case 'CAB-003': return 'Cabang B';
-                default: return 'Produk Master (Semua Cabang)';
+                default: return 'Produk Master (Stok Gudang)';
             }
         },
 
@@ -1646,6 +1647,7 @@ function ownerProductsApp() {
                             dump: p.dump || '',
                             rackLocation: p.rack_location || '-',
                             branchStock: (p.branch_stock && typeof p.branch_stock === 'object') ? p.branch_stock : {},
+                            allocatedBranches: Array.isArray(p.allocated_branches) ? p.allocated_branches : Object.keys(p.branch_stock || {}),
                             status: Number(p.stock) <= 0 ? 'HABIS' : (Number(p.stock) <= Number(p.min_stock || 10) ? 'STOK_RENDAH' : 'TERSEDIA')
                         }));
                         const existingSkus = new Set(this.products.map(p => p.sku));
@@ -1680,6 +1682,10 @@ function ownerProductsApp() {
             return this.products.filter(p => {
                 // Location filter
                 if (this.selectedLocation !== 'all') {
+                    const isAllocated = Array.isArray(p.allocatedBranches)
+                        ? p.allocatedBranches.includes(this.selectedLocation)
+                        : (p.branchStock && Object.prototype.hasOwnProperty.call(p.branchStock, this.selectedLocation));
+                    if (!isAllocated) return false;
                     const locStock = this.getLocationStock(p, this.selectedLocation);
                     if (this.statusFilter === 'HABIS' && locStock > 0) return false;
                     if (this.statusFilter === 'STOK_RENDAH' && (locStock <= 0 || locStock > Math.round(p.minStock * 0.3))) return false;

@@ -74,10 +74,17 @@
     form: {
         purchase_number: '',
         purchase_date: '{{ date('Y-m-d') }}',
+        arrival_status: 'SUDAH_SAMPAI', // 'SUDAH_SAMPAI' | 'BELUM_SAMPAI'
+        arrival_time: '{{ date('H:i') }}',
         supplier_id: '',
         supplier_invoice_number: '',
         notes: '',
         items: []
+    },
+    setNowArrivalTime() {
+        const now = new Date();
+        const pad = n => String(n).padStart(2, '0');
+        this.form.arrival_time = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
     },
     productSearchQuery: '',
     showProductDropdown: false,
@@ -98,6 +105,110 @@
             this.supplierSubmitKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('sup-' + Date.now());
         }
         this.showSupplierModal = true;
+    },
+
+    // Quick Product Modal
+    showQuickProductModal: false,
+    isSavingQuickProduct: false,
+    quickProduct: {
+        name: '',
+        category: 'Kebutuhan Pokok',
+        unit: 'Pcs',
+        barcode: '',
+        cost_price: 0,
+        price: 0,
+        member_price: 0,
+        min_stock: 10
+    },
+    openQuickProductModal(initialName = '') {
+        const randBarcode = '899' + Math.floor(1000000000 + Math.random() * 9000000000);
+        this.quickProduct = {
+            name: initialName || '',
+            category: 'Kebutuhan Pokok',
+            unit: 'Pcs',
+            barcode: randBarcode,
+            cost_price: 0,
+            price: 0,
+            member_price: 0,
+            min_stock: 10
+        };
+        this.showQuickProductModal = true;
+    },
+    async createQuickProduct() {
+        if (this.isSavingQuickProduct) return;
+        const cleanName = (this.quickProduct.name || '').trim();
+        if (!cleanName) {
+            this.triggerToast('Nama produk wajib diisi.', 'error');
+            return;
+        }
+        if (Number(this.quickProduct.cost_price) < 0) {
+            this.triggerToast('Harga beli/modal tidak boleh negatif.', 'error');
+            return;
+        }
+        this.isSavingQuickProduct = true;
+        try {
+            const costP = Number(this.quickProduct.cost_price) || 0;
+            const sellP = Number(this.quickProduct.price) || (costP > 0 ? Math.round(costP * 1.2) : 0);
+            const memP = Number(this.quickProduct.member_price) || sellP;
+
+            const payload = {
+                name: cleanName,
+                category: this.quickProduct.category || 'Kebutuhan Pokok',
+                unit: this.quickProduct.unit || 'Pcs',
+                barcode: this.quickProduct.barcode || ('899' + Math.floor(1000000000 + Math.random() * 9000000000)),
+                cost_price: costP,
+                last_cost_price: costP,
+                price: sellP,
+                member_price: memP,
+                stock: 0,
+                min_stock: Number(this.quickProduct.min_stock) || 10,
+                is_consignment: false,
+                supplier_id: this.form.supplier_id ? Number(this.form.supplier_id) : null
+            };
+
+            const res = await fetch('/api/products', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const json = await res.json();
+            if (res.ok && json.success && json.data) {
+                const newProd = {
+                    id: json.data.id,
+                    sku: json.data.sku,
+                    barcode: json.data.barcode,
+                    name: json.data.name,
+                    category: json.data.category,
+                    unit: json.data.unit || 'Pcs',
+                    cost_price: Number(json.data.cost_price) || costP,
+                    last_cost_price: Number(json.data.cost_price) || costP,
+                    price: Number(json.data.price) || sellP,
+                    stock: 0,
+                    unit_options: [{ unit_name: json.data.unit || 'Pcs', conversion_factor: 1, is_base: true }]
+                };
+                this.products.unshift(newProd);
+                this.addProductToForm(newProd);
+                const lastIdx = this.form.items.length - 1;
+                if (lastIdx >= 0 && costP > 0) {
+                    this.form.items[lastIdx].purchase_price = costP;
+                }
+                this.showQuickProductModal = false;
+                this.showProductDropdown = false;
+                this.productSearchQuery = '';
+                this.triggerToast(`Produk '${newProd.name}' berhasil didaftarkan ke master dan ditambahkan ke pembelian.`, 'success');
+            } else {
+                this.triggerToast(json.message || 'Gagal mendaftarkan produk baru.', 'error');
+            }
+        } catch (e) {
+            this.triggerToast('Terjadi kesalahan koneksi saat mendaftarkan produk.', 'error');
+        } finally {
+            this.isSavingQuickProduct = false;
+        }
     },
 
     // ==========================================
@@ -266,11 +377,11 @@
             case 'DRAFT':
                 return { label: 'Draft', class: 'bg-slate-100 text-slate-700 border-slate-300' };
             case 'MENUNGGU_PENERIMAAN':
-                return { label: 'Menunggu Penerimaan', class: 'bg-amber-50 text-amber-700 border-amber-300' };
+                return { label: 'Belum Sampai', class: 'bg-amber-50 text-amber-700 border-amber-300' };
             case 'DITERIMA_SEBAGIAN':
                 return { label: 'Diterima Sebagian', class: 'bg-blue-50 text-[#0052cc] border-blue-200' };
             case 'SELESAI':
-                return { label: 'Selesai', class: 'bg-emerald-50 text-emerald-700 border-emerald-300' };
+                return { label: 'Sudah Sampai', class: 'bg-emerald-50 text-emerald-700 border-emerald-300' };
             case 'DIBATALKAN':
                 return { label: 'Dibatalkan', class: 'bg-rose-50 text-rose-700 border-rose-200' };
             default:
@@ -286,6 +397,8 @@
         this.form = {
             purchase_number: this.nextPurchaseNumber,
             purchase_date: '{{ date('Y-m-d') }}',
+            arrival_status: 'SUDAH_SAMPAI',
+            arrival_time: '{{ date('H:i') }}',
             supplier_id: this.suppliers.length > 0 ? String(this.suppliers[0].id) : '',
             supplier_invoice_number: '',
             notes: '',
@@ -304,6 +417,8 @@
         this.form = {
             purchase_number: p.purchase_number,
             purchase_date: p.purchase_date || '{{ date('Y-m-d') }}',
+            arrival_status: p.is_arrived ? 'SUDAH_SAMPAI' : 'BELUM_SAMPAI',
+            arrival_time: p.arrival_time || '{{ date('H:i') }}',
             supplier_id: p.supplier_id ? String(p.supplier_id) : '',
             supplier_invoice_number: p.supplier_invoice_number || '',
             notes: p.notes || '',
@@ -399,10 +514,10 @@
         return this.form.items.reduce((sum, it) => sum + this.getItemSubtotal(it), 0);
     },
 
-    async submitPurchase(targetStatus) {
+    async submitPurchase(targetStatus, autoReceive = false) {
         if (this.isSubmitting) return;
         if (!this.form.supplier_id) {
-            this.triggerToast('Pilih supplier terlebih dahulu.', 'error');
+            this.triggerToast('Pilih supplier terlebih dahulu. Jika belum terdaftar, klik Tambah Supplier.', 'error');
             return;
         }
         if (!this.form.purchase_date) {
@@ -431,6 +546,9 @@
             const url = this.editingPurchaseId ? `/api/purchases/${this.editingPurchaseId}` : '/api/purchases';
             const method = this.editingPurchaseId ? 'PUT' : 'POST';
 
+            const isArrived = (targetStatus === 'SELESAI' || autoReceive || this.form.arrival_status === 'SUDAH_SAMPAI') && targetStatus !== 'DRAFT';
+            const finalStatus = targetStatus === 'DRAFT' ? 'DRAFT' : (isArrived ? 'SELESAI' : 'MENUNGGU_PENERIMAAN');
+
             const res = await fetch(url, {
                 method,
                 headers: {
@@ -442,10 +560,14 @@
                 body: JSON.stringify({
                     purchase_number: this.form.purchase_number,
                     purchase_date: this.form.purchase_date,
+                    arrival_status: this.form.arrival_status,
+                    arrival_time: this.form.arrival_time,
+                    is_arrived: isArrived,
                     supplier_id: Number(this.form.supplier_id),
                     supplier_invoice_number: this.form.supplier_invoice_number,
                     notes: this.form.notes,
-                    status: targetStatus,
+                    status: finalStatus,
+                    auto_receive: Boolean(isArrived),
                     items: this.form.items.map(it => ({
                         product_id: Number(it.product_id),
                         unit: it.unit,
@@ -469,6 +591,8 @@
             this.form = {
                 purchase_number: this.nextPurchaseNumber,
                 purchase_date: '{{ date('Y-m-d') }}',
+                arrival_status: 'SUDAH_SAMPAI',
+                arrival_time: '{{ date('H:i') }}',
                 supplier_id: '',
                 supplier_invoice_number: '',
                 notes: '',
@@ -841,10 +965,20 @@
             ? `M ${first.x},${baselineY} L ${points.map(p => `${p.x},${p.y}`).join(' L ')} L ${last.x},${baselineY} Z`
             : '';
 
+        const pointsHtml = points.map(p => {
+            const fillColor = p.change_type === 'NAIK' ? '#e11d48' : (p.change_type === 'TURUN' ? '#059669' : '#0052cc');
+            const lbl = p.label || p.short_date || '';
+            return '<g class=\'cursor-pointer\'>' +
+                '<circle cx=\'' + p.x + '\' cy=\'' + p.y + '\' r=\'5\' fill=\'' + fillColor + '\' stroke=\'#ffffff\' stroke-width=\'2\' />' +
+                '<text x=\'' + p.x + '\' y=\'182\' text-anchor=\'middle\' fill=\'#94a3b8\' font-size=\'9\' font-family=\'monospace\'>' + lbl + '</text>' +
+            '</g>';
+        }).join('');
+
         return {
             points,
             polyline,
             areaPath,
+            pointsHtml,
             min: Math.round(minVal),
             max: Math.round(maxVal),
             mid: Math.round((minVal + maxVal) / 2)
@@ -861,29 +995,25 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
     <main class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
 
         <!-- Top Header Bar -->
-        <header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 sm:px-6 z-10 shrink-0 select-none">
-            <div class="flex items-center gap-2 min-w-0">
-                <span class="text-xs font-bold text-gray-400 uppercase tracking-wider hidden sm:inline">Persediaan</span>
-                <span class="material-symbols-rounded text-gray-400 text-sm hidden sm:inline">chevron_right</span>
-                <h1 class="text-sm sm:text-base font-bold text-gray-800 truncate">Pembelian Barang</h1>
+        <header class="h-20 bg-[#f8f9fa] border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
+            <div class="flex items-center gap-3">
+                <h1 class="text-[20px] font-bold text-gray-900">Pembelian Barang</h1>
+                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200 flex items-center gap-1.5">
+                    <span class="material-symbols-rounded text-[14px]">shopping_cart</span>
+                    <span>Pengadaan &amp; PO Supplier</span>
+                </span>
             </div>
 
-            <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+            <div class="flex items-center gap-4 text-gray-500">
                 <x-notification-bell role="MANAGER" />
                 <button type="button"
                         @click="refreshAll()"
-                        class="p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
-                        title="Sinkronisasi Data">
-                    <span class="material-symbols-rounded text-[20px]" :class="isLoading ? 'animate-spin text-[#0052cc]' : ''">sync</span>
+                        class="hover:text-gray-900 transition-colors cursor-pointer"
+                        title="Sinkronkan Data">
+                    <span class="material-symbols-rounded text-[24px]" :class="(isLoading || $store.network?.isChecking) ? 'animate-spin text-[#0052cc]' : ''">autorenew</span>
                 </button>
+                <div class="h-6 w-px bg-gray-300"></div>
                 <x-realtime-network-badge />
-                <div class="h-6 w-px bg-gray-200 mx-0.5 hidden sm:block"></div>
-                <button type="button"
-                        @click="switchToCreateNew()"
-                        class="px-3.5 py-2 bg-[#0052cc] hover:bg-[#0043a8] text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 cursor-pointer transition-colors">
-                    <span class="material-symbols-rounded text-[18px]">add</span>
-                    <span class="hidden sm:inline">Buat Pembelian</span>
-                </button>
             </div>
         </header>
 
@@ -899,9 +1029,18 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             Kelola transaksi pembelian produk, penerimaan barang, dan riwayat harga beli supplier.
                         </p>
                     </div>
-                    <div class="flex items-center gap-2 text-xs text-gray-500 bg-white border border-gray-200 rounded-xl px-3.5 py-2 shadow-2xs self-start md:self-auto">
-                        <span class="material-symbols-rounded text-[18px] text-[#0052cc]">warehouse</span>
-                        <span>Pusat Penerimaan: <strong class="text-gray-800" x-text="warehouseName">Gudang Pusat (DC)</strong></span>
+                    <div class="flex items-center gap-3 self-start md:self-auto flex-wrap">
+                        <div class="flex items-center gap-2 text-xs text-gray-500 bg-white border border-gray-200 rounded-xl px-3.5 py-2 shadow-2xs">
+                            <span class="material-symbols-rounded text-[18px] text-[#0052cc]">warehouse</span>
+                            <span>Pusat Penerimaan: <strong class="text-gray-800" x-text="warehouseName">Gudang Pusat (DC)</strong></span>
+                        </div>
+                        <button type="button"
+                                x-show="activeTab !== 'create'"
+                                @click="switchToCreateNew()"
+                                class="px-4 py-2 bg-[#0052cc] hover:bg-[#0043a8] text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 cursor-pointer transition-colors">
+                            <span class="material-symbols-rounded text-[18px]">add</span>
+                            <span>Buat Pembelian</span>
+                        </button>
                     </div>
                 </div>
 
@@ -1128,7 +1267,21 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                         x-text="p.purchase_number"></button>
                                                 <span x-show="p.supplier_invoice_number" class="text-[10.5px] text-gray-400 font-mono" x-text="'Inv: ' + p.supplier_invoice_number"></span>
                                             </td>
-                                            <td class="px-4 py-3.5 whitespace-nowrap text-gray-600" x-text="p.purchase_date_label || p.purchase_date"></td>
+                                            <td class="px-4 py-3.5 whitespace-nowrap text-gray-600">
+                                                <div class="font-medium" x-text="p.purchase_date_label || p.purchase_date"></div>
+                                                <template x-if="p.is_arrived && p.arrival_time_short">
+                                                    <div class="text-[10.5px] font-bold text-emerald-700 flex items-center gap-1 mt-0.5 font-mono">
+                                                        <span class="material-symbols-rounded text-[13px]">schedule</span>
+                                                        <span x-text="'Tiba ' + p.arrival_time_short"></span>
+                                                    </div>
+                                                </template>
+                                                <template x-if="!p.is_arrived">
+                                                    <div class="text-[10.5px] font-bold text-amber-600 flex items-center gap-1 mt-0.5">
+                                                        <span class="material-symbols-rounded text-[13px]">hourglass_top</span>
+                                                        <span>Belum Sampai</span>
+                                                    </div>
+                                                </template>
+                                            </td>
                                             <td class="px-4 py-3.5 whitespace-nowrap font-semibold text-gray-900" x-text="p.supplier_name"></td>
                                             <td class="px-4 py-3.5 whitespace-nowrap text-center font-mono font-bold text-gray-700" x-text="p.total_items + ' Produk'"></td>
                                             <td class="px-4 py-3.5 whitespace-nowrap text-center font-mono font-bold">
@@ -1241,15 +1394,16 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     <label class="font-bold text-gray-700">Supplier <span class="text-rose-500">*</span></label>
                                     <button type="button"
                                             @click="openSupplierModal()"
-                                            class="text-[11px] font-bold text-[#0052cc] hover:underline cursor-pointer flex items-center gap-0.5">
-                                        <span class="material-symbols-rounded text-[14px]">add</span>
-                                        <span>Tambah Supplier</span>
+                                            class="text-[11px] font-bold text-[#0052cc] hover:text-[#0043a8] bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg border border-blue-200 transition-colors cursor-pointer inline-flex items-center gap-1"
+                                            title="Daftarkan supplier baru langsung jika belum ada di master data">
+                                        <span class="material-symbols-rounded text-[14px]">person_add</span>
+                                        <span>+ Daftar Supplier Baru</span>
                                     </button>
                                 </div>
                                 <div class="relative">
                                     <select x-model="form.supplier_id"
                                             class="appearance-none w-full px-3.5 py-2.5 pr-9 rounded-xl border border-gray-300 bg-white focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-semibold text-gray-800 cursor-pointer">
-                                        <option value="">-- Pilih Supplier --</option>
+                                        <option value="">-- Pilih Supplier Terdaftar (atau klik + Daftar Supplier Baru) --</option>
                                         <template x-for="sup in suppliers" :key="sup.id">
                                             <option :value="sup.id" x-text="sup.name + (sup.code ? ' (' + sup.code + ')' : '')"></option>
                                         </template>
@@ -1264,6 +1418,69 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                        x-model="form.supplier_invoice_number"
                                        placeholder="Contoh: INV-SUP-2026/001"
                                        class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono font-medium">
+                            </div>
+
+                            <!-- Panel Status Kedatangan & Jam Sampai di Gudang -->
+                            <div class="md:col-span-2 lg:col-span-4 p-4 rounded-2xl bg-gradient-to-r from-slate-50 to-blue-50/30 border border-slate-200 space-y-3.5">
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                    <div class="space-y-0.5">
+                                        <div class="flex items-center gap-2">
+                                            <span class="material-symbols-rounded text-[18px] text-[#0052cc]">local_shipping</span>
+                                            <label class="block font-bold text-gray-900 text-xs">Status Kedatangan Barang di Gudang <span class="text-rose-500">*</span></label>
+                                        </div>
+                                        <p class="text-[11px] text-gray-500">Tentukan apakah produk saat ini sudah tiba di Gudang Pusat atau masih belum sampai.</p>
+                                    </div>
+                                    <div class="inline-flex p-1 bg-white border border-gray-300 rounded-xl shadow-2xs gap-1.5 shrink-0">
+                                        <button type="button"
+                                                @click="form.arrival_status = 'SUDAH_SAMPAI'"
+                                                :class="form.arrival_status === 'SUDAH_SAMPAI' ? 'bg-emerald-600 text-white shadow-xs' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'"
+                                                class="px-3.5 py-2 rounded-lg font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer transition-all">
+                                            <span class="material-symbols-rounded text-[17px]">verified</span>
+                                            <span>Sudah Sampai di Gudang</span>
+                                        </button>
+                                        <button type="button"
+                                                @click="form.arrival_status = 'BELUM_SAMPAI'"
+                                                :class="form.arrival_status === 'BELUM_SAMPAI' ? 'bg-amber-500 text-white shadow-xs' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'"
+                                                class="px-3.5 py-2 rounded-lg font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer transition-all">
+                                            <span class="material-symbols-rounded text-[17px]">hourglass_top</span>
+                                            <span>Belum Sampai</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Box Input Jam Sampai (Hanya muncul jika Sudah Sampai) -->
+                                <div x-show="form.arrival_status === 'SUDAH_SAMPAI'" x-transition class="pt-3 border-t border-slate-200/80 flex flex-col sm:flex-row sm:items-center gap-4">
+                                    <div class="w-full sm:w-64">
+                                        <div class="flex items-center justify-between mb-1">
+                                            <label class="font-bold text-gray-800 text-[11px] flex items-center gap-1">
+                                                <span class="material-symbols-rounded text-[15px] text-emerald-600">schedule</span>
+                                                <span>Jam Sampai di Gudang <span class="text-rose-500">*</span></span>
+                                            </label>
+                                            <button type="button"
+                                                    @click="setNowArrivalTime()"
+                                                    class="text-[10px] font-bold text-[#0052cc] hover:underline cursor-pointer">
+                                                Gunakan Jam Sekarang
+                                            </button>
+                                        </div>
+                                        <div class="relative">
+                                            <input type="time"
+                                                   x-model="form.arrival_time"
+                                                   class="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono font-bold text-gray-900 text-xs">
+                                        </div>
+                                    </div>
+                                    <div class="text-[11px] text-emerald-900 bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl flex items-center gap-2.5 flex-1">
+                                        <span class="material-symbols-rounded text-emerald-600 text-[19px] shrink-0">check_circle</span>
+                                        <span>Barang dicatat telah tiba pada jam yang ditentukan dan kuantitas produk akan <strong>langsung masuk ke Stok Master Gudang Pusat (DC)</strong>.</span>
+                                    </div>
+                                </div>
+
+                                <!-- Box Keterangan Belum Sampai -->
+                                <div x-show="form.arrival_status === 'BELUM_SAMPAI'" x-transition class="pt-3 border-t border-slate-200/80">
+                                    <div class="text-[11px] text-amber-900 bg-amber-50 border border-amber-200 p-2.5 rounded-xl flex items-center gap-2.5">
+                                        <span class="material-symbols-rounded text-amber-600 text-[19px] shrink-0">info</span>
+                                        <span>Barang berstatus <strong>Belum Sampai</strong> di gudang. Transaksi dicatat sebagai pesanan berjalan (Pending), dan saldo fisik Stok Gudang belum bertambah sampai barang fisik tiba.</span>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="md:col-span-2 lg:col-span-4">
@@ -1283,13 +1500,30 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <span class="material-symbols-rounded text-[20px] text-[#0052cc]">inventory_2</span>
                                 <h3 class="text-sm font-bold text-gray-900">B. Detail Produk Pembelian</h3>
                             </div>
-                            <span class="text-[11px] font-medium text-gray-500">Harga beli dapat diisi bebas sesuai invoice aktual supplier</span>
+                            <div class="flex items-center gap-2.5">
+                                <button type="button"
+                                        @click="openQuickProductModal()"
+                                        class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                                        title="Daftarkan produk baru jika produk yang dibeli belum ada di master data">
+                                    <span class="material-symbols-rounded text-[16px]">add_box</span>
+                                    <span>+ Tambah Produk Baru</span>
+                                </button>
+                                <span class="text-[11px] font-medium text-gray-500 hidden md:inline">Harga beli disesuaikan faktur supplier</span>
+                            </div>
                         </div>
 
                         <div class="p-6 space-y-5">
                             <!-- Search & Add Product Box -->
                             <div class="relative max-w-2xl" @click.away="showProductDropdown = false">
-                                <label class="block text-xs font-bold text-gray-700 mb-1.5">Cari &amp; Tambah Produk dari Master Produk (Non-Konsinyasi)</label>
+                                <div class="flex items-center justify-between mb-1.5">
+                                    <label class="block text-xs font-bold text-gray-700">Cari &amp; Tambah Produk dari Master Produk</label>
+                                    <button type="button"
+                                            @click="openQuickProductModal(productSearchQuery)"
+                                            class="text-[11px] font-bold text-emerald-600 hover:text-emerald-700 hover:underline cursor-pointer inline-flex items-center gap-0.5">
+                                        <span class="material-symbols-rounded text-[14px]">add</span>
+                                        <span>Produk Belum Terdaftar? Klik di Sini</span>
+                                    </button>
+                                </div>
                                 <div class="relative">
                                     <span class="material-symbols-rounded absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-[20px]">search</span>
                                     <input type="text"
@@ -1305,7 +1539,15 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                      style="display: none;"
                                      class="absolute z-30 mt-1.5 w-full bg-white rounded-xl border border-gray-200 shadow-xl max-h-64 overflow-y-auto divide-y divide-gray-100">
                                     <template x-if="filteredCatalogProducts.length === 0">
-                                        <div class="px-4 py-3 text-xs text-gray-500">Produk reguler tidak ditemukan.</div>
+                                        <div class="p-4 text-center">
+                                            <p class="text-xs text-gray-500 mb-2">Produk "<span class="font-bold text-gray-800" x-text="productSearchQuery || 'yang dicari'"></span>" belum ada di master data.</p>
+                                            <button type="button"
+                                                    @click="openQuickProductModal(productSearchQuery)"
+                                                    class="px-3.5 py-1.5 bg-[#0052cc] hover:bg-[#0043a8] text-white rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 cursor-pointer shadow-xs">
+                                                <span class="material-symbols-rounded text-[16px]">add_circle</span>
+                                                <span>Daftarkan Produk Baru Ini</span>
+                                            </button>
+                                        </div>
                                     </template>
                                     <template x-for="prod in filteredCatalogProducts" :key="prod.id">
                                         <button type="button"
@@ -1422,17 +1664,26 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <div class="flex flex-wrap items-center gap-2.5 shrink-0">
                                     <button type="button"
                                             :disabled="isSubmitting"
-                                            @click="submitPurchase('DRAFT')"
-                                            class="px-5 py-2.5 rounded-xl border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-bold text-xs flex items-center gap-2 cursor-pointer transition-colors disabled:opacity-50">
+                                            @click="submitPurchase('DRAFT', false)"
+                                            class="px-4 py-2.5 rounded-xl border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-bold text-xs flex items-center gap-2 cursor-pointer transition-colors disabled:opacity-50">
                                         <span class="material-symbols-rounded text-[18px]">draft</span>
                                         <span>Simpan Draft</span>
                                     </button>
                                     <button type="button"
                                             :disabled="isSubmitting"
-                                            @click="submitPurchase('MENUNGGU_PENERIMAAN')"
-                                            class="px-6 py-2.5 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-xs flex items-center gap-2 shadow-xs cursor-pointer transition-colors disabled:opacity-50">
-                                        <span class="material-symbols-rounded text-[18px]">save</span>
-                                        <span>Simpan Pembelian</span>
+                                            @click="form.arrival_status = 'BELUM_SAMPAI'; submitPurchase('MENUNGGU_PENERIMAAN', false)"
+                                            :class="form.arrival_status === 'BELUM_SAMPAI' ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-xs border-amber-600' : 'border border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100'"
+                                            class="px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer transition-colors disabled:opacity-50 border">
+                                        <span class="material-symbols-rounded text-[18px]">hourglass_top</span>
+                                        <span>Simpan Pesanan (Belum Sampai)</span>
+                                    </button>
+                                    <button type="button"
+                                            :disabled="isSubmitting"
+                                            @click="form.arrival_status = 'SUDAH_SAMPAI'; submitPurchase('SELESAI', true)"
+                                            :class="form.arrival_status === 'SUDAH_SAMPAI' ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs ring-2 ring-emerald-300' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs opacity-90'"
+                                            class="px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer transition-colors disabled:opacity-50">
+                                        <span class="material-symbols-rounded text-[18px]">inventory</span>
+                                        <span x-text="form.arrival_status === 'SUDAH_SAMPAI' ? ('Simpan & Masuk Stok Master (Tiba ' + (form.arrival_time || 'Sekarang') + ')') : 'Simpan & Masuk Stok Master'"></span>
                                     </button>
                                 </div>
                             </div>
@@ -1509,7 +1760,21 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                         class="font-mono font-bold text-[#0052cc] hover:underline cursor-pointer"
                                                         x-text="p.purchase_number"></button>
                                             </td>
-                                            <td class="px-4 py-3.5 whitespace-nowrap text-gray-600" x-text="p.purchase_date_label || p.purchase_date"></td>
+                                            <td class="px-4 py-3.5 whitespace-nowrap text-gray-600">
+                                                <div class="font-medium" x-text="p.purchase_date_label || p.purchase_date"></div>
+                                                <template x-if="p.is_arrived && p.arrival_time_short">
+                                                    <div class="text-[10.5px] font-bold text-emerald-700 flex items-center gap-1 mt-0.5 font-mono">
+                                                        <span class="material-symbols-rounded text-[13px]">schedule</span>
+                                                        <span x-text="'Tiba ' + p.arrival_time_short"></span>
+                                                    </div>
+                                                </template>
+                                                <template x-if="!p.is_arrived">
+                                                    <div class="text-[10.5px] font-bold text-amber-600 flex items-center gap-1 mt-0.5">
+                                                        <span class="material-symbols-rounded text-[13px]">hourglass_top</span>
+                                                        <span>Belum Sampai</span>
+                                                    </div>
+                                                </template>
+                                            </td>
                                             <td class="px-4 py-3.5 whitespace-nowrap font-semibold text-gray-900" x-text="p.supplier_name"></td>
                                             <td class="px-4 py-3.5 whitespace-nowrap text-center font-mono font-bold" x-text="p.total_items + ' Produk'"></td>
                                             <td class="px-4 py-3.5 whitespace-nowrap text-center font-mono font-bold" x-text="formatQty(p.total_qty)"></td>
@@ -1705,17 +1970,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     <polyline x-show="chart.points.length > 1" :points="chart.polyline" fill="none" stroke="#0052cc" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
 
                                     <!-- Points -->
-                                    <template x-for="(pt, i) in chart.points" :key="i">
-                                        <g class="cursor-pointer"
-                                           @click="if(pt.product_id) openProductPriceDetail(pt.product_id)"
-                                           @mouseenter="hoveredChartPoint = pt"
-                                           @mouseleave="hoveredChartPoint = null">
-                                            <circle :cx="pt.x" :cy="pt.y" r="5"
-                                                    :fill="pt.change_type === 'NAIK' ? '#e11d48' : (pt.change_type === 'TURUN' ? '#059669' : '#0052cc')"
-                                                    stroke="#ffffff" stroke-width="2" />
-                                            <text :x="pt.x" y="182" text-anchor="middle" class="fill-gray-400 text-[9px] font-mono" x-text="pt.label"></text>
-                                        </g>
-                                    </template>
+                                    <g x-html="chart.pointsHtml"></g>
                                 </svg>
                             </div>
                         </template>
@@ -1850,17 +2105,31 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <template x-if="selectedPurchase">
                         <div class="space-y-5">
                             <!-- Info Grid -->
-                            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
                                 <div class="p-3.5 bg-slate-50 rounded-xl border border-gray-200">
                                     <span class="text-[10px] font-bold text-gray-400 uppercase block">SUPPLIER</span>
-                                    <span class="font-bold text-gray-900 mt-0.5 block" x-text="selectedPurchase.supplier_name"></span>
+                                    <span class="font-bold text-gray-900 mt-0.5 block truncate" x-text="selectedPurchase.supplier_name"></span>
                                 </div>
                                 <div class="p-3.5 bg-slate-50 rounded-xl border border-gray-200">
                                     <span class="text-[10px] font-bold text-gray-400 uppercase block">NO. INVOICE SUPPLIER</span>
                                     <span class="font-mono font-bold text-gray-900 mt-0.5 block" x-text="selectedPurchase.supplier_invoice_number || '-'"></span>
                                 </div>
                                 <div class="p-3.5 bg-slate-50 rounded-xl border border-gray-200">
-                                    <span class="text-[10px] font-bold text-gray-400 uppercase block">STATUS</span>
+                                    <span class="text-[10px] font-bold text-gray-400 uppercase block">STATUS KEDATANGAN</span>
+                                    <template x-if="selectedPurchase.is_arrived">
+                                        <div class="mt-0.5">
+                                            <span class="text-[11px] font-bold text-emerald-700 block" x-text="selectedPurchase.arrival_time_label || 'Sudah Tiba'"></span>
+                                        </div>
+                                    </template>
+                                    <template x-if="!selectedPurchase.is_arrived">
+                                        <span class="inline-flex items-center gap-1 font-bold text-amber-600 text-[11px] mt-1">
+                                            <span class="material-symbols-rounded text-[14px]">hourglass_top</span>
+                                            <span>Belum Sampai</span>
+                                        </span>
+                                    </template>
+                                </div>
+                                <div class="p-3.5 bg-slate-50 rounded-xl border border-gray-200">
+                                    <span class="text-[10px] font-bold text-gray-400 uppercase block">STATUS TRANSAKSI</span>
                                     <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-bold border mt-1"
                                           :class="getStatusBadge(selectedPurchase.status).class"
                                           x-text="getStatusBadge(selectedPurchase.status).label"></span>
@@ -2203,12 +2472,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                             <path x-show="mChart.areaPath" :d="mChart.areaPath" fill="url(#priceAreaGrad)" />
                                             <polyline x-show="mChart.points.length > 1" :points="mChart.polyline" fill="none" stroke="#0052cc" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
 
-                                            <template x-for="(pt, i) in mChart.points" :key="i">
-                                                <g class="cursor-pointer" @mouseenter="hoveredModalPoint = pt" @mouseleave="hoveredModalPoint = null">
-                                                    <circle :cx="pt.x" :cy="pt.y" r="5" fill="#0052cc" stroke="#ffffff" stroke-width="2" />
-                                                    <text :x="pt.x" y="182" text-anchor="middle" class="fill-gray-400 text-[9px] font-mono" x-text="pt.short_date"></text>
-                                                </g>
-                                            </template>
+                                            <g x-html="mChart.pointsHtml"></g>
                                         </svg>
                                     </div>
                                 </template>
@@ -2300,6 +2564,90 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <button type="submit" :disabled="isSavingSupplier" class="px-5 py-2 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
                         <span x-show="isSavingSupplier" class="material-symbols-rounded text-[15px] animate-spin">progress_activity</span>
                         <span x-text="isSavingSupplier ? 'Menyimpan...' : 'Simpan Supplier'"></span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </template>
+
+    <!-- ========================================================= -->
+    <!-- MODAL: TAMBAH PRODUK BARU CEPAT (KE MASTER)              -->
+    <!-- ========================================================= -->
+    <template x-teleport="body">
+        <div x-show="showQuickProductModal"
+             x-transition.opacity
+             style="display: none;"
+             class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <form @submit.prevent="createQuickProduct()"
+                  @click.away="if (!isSavingQuickProduct) showQuickProductModal = false"
+                  class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-200 flex flex-col max-h-[90vh]">
+                <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-slate-50">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-lg bg-blue-100 text-[#0052cc] flex items-center justify-center">
+                            <span class="material-symbols-rounded text-[18px]">add_box</span>
+                        </div>
+                        <div>
+                            <h3 class="text-sm font-black text-gray-900">Tambah Produk Baru ke Master</h3>
+                            <p class="text-[11px] text-gray-500">Produk akan didaftarkan ke katalog master & ditambahkan ke pembelian</p>
+                        </div>
+                    </div>
+                    <button type="button" :disabled="isSavingQuickProduct" @click="showQuickProductModal = false" class="text-gray-400 hover:text-gray-600 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                        <span class="material-symbols-rounded text-[20px]">close</span>
+                    </button>
+                </div>
+                <div class="p-6 space-y-3.5 text-xs overflow-y-auto">
+                    <div>
+                        <label class="block font-bold text-gray-700 mb-1">Nama Produk <span class="text-rose-500">*</span></label>
+                        <input type="text" x-model="quickProduct.name" required placeholder="Contoh: Kopi Kapal Api Special 65g" class="w-full px-3.5 py-2 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc]">
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block font-bold text-gray-700 mb-1">Kategori <span class="text-rose-500">*</span></label>
+                            <select x-model="quickProduct.category" class="w-full px-3.5 py-2 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] bg-white">
+                                <option value="Kebutuhan Pokok">Kebutuhan Pokok</option>
+                                <option value="Minuman">Minuman</option>
+                                <option value="Snack">Snack</option>
+                                <option value="Pembersih">Pembersih</option>
+                                <option value="Makanan">Makanan</option>
+                                <option value="Obat & Kesehatan">Obat & Kesehatan</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block font-bold text-gray-700 mb-1">Satuan Beli / Dasar</label>
+                            <input type="text" x-model="quickProduct.unit" placeholder="Pcs / Pack / Dus" class="w-full px-3.5 py-2 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc]">
+                        </div>
+                    </div>
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="font-bold text-gray-700">Barcode / Kode Produk</label>
+                            <button type="button" @click="quickProduct.barcode = '899' + Math.floor(1000000000 + Math.random() * 9000000000)" class="text-[11px] text-[#0052cc] hover:underline font-bold">Acak Barcode</button>
+                        </div>
+                        <input type="text" x-model="quickProduct.barcode" placeholder="899..." class="w-full px-3.5 py-2 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] font-mono">
+                    </div>
+                    <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2.5">
+                        <div class="text-[11px] font-black text-slate-700 uppercase tracking-wider">Struktur Harga</div>
+                        <div class="grid grid-cols-3 gap-2.5">
+                            <div>
+                                <label class="block font-semibold text-gray-600 mb-1">Harga Beli (Modal)</label>
+                                <input type="number" min="0" x-model.number="quickProduct.cost_price" placeholder="0" class="w-full px-2.5 py-1.5 rounded-lg border border-gray-300 focus:outline-none focus:border-[#0052cc]">
+                            </div>
+                            <div>
+                                <label class="block font-semibold text-gray-600 mb-1">Harga Umum</label>
+                                <input type="number" min="0" x-model.number="quickProduct.price" placeholder="0" class="w-full px-2.5 py-1.5 rounded-lg border border-gray-300 focus:outline-none focus:border-[#0052cc]">
+                            </div>
+                            <div>
+                                <label class="block font-semibold text-gray-600 mb-1">Harga Member</label>
+                                <input type="number" min="0" x-model.number="quickProduct.member_price" placeholder="0" class="w-full px-2.5 py-1.5 rounded-lg border border-gray-300 focus:outline-none focus:border-[#0052cc]">
+                            </div>
+                        </div>
+                        <p class="text-[10px] text-gray-500">Harga beli di atas otomatis digunakan sebagai harga perolehan pada baris barang pembelian ini.</p>
+                    </div>
+                </div>
+                <div class="px-6 py-4 border-t border-gray-100 bg-slate-50 flex justify-end gap-2 shrink-0">
+                    <button type="button" :disabled="isSavingQuickProduct" @click="showQuickProductModal = false" class="px-4 py-2 rounded-xl border border-gray-300 text-gray-700 font-bold text-xs hover:bg-gray-100 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">Batal</button>
+                    <button type="submit" :disabled="isSavingQuickProduct" class="px-5 py-2 rounded-xl bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed shadow-xs">
+                        <span x-show="isSavingQuickProduct" class="material-symbols-rounded text-[15px] animate-spin">progress_activity</span>
+                        <span x-text="isSavingQuickProduct ? 'Menyimpan...' : 'Simpan & Tambah ke Pesanan'"></span>
                     </button>
                 </div>
             </form>

@@ -29,8 +29,28 @@ class ConsolidatedReportController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $startDate = $request->query('start_date', Carbon::now()->startOfMonth()->toDateString());
-        $endDate = $request->query('end_date', Carbon::now()->toDateString());
+        $today = Carbon::today();
+        $period = $request->query('period', '');
+
+        if ($period === 'daily' || $period === 'harian') {
+            $startDate = $request->query('date', $today->toDateString());
+            $endDate = $startDate;
+        } elseif ($period === 'monthly' || $period === 'bulanan') {
+            $month = $request->query('month', $today->format('Y-m'));
+            $startDate = Carbon::parse($month . '-01')->startOfMonth()->toDateString();
+            $endDate = Carbon::parse($month . '-01')->endOfMonth()->toDateString();
+        } elseif ($period === 'yearly' || $period === 'tahunan') {
+            $year = $request->query('year', $today->format('Y'));
+            $startDate = Carbon::parse($year . '-01-01')->startOfYear()->toDateString();
+            $endDate = Carbon::parse($year . '-12-31')->endOfYear()->toDateString();
+        } elseif ($request->filled('start_date') && $request->filled('end_date')) {
+            $startDate = $request->query('start_date');
+            $endDate = $request->query('end_date');
+        } else {
+            $startDate = $request->query('start_date', Carbon::now()->startOfMonth()->toDateString());
+            $endDate = $request->query('end_date', Carbon::now()->toDateString());
+        }
+
         $branchFilter = $request->query('branch', 'all');
         $locationIdFilter = $request->integer('location_id') ?: null;
 

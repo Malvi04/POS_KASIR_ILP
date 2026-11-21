@@ -41,11 +41,7 @@ Route::get('/login', function () {
 
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login')->name('login');
 Route::match(['get', 'post'], '/logout', function (\Illuminate\Http\Request $request) {
-    Auth::logout();
-    if ($request->hasSession()) {
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
-    }
+    AuthController::performLogout($request);
     if ($request->expectsJson() || $request->is('api/*')) {
         return response()->json([
             'success' => true,
@@ -179,6 +175,9 @@ Route::middleware(['auth.web:manager'])->group(function () {
 
     Route::get('/manager/products/export', [App\Http\Controllers\Api\Manager\ProductImportExportController::class, 'export'])->name('manager.products.export');
     Route::get('/manager/products/template', [App\Http\Controllers\Api\Manager\ProductImportExportController::class, 'downloadTemplate'])->name('manager.products.template');
+
+    Route::get('/manager/members/export', [App\Http\Controllers\Api\Manager\MemberImportExportController::class, 'export'])->name('manager.members.export');
+    Route::get('/manager/members/template', [App\Http\Controllers\Api\Manager\MemberImportExportController::class, 'downloadTemplate'])->name('manager.members.template');
 
     Route::get('/manager/kirim-barang', function () {
         return view('manager.kirim-barang', [
@@ -379,6 +378,16 @@ Route::middleware(['auth.web:kasir'])->group(function () {
     });
     Route::get('/cashier-inventory', function () {
         return view('kasir.inventory');
+    });
+
+    Route::get('/kasir/produk/umkm', function () {
+        return view('kasir.umkm-products');
+    })->name('cashier.umkm-products');
+    Route::get('/kasir/umkm', function () {
+        return view('kasir.umkm-products');
+    });
+    Route::get('/cashier-umkm', function () {
+        return view('kasir.umkm-products');
     });
 
     // 4. Retur Barang Submenu

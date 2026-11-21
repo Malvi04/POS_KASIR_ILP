@@ -19,33 +19,51 @@ use Illuminate\Support\Facades\DB;
 class AccountingReportController extends Controller
 {
     /**
+     * Helper to resolve Date Range based on period (daily/harian, weekly/mingguan, monthly/bulanan, yearly/tahunan, custom).
+     */
+    protected function resolveReportDateRange(Request $request): array
+    {
+        $period = $request->query('period', '');
+        $today = Carbon::today();
+
+        if ($period === 'daily' || $period === 'harian') {
+            $startDate = $request->query('date', $today->toDateString());
+            $endDate = $startDate;
+        } elseif ($period === 'weekly' || $period === 'mingguan') {
+            $startDate = $request->query('start_date', $today->copy()->startOfWeek()->toDateString());
+            $endDate = $request->query('end_date', $today->copy()->endOfWeek()->toDateString());
+        } elseif ($period === 'monthly' || $period === 'bulanan') {
+            $month = $request->query('month', $today->format('Y-m'));
+            $startDate = Carbon::parse($month . '-01')->startOfMonth()->toDateString();
+            $endDate = Carbon::parse($month . '-01')->endOfMonth()->toDateString();
+        } elseif ($period === 'yearly' || $period === 'tahunan') {
+            $year = $request->query('year', $today->format('Y'));
+            $startDate = Carbon::parse($year . '-01-01')->startOfYear()->toDateString();
+            $endDate = Carbon::parse($year . '-12-31')->endOfYear()->toDateString();
+        } elseif ($request->filled('start_date') && $request->filled('end_date')) {
+            $startDate = $request->query('start_date');
+            $endDate = $request->query('end_date');
+        } else {
+            $startDate = $request->query('start_date', $today->copy()->startOfMonth()->toDateString());
+            $endDate = $request->query('end_date', $today->toDateString());
+        }
+
+        return [$startDate, $endDate];
+    }
+
+    /**
      * 1. Laporan Penjualan (Sales Report):
-     * Per-shift kasir, Per-cabang, dan Konsolidasi 3 Cabang (Harian, Mingguan, Bulanan).
+     * Per-shift kasir, Per-cabang, dan Konsolidasi 3 Cabang (Harian, Mingguan, Bulanan, Tahunan).
      */
     public function sales(Request $request): JsonResponse
     {
-        $period = $request->query('period', 'monthly'); // daily, weekly, monthly, custom
+        $period = $request->query('period', 'monthly'); // daily, weekly, monthly, yearly, custom
         $branch = $request->query('branch', 'all');
         $locationIdFilter = $request->integer('location_id') ?: null;
         $shiftId = $request->query('shift_id');
         $cashierNik = $request->query('cashier_nik');
 
-        // Resolve Date Range based on period
-        $today = Carbon::today();
-        if ($period === 'daily') {
-            $startDate = $request->query('date', $today->toDateString());
-            $endDate = $startDate;
-        } elseif ($period === 'weekly') {
-            $startDate = $request->query('start_date', $today->copy()->startOfWeek()->toDateString());
-            $endDate = $request->query('end_date', $today->copy()->endOfWeek()->toDateString());
-        } elseif ($period === 'monthly') {
-            $month = $request->query('month', $today->format('Y-m'));
-            $startDate = Carbon::parse($month . '-01')->startOfMonth()->toDateString();
-            $endDate = Carbon::parse($month . '-01')->endOfMonth()->toDateString();
-        } else { // custom
-            $startDate = $request->query('start_date', $today->copy()->startOfMonth()->toDateString());
-            $endDate = $request->query('end_date', $today->toDateString());
-        }
+        [$startDate, $endDate] = $this->resolveReportDateRange($request);
 
         // Build Base Query (never filter branch using terminal_code LIKE heuristic)
         $query = Transaction::query()
@@ -199,8 +217,7 @@ class AccountingReportController extends Controller
      */
     public function profitLoss(Request $request): JsonResponse
     {
-        $startDate = $request->query('start_date', Carbon::now()->startOfMonth()->toDateString());
-        $endDate = $request->query('end_date', Carbon::now()->toDateString());
+        [$startDate, $endDate] = $this->resolveReportDateRange($request);
         $branch = $request->query('branch', 'all');
         $locationIdFilter = $request->integer('location_id') ?: null;
 
@@ -302,8 +319,7 @@ class AccountingReportController extends Controller
      */
     public function fastMoving(Request $request): JsonResponse
     {
-        $startDate = $request->query('start_date', Carbon::now()->startOfMonth()->toDateString());
-        $endDate = $request->query('end_date', Carbon::now()->toDateString());
+        [$startDate, $endDate] = $this->resolveReportDateRange($request);
         $limit = $request->integer('limit', 10);
         $sortBy = $request->query('sort_by', 'qty'); // qty or revenue
 
@@ -391,8 +407,7 @@ class AccountingReportController extends Controller
      */
     public function cashReconciliation(Request $request): JsonResponse
     {
-        $startDate = $request->query('start_date', Carbon::now()->startOfMonth()->toDateString());
-        $endDate = $request->query('end_date', Carbon::now()->toDateString());
+        [$startDate, $endDate] = $this->resolveReportDateRange($request);
         $terminal = $request->query('terminal_code');
         $status = $request->query('status'); // SESUAI, LEBIH, KURANG
         $perPage = $request->integer('per_page', 20);

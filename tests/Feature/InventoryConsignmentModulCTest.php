@@ -269,4 +269,145 @@ class InventoryConsignmentModulCTest extends TestCase
         $this->assertTrue(str_contains($response->headers->get('content-type'), 'spreadsheetml.sheet'));
         $this->assertTrue(str_contains($response->headers->get('content-disposition'), '.xlsx'));
     }
+
+    /**
+     * Test full end-to-end UMKM workflow:
+     * Manager adds UMKM Partner -> Adds UMKM Product (buy & sell price) -> Sends stock to Branch ->
+     * Cashier loads UMKM products -> Cashier completes POS transaction with UMKM product.
+     */
+    public function test_umkm_product_creation_branch_transfer_cashier_load_and_pos_checkout(): void
+    {
+        // 1. Manager creates Mitra UMKM
+        $partnerRes = $this->postJson('/api/consignment/partners', [
+            'name' => 'UMKM Keripik Singkong Nusantara',
+            'owner_name' => 'Ibu Sari',
+            'phone' => '0813-7788-9900',
+            'category' => 'Makanan Ringan',
+            'commission_percent' => 15.0,
+            'settlement_period' => 'MINGGUAN',
+            'bank_name' => 'BRI',
+            'bank_account' => '9988-7766-55',
+        ]);
+        $partnerRes->assertStatus(201);
+        $partnerId = $partnerRes->json('data.id');
+
+        // 2. Manager adds UMKM Product (bought at 12,750, sold at 15,000, initial stock 40 in Gudang Pusat)
+        $prodRes = $this->postJson('/api/consignment/products', [
+            'supplier_id' => $partnerId,
+            'name' => 'Keripik Singkong Balado 200g',
+            'sku' => 'UMKM-KSB-200',
+            'barcode' => '8997766554433',
+            'category' => 'Makanan Ringan',
+            'unit' => 'Bungkus',
+            'cost_price' => 12750,
+            'price' => 15000,
+            'member_price' => 14500,
+            'commission_percent' => 15.0,
+            'stock' => 40,
+            'min_stock' => 5,
+            'target_location' => 'GUDANG_PUSAT',
+        ]);
+        $prodRes->assertStatus(201)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.warehouse_stock', 40)
+            ->assertJsonPath('data.branch_stock_total', 0)
+            ->assertJsonPath('data.allocated_branches', []);
+        $productId = $prodRes->json('data.id');
+
+        // 2b. Verify product that has NOT been sent to any branch does NOT exist in Toko Pusat or Cabang A
+        $beforeSendPusat = $this->getJson('/api/pos/products/umkm?branch=Toko+Pusat&terminal_code=POS-01');
+        $beforeSendPusat->assertStatus(200);
+        $this->assertNull(collect($beforeSendPusat->json('data'))->firstWhere('id', $productId));
+
+        $beforeLoadPusat = $this->postJson('/api/pos/products/umkm/load', [
+            'branch' => 'Toko Pusat',
+            'terminal_code' => 'POS-01',
+        ]);
+        $beforeLoadPusat->assertStatus(200);
+        $this->assertNull(collect($beforeLoadPusat->json('data'))->firstWhere('id', $productId));
+
+        // 3. Manager sends 15 Bungkus to Toko Pusat (CAB-001)
+        $sendRes = $this->postJson('/api/consignment/send-stock', [
+            'destination_store' => 'Toko Pusat',
+            'source_mode' => 'WAREHOUSE',
+            'delivery_mode' => 'DIRECT_ACTIVE',
+            'driver_name' => 'Kurir UMKM',
+            'plate_number' => 'BE 9988 XX',
+            'items' => [
+                [
+                    'product_id' => $productId,
+                    'qty_sent' => 15,
+                ],
+            ],
+        ]);
+        $sendRes->assertStatus(201)
+            ->assertJsonPath('success', true);
+
+        // Verify warehouse stock is now 25 and branch stock is 15 (only in CAB-001 Toko Pusat, NOT in Cabang A or Cabang B)
+        $listRes = $this->getJson("/api/consignment/products?supplier_id={$partnerId}");
+        $listRes->assertStatus(200);
+        $prodData = collect($listRes->json('data'))->firstWhere('id', $productId);
+        $this->assertEquals(25, $prodData['warehouse_stock']);
+        $this->assertEquals(15, $prodData['branch_stock_total']);
+        $this->assertCount(1, $prodData['allocated_branches']);
+
+        // Verify Cabang A (where the product was NOT sent) still does NOT have this product
+        $cabangAUmkm = $this->getJson('/api/pos/products/umkm?branch=Cabang+A&terminal_code=POS-06');
+        $cabangAUmkm->assertStatus(200);
+        $this->assertNull(collect($cabangAUmkm->json('data'))->firstWhere('id', $productId));
+
+        // 4. Cashier loads UMKM products at Toko Pusat (POS-01)
+        $loadRes = $this->postJson('/api/pos/products/umkm/load', [
+            'branch' => 'Toko Pusat',
+            'terminal_code' => 'POS-01',
+        ]);
+        $loadRes->assertStatus(200)
+            ->assertJsonPath('success', true);
+        $loadedItem = collect($loadRes->json('data'))->firstWhere('id', $productId);
+        $this->assertNotNull($loadedItem);
+        $this->assertEquals(15, $loadedItem['branch_stock_qty']);
+        $this->assertTrue($loadedItem['can_transact']);
+
+        // 5. Cashier executes POS Checkout with 3 Bungkus of the UMKM product
+        $cashier = User::where('role', 'like', '%Kasir%')->first();
+        $shift = CashierShift::create([
+            'shift_code' => 'SFT-UMKM-' . time(),
+            'terminal_code' => 'POS-01',
+            'branch' => 'Toko Pusat',
+            'cashier_nik' => $cashier->nik,
+            'cashier_name' => $cashier->name,
+            'opening_cash' => 200000,
+            'status' => 'OPEN',
+            'opened_at' => now(),
+        ]);
+
+        $checkoutRes = $this->postJson('/api/pos/checkout', [
+            'shift_id' => $shift->id,
+            'terminal_code' => 'POS-01',
+            'branch' => 'Toko Pusat',
+            'cashier_nik' => $cashier->nik,
+            'cashier_name' => $cashier->name,
+            'payment_method' => 'TUNAI',
+            'cash_received' => 100000,
+            'items' => [
+                [
+                    'sku' => 'UMKM-KSB-200',
+                    'barcode' => '8997766554433',
+                    'name' => 'Keripik Singkong Balado 200g',
+                    'qty' => 3,
+                    'unit' => 'Bungkus',
+                    'price' => 15000,
+                    'is_member' => false,
+                ],
+            ],
+        ]);
+        $checkoutRes->assertStatus(201)
+            ->assertJsonPath('success', true);
+
+        // Verify branch stock decreased from 15 to 12
+        $afterCheckRes = $this->getJson('/api/pos/products/umkm?branch=Toko+Pusat&terminal_code=POS-01');
+        $afterCheckRes->assertStatus(200);
+        $afterItem = collect($afterCheckRes->json('data'))->firstWhere('id', $productId);
+        $this->assertEquals(12, $afterItem['branch_stock_qty']);
+    }
 }

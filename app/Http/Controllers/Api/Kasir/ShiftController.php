@@ -81,6 +81,35 @@ class ShiftController extends Controller
             ->orderBy('id', 'desc')
             ->get();
 
+        // Cari terminal yang shift terakhirnya ditutup dengan SERAH TERIMA dan belum dibuka shift baru
+        $openTerminalCodes = $shifts->pluck('terminal_code')->toArray();
+        $latestShiftIds = CashierShift::selectRaw('MAX(id) as max_id')
+            ->groupBy('terminal_code')
+            ->pluck('max_id');
+
+        $latestShifts = CashierShift::whereIn('id', $latestShiftIds)->get();
+
+        $handovers = [];
+        foreach ($latestShifts as $ls) {
+            $isHandover = str_contains($ls->closing_notes ?? '', '[SERAH TERIMA]');
+            if ($ls->status === 'CLOSED' && $isHandover && !in_array($ls->terminal_code, $openTerminalCodes)) {
+                $handovers[] = [
+                    'terminal_code' => $ls->terminal_code,
+                    'terminalId' => $ls->terminal_code,
+                    'shift_code' => $ls->shift_code,
+                    'from_cashier_name' => $ls->cashier_name,
+                    'from_cashier_nik' => $ls->cashier_nik,
+                    'actual_cash' => (float) ($ls->actual_cash ?? 0),
+                    'expected_cash' => (float) ($ls->expected_cash ?? 0),
+                    'variance' => (float) ($ls->variance ?? 0),
+                    'variance_status' => $ls->variance_status ?? ($ls->variance == 0 ? 'SESUAI' : ($ls->variance > 0 ? 'LEBIH' : 'KURANG')),
+                    'closing_notes' => $ls->closing_notes,
+                    'ended_at' => $ls->closed_at ? $ls->closed_at->format('H:i') : '-',
+                    'closed_at' => $ls->closed_at ? $ls->closed_at->toIso8601String() : null,
+                ];
+            }
+        }
+
         return response()->json([
             'success' => true,
             'count' => $shifts->count(),
@@ -89,6 +118,7 @@ class ShiftController extends Controller
                     'id' => $s->id,
                     'shift_code' => $s->shift_code,
                     'terminal_code' => $s->terminal_code,
+                    'terminalId' => $s->terminal_code,
                     'location_id' => $s->location_id,
                     'branch' => $s->branch,
                     'cashier_name' => $s->cashier_name,
@@ -103,6 +133,7 @@ class ShiftController extends Controller
                     'status' => $s->status,
                 ];
             }),
+            'handovers' => $handovers,
         ]);
     }
 
@@ -286,19 +317,57 @@ class ShiftController extends Controller
     {
         $validated = $request->validate([
             'shift_id' => 'nullable|integer|exists:cashier_shifts,id',
+            'shift_code' => 'nullable|string',
             'terminal_code' => 'nullable|string',
             'actual_cash' => 'required|numeric|min:0', // Uang fisik di laci
             'closing_notes' => 'nullable|string|max:500',
+            'handover_type' => 'nullable|string|max:50',
         ]);
 
-        $query = CashierShift::where('status', 'OPEN');
-        if (!empty($validated['shift_id'])) {
-            $query->where('id', $validated['shift_id']);
-        } elseif (!empty($validated['terminal_code'])) {
-            $query->where('terminal_code', $validated['terminal_code']);
+        $shift = null;
+        if (!empty($validated['shift_code'])) {
+            $shift = CashierShift::where('shift_code', $validated['shift_code'])->where('status', 'OPEN')->first();
+        }
+        if (!$shift && !empty($validated['shift_id'])) {
+            $shift = CashierShift::where('id', $validated['shift_id'])->where('status', 'OPEN')->first();
+        }
+        if (!$shift && !empty($validated['terminal_code'])) {
+            preg_match('/(POS-\d+|TERM-\d+)/i', $validated['terminal_code'], $m);
+            $cleanCode = !empty($m[1]) ? strtoupper($m[1]) : trim($validated['terminal_code']);
+            $shift = CashierShift::where('status', 'OPEN')
+                ->where(function ($q) use ($cleanCode, $validated) {
+                    $q->where('terminal_code', $cleanCode)
+                      ->orWhere('terminal_code', $validated['terminal_code'])
+                      ->orWhere('terminal_code', 'like', $cleanCode . '%');
+                })
+                ->latest('id')
+                ->first();
+        }
+        if (!$shift && Auth::check()) {
+            $shift = CashierShift::where('status', 'OPEN')->where('user_id', Auth::id())->latest('id')->first();
+        }
+        if (!$shift) {
+            $shift = CashierShift::where('status', 'OPEN')->latest('id')->first();
         }
 
-        $shift = $query->latest('id')->first();
+        if (!$shift && !empty($validated['shift_code'])) {
+            $alreadyClosed = CashierShift::where('shift_code', $validated['shift_code'])->latest('id')->first();
+            if ($alreadyClosed) {
+                return response()->json([
+                    'success' => true,
+                    'message' => "Sesi {$alreadyClosed->shift_code} sudah ditutup sebelumnya.",
+                    'data' => [
+                        'shift_code' => $alreadyClosed->shift_code,
+                        'terminal_code' => $alreadyClosed->terminal_code,
+                        'cashier_name' => $alreadyClosed->cashier_name,
+                        'opened_at' => $alreadyClosed->opened_at?->toIso8601String(),
+                        'closed_at' => $alreadyClosed->closed_at?->toIso8601String(),
+                        'actual_cash' => (float) $alreadyClosed->actual_cash,
+                        'closing_notes' => $alreadyClosed->closing_notes,
+                    ],
+                ]);
+            }
+        }
 
         if (!$shift) {
             return response()->json([
@@ -319,7 +388,12 @@ class ShiftController extends Controller
             }
         }
 
-        $shift->closeShift((float) $validated['actual_cash'], $validated['closing_notes'] ?? null);
+        $closingNotes = $validated['closing_notes'] ?? null;
+        if (($request->input('handover_type') === 'handover' || str_contains($closingNotes ?? '', '[SERAH TERIMA]')) && !str_contains($closingNotes ?? '', '[SERAH TERIMA]')) {
+            $closingNotes = '[SERAH TERIMA] ' . ($closingNotes ?: 'Serah terima ke kasir berikutnya');
+        }
+
+        $shift->closeShift((float) $validated['actual_cash'], $closingNotes);
 
         // Update Jam Keluar Absensi Karyawan di PostgreSQL
         try {
@@ -504,7 +578,7 @@ class ShiftController extends Controller
     {
         $terminal = $request->query('terminal_code');
         $cashierNik = $request->query('cashier_nik');
-        $limit = max(5, min(100, (int) $request->query('limit', 20)));
+        $limit = max(5, min(100, (int) $request->query('limit', 50)));
 
         $query = CashierShift::with('location')->orderBy('id', 'desc');
         if ($terminal) {
@@ -520,15 +594,22 @@ class ShiftController extends Controller
             'success' => true,
             'count' => $shifts->count(),
             'data' => $shifts->map(function ($s) {
+                $isHandover = str_contains($s->closing_notes ?? '', '[SERAH TERIMA]');
+                $variance = (float) ($s->variance ?? 0);
+                $varianceStatus = $s->variance_status ?? ($variance == 0 ? 'SESUAI' : ($variance > 0 ? 'LEBIH' : 'KURANG'));
+
                 return [
                     'id' => $s->id,
                     'shift_code' => $s->shift_code,
                     'sessionId' => $s->shift_code,
                     'terminal_code' => $s->terminal_code,
+                    'terminalId' => $s->terminal_code,
+                    'terminal_id' => $s->terminal_code,
                     'terminalLabel' => $s->terminal_code,
                     'location_id' => $s->location_id,
                     'branch' => $s->location?->name ?? $s->branch ?? 'Toko Pusat',
                     'cashier_name' => $s->cashier_name,
+                    'cashierName' => $s->cashier_name,
                     'cashier_nik' => $s->cashier_nik,
                     'cashierId' => $s->cashier_nik,
                     'opening_cash' => (float) $s->opening_cash,
@@ -544,15 +625,22 @@ class ShiftController extends Controller
                     'expectedClosingCash' => (float) ($s->expected_cash ?? $s->calculateExpectedCash()),
                     'actual_cash' => (float) ($s->actual_cash ?? 0),
                     'actualClosingCash' => (float) ($s->actual_cash ?? 0),
-                    'variance' => (float) ($s->variance ?? 0),
-                    'cashVariance' => (float) ($s->variance ?? 0),
-                    'variance_status' => $s->variance_status,
+                    'variance' => $variance,
+                    'cashVariance' => $variance,
+                    'variance_status' => $varianceStatus,
+                    'varianceStatus' => $varianceStatus,
                     'closing_notes' => $s->closing_notes,
+                    'closeNote' => $s->closing_notes,
+                    'is_handover' => $isHandover,
+                    'isHandover' => $isHandover,
+                    'handover_type' => $isHandover ? 'handover' : 'close_only',
+                    'handoverType' => $isHandover ? 'handover' : 'none',
                     'status' => $s->status,
                     'startedAt' => $s->opened_at ? $s->opened_at->format('H:i') : '-',
                     'endedAt' => $s->closed_at ? $s->closed_at->format('H:i') : '-',
                     'opened_at' => $s->opened_at ? $s->opened_at->toIso8601String() : null,
                     'closed_at' => $s->closed_at ? $s->closed_at->toIso8601String() : null,
+                    'created_at' => $s->created_at ? $s->created_at->toIso8601String() : null,
                 ];
             }),
         ]);

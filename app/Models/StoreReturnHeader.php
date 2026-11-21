@@ -11,8 +11,11 @@ class StoreReturnHeader extends Model
     protected $fillable = [
         'return_number',
         'from_location_id',
+        'branch',
         'to_location_id',
         'created_by',
+        'cashier_username',
+        'terminal_code',
         'returned_at',
         'status',
         'direction',

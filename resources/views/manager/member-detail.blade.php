@@ -226,23 +226,25 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
     <main class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
         
         <!-- Top Header -->
-        <header class="h-[72px] bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
+        <header class="h-20 bg-[#f8f9fa] border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
             <div class="flex items-center gap-3">
-                <a href="{{ url('/members') }}" class="p-2 rounded-lg text-gray-400 hover:text-gray-800 hover:bg-gray-100 transition-colors">
-                    <span class="material-symbols-rounded">arrow_back</span>
+                <a href="{{ url('/members') }}" class="p-2 rounded-xl hover:bg-gray-200 text-gray-500 transition-colors cursor-pointer" title="Kembali ke Database">
+                    <span class="material-symbols-rounded text-[20px]">arrow_back</span>
                 </a>
-                <div>
-                    <h1 class="text-[18px] font-black text-gray-900 tracking-tight">Detail Profil Karyawan &amp; Kasbon</h1>
-                    <p class="text-xs text-gray-400">Master Data Koperasi Multi-Cabang PT Indo Lampung Perkasa</p>
-                </div>
+                <h1 class="text-[20px] font-bold text-gray-900">Detail Anggota</h1>
+                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200 flex items-center gap-1.5">
+                    <span class="material-symbols-rounded text-[14px]">badge</span>
+                    <span>Profil &amp; Kasbon</span>
+                </span>
             </div>
 
             <div class="flex items-center gap-4 text-gray-500">
                 <x-notification-bell role="MANAGER" />
+                <button type="button" @click="window.PosRealtime?.syncNow?.(); initDetail();" class="hover:text-gray-900 transition-colors cursor-pointer" title="Sinkronkan Data">
+                    <span class="material-symbols-rounded text-[24px]" :class="$store.network?.isChecking ? 'animate-spin text-[#0052cc]' : ''">autorenew</span>
+                </button>
+                <div class="h-6 w-px bg-gray-300"></div>
                 <x-realtime-network-badge />
-                <a href="{{ url('/members') }}" class="px-4 py-2 border border-gray-300 rounded-xl text-xs font-bold text-gray-700 hover:bg-gray-50">
-                    Kembali ke Database
-                </a>
             </div>
         </header>
 

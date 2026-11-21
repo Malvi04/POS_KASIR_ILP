@@ -7,6 +7,8 @@
     ...cashierOpeningData(),
     activeTab: 'all', // all | barang_masuk | retur_keluar | retur_masuk | stock_opname
     searchQuery: '',
+    filterMineOnly: false,
+    periodFilter: 'all', // all | today | week | month | year
 
     operationalLogs: [],
 
@@ -33,7 +35,8 @@
                             bastNo: d.status !== 'MENUNGGU_VERIFIKASI' ? d.docNo : '-',
                             details: (d.warehouseOrigin || 'Gudang') + ' → ' + (d.destinationStore || 'Toko') + ' (' + (Array.isArray(d.items) ? d.items.length : 0) + ' SKU)',
                             date: d.date || '-',
-                            operator: d.receiverName || d.driverName || '-',
+                            createdTimestamp: d.createdAt ? new Date(d.createdAt).getTime() : Date.now(),
+                            operator: d.receiverName || d.senderName || d.driverName || '-',
                             status: d.status || 'MENUNGGU_VERIFIKASI'
                         });
                     });
@@ -55,7 +58,8 @@
                             bastNo: '-',
                             details: r.conditionDesc || r.conditionLabel || 'Dokumen retur toko',
                             date: r.date || '-',
-                            operator: r.driver || '-',
+                            createdTimestamp: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+                            operator: r.submitted_by || r.driver || (isInbound ? r.receiverName : '-') || '-',
                             status: r.statusLabel || r.statusKey || '-'
                         });
                     });
@@ -76,7 +80,8 @@
                             bastNo: '-',
                             details: (s.title || 'Audit Stock Opname') + (s.notes ? ' — ' + s.notes : ''),
                             date: s.created_at ? new Date(s.created_at).toLocaleString('id-ID') : '-',
-                            operator: s.conducted_by || '-',
+                            createdTimestamp: s.created_at ? new Date(s.created_at).getTime() : Date.now(),
+                            operator: s.conducted_by || (this.activeOperator?.name || this.activeSession?.cashierName || '-'),
                             status: s.status || 'DRAFT'
                         });
                     });
@@ -88,9 +93,40 @@
         this.operationalLogs = logs;
     },
 
+    get currentCashierName() {
+        return (this.activeOperator ? this.activeOperator.name : (this.activeSession?.cashierName || localStorage.getItem('pos_user_name') || '')).toLowerCase();
+    },
+
+    get currentCashierNik() {
+        return (this.activeOperator ? this.activeOperator.nik : (this.activeSession?.cashierNik || localStorage.getItem('pos_portal_logged_in_nik') || '')).toLowerCase();
+    },
+
     get filteredLogs() {
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+        const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay()).getTime();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+        const startOfYear = new Date(now.getFullYear(), 0, 1).getTime();
+
         return this.operationalLogs.filter(log => {
             if (this.activeTab !== 'all' && log.type !== this.activeTab) return false;
+
+            // Period filter
+            if (this.periodFilter !== 'all' && log.createdTimestamp) {
+                if (this.periodFilter === 'today' && log.createdTimestamp < startOfToday) return false;
+                if (this.periodFilter === 'week' && log.createdTimestamp < startOfWeek) return false;
+                if (this.periodFilter === 'month' && log.createdTimestamp < startOfMonth) return false;
+                if (this.periodFilter === 'year' && log.createdTimestamp < startOfYear) return false;
+            }
+
+            // Filter kasir itu sendiri jika filterMineOnly aktif
+            if (this.filterMineOnly && (this.currentCashierName || this.currentCashierNik)) {
+                const op = (log.operator || '').toLowerCase();
+                const matchName = this.currentCashierName && op.includes(this.currentCashierName);
+                const matchNik = this.currentCashierNik && op.includes(this.currentCashierNik);
+                if (!matchName && !matchNik && op !== '-') return false;
+            }
+
             if (this.searchQuery) {
                 const q = this.searchQuery.toLowerCase();
                 return (log.refNo || '').toLowerCase().includes(q) ||
@@ -178,8 +214,8 @@ class="flex flex-col h-screen w-full font-sans">
                 </div>
 
                 <!-- Tabs & Search -->
-                <div class="bg-white rounded-t-xl p-5 border border-gray-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4 border-b-0">
-                    <div class="flex items-center gap-1.5 bg-gray-100 p-1 rounded-xl w-full sm:w-auto overflow-x-auto">
+                <div class="bg-white rounded-t-xl p-5 border border-gray-200 shadow-xs flex flex-col md:flex-row items-center justify-between gap-4 border-b-0">
+                    <div class="flex items-center gap-1.5 bg-gray-100 p-1 rounded-xl w-full md:w-auto overflow-x-auto">
                         <button type="button"
                                 @click="activeTab = 'all'"
                                 :class="activeTab === 'all' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
@@ -212,12 +248,33 @@ class="flex flex-col h-screen w-full font-sans">
                         </button>
                     </div>
 
-                    <div class="relative w-full sm:w-64">
-                        <span class="material-symbols-rounded absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-[18px]">search</span>
-                        <input type="text"
-                               x-model="searchQuery"
-                               placeholder="Cari no referensi, petugas..."
-                               class="w-full pl-9 pr-3.5 py-1.5 bg-slate-50 border border-gray-200 rounded-lg text-xs font-medium text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#0052cc] focus:bg-white transition-colors" />
+                    <div class="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+                        <!-- Toggle Aktivitas Saya -->
+                        <button type="button"
+                                @click="filterMineOnly = !filterMineOnly"
+                                :class="filterMineOnly ? 'bg-blue-50 text-[#0052cc] border-[#0052cc]' : 'bg-white text-gray-600 border-gray-200'"
+                                class="px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer">
+                            <span class="material-symbols-rounded text-[16px]">account_circle</span>
+                            <span x-text="filterMineOnly ? 'Aktivitas Saya (Aktif)' : 'Semua Petugas'"></span>
+                        </button>
+
+                        <!-- Filter Periode: Harian, Mingguan, Bulanan, Tahunan -->
+                        <select x-model="periodFilter"
+                                class="bg-slate-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-gray-700 font-bold focus:outline-none focus:border-[#0052cc] cursor-pointer">
+                            <option value="all">Semua Periode</option>
+                            <option value="today">Harian (Hari Ini)</option>
+                            <option value="week">Mingguan (Minggu Ini)</option>
+                            <option value="month">Bulanan (Bulan Ini)</option>
+                            <option value="year">Tahunan (Tahun Ini)</option>
+                        </select>
+
+                        <div class="relative flex-1 sm:w-48">
+                            <span class="material-symbols-rounded absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-[18px]">search</span>
+                            <input type="text"
+                                   x-model="searchQuery"
+                                   placeholder="Cari referensi/petugas..."
+                                   class="w-full pl-9 pr-3.5 py-1.5 bg-slate-50 border border-gray-200 rounded-lg text-xs font-medium text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#0052cc] focus:bg-white transition-colors" />
+                        </div>
                     </div>
                 </div>
 

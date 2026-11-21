@@ -178,16 +178,32 @@
             if (res.ok) {
                 const json = await res.json();
                 if (json.success) {
-                    this.users = json.data.map(u => ({
-                        ...u,
-                        status: u.is_active ? 'AKTIF' : 'NONAKTIF',
-                        assignedBranches: [
-                            { branch: u.branch || 'Pusat', status: u.is_active ? 'AKTIF' : 'NONAKTIF', assignedAt: 'Hari ini' }
-                        ]
-                    }));
+                    this.users = json.data.map(u => {
+                        let assigned = [];
+                        if (Array.isArray(u.assigned_branches) && u.assigned_branches.length > 0) {
+                            assigned = u.assigned_branches;
+                        } else if (Array.isArray(u.assignedBranches) && u.assignedBranches.length > 0) {
+                            assigned = u.assignedBranches;
+                        } else if (u.branch) {
+                            const parts = String(u.branch).split(',').map(s => s.trim()).filter(Boolean);
+                            assigned = parts.map(p => ({
+                                branch: p,
+                                status: u.is_active ? 'AKTIF' : 'NONAKTIF',
+                                assignedAt: u.created_at || 'Hari ini'
+                            }));
+                        } else {
+                            assigned = [{ branch: 'Pusat', status: u.is_active ? 'AKTIF' : 'NONAKTIF', assignedAt: 'Hari ini' }];
+                        }
+                        return {
+                            ...u,
+                            status: u.is_active ? 'AKTIF' : 'NONAKTIF',
+                            assignedBranches: assigned
+                        };
+                    });
                     if (json.summary) {
                         this.userSummary = json.summary;
                     }
+                    this.saveUsers();
                 }
             }
         } catch (e) {
@@ -223,7 +239,11 @@
     },
 
     saveUsers() {
-        // Data akun tersimpan di backend database PostgreSQL
+        try {
+            if (Array.isArray(this.users)) {
+                localStorage.setItem('pos_ilp_users_v1', JSON.stringify(this.users));
+            }
+        } catch(e) {}
     },
 
     saveLogs() {
@@ -545,7 +565,7 @@
     openManageAssignments(user) {
         this.managingUser = JSON.parse(JSON.stringify(user));
         // Cari opsi cabang yang belum dimiliki oleh kasir ini
-        const currentBranches = this.managingUser.assignedBranches.map(b => b.branch);
+        const currentBranches = (this.managingUser.assignedBranches || []).map(b => b.branch);
         const allBranches = ['Pusat', 'Cabang A', 'Cabang B'];
         const remaining = allBranches.filter(b => !currentBranches.includes(b));
         this.modalNewBranch = remaining.length > 0 ? remaining[0] : 'Cabang A';
@@ -553,19 +573,22 @@
     },
 
     // Toggle status penugasan cabang (Aktif / Nonaktif)
-    toggleBranchAssignment(branchName) {
+    async toggleBranchAssignment(branchName) {
         if (!this.managingUser) return;
         const assignment = this.managingUser.assignedBranches.find(b => b.branch === branchName);
         if (assignment) {
             assignment.status = assignment.status === 'AKTIF' ? 'NONAKTIF' : 'AKTIF';
-            this.syncManagingUserToState();
-            this.triggerToast(`Penugasan ${branchName} diubah menjadi ${assignment.status}!`);
+            await this.syncManagingUserToState(true);
+            this.triggerToast(`Penugasan ${branchName} diubah menjadi ${assignment.status} di database!`);
         }
     },
 
     // Tambah penugasan cabang baru ke kasir yang sedang dikelola
-    addBranchToManagingUser() {
+    async addBranchToManagingUser() {
         if (!this.managingUser) return;
+        if (!Array.isArray(this.managingUser.assignedBranches)) {
+            this.managingUser.assignedBranches = [];
+        }
         const exists = this.managingUser.assignedBranches.some(b => b.branch === this.modalNewBranch);
         if (exists) {
             alert(`Kasir sudah memiliki penugasan di ${this.modalNewBranch}!`);
@@ -578,21 +601,27 @@
             status: 'AKTIF',
             assignedAt: dateStr
         });
-        this.managingUser.branch = this.managingUser.assignedBranches.map(b => b.branch).join(', ');
-        this.syncManagingUserToState();
+        const addedBranch = this.modalNewBranch;
+        await this.syncManagingUserToState(true);
 
         const timeStr = new Date().toLocaleTimeString('id-ID');
         this.securityLogs.unshift({
             time: timeStr,
-            text: `Penugasan [${this.managingUser.name}] ditambahkan ke ${this.modalNewBranch}`
+            text: `Penugasan [${this.managingUser.name}] ditambahkan ke ${addedBranch}`
         });
         this.saveLogs();
 
-        this.triggerToast(`Penugasan ke ${this.modalNewBranch} berhasil ditambahkan!`);
+        // Update opsi cabang berikutnya
+        const currentBranches = this.managingUser.assignedBranches.map(b => b.branch);
+        const allBranches = ['Pusat', 'Cabang A', 'Cabang B'];
+        const remaining = allBranches.filter(b => !currentBranches.includes(b));
+        if (remaining.length > 0) this.modalNewBranch = remaining[0];
+
+        this.triggerToast(`Penugasan ke ${addedBranch} berhasil ditambahkan dan disimpan ke database!`);
     },
 
     // Hapus penugasan dari suatu cabang
-    removeBranchFromManagingUser(branchName) {
+    async removeBranchFromManagingUser(branchName) {
         if (!this.managingUser) return;
         if (this.managingUser.assignedBranches.length <= 1) {
             alert('Tidak dapat menghapus penugasan cabang terakhir.\nJika kasir dinonaktifkan sepenuhnya, ubah status akun menjadi NONAKTIF.');
@@ -600,8 +629,7 @@
         }
 
         this.managingUser.assignedBranches = this.managingUser.assignedBranches.filter(b => b.branch !== branchName);
-        this.managingUser.branch = this.managingUser.assignedBranches.map(b => b.branch).join(', ');
-        this.syncManagingUserToState();
+        await this.syncManagingUserToState(true);
 
         const timeStr = new Date().toLocaleTimeString('id-ID');
         this.securityLogs.unshift({
@@ -610,14 +638,71 @@
         });
         this.saveLogs();
 
-        this.triggerToast(`Penugasan ${branchName} berhasil dicabut!`);
+        this.triggerToast(`Penugasan ${branchName} berhasil dicabut dan diperbarui di database!`);
     },
 
-    syncManagingUserToState() {
+    async syncManagingUserToState(saveToDb = true) {
+        const activeBranches = (this.managingUser.assignedBranches || [])
+            .filter(b => (b.status || 'AKTIF') === 'AKTIF')
+            .map(b => b.branch);
+        const branchString = activeBranches.length > 0
+            ? activeBranches.join(', ')
+            : (this.managingUser.assignedBranches[0]?.branch || 'Pusat');
+
+        this.managingUser.branch = branchString;
+
         const idx = this.users.findIndex(u => u.id === this.managingUser.id);
         if (idx !== -1) {
             this.users[idx] = JSON.parse(JSON.stringify(this.managingUser));
             this.saveUsers();
+        }
+
+        if (saveToDb && this.managingUser.id) {
+            try {
+                const res = await fetch(`/api/users/${this.managingUser.id}/branch-assignment`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({
+                        branch: branchString,
+                        assigned_branches: this.managingUser.assignedBranches
+                    })
+                });
+
+                const json = await res.json();
+                if (res.ok && json.success) {
+                    if (idx !== -1 && json.user) {
+                        this.users[idx].branch = json.user.branch;
+                        this.users[idx].assignedBranches = json.user.assigned_branches || this.managingUser.assignedBranches;
+                    }
+                    this.saveUsers();
+
+                    const broadcastPayload = {
+                        userId: this.managingUser.id,
+                        userName: this.managingUser.name,
+                        branch: branchString,
+                        assignedBranches: this.managingUser.assignedBranches
+                    };
+                    if (window.PosRealtime && typeof window.PosRealtime.broadcast === 'function') {
+                        window.PosRealtime.broadcast('cashier_assignment_updated', broadcastPayload);
+                    }
+                    window.dispatchEvent(new CustomEvent('cashier_assignment_updated', { detail: broadcastPayload }));
+                    try {
+                        const bc = new BroadcastChannel('pos_system_channel');
+                        bc.postMessage({ type: 'cashier_assignment_updated', data: broadcastPayload });
+                        setTimeout(() => bc.close(), 1000);
+                    } catch(e) {}
+                } else {
+                    console.error('Gagal menyimpan penugasan cabang ke database:', json);
+                    alert('Gagal menyimpan penugasan cabang ke database: ' + (json.message || 'Error'));
+                }
+            } catch (err) {
+                console.error('Koneksi database gagal saat simpan penugasan:', err);
+                alert('Gagal terhubung ke database server saat menyimpan penugasan cabang.');
+            }
         }
     },
 
@@ -651,7 +736,21 @@
 
             const json = await res.json();
             if (res.ok && json.success) {
-                this.triggerToast(`Data pengguna [${this.editingUser.name}] berhasil diperbarui.`);
+                this.triggerToast(`Data pengguna [${this.editingUser.name}] berhasil diperbarui di database.`);
+                const broadcastPayload = {
+                    userId: this.editingUser.id,
+                    userName: this.editingUser.name,
+                    branch: this.editingUser.branch
+                };
+                if (window.PosRealtime && typeof window.PosRealtime.broadcast === 'function') {
+                    window.PosRealtime.broadcast('cashier_assignment_updated', broadcastPayload);
+                }
+                window.dispatchEvent(new CustomEvent('cashier_assignment_updated', { detail: broadcastPayload }));
+                try {
+                    const bc = new BroadcastChannel('pos_system_channel');
+                    bc.postMessage({ type: 'cashier_assignment_updated', data: broadcastPayload });
+                    setTimeout(() => bc.close(), 1000);
+                } catch(e) {}
                 this.showEditModal = false;
                 this.editingUser = null;
                 await this.loadUsersFromApi();
@@ -1009,21 +1108,21 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
     <main class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden bg-[#f8f9fa]">
 
         <!-- Top Header -->
-        <header class="h-[68px] bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
+        <header class="h-20 bg-[#f8f9fa] border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
             <div class="flex items-center gap-3">
-                <span class="material-symbols-rounded text-[#0052cc] text-[26px]">manage_accounts</span>
-                <div>
-                    <h1 class="text-[18px] font-bold text-gray-900 tracking-tight">Kelola Akun</h1>
-                    <p class="text-[12px] text-gray-500 font-medium">Otoritas Manager: Manajemen staf kasir cabang berbasis data Anggota (Members)</p>
-                </div>
+                <h1 class="text-[20px] font-bold text-gray-900">Kelola Akun</h1>
+                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200 flex items-center gap-1.5">
+                    <span class="material-symbols-rounded text-[14px]">manage_accounts</span>
+                    <span>Otoritas Staf &amp; Kasir</span>
+                </span>
             </div>
 
-            <div class="flex items-center gap-4 text-gray-600">
+            <div class="flex items-center gap-4 text-gray-500">
                 <x-notification-bell role="MANAGER" />
-                <button type="button" @click="window.PosRealtime?.syncNow?.(); initUsers();" class="hover:text-gray-900 transition-colors p-1.5 rounded-lg hover:bg-gray-100 cursor-pointer" title="Sinkronisasi Data Realtime">
-                    <span class="material-symbols-rounded text-[22px]" :class="$store.network?.isChecking ? 'animate-spin text-[#0052cc]' : ''">sync</span>
+                <button type="button" @click="window.PosRealtime?.syncNow?.(); initUsers();" class="hover:text-gray-900 transition-colors cursor-pointer" title="Sinkronkan Data">
+                    <span class="material-symbols-rounded text-[24px]" :class="$store.network?.isChecking ? 'animate-spin text-[#0052cc]' : ''">autorenew</span>
                 </button>
-                <div class="h-6 w-px bg-gray-200"></div>
+                <div class="h-6 w-px bg-gray-300"></div>
                 <x-realtime-network-badge />
             </div>
         </header>
@@ -2269,6 +2368,19 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     <option value="NONAKTIF">NONAKTIF</option>
                                 </select>
                             </div>
+                        </div>
+
+                        <div>
+                            <label class="font-bold text-gray-700 block mb-1">Cabang Penugasan</label>
+                            <select x-model="editingUser.branch" class="w-full px-3 py-2 border border-gray-300 rounded-xl">
+                                <option value="Pusat">Pusat (Minimarket Pusat)</option>
+                                <option value="Cabang A">Cabang A</option>
+                                <option value="Cabang B">Cabang B</option>
+                                <option value="Pusat, Cabang A">Pusat &amp; Cabang A</option>
+                                <option value="Pusat, Cabang B">Pusat &amp; Cabang B</option>
+                                <option value="Cabang A, Cabang B">Cabang A &amp; Cabang B</option>
+                                <option value="Pusat, Cabang A, Cabang B">Semua Cabang (Pusat, A, B)</option>
+                            </select>
                         </div>
 
                         <!-- Kredensial: Password Portal & PIN POS Dipisahkan -->

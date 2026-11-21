@@ -67,11 +67,21 @@ class ReturnController extends Controller
                 'disetujui' => 'DISETUJUI / SELESAI',
                 'ditolak' => 'DITOLAK',
                 'draft' => 'DRAFT DIAJUKAN',
+                'selesai' => 'DITERIMA SELESAI',
             ];
 
             return [
                 'id' => $r->id,
                 'docNo' => $r->return_number,
+                'branch' => $r->branch ?: ($r->fromLocation?->name ?: ($r->creator?->branch ?: 'Cabang A')),
+                'branchOrigin' => $r->branch ?: ($r->fromLocation?->name ?: ($r->creator?->branch ?: 'Cabang A')),
+                'cashierUsername' => $r->cashier_username ?: ($r->creator?->username ?: 'kasir1'),
+                'cashier_username' => $r->cashier_username ?: ($r->creator?->username ?: 'kasir1'),
+                'cashierName' => $r->creator?->name ?: ($r->cashier_username ?: 'Kasir 1'),
+                'terminalCode' => $r->terminal_code ?: 'POS-01',
+                'terminalId' => $r->terminal_code ?: 'POS-01',
+                'posKasir' => $r->terminal_code ?: 'POS-01',
+                'pos_kasir' => $r->terminal_code ?: 'POS-01',
                 'date' => $r->returned_at ? $r->returned_at->format('d M Y • H:i') . ' WIB' : now()->format('d M Y • H:i') . ' WIB',
                 'ref' => 'Ref: ' . ($r->notes ? substr($r->notes, 0, 25) : 'RETUR-' . $r->id),
                 'direction' => $r->direction,
@@ -82,7 +92,9 @@ class ReturnController extends Controller
                 'products' => $r->items->map(function ($it) {
                     return [
                         'name' => $it->product?->name ?: 'Item Retur',
+                        'sku' => $it->product?->sku ?: '-',
                         'qty' => (float)$it->qty . ' ' . ($it->product?->unit ?: 'Pcs'),
+                        'submittedQty' => (float)$it->qty,
                         'color' => 'text-[#dc2626]',
                     ];
                 }),
@@ -95,7 +107,7 @@ class ReturnController extends Controller
                 'driver' => $r->driver_name ?: '-',
                 'statusKey' => $r->status,
                 'statusLabel' => $statusLabels[$r->status] ?? strtoupper($r->status),
-                'statusSub' => $r->status === 'cek_fisik' ? 'Menunggu Approval Supervisor' : 'Diproses oleh Supervisor',
+                'statusSub' => $r->status === 'cek_fisik' ? 'Menunggu Approval Supervisor' : ($r->status === 'ditolak' ? 'Ditolak oleh Supervisor' : ($r->status === 'disetujui' ? 'Disetujui Supervisor' : 'Diproses oleh Supervisor')),
                 'needsApproval' => in_array($r->status, ['cek_fisik', 'draft']),
             ];
         });
@@ -107,38 +119,54 @@ class ReturnController extends Controller
     }
 
     /**
-     * Create new store return document.
+     * Create new store return document (Supports multi-item submissions).
      */
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'direction' => 'nullable|string',
             'condition_type' => 'nullable|string',
-            'product_id' => 'nullable|exists:products,id',
-            'sku' => 'nullable|string',
-            'qty' => 'required|numeric|min:1',
-            'unit' => 'nullable|string',
-            'reason' => 'nullable|string',
+            'branch' => 'nullable|string|max:100',
+            'cashier_username' => 'nullable|string|max:100',
+            'terminal_code' => 'nullable|string|max:50',
+            'pos_kasir' => 'nullable|string|max:50',
             'driver_name' => 'nullable|string',
             'vehicle_plate' => 'nullable|string',
             'use_fleet' => 'nullable|boolean',
+            'reason' => 'nullable|string',
+            'items' => 'nullable|array|min:1',
+            'items.*.product_id' => 'nullable|integer',
+            'items.*.sku' => 'nullable|string',
+            'items.*.barcode' => 'nullable|string',
+            'items.*.qty' => 'nullable|numeric|min:1',
+            'items.*.unit' => 'nullable|string',
+            'items.*.condition' => 'nullable|string',
+            'items.*.note' => 'nullable|string',
+            'items.*.notes' => 'nullable|string',
+            // Single-item fallback:
+            'product_id' => 'nullable|integer',
+            'sku' => 'nullable|string',
+            'qty' => 'nullable|numeric|min:1',
+            'unit' => 'nullable|string',
         ]);
 
-        $product = null;
-        if (!empty($validated['product_id'])) {
-            $product = Product::find($validated['product_id']);
-        } elseif (!empty($validated['sku'])) {
-            $product = Product::where('sku', $validated['sku'])
-                ->orWhere('barcode', $validated['sku'])
-                ->orWhere('name', 'ilike', "%{$validated['sku']}%")
-                ->first();
-        }
-
-        if (!$product) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Produk yang akan diretur tidak ditemukan di master inventaris.',
-            ], 422);
+        $rawItems = $validated['items'] ?? [];
+        if (empty($rawItems)) {
+            if (!empty($validated['product_id']) || !empty($validated['sku'])) {
+                $rawItems[] = [
+                    'product_id' => $validated['product_id'] ?? null,
+                    'sku' => $validated['sku'] ?? null,
+                    'qty' => $validated['qty'] ?? 1,
+                    'unit' => $validated['unit'] ?? 'Pcs',
+                    'condition' => $validated['condition_type'] ?? 'RUSAK',
+                    'note' => $validated['reason'] ?? 'Retur barang operasional',
+                ];
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Daftar produk yang akan diretur tidak boleh kosong.',
+                ], 422);
+            }
         }
 
         $user = Auth::user();
@@ -152,46 +180,95 @@ class ReturnController extends Controller
         ) ?: Location::where('type', 'STORE')->first() ?: Location::where('type', 'BRANCH')->first() ?: Location::first();
         $dc = $stockService->getWarehouseLocation() ?: Location::where('type', 'DC')->first() ?: Location::first();
 
-        $price = (float) $product->cost_price;
-        $qty = (float)$validated['qty'];
-        $subtotal = $price * $qty;
-        $truckFee = empty($validated['use_fleet']) ? 250000 : 0;
-        $netAmount = max(0, $subtotal - $truckFee);
-
-        $docNo = '#RTR-TK-' . date('Y') . '-' . str_pad((string)(StoreReturnHeader::count() + 1), 4, '0', STR_PAD_LEFT);
-
         DB::beginTransaction();
         try {
+            $docNo = '#RTR-TK-' . date('Y') . '-' . str_pad((string)(StoreReturnHeader::count() + 1), 4, '0', STR_PAD_LEFT);
+            $truckFee = empty($validated['use_fleet']) ? 250000 : 0;
+
+            $totalSubtotal = 0;
+            $preparedItems = [];
+
+            foreach ($rawItems as $raw) {
+                $product = null;
+                if (!empty($raw['product_id'])) {
+                    $product = Product::find($raw['product_id']);
+                }
+                if (!$product && !empty($raw['sku'])) {
+                    $product = Product::where('sku', $raw['sku'])
+                        ->orWhere('barcode', $raw['sku'])
+                        ->orWhere('name', 'ilike', "%{$raw['sku']}%")
+                        ->first();
+                }
+                if (!$product && !empty($raw['barcode'])) {
+                    $product = Product::where('barcode', $raw['barcode'])
+                        ->orWhere('sku', $raw['barcode'])
+                        ->first();
+                }
+
+                if (!$product) {
+                    continue;
+                }
+
+                $qty = (float) ($raw['qty'] ?? 1);
+                $price = (float) ($product->cost_price ?? $product->price ?? 0);
+                $lineSubtotal = $price * $qty;
+                $totalSubtotal += $lineSubtotal;
+
+                $preparedItems[] = [
+                    'product' => $product,
+                    'qty' => $qty,
+                    'price' => $price,
+                    'condition' => $raw['condition'] ?? ($validated['condition_type'] ?? 'RUSAK'),
+                    'note' => $raw['note'] ?? ($raw['notes'] ?? ($validated['reason'] ?? '')),
+                ];
+            }
+
+            if (empty($preparedItems)) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Produk yang dipilih tidak valid atau tidak terdaftar di sistem.',
+                ], 422);
+            }
+
+            $netAmount = max(0, $totalSubtotal - $truckFee);
+
             $header = StoreReturnHeader::create([
                 'return_number' => $docNo,
                 'from_location_id' => $cabang?->id,
+                'branch' => $validated['branch'] ?? ($request->input('branch') ?: ($cabang?->name ?? $user?->branch ?? 'Cabang A')),
                 'to_location_id' => $dc?->id,
                 'created_by' => $user?->id,
+                'cashier_username' => $validated['cashier_username'] ?? ($request->input('cashier_username') ?: ($user?->username ?? 'kasir1')),
+                'terminal_code' => $validated['terminal_code'] ?? ($validated['pos_kasir'] ?? ($request->input('terminal_code') ?: ($request->input('pos_kasir') ?: 'POS-01'))),
                 'returned_at' => now(),
                 'direction' => $validated['direction'] ?? 'toko_ke_gudang',
                 'condition_type' => $validated['condition_type'] ?? 'rusak',
-                'notes' => $validated['reason'] ?? 'Pengajuan retur barang toko',
+                'notes' => $validated['reason'] ?? 'Pengajuan retur multi-item toko',
                 'driver_name' => $validated['driver_name'] ?? '-',
                 'vehicle_plate' => $validated['vehicle_plate'] ?? '-',
-                'subtotal' => $subtotal,
+                'subtotal' => $totalSubtotal,
                 'truck_fee' => $truckFee,
                 'net_amount' => $netAmount,
                 'status' => 'cek_fisik',
             ]);
 
-            if ($product) {
+            foreach ($preparedItems as $pi) {
+                $prod = $pi['product'];
+                $itemQty = $pi['qty'];
+
                 StoreReturnItem::create([
                     'store_return_id' => $header->id,
-                    'product_id' => $product->id,
-                    'qty' => $qty,
-                    'disposition' => strtoupper($validated['condition_type'] ?? 'RUSAK'),
-                    'claim_price' => $price,
+                    'product_id' => $prod->id,
+                    'qty' => $itemQty,
+                    'disposition' => strtoupper($pi['condition'] ?? 'RUSAK'),
+                    'claim_price' => $pi['price'],
                 ]);
 
-                // Reduce store stock at origin location since item is being returned to DC
-                $intQty = (int) round($qty);
-                if ($cabang && \App\Models\ProductStock::where('product_id', $product->id)->where('location_id', $cabang->id)->exists()) {
-                    $stockService->deductStock($product->id, $cabang->id, $intQty, [
+                // Kurangi stok toko di cabang asal
+                $intQty = (int) round($itemQty);
+                if ($cabang && \App\Models\ProductStock::where('product_id', $prod->id)->where('location_id', $cabang->id)->exists()) {
+                    $stockService->deductStock($prod->id, $cabang->id, $intQty, [
                         'movement_type' => 'RETURN_OUT',
                         'allow_negative' => true,
                         'reference_type' => StoreReturnHeader::class,
@@ -200,30 +277,25 @@ class ReturnController extends Controller
                         'user_id' => $user?->id,
                         'notes' => "Retur toko ke gudang ({$header->return_number})",
                     ]);
-                } elseif ($product->stock >= $qty) {
-                    $product->decrement('stock', $qty);
+                } elseif ($prod->stock >= $itemQty) {
+                    $prod->decrement('stock', $intQty);
                 }
             }
 
             DB::commit();
 
             try {
+                $itemNames = collect($preparedItems)->pluck('product.name')->take(2)->join(', ');
+                if (count($preparedItems) > 2) {
+                    $itemNames .= ' +' . (count($preparedItems) - 2) . ' produk lainnya';
+                }
+
                 NotificationController::notify(
                     role: 'MANAGER',
                     title: "Pengajuan Retur: {$header->return_number}",
-                    message: "Toko mengajukan retur barang {$product->name} ({$qty} {$product->unit}) senilai Rp " . number_format($subtotal, 0, ',', '.') . ". Alasan: {$validated['reason']}.",
+                    message: "Toko mengajukan retur [{$itemNames}] senilai Rp " . number_format($totalSubtotal, 0, ',', '.') . ". Alasan: {$header->notes}.",
                     category: 'RETURN',
                     link: '/manager/retur',
-                    icon: 'assignment_return',
-                    color: 'purple',
-                    referenceId: $header->return_number
-                );
-                NotificationController::notify(
-                    role: 'OWNER',
-                    title: "Pengajuan Retur Toko: {$header->return_number}",
-                    message: "Tercatat pengajuan retur barang ke gudang senilai Rp " . number_format($subtotal, 0, ',', '.') . '.',
-                    category: 'RETURN',
-                    link: '/owner/audit-log',
                     icon: 'assignment_return',
                     color: 'purple',
                     referenceId: $header->return_number
@@ -232,7 +304,7 @@ class ReturnController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Dokumen retur berhasil dibuat dan diserahkan ke DC/Supervisor',
+                'message' => 'Dokumen retur multi-item berhasil dibuat dan dikirim ke Supervisor / Gudang DC.',
                 'data' => $header->load('items.product'),
             ], 201);
         } catch (\Throwable $e) {
@@ -253,38 +325,105 @@ class ReturnController extends Controller
 
         $validated = $request->validate([
             'status' => 'required|in:cek_fisik,disetujui,ditolak,selesai',
+            'reason' => 'nullable|string|max:500',
+            'notes' => 'nullable|string|max:500',
         ]);
 
         $oldStatus = $header->status;
         $newStatus = $validated['status'];
 
-        // If return is rejected by supervisor/warehouse, restore deducted store stock
+        // Jika pengajuan retur toko ditolak oleh Supervisor/Gudang
         if ($oldStatus !== 'ditolak' && $newStatus === 'ditolak') {
-            $stockService = app(\App\Services\LocationStockService::class);
-            if ($header->from_location_id) {
-                foreach ($header->items as $item) {
-                    $intQty = (int) round((float) $item->qty);
-                    if ($intQty > 0 && $item->product_id) {
-                        $stockService->addStock($item->product_id, $header->from_location_id, $intQty, [
-                            'movement_type' => 'RETURN_REJECTED_IN',
+            // 1. Kembalikan stok toko di cabang asal jika sebelumnya dipotong saat pengajuan retur toko_ke_gudang
+            if ($header->direction === 'toko_ke_gudang' && $header->from_location_id) {
+                $stockService = app(\App\Services\LocationStockService::class);
+                foreach ($header->items as $it) {
+                    $intQty = (int) round((float) $it->qty);
+                    if ($intQty > 0 && $it->product_id) {
+                        $stockService->addStock($it->product_id, $header->from_location_id, $intQty, [
+                            'movement_type' => 'RETURN_RESTORE_IN',
                             'reference_type' => StoreReturnHeader::class,
                             'reference_id' => $header->id,
                             'reference_number' => $header->return_number,
+                            'user_id' => Auth::id(),
                             'notes' => "Pengembalian stok toko akibat retur ditolak ({$header->return_number})",
+                        ]);
+                    }
+                }
+            }
+
+            // 2. Buat dokumen pencatatan fisik barang retur ditolak jika belum ada
+            try {
+                $returnInDocNo = '#RTR-IN-' . date('Y') . '-' . str_pad((string)(StoreReturnHeader::count() + 1), 4, '0', STR_PAD_LEFT);
+                $reasonText = $validated['reason'] ?? ($validated['notes'] ?? 'Ditolak oleh Supervisor/Gudang');
+                $inboundHeader = StoreReturnHeader::create([
+                    'return_number' => $returnInDocNo,
+                    'from_location_id' => $header->to_location_id,
+                    'to_location_id' => $header->from_location_id,
+                    'created_by' => Auth::id(),
+                    'returned_at' => now(),
+                    'direction' => 'gudang_ke_toko',
+                    'condition_type' => 'retur_ditolak',
+                    'notes' => "Pengembalian barang retur ditolak gudang (Ref: {$header->return_number}) - Alasan: {$reasonText}",
+                    'driver_name' => $header->driver_name ?: '-',
+                    'vehicle_plate' => $header->vehicle_plate ?: '-',
+                    'subtotal' => $header->subtotal,
+                    'truck_fee' => 0,
+                    'net_amount' => $header->subtotal,
+                    'status' => 'cek_fisik',
+                ]);
+
+                foreach ($header->items as $it) {
+                    StoreReturnItem::create([
+                        'store_return_id' => $inboundHeader->id,
+                        'product_id' => $it->product_id,
+                        'qty' => $it->qty,
+                        'disposition' => 'PENGEMBALIAN_TOKO',
+                        'claim_price' => $it->claim_price,
+                    ]);
+                }
+            } catch (\Throwable $e) {}
+        }
+
+        // Jika barang masuk retur di-approve oleh kasir (status = selesai pada direction gudang_ke_toko), kembalikan ke stok toko
+        if ($header->direction === 'gudang_ke_toko' && ($newStatus === 'selesai' || $newStatus === 'disetujui')) {
+            $stockService = app(\App\Services\LocationStockService::class);
+            $targetLocId = $header->to_location_id ?: $header->from_location_id;
+            if ($targetLocId) {
+                foreach ($header->items as $item) {
+                    $intQty = (int) round((float) $item->qty);
+                    if ($intQty > 0 && $item->product_id) {
+                        $stockService->addStock($item->product_id, $targetLocId, $intQty, [
+                            'movement_type' => 'RETURN_RESTORE_IN',
+                            'reference_type' => StoreReturnHeader::class,
+                            'reference_id' => $header->id,
+                            'reference_number' => $header->return_number,
+                            'user_id' => Auth::id(),
+                            'notes' => "Barang masuk retur disetujui kasir ({$header->return_number})",
                         ]);
                     }
                 }
             }
         }
 
-        $header->update(['status' => $newStatus]);
+        $updateData = ['status' => $newStatus];
+        if (!empty($validated['reason'])) {
+            $reasonStr = trim($validated['reason']);
+            $updateData['notes'] = $header->notes ? ($header->notes . " | Alasan SPV/Gudang: " . $reasonStr) : ("Alasan SPV/Gudang: " . $reasonStr);
+        } elseif (!empty($validated['notes'])) {
+            $notesStr = trim($validated['notes']);
+            $updateData['notes'] = $header->notes ? ($header->notes . " | " . $notesStr) : $notesStr;
+        }
+
+        $header->update($updateData);
 
         try {
             $readableStatus = strtoupper(str_replace('_', ' ', $validated['status']));
+            $reasonText = !empty($validated['reason']) ? " Alasan: {$validated['reason']}." : '';
             NotificationController::notify(
                 role: 'KASIR',
                 title: "Status Retur {$header->return_number}: {$readableStatus}",
-                message: "Pengajuan retur barang ke gudang telah diubah statusnya menjadi {$readableStatus}.",
+                message: "Pengajuan retur barang ke gudang telah diubah statusnya menjadi {$readableStatus}.{$reasonText}",
                 category: 'RETURN',
                 link: '/kasir/retur',
                 icon: $validated['status'] === 'disetujui' || $validated['status'] === 'selesai' ? 'check_circle' : ($validated['status'] === 'ditolak' ? 'cancel' : 'pending'),

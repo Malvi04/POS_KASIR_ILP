@@ -4,7 +4,7 @@
 
 @section('content')
 <div x-data="{
-    activeTab: 'rekap', // rekap | jadwal | izin
+    activeTab: 'rekap', // rekap | izin
     searchQuery: '',
     kasirFilter: 'all',
     branchFilter: 'all',
@@ -35,13 +35,28 @@
 
     attendanceList: [],
     leaveRequests: [],
-    shifts: [],
+    leavePeriod: 'hari', // 'hari', 'minggu', 'bulan', 'tahun', 'all'
+    leaveFilterDate: new Date().toISOString().split('T')[0],
+    leaveFilterMonth: new Date().toISOString().slice(0, 7),
+    leaveFilterYear: new Date().getFullYear().toString(),
+    leaveStatusFilter: 'all',
+    leaveTypeFilter: 'all',
+    leaveSearchQuery: '',
+    isLoadingLeaves: false,
+    leaveSummary: {
+        total: 0,
+        disetujui: 0,
+        menunggu: 0,
+        ditolak: 0,
+        izin: 0,
+        cuti: 0,
+        sakit: 0
+    },
 
     async initAttendance() {
         await Promise.all([
             this.loadAttendance(),
-            this.loadLeaves(),
-            this.loadShifts()
+            this.loadLeaves()
         ]);
 
         // 1. Event listener real-time Reverb untuk absensi kasir
@@ -90,31 +105,52 @@
     },
 
     async loadLeaves() {
+        this.isLoadingLeaves = true;
         try {
-            const leaveRes = await fetch('/api/attendance/leaves', {
+            const params = new URLSearchParams({
+                period: this.leavePeriod,
+                date: this.leaveFilterDate,
+                month: this.leaveFilterMonth,
+                year: this.leaveFilterYear,
+                status: this.leaveStatusFilter,
+                type: this.leaveTypeFilter,
+                q: this.leaveSearchQuery
+            });
+            const leaveRes = await fetch(`/api/attendance/leaves?${params.toString()}`, {
                 headers: { 'Accept': 'application/json' }
             });
             if (leaveRes.ok) {
                 const leaveJson = await leaveRes.json();
                 if (leaveJson.success && leaveJson.data) {
                     this.leaveRequests = leaveJson.data;
+                    if (leaveJson.summary) {
+                        this.leaveSummary = leaveJson.summary;
+                    }
                 }
             }
-        } catch(e) {}
+        } catch(e) {
+            console.error('Failed to load leave requests', e);
+        } finally {
+            this.isLoadingLeaves = false;
+        }
     },
 
-    async loadShifts() {
-        try {
-            const shiftRes = await fetch('/api/attendance/shifts', {
-                headers: { 'Accept': 'application/json' }
-            });
-            if (shiftRes.ok) {
-                const shiftJson = await shiftRes.json();
-                if (shiftJson.success && shiftJson.data) {
-                    this.shifts = shiftJson.data;
-                }
-            }
-        } catch(e) {}
+    setLeavePeriod(period) {
+        this.leavePeriod = period;
+        this.loadLeaves();
+    },
+
+    exportLeaveExcel() {
+        const params = new URLSearchParams({
+            period: this.leavePeriod,
+            date: this.leaveFilterDate,
+            month: this.leaveFilterMonth,
+            year: this.leaveFilterYear,
+            status: this.leaveStatusFilter,
+            type: this.leaveTypeFilter,
+            q: this.leaveSearchQuery
+        });
+        window.open(`/api/attendance/leaves/export-excel?${params.toString()}`, '_blank');
     },
 
     saveAttendance() {
@@ -254,11 +290,11 @@
 
             const json = await res.json().catch(() => ({}));
             if (res.ok && json.success && json.data) {
-                this.leaveRequests.unshift(json.data);
                 this.showIzinModal = false;
                 this.triggerToast(`Pengajuan ${this.formIzin.type} untuk ${this.formIzin.staffName} berhasil disimpan ke Database!`);
                 this.formIzin.staffName = '';
                 this.formIzin.reason = '';
+                await this.loadLeaves();
             } else {
                 alert(json.message || 'Gagal mengirim pengajuan izin ke server.');
             }
@@ -280,6 +316,7 @@
             if (res.ok) {
                 req.status = 'DISETUJUI';
                 this.triggerToast(`Izin ${req.staffName} telah disetujui di Database.`);
+                await this.loadLeaves();
             } else {
                 this.triggerToast('Gagal menyetujui izin di server.');
             }
@@ -299,6 +336,7 @@
             if (res.ok) {
                 req.status = 'DITOLAK';
                 this.triggerToast(`Izin ${req.staffName} telah ditolak.`);
+                await this.loadLeaves();
             } else {
                 this.triggerToast('Gagal menolak izin di server.');
             }
@@ -358,35 +396,46 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
     <main class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
 
         <!-- Top Header -->
-        <header class="h-[72px] bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
-            <div class="flex items-center h-full">
-                <h1 class="text-[18px] font-black text-gray-900 mr-8 tracking-tight">Absensi & Shift</h1>
+        <header class="h-20 bg-[#f8f9fa] border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
+            <div class="flex items-center gap-3">
+                <h1 class="text-[20px] font-bold text-gray-900">Absensi &amp; Shift</h1>
+                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200 flex items-center gap-1.5">
+                    <span class="material-symbols-rounded text-[14px]">badge</span>
+                    <span>Presensi &amp; Jadwal Kerja</span>
+                </span>
+            </div>
 
-                <nav class="flex h-full gap-8">
+            <div class="flex items-center gap-4 text-gray-500">
+                <x-notification-bell role="MANAGER" />
+                <button type="button" @click="window.PosRealtime?.syncNow?.(); initAttendance();" class="hover:text-gray-900 transition-colors cursor-pointer" title="Sinkronkan Data">
+                    <span class="material-symbols-rounded text-[24px]" :class="$store.network?.isChecking ? 'animate-spin text-[#0052cc]' : ''">autorenew</span>
+                </button>
+                <div class="h-6 w-px bg-gray-300"></div>
+                <x-realtime-network-badge />
+            </div>
+        </header>
+
+        <!-- Scrollable Workspace -->
+        <div class="flex-1 overflow-y-auto p-8">
+
+            <!-- Tab Switcher & Action Toolbar -->
+            <div class="bg-white p-2.5 rounded-2xl border border-gray-200/80 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3 mb-6">
+                <div class="inline-flex p-1 bg-gray-100 rounded-xl gap-1">
                     <button type="button"
                             @click="activeTab = 'rekap'"
-                            :class="activeTab === 'rekap' ? 'text-[#0052cc] font-bold border-b-[3px] border-[#0052cc]' : 'text-gray-500 font-medium hover:text-gray-800 border-b-[3px] border-transparent'"
-                            class="h-full flex items-center text-[14px] pt-[3px] transition-colors cursor-pointer">
-                        Rekap Harian
-                    </button>
-                    <button type="button"
-                            @click="activeTab = 'jadwal'"
-                            :class="activeTab === 'jadwal' ? 'text-[#0052cc] font-bold border-b-[3px] border-[#0052cc]' : 'text-gray-500 font-medium hover:text-gray-800 border-b-[3px] border-transparent'"
-                            class="h-full flex items-center text-[14px] pt-[3px] transition-colors cursor-pointer">
-                        Jadwal Shift
+                            :class="activeTab === 'rekap' ? 'bg-white text-[#0052cc] shadow-xs font-black' : 'text-gray-600 hover:text-gray-900 font-bold'"
+                            class="px-4 py-2 rounded-lg text-xs transition-all flex items-center gap-2 cursor-pointer">
+                        <span class="material-symbols-rounded text-[18px]">calendar_today</span>
+                        <span>Rekap Harian</span>
                     </button>
                     <button type="button"
                             @click="activeTab = 'izin'"
-                            :class="activeTab === 'izin' ? 'text-[#0052cc] font-bold border-b-[3px] border-[#0052cc]' : 'text-gray-500 font-medium hover:text-gray-800 border-b-[3px] border-transparent'"
-                            class="h-full flex items-center text-[14px] pt-[3px] transition-colors cursor-pointer">
-                        Pengajuan Izin
+                            :class="activeTab === 'izin' ? 'bg-white text-[#0052cc] shadow-xs font-black' : 'text-gray-600 hover:text-gray-900 font-bold'"
+                            class="px-4 py-2 rounded-lg text-xs transition-all flex items-center gap-2 cursor-pointer">
+                        <span class="material-symbols-rounded text-[18px]">event_busy</span>
+                        <span>Pengajuan Izin</span>
                     </button>
-                </nav>
-            </div>
-
-            <div class="flex items-center gap-3">
-                <x-realtime-network-badge />
-                <x-notification-bell role="MANAGER" />
+                </div>
 
                 <button type="button"
                         @click="showCheckInModal = true"
@@ -395,10 +444,6 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <span>Check-In / Out Manual</span>
                 </button>
             </div>
-        </header>
-
-        <!-- Scrollable Workspace -->
-        <div class="flex-1 overflow-y-auto p-8">
 
             <!-- Metric Cards -->
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
@@ -582,95 +627,278 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                 </div>
             </div>
 
-            <!-- TAB 2: JADWAL SHIFT -->
-            <div x-show="activeTab === 'jadwal'" style="display: none;">
-                <div x-show="shifts.length === 0" class="bg-white border border-gray-200 rounded-2xl p-12 text-center text-gray-400 font-medium">
-                    Belum ada jadwal shift yang dikonfigurasi.
+            <!-- TAB 2: PENGAJUAN IZIN -->
+            <div x-show="activeTab === 'izin'" style="display: none;" class="space-y-4">
+                <!-- TOP HEADER & ACTION BUTTONS -->
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                        <h2 class="text-base font-bold text-gray-900 flex items-center gap-2">
+                            <span>Daftar Pengajuan Izin & Cuti</span>
+                            <span class="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-blue-50 text-[#0052cc]" x-text="leaveRequests.length + ' data'"></span>
+                        </h2>
+                        <p class="text-xs text-gray-500 mt-0.5">Rekapitulasi berkala dan verifikasi izin, cuti tahunan, dan surat sakit staf.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <!-- EXPORT EXCEL BUTTON -->
+                        <button type="button"
+                                @click="exportLeaveExcel()"
+                                :disabled="isLoadingLeaves"
+                                class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors disabled:opacity-50">
+                            <span class="material-symbols-rounded text-[18px]">table_view</span>
+                            <span>Export Excel</span>
+                        </button>
+
+                        <!-- AJUKAN IZIN BARU BUTTON -->
+                        <button type="button"
+                                @click="showIzinModal = true"
+                                class="bg-[#0052cc] hover:bg-[#0043a8] text-white px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors">
+                            <span class="material-symbols-rounded text-[18px]">add</span>
+                            <span>Ajukan Izin Baru</span>
+                        </button>
+                    </div>
                 </div>
-                <div x-show="shifts.length > 0" class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <template x-for="shift in shifts" :key="shift.id">
-                        <div class="bg-white border border-gray-200 rounded-2xl p-5 shadow-xs">
-                            <div class="flex items-center gap-2 mb-3">
-                                <span class="material-symbols-rounded text-[#0052cc]">schedule</span>
-                                <h3 class="font-bold text-gray-900 text-sm" x-text="shift.name"></h3>
-                            </div>
-                            <p class="text-xs text-gray-500 mb-3" x-text="shift.branch"></p>
-                            <div class="border-t border-gray-100 pt-3">
-                                <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-2">Personel Bertugas:</span>
-                                <ul class="space-y-1.5 text-xs text-gray-700">
-                                    <template x-for="(st, idx) in shift.staff" :key="idx">
-                                        <li class="flex items-center gap-2">
-                                            <span class="w-1.5 h-1.5 rounded-full bg-[#0052cc]"></span>
-                                            <span x-text="st"></span>
-                                        </li>
-                                    </template>
-                                </ul>
-                            </div>
+
+                <!-- SUMMARY COUNTER CARDS -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div class="bg-white border border-gray-200 rounded-2xl p-3.5 shadow-xs flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-blue-50 text-[#0052cc] flex items-center justify-center shrink-0">
+                            <span class="material-symbols-rounded text-[20px]">description</span>
                         </div>
-                    </template>
-                </div>
-            </div>
+                        <div>
+                            <div class="text-[11px] font-semibold text-gray-500">Total Pengajuan</div>
+                            <div class="text-lg font-bold text-gray-900" x-text="leaveSummary.total || leaveRequests.length"></div>
+                        </div>
+                    </div>
 
-            <!-- TAB 3: PENGAJUAN IZIN -->
-            <div x-show="activeTab === 'izin'" style="display: none;">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-base font-bold text-gray-900">Daftar Pengajuan Izin & Cuti</h2>
-                    <button type="button"
-                            @click="showIzinModal = true"
-                            class="bg-[#0052cc] hover:bg-[#0043a8] text-white px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer">
-                        <span class="material-symbols-rounded text-[18px]">add</span>
-                        <span>Ajukan Izin Baru</span>
-                    </button>
+                    <div class="bg-white border border-gray-200 rounded-2xl p-3.5 shadow-xs flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                            <span class="material-symbols-rounded text-[20px]">pending_actions</span>
+                        </div>
+                        <div>
+                            <div class="text-[11px] font-semibold text-gray-500">Menunggu Review</div>
+                            <div class="text-lg font-bold text-amber-600" x-text="leaveSummary.menunggu || 0"></div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white border border-gray-200 rounded-2xl p-3.5 shadow-xs flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                            <span class="material-symbols-rounded text-[20px]">check_circle</span>
+                        </div>
+                        <div>
+                            <div class="text-[11px] font-semibold text-gray-500">Disetujui</div>
+                            <div class="text-lg font-bold text-emerald-600" x-text="leaveSummary.disetujui || 0"></div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white border border-gray-200 rounded-2xl p-3.5 shadow-xs flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                            <span class="material-symbols-rounded text-[20px]">cancel</span>
+                        </div>
+                        <div>
+                            <div class="text-[11px] font-semibold text-gray-500">Ditolak</div>
+                            <div class="text-lg font-bold text-rose-600" x-text="leaveSummary.ditolak || 0"></div>
+                        </div>
+                    </div>
                 </div>
 
+                <!-- FILTER CONTROLS & PERIOD SELECTION -->
+                <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-xs space-y-3">
+                    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                        <!-- PERIOD PILLS -->
+                        <div class="flex items-center gap-1.5 p-1 bg-gray-100 rounded-xl text-xs font-semibold overflow-x-auto">
+                            <button type="button"
+                                    @click="setLeavePeriod('hari')"
+                                    class="px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap"
+                                    :class="leavePeriod === 'hari' ? 'bg-white text-[#0052cc] shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900'">
+                                Hari Ini
+                            </button>
+                            <button type="button"
+                                    @click="setLeavePeriod('minggu')"
+                                    class="px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap"
+                                    :class="leavePeriod === 'minggu' ? 'bg-white text-[#0052cc] shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900'">
+                                Minggu Ini
+                            </button>
+                            <button type="button"
+                                    @click="setLeavePeriod('bulan')"
+                                    class="px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap"
+                                    :class="leavePeriod === 'bulan' ? 'bg-white text-[#0052cc] shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900'">
+                                Bulan Ini
+                            </button>
+                            <button type="button"
+                                    @click="setLeavePeriod('tahun')"
+                                    class="px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap"
+                                    :class="leavePeriod === 'tahun' ? 'bg-white text-[#0052cc] shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900'">
+                                Tahun Ini
+                            </button>
+                            <button type="button"
+                                    @click="setLeavePeriod('all')"
+                                    class="px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap"
+                                    :class="leavePeriod === 'all' ? 'bg-white text-[#0052cc] shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900'">
+                                Semua Periode
+                            </button>
+                        </div>
+
+                        <!-- DYNAMIC PERIOD PICKERS -->
+                        <div class="flex items-center gap-2">
+                            <!-- Daily Picker -->
+                            <template x-if="leavePeriod === 'hari'">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-xs font-semibold text-gray-500 whitespace-nowrap">Pilih Tanggal:</span>
+                                    <input type="date"
+                                           x-model="leaveFilterDate"
+                                           @change="loadLeaves()"
+                                           class="px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-xl focus:border-[#0052cc] focus:outline-none" />
+                                </div>
+                            </template>
+
+                            <!-- Weekly Reference Date Picker -->
+                            <template x-if="leavePeriod === 'minggu'">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-xs font-semibold text-gray-500 whitespace-nowrap">Acuan Minggu:</span>
+                                    <input type="date"
+                                           x-model="leaveFilterDate"
+                                           @change="loadLeaves()"
+                                           class="px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-xl focus:border-[#0052cc] focus:outline-none" />
+                                </div>
+                            </template>
+
+                            <!-- Monthly Picker -->
+                            <template x-if="leavePeriod === 'bulan'">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-xs font-semibold text-gray-500 whitespace-nowrap">Pilih Bulan:</span>
+                                    <input type="month"
+                                           x-model="leaveFilterMonth"
+                                           @change="loadLeaves()"
+                                           class="px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-xl focus:border-[#0052cc] focus:outline-none" />
+                                </div>
+                            </template>
+
+                            <!-- Yearly Picker -->
+                            <template x-if="leavePeriod === 'tahun'">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-xs font-semibold text-gray-500 whitespace-nowrap">Pilih Tahun:</span>
+                                    <select x-model="leaveFilterYear"
+                                            @change="loadLeaves()"
+                                            class="px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-xl focus:border-[#0052cc] focus:outline-none">
+                                        <option value="2024">2024</option>
+                                        <option value="2025">2025</option>
+                                        <option value="2026">2026</option>
+                                        <option value="2027">2027</option>
+                                        <option value="2028">2028</option>
+                                    </select>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- SEARCH & SECONDARY FILTERS -->
+                    <div class="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 gap-2.5 pt-2 border-t border-gray-100">
+                        <!-- Search Box -->
+                        <div class="sm:col-span-2 relative">
+                            <span class="material-symbols-rounded absolute left-3 top-2.5 text-gray-400 text-[18px]">search</span>
+                            <input type="text"
+                                   x-model="leaveSearchQuery"
+                                   @input.debounce.400ms="loadLeaves()"
+                                   placeholder="Cari nama personel, keterangan, atau approver..."
+                                   class="w-full pl-9 pr-3 py-2 text-xs border border-gray-200 rounded-xl focus:border-[#0052cc] focus:outline-none" />
+                        </div>
+
+                        <!-- Status Filter -->
+                        <div>
+                            <select x-model="leaveStatusFilter"
+                                    @change="loadLeaves()"
+                                    class="w-full px-3 py-2 text-xs border border-gray-200 rounded-xl focus:border-[#0052cc] focus:outline-none font-medium">
+                                <option value="all">Semua Status</option>
+                                <option value="MENUNGGU">Menunggu Review</option>
+                                <option value="DISETUJUI">Disetujui</option>
+                                <option value="DITOLAK">Ditolak</option>
+                            </select>
+                        </div>
+
+                        <!-- Type Filter -->
+                        <div>
+                            <select x-model="leaveTypeFilter"
+                                    @change="loadLeaves()"
+                                    class="w-full px-3 py-2 text-xs border border-gray-200 rounded-xl focus:border-[#0052cc] focus:outline-none font-medium">
+                                <option value="all">Semua Tipe</option>
+                                <option value="IZIN">Izin Pribadi</option>
+                                <option value="CUTI">Cuti Tahunan</option>
+                                <option value="SAKIT">Surat Sakit</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TABLE CARD -->
                 <div class="bg-white border border-gray-200 rounded-2xl shadow-xs overflow-hidden">
                     <div class="overflow-x-auto min-w-0 w-full">
-                        <table class="w-full text-left text-xs min-w-[850px] border-collapse">
+                        <table class="w-full text-left text-xs min-w-[950px] border-collapse">
                             <thead class="bg-gray-50/80 border-b border-gray-200 text-gray-600 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
                                 <tr>
-                                    <th class="py-3.5 px-6 text-left w-[200px]">Nama Personel</th>
-                                    <th class="py-3.5 px-6 text-left w-[120px]">Tipe</th>
-                                    <th class="py-3.5 px-6 text-left w-[140px]">Tanggal</th>
-                                    <th class="py-3.5 px-6 text-left w-[220px]">Alasan</th>
-                                    <th class="py-3.5 px-6 text-center w-[120px]">Status</th>
-                                    <th class="py-3.5 px-6 text-center w-[140px]">Aksi</th>
+                                    <th class="py-3.5 px-4 text-center w-[50px]">No</th>
+                                    <th class="py-3.5 px-5 text-left w-[180px]">Nama Personel</th>
+                                    <th class="py-3.5 px-4 text-left w-[140px]">Cabang</th>
+                                    <th class="py-3.5 px-4 text-center w-[110px]">Tipe</th>
+                                    <th class="py-3.5 px-5 text-left w-[140px]">Periode Izin</th>
+                                    <th class="py-3.5 px-5 text-left min-w-[200px]">Alasan</th>
+                                    <th class="py-3.5 px-4 text-center w-[120px]">Status</th>
+                                    <th class="py-3.5 px-4 text-center w-[130px]">Reviewer</th>
+                                    <th class="py-3.5 px-4 text-center w-[130px]">Diajukan</th>
+                                    <th class="py-3.5 px-4 text-center w-[130px]">Aksi</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100">
-                                <template x-for="req in leaveRequests" :key="req.id">
+                                <!-- Loading State -->
+                                <tr x-show="isLoadingLeaves">
+                                    <td colspan="10" class="text-center py-10 text-gray-400">
+                                        <div class="inline-flex items-center gap-2">
+                                            <span class="material-symbols-rounded animate-spin text-[20px] text-[#0052cc]">progress_activity</span>
+                                            <span class="font-medium text-xs">Memuat data pengajuan izin...</span>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Data Rows -->
+                                <template x-for="(req, index) in leaveRequests" :key="req.id">
                                     <tr class="hover:bg-blue-50/30 transition-colors">
-                                        <td class="py-3.5 px-6 font-bold text-gray-900" x-text="req.staffName"></td>
-                                        <td class="py-3.5 px-6 whitespace-nowrap">
-                                            <span class="px-2 py-0.5 rounded text-[10px] font-bold"
+                                        <td class="py-3.5 px-4 text-center font-mono text-gray-500 text-[11px]" x-text="index + 1"></td>
+                                        <td class="py-3.5 px-5 font-bold text-gray-900" x-text="req.staffName"></td>
+                                        <td class="py-3.5 px-4 text-gray-600 font-medium" x-text="req.branch || '-'"></td>
+                                        <td class="py-3.5 px-4 text-center whitespace-nowrap">
+                                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide"
                                                   :class="{
-                                                      'bg-red-50 text-red-600': req.type === 'SAKIT',
-                                                      'bg-blue-50 text-blue-700': req.type === 'CUTI',
-                                                      'bg-amber-50 text-amber-700': req.type === 'IZIN'
+                                                      'bg-red-50 text-red-600 border border-red-200': req.type === 'SAKIT',
+                                                      'bg-blue-50 text-[#0052cc] border border-blue-200': req.type === 'CUTI',
+                                                      'bg-amber-50 text-amber-700 border border-amber-200': req.type === 'IZIN'
                                                   }"
                                                   x-text="req.type"></span>
                                         </td>
-                                        <td class="py-3.5 px-6 font-mono whitespace-nowrap" x-text="req.date"></td>
-                                        <td class="py-3.5 px-6 text-gray-600" x-text="req.reason"></td>
-                                        <td class="py-3.5 px-6 text-center whitespace-nowrap">
-                                            <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
+                                        <td class="py-3.5 px-5 font-mono text-gray-700 whitespace-nowrap text-[11px]" x-text="req.date"></td>
+                                        <td class="py-3.5 px-5 text-gray-600 text-[11px] leading-relaxed" x-text="req.reason"></td>
+                                        <td class="py-3.5 px-4 text-center whitespace-nowrap">
+                                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
                                                   :class="{
-                                                      'bg-green-50 text-green-700': req.status === 'DISETUJUI',
-                                                      'bg-amber-50 text-amber-700': req.status === 'MENUNGGU',
-                                                      'bg-red-50 text-red-600': req.status === 'DITOLAK'
+                                                      'bg-emerald-50 text-emerald-700 border border-emerald-200': req.status === 'DISETUJUI',
+                                                      'bg-amber-50 text-amber-700 border border-amber-200': req.status === 'MENUNGGU',
+                                                      'bg-rose-50 text-rose-600 border border-rose-200': req.status === 'DITOLAK'
                                                   }"
                                                   x-text="req.status"></span>
                                         </td>
-                                        <td class="py-3.5 px-6 text-center whitespace-nowrap">
+                                        <td class="py-3.5 px-4 text-center text-gray-600 text-[11px]" x-text="req.approved_by || '-'"></td>
+                                        <td class="py-3.5 px-4 text-center text-gray-500 font-mono text-[11px] whitespace-nowrap" x-text="req.created_at || '-'"></td>
+                                        <td class="py-3.5 px-4 text-center whitespace-nowrap">
                                             <template x-if="req.status === 'MENUNGGU'">
-                                                <div class="inline-flex items-center justify-center gap-2">
+                                                <div class="inline-flex items-center justify-center gap-1.5">
                                                     <button type="button"
                                                             @click="approveLeave(req)"
-                                                            class="px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-[11px] font-bold cursor-pointer">
+                                                            title="Setujui Pengajuan"
+                                                            class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold cursor-pointer transition-colors shadow-xs">
                                                         Setujui
                                                     </button>
                                                     <button type="button"
                                                             @click="rejectLeave(req)"
-                                                            class="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-[11px] font-bold cursor-pointer">
+                                                            title="Tolak Pengajuan"
+                                                            class="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-bold cursor-pointer transition-colors shadow-xs">
                                                         Tolak
                                                     </button>
                                                 </div>
@@ -681,17 +909,20 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         </td>
                                     </tr>
                                 </template>
-                                    <tr x-show="!leaveRequests || leaveRequests.length === 0">
-                                        <td colspan="6" class="text-center py-12 text-gray-400 font-medium">
-                                            <p class="text-sm">Belum ada pengajuan izin atau cuti.</p>
-                                            <div class="mt-3">
-                                                <button type="button" @click="showIzinModal = true" class="px-4 py-2 bg-[#0052cc] text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 shadow-sm hover:bg-[#0043a8] transition-colors cursor-pointer">
-                                                    <span class="material-symbols-rounded text-[16px]">add</span>
-                                                    <span>Ajukan Izin / Cuti</span>
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
+
+                                <!-- Empty State -->
+                                <tr x-show="!isLoadingLeaves && (!leaveRequests || leaveRequests.length === 0)">
+                                    <td colspan="10" class="text-center py-12 text-gray-400 font-medium">
+                                        <span class="material-symbols-rounded text-gray-300 text-[36px] block mb-1">event_busy</span>
+                                        <p class="text-xs">Tidak ada data pengajuan izin atau cuti untuk filter ini.</p>
+                                        <div class="mt-3">
+                                            <button type="button" @click="showIzinModal = true" class="px-4 py-2 bg-[#0052cc] text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 shadow-xs hover:bg-[#0043a8] transition-colors cursor-pointer">
+                                                <span class="material-symbols-rounded text-[16px]">add</span>
+                                                <span>Ajukan Izin / Cuti</span>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>

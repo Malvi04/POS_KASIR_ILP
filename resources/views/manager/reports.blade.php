@@ -5,6 +5,16 @@
 @section('content')
 <div x-data="{
     activeTab: (new URLSearchParams(window.location.search).get('tab') || 'sales_accounting'), // 'sales_accounting' | 'profit_loss' | 'fast_moving' | 'cash_reconciliation' | 'product_taxes' | 'payroll_debt' | 'consolidated_3branches'
+
+    // ==========================================
+    // Unified Period & Reporting Controls (Per Hari, Per Bulan, Per Tahun)
+    // ==========================================
+    periodMode: 'monthly', // 'daily' | 'monthly' | 'yearly'
+    selectedDate: '{{ date('Y-m-d') }}',
+    selectedMonth: '{{ date('Y-m') }}',
+    selectedYear: '{{ date('Y') }}',
+    selectedBranch: 'all',
+    showPrintModal: false,
     
     // ==========================================
     // 1. Modul E: Laporan Penjualan State
@@ -123,9 +133,9 @@
     },
     debtRows: [],
     branches: [
-        'Cabang 1 - Mill / Pabrik',
-        'Cabang 2 - Kebun Barat',
-        'Cabang 3 - Kebun Timur'
+        'Cabang Pusat',
+        'Cabang A',
+        'Cabang B'
     ],
 
     // Modul D: Konsolidasi 3 Cabang
@@ -377,6 +387,368 @@
         this.toastType = type;
         this.showToast = true;
         setTimeout(() => { this.showToast = false; }, 3500);
+    },
+
+    syncPeriodDates() {
+        if (this.periodMode === 'daily') {
+            this.salesPeriod = 'daily';
+            this.salesDate = this.selectedDate;
+            this.plStartDate = this.selectedDate;
+            this.plEndDate = this.selectedDate;
+            this.consolidatedStartDate = this.selectedDate;
+            this.consolidatedEndDate = this.selectedDate;
+            this.month = this.selectedDate ? this.selectedDate.slice(0, 7) : '{{ date('Y-m') }}';
+        } else if (this.periodMode === 'yearly') {
+            this.salesPeriod = 'yearly';
+            const y = this.selectedYear || '{{ date('Y') }}';
+            this.plStartDate = y + '-01-01';
+            this.plEndDate = y + '-12-31';
+            this.consolidatedStartDate = this.plStartDate;
+            this.consolidatedEndDate = this.plEndDate;
+            this.month = y + '-01';
+        } else { // monthly
+            this.salesPeriod = 'monthly';
+            this.salesMonth = this.selectedMonth || '{{ date('Y-m') }}';
+            const parts = (this.selectedMonth || '{{ date('Y-m') }}').split('-');
+            const yr = parseInt(parts[0], 10);
+            const mo = parseInt(parts[1], 10);
+            const lastDay = new Date(yr, mo, 0).getDate();
+            this.plStartDate = this.selectedMonth + '-01';
+            this.plEndDate = this.selectedMonth + '-' + String(lastDay).padStart(2, '0');
+            this.consolidatedStartDate = this.plStartDate;
+            this.consolidatedEndDate = this.plEndDate;
+            this.month = this.selectedMonth;
+        }
+        this.salesBranch = this.selectedBranch;
+        this.plBranch = this.selectedBranch;
+        this.consolidatedBranch = this.selectedBranch;
+    },
+
+    async applyPeriodChange() {
+        this.syncPeriodDates();
+        await this.initReports();
+        this.triggerToast('Data diperbarui untuk: ' + this.getPeriodDisplayLabel() + ' (' + (this.selectedBranch === 'all' ? 'Semua Cabang' : this.selectedBranch) + ')');
+    },
+
+    getPeriodDisplayLabel() {
+        if (this.periodMode === 'daily') {
+            try {
+                const parts = this.selectedDate.split('-');
+                const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+            } catch(e) { return this.selectedDate; }
+        } else if (this.periodMode === 'yearly') {
+            return 'Tahun ' + this.selectedYear;
+        } else {
+            try {
+                const parts = this.selectedMonth.split('-');
+                const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, 1);
+                return d.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+            } catch(e) { return this.selectedMonth; }
+        }
+    },
+
+    getTabTitle() {
+        const titles = {
+            sales_accounting: 'Laporan Penjualan Cabang & Shift Kasir',
+            profit_loss: 'Laporan Laba / Rugi Bersih (P&L)',
+            fast_moving: 'Laporan Analisis Barang Terlaris & Restock',
+            cash_reconciliation: 'Laporan Rekonsiliasi Kas Shift Kasir',
+            product_taxes: 'Laporan Status Pajak PPN Produk',
+            payroll_debt: 'Laporan Piutang Anggota & Kredit Potong Gaji',
+            consolidated_3branches: 'Laporan Konsolidasi Finansial 3 Cabang'
+        };
+        return titles[this.activeTab] || 'Laporan POS ILP';
+    },
+
+    exportCurrentTabToExcel() {
+        if (typeof window.exportTableToExcel !== 'function') {
+            this.triggerToast('Library ekspor Excel sedang dimuat, coba sesaat lagi.', 'error');
+            return;
+        }
+        const periodStr = this.getPeriodDisplayLabel();
+        const branchStr = this.selectedBranch === 'all' ? 'Semua Cabang (Konsolidasi)' : this.selectedBranch;
+        const baseMeta = [
+            ['Organisasi', 'PT INDO LAMPUNG PERKASA - MINIMARKET KOPERASI'],
+            ['Jenis Laporan', this.getTabTitle()],
+            ['Periode', periodStr + ' (' + (this.periodMode === 'daily' ? 'Harian' : (this.periodMode === 'yearly' ? 'Tahunan' : 'Bulanan')) + ')'],
+            ['Cabang / Unit', branchStr],
+            ['Tanggal Cetak', new Date().toLocaleString('id-ID')],
+            ['Otorisator / Dicetak Oleh', '{{ Auth::user()->name ?? "Manager" }} ({{ Auth::user()->role ?? "Manager" }})']
+        ];
+
+        const dateSuffix = this.periodMode === 'daily' ? this.selectedDate : (this.periodMode === 'yearly' ? this.selectedYear : this.selectedMonth);
+
+        if (this.activeTab === 'sales_accounting') {
+            const headers = ['Kode Shift', 'Terminal', 'Nama Kasir', 'Jumlah Transaksi', 'Modal Awal (Rp)', 'Penjualan Tunai (Rp)', 'Total Omzet (Rp)', 'Status Sesi'];
+            const rows = (this.salesData?.shifts_breakdown || []).map(s => [
+                s.shift_code || '-',
+                s.terminal_code || '-',
+                s.cashier_name || '-',
+                Number(s.transaction_count || 0),
+                Number(s.opening_cash || 0),
+                Number(s.cash_sales || 0),
+                Number(s.total_sales || 0),
+                s.status || '-'
+            ]);
+            const totals = [
+                'TOTAL OMZET',
+                '',
+                '',
+                Number(this.salesData?.summary?.transaction_count || 0),
+                '',
+                '',
+                Number(this.salesData?.summary?.grand_total || 0),
+                ''
+            ];
+
+            window.exportTableToExcel({
+                filename: `Laporan_Penjualan_${this.periodMode}_${dateSuffix}.xlsx`,
+                sheetName: 'Penjualan',
+                title: 'PT INDO LAMPUNG PERKASA - MINIMARKET KOPERASI',
+                subtitle: 'LAPORAN PENJUALAN KASIR & CABANG (' + periodStr + ')',
+                metadata: baseMeta,
+                headers: headers,
+                rows: rows,
+                totals: totals
+            });
+        } else if (this.activeTab === 'profit_loss') {
+            const stmt = this.plData?.statement || {};
+            const rev = Number(stmt.gross_sales || 0);
+            const pct = v => (rev > 0 ? ((Number(v || 0) / rev) * 100).toFixed(1) + '%' : '0%');
+            const headers = ['No', 'Komponen Akuntansi Laba Rugi', 'Nominal (Rp)', '% Terhadap Gross Sales', 'Kategori Pos'];
+            const rows = [
+                [1, 'Penjualan Produk Reguler Koperasi', Number(stmt.regular_product_sales || 0), pct(stmt.regular_product_sales), 'Pendapatan Pokok'],
+                [2, 'Penjualan Produk Titipan Konsinyasi UMKM', Number(stmt.consignment_product_sales || 0), pct(stmt.consignment_product_sales), 'Titipan Mitra UMKM'],
+                [3, 'TOTAL PENJUALAN KOTOR (GROSS SALES)', rev, '100%', 'Total Omzet Toko'],
+                [4, '(-) Potongan / Diskon Promosi', Number(stmt.total_discounts || 0), pct(stmt.total_discounts), 'Beban Promosi'],
+                [5, 'TOTAL PENJUALAN BERSIH (NET SALES)', Number(stmt.net_sales || 0), pct(stmt.net_sales), 'Penjualan Bersih Kasir'],
+                [6, '(-) Harga Pokok Penjualan (HPP Reguler)', Number(stmt.regular_cogs || 0), pct(stmt.regular_cogs), 'Biaya Pokok Barang'],
+                [7, '(-) Hak Setoran Hasil Penjualan ke Mitra UMKM', Number(stmt.umkm_partner_share || 0), pct(stmt.umkm_partner_share), 'Kewajiban Hutang UMKM'],
+                [8, '(+) Komisi Koperasi dari Konsinyasi UMKM', Number(stmt.cooperative_commission_earned || 0), pct(stmt.cooperative_commission_earned), 'Pendapatan Komisi Koperasi'],
+                [9, 'TOTAL LABA KOTOR (GROSS PROFIT)', Number(stmt.total_gross_profit || 0), pct(stmt.total_gross_profit), 'Laba Kotor Usaha'],
+                [10, 'Pajak Pertambahan Nilai (PPN 11%) Terkumpul', Number(stmt.collected_tax_ppn || 0), pct(stmt.collected_tax_ppn), 'Titipan Kas Negara'],
+                [11, 'LABA BERSIH OPERASIONAL (NET PROFIT)', Number(stmt.net_profit || 0), (stmt.profit_margin_percent || 0) + '%', 'Laba Bersih Akhir']
+            ];
+
+            window.exportTableToExcel({
+                filename: `Laporan_Laba_Rugi_${this.periodMode}_${dateSuffix}.xlsx`,
+                sheetName: 'Laba Rugi',
+                title: 'PT INDO LAMPUNG PERKASA - MINIMARKET KOPERASI',
+                subtitle: 'LAPORAN LABA RUGI KOMPREHENSIF (' + periodStr + ')',
+                metadata: baseMeta,
+                headers: headers,
+                rows: rows
+            });
+        } else if (this.activeTab === 'fast_moving') {
+            const headers = ['Rank', 'Kode SKU / Barcode', 'Nama Produk', 'Kategori', 'Qty Terjual', 'Satuan', 'Total Omzet (Rp)', 'Pangsa Omzet (%)', 'Sisa Stok Saat Ini', 'Batas Min. Stok', 'Status Kecepatan', 'Rekomendasi Restock'];
+            const rows = (this.fastMovingData || []).map(item => [
+                Number(item.rank || 0),
+                item.sku || '-',
+                item.name || '-',
+                item.category || 'Umum',
+                Number(item.total_qty_sold || 0),
+                item.unit || 'Pcs',
+                Number(item.total_revenue || 0),
+                Number(item.revenue_share_percent || 0) + '%',
+                Number(item.current_stock || 0),
+                Number(item.min_stock || 0),
+                item.velocity_status || 'FAST MOVING',
+                item.recommended_restock_qty > 0 ? Number(item.recommended_restock_qty) : 0
+            ]);
+            const totals = [
+                'TOTAL',
+                '',
+                '',
+                '',
+                rows.reduce((sum, r) => sum + (Number(r[4]) || 0), 0),
+                '',
+                Number(this.fastMovingTotalRevenue || 0),
+                '100%',
+                '',
+                '',
+                '',
+                ''
+            ];
+
+            window.exportTableToExcel({
+                filename: `Laporan_Barang_Terlaris_${this.periodMode}_${dateSuffix}.xlsx`,
+                sheetName: 'Barang Terlaris',
+                title: 'PT INDO LAMPUNG PERKASA - MINIMARKET KOPERASI',
+                subtitle: 'LAPORAN ANALISIS BARANG TERLARIS & RESTOCK (' + periodStr + ')',
+                metadata: baseMeta,
+                headers: headers,
+                rows: rows,
+                totals: totals
+            });
+        } else if (this.activeTab === 'cash_reconciliation') {
+            const headers = ['Kode Shift', 'Terminal', 'Nama Kasir', 'Modal Awal (Rp)', 'Penjualan Tunai (Rp)', 'Saldo Sistem (Rp)', 'Fisik Laci Kasir (Rp)', 'Selisih Kas (Rp)', 'Status Rekonsiliasi'];
+            const rows = (this.reconData?.data || []).map(r => [
+                r.shift_code || '-',
+                r.terminal_code || '-',
+                r.cashier_name || '-',
+                Number(r.opening_cash || 0),
+                Number(r.cash_sales_total || 0),
+                Number(r.expected_cash || 0),
+                Number(r.actual_cash || 0),
+                Number(r.variance || 0),
+                r.variance_status || '-'
+            ]);
+            const totals = [
+                'TOTAL',
+                '',
+                '',
+                '',
+                '',
+                Number(this.reconData?.summary?.total_expected_cash || 0),
+                Number(this.reconData?.summary?.total_actual_cash || 0),
+                Number(this.reconData?.summary?.net_variance || 0),
+                'Akurasi: ' + (this.reconData?.summary?.accuracy_rate_percent || 100) + '%'
+            ];
+
+            window.exportTableToExcel({
+                filename: `Laporan_Rekonsiliasi_Kas_${this.periodMode}_${dateSuffix}.xlsx`,
+                sheetName: 'Rekonsiliasi Kas',
+                title: 'PT INDO LAMPUNG PERKASA - MINIMARKET KOPERASI',
+                subtitle: 'LAPORAN REKONSILIASI KAS SHIFT KASIR (' + periodStr + ')',
+                metadata: baseMeta,
+                headers: headers,
+                rows: rows,
+                totals: totals
+            });
+        } else if (this.activeTab === 'product_taxes') {
+            const headers = ['No', 'Barcode', 'Kode SKU', 'Nama Produk', 'Kategori', 'Harga Jual (Rp)', 'Status Kena Pajak', 'Tarif PPN (%)'];
+            let no = 1;
+            const rows = (this.taxProductList || []).map(p => [
+                no++,
+                p.barcode || '-',
+                p.sku || '-',
+                p.name || '-',
+                p.category || 'Umum',
+                Number(p.price || 0),
+                p.is_taxable ? 'KENA PAJAK' : 'BEBAS PAJAK',
+                Number(p.is_taxable ? (p.tax_rate || 11) : 0) + '%'
+            ]);
+
+            window.exportTableToExcel({
+                filename: `Laporan_Status_Pajak_Produk_${new Date().toISOString().slice(0, 10)}.xlsx`,
+                sheetName: 'Status Pajak PPN',
+                title: 'PT INDO LAMPUNG PERKASA - MINIMARKET KOPERASI',
+                subtitle: 'LAPORAN STATUS PPN 11% MASTER PRODUK',
+                metadata: baseMeta,
+                headers: headers,
+                rows: rows
+            });
+        } else if (this.activeTab === 'payroll_debt') {
+            const headers = ['No', 'Nama Anggota', 'NIK / No Anggota', 'Departemen / Divisi', 'Cabang', 'Plafon Kredit (Rp)', 'Total Kasbon Berjalan (Rp)', 'Sisa Plafon (Rp)', 'Utilisasi (%)', 'Status'];
+            let no = 1;
+            const rows = (this.debtRows || []).map(d => [
+                no++,
+                d.name || '-',
+                d.nik || d.member_code || '-',
+                d.department || '-',
+                d.branch || '-',
+                Number(d.credit_limit || 0),
+                Number(d.total_debt || 0),
+                Number(d.remaining_credit || 0),
+                Number(d.utilization_percent || 0) + '%',
+                d.status || 'Aktif'
+            ]);
+            const totals = [
+                'TOTAL',
+                '',
+                '',
+                '',
+                '',
+                Number(this.debtSummary?.total_credit_limit || 0),
+                Number(this.debtSummary?.total_active_debt || 0),
+                Number(this.debtSummary?.total_remaining_credit || 0),
+                (this.debtSummary?.overall_utilization_percent || 0) + '%',
+                ''
+            ];
+
+            window.exportTableToExcel({
+                filename: `Laporan_Piutang_Payroll_${this.periodMode}_${dateSuffix}.xlsx`,
+                sheetName: 'Piutang Anggota',
+                title: 'PT INDO LAMPUNG PERKASA - MINIMARKET KOPERASI',
+                subtitle: 'LAPORAN PIUTANG ANGGOTA & KREDIT GAJI (' + periodStr + ')',
+                metadata: baseMeta,
+                headers: headers,
+                rows: rows,
+                totals: totals
+            });
+        } else if (this.activeTab === 'consolidated_3branches') {
+            const headers = ['No', 'Kode Cabang', 'Nama Cabang', 'Jumlah Transaksi', 'Omzet Penjualan (Rp)', 'Laba Kotor Cabang (Rp)', 'Piutang Anggota (Rp)', 'Valuasi Stok Toko (Rp)'];
+            let no = 1;
+            const rows = (this.consolidatedData?.branch_comparison || []).map(b => [
+                no++,
+                b.branch_code || '-',
+                b.branch_name || '-',
+                Number(b.transaction_count || 0),
+                Number(b.total_revenue || 0),
+                Number(b.gross_profit || 0),
+                Number(b.member_debt || 0),
+                Number(b.stock_valuation_share || 0)
+            ]);
+            const totals = [
+                'TOTAL KONSOLIDASI',
+                '',
+                '',
+                rows.reduce((sum, r) => sum + (Number(r[3]) || 0), 0),
+                rows.reduce((sum, r) => sum + (Number(r[4]) || 0), 0),
+                rows.reduce((sum, r) => sum + (Number(r[5]) || 0), 0),
+                rows.reduce((sum, r) => sum + (Number(r[6]) || 0), 0),
+                rows.reduce((sum, r) => sum + (Number(r[7]) || 0), 0)
+            ];
+
+            window.exportTableToExcel({
+                filename: `Laporan_Konsolidasi_3Cabang_${this.periodMode}_${dateSuffix}.xlsx`,
+                sheetName: 'Konsolidasi 3 Cabang',
+                title: 'PT INDO LAMPUNG PERKASA - MINIMARKET KOPERASI',
+                subtitle: 'LAPORAN KONSOLIDASI FINANSIAL 3 CABANG (' + periodStr + ')',
+                metadata: baseMeta,
+                headers: headers,
+                rows: rows,
+                totals: totals
+            });
+        }
+        this.triggerToast('File Excel ' + this.getTabTitle() + ' berhasil diunduh.');
+    },
+
+    async openPrintPdfModal() {
+        if (this.activeTab === 'profit_loss' && (!this.plData || !this.plData.statement)) {
+            await this.loadProfitLossReport();
+        }
+        this.showPrintModal = true;
+    },
+
+    getPdfPeriodLabel() {
+        if (this.activeTab === 'profit_loss') {
+            return (this.plStartDate || '-') + ' s/d ' + (this.plEndDate || '-');
+        }
+        if (this.activeTab === 'consolidated_3branches') {
+            return (this.consolidatedStartDate || '-') + ' s/d ' + (this.consolidatedEndDate || '-');
+        }
+        return this.getPeriodDisplayLabel();
+    },
+
+    getPdfBranchLabel() {
+        const b = this.activeTab === 'profit_loss'
+            ? this.plBranch
+            : (this.activeTab === 'sales_accounting'
+                ? this.salesBranch
+                : (this.activeTab === 'consolidated_3branches' ? this.consolidatedBranch : this.selectedBranch));
+        return (!b || b === 'all') ? 'Semua Cabang (Konsolidasian)' : b;
+    },
+
+    getPlRatio(val) {
+        const gross = Number(this.plData?.statement?.gross_sales || 0);
+        if (gross <= 0) return '0.0%';
+        return ((Number(val || 0) / gross) * 100).toFixed(1) + '%';
+    },
+
+    printOfficialDocument() {
+        window.print();
     }
 }"
 x-init="initReports()"
@@ -472,6 +844,106 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
         <div class="flex-1 overflow-y-auto p-6 lg:p-8 pb-10">
             <div class="max-w-[1400px] mx-auto space-y-6">
 
+                <!-- Global Period, Branch & Export Toolbar (Harian, Bulanan, Tahunan & Excel/PDF) -->
+                <div class="bg-white border border-gray-200 rounded-2xl p-4 lg:p-5 shadow-xs flex flex-wrap items-center justify-between gap-4">
+                    <!-- Left: Period Switcher & Date Input & Branch Filter -->
+                    <div class="flex flex-wrap items-center gap-3">
+                        <div class="flex items-center gap-2">
+                            <span class="text-[11px] font-black text-gray-500 uppercase tracking-wider">Periode:</span>
+                            <!-- Period Mode Toggle Pills: Per Hari | Per Bulan | Per Tahun -->
+                            <div class="inline-flex p-1 bg-gray-100 rounded-xl text-xs font-bold shadow-2xs">
+                                <button type="button"
+                                        @click="periodMode = 'daily'; applyPeriodChange()"
+                                        :class="periodMode === 'daily' ? 'bg-[#0052cc] text-white shadow-xs' : 'text-gray-600 hover:text-gray-900'"
+                                        class="px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer">
+                                    <span class="material-symbols-rounded text-[15px]">today</span>
+                                    <span>Per Hari</span>
+                                </button>
+                                <button type="button"
+                                        @click="periodMode = 'monthly'; applyPeriodChange()"
+                                        :class="periodMode === 'monthly' ? 'bg-[#0052cc] text-white shadow-xs' : 'text-gray-600 hover:text-gray-900'"
+                                        class="px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer">
+                                    <span class="material-symbols-rounded text-[15px]">calendar_month</span>
+                                    <span>Per Bulan</span>
+                                </button>
+                                <button type="button"
+                                        @click="periodMode = 'yearly'; applyPeriodChange()"
+                                        :class="periodMode === 'yearly' ? 'bg-[#0052cc] text-white shadow-xs' : 'text-gray-600 hover:text-gray-900'"
+                                        class="px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer">
+                                    <span class="material-symbols-rounded text-[15px]">date_range</span>
+                                    <span>Per Tahun</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Dynamic Date/Month/Year Input -->
+                        <div class="flex items-center gap-2">
+                            <template x-if="periodMode === 'daily'">
+                                <input type="date"
+                                       x-model="selectedDate"
+                                       @change="applyPeriodChange()"
+                                       class="bg-gray-50 hover:bg-white border border-gray-200 focus:border-[#0052cc] rounded-xl px-3 py-1.5 text-xs font-bold text-gray-800 outline-none shadow-2xs transition-colors cursor-pointer" />
+                            </template>
+                            <template x-if="periodMode === 'monthly'">
+                                <input type="month"
+                                       x-model="selectedMonth"
+                                       @change="applyPeriodChange()"
+                                       class="bg-gray-50 hover:bg-white border border-gray-200 focus:border-[#0052cc] rounded-xl px-3 py-1.5 text-xs font-bold text-gray-800 outline-none shadow-2xs transition-colors cursor-pointer" />
+                            </template>
+                            <template x-if="periodMode === 'yearly'">
+                                <select x-model="selectedYear"
+                                        @change="applyPeriodChange()"
+                                        class="bg-gray-50 hover:bg-white border border-gray-200 focus:border-[#0052cc] rounded-xl px-3.5 py-1.5 text-xs font-bold text-gray-800 outline-none shadow-2xs transition-colors cursor-pointer">
+                                    <option value="2024">Tahun 2024</option>
+                                    <option value="2025">Tahun 2025</option>
+                                    <option value="2026">Tahun 2026</option>
+                                    <option value="2027">Tahun 2027</option>
+                                </select>
+                            </template>
+                        </div>
+
+                        <!-- Branch Filter (Konsolidasi Multi-Outlet) -->
+                        <div class="relative">
+                            <select x-model="selectedBranch"
+                                    @change="applyPeriodChange()"
+                                    class="bg-gray-50 hover:bg-white border border-gray-200 focus:border-[#0052cc] rounded-xl pl-3 pr-8 py-1.5 text-xs font-bold text-gray-800 outline-none shadow-2xs transition-colors cursor-pointer">
+                                <option value="all">Semua Cabang (Konsolidasi)</option>
+                                <option value="Pusat">Cabang Pusat</option>
+                                <option value="Cabang A">Cabang A</option>
+                                <option value="Cabang B">Cabang B</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Right: Export Excel & PDF Buttons -->
+                    <div class="flex items-center gap-2">
+                        <!-- Button Ekspor Excel (.xlsx) -->
+                        <button type="button"
+                                @click="exportCurrentTabToExcel()"
+                                class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                                title="Unduh data tabel laporan saat ini dalam format spreadsheet Excel (.xlsx)">
+                            <span class="material-symbols-rounded text-[17px]">table_chart</span>
+                            <span>Ekspor Excel (.xlsx)</span>
+                        </button>
+
+                        <!-- Button Cetak / Unduh PDF -->
+                        <button type="button"
+                                @click="openPrintPdfModal()"
+                                class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#0052cc] hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                                title="Pratinjau & Cetak / Simpan sebagai dokumen PDF resmi lengkap dengan tanda tangan">
+                            <span class="material-symbols-rounded text-[17px]">picture_as_pdf</span>
+                            <span>Cetak / Unduh PDF</span>
+                        </button>
+
+                        <button type="button"
+                                @click="applyPeriodChange()"
+                                class="p-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors cursor-pointer"
+                                title="Muat ulang data laporan">
+                            <span class="material-symbols-rounded text-[18px]">refresh</span>
+                        </button>
+                    </div>
+                </div>
+
                 <!-- ========================================================= -->
                 <!-- 1. TAB: LAPORAN PENJUALAN (MODUL E)                       -->
                 <!-- ========================================================= -->
@@ -502,11 +974,11 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
                             <!-- Cabang Selector -->
                             <select x-model="salesBranch" @change="loadSalesReport()"
-                                    class="bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 shadow-2xs">
+                                    class="bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 shadow-2xs cursor-pointer">
                                 <option value="all">Konsolidasi 3 Cabang</option>
-                                <option value="Pusat">Minimarket Pusat</option>
-                                <option value="Cabang 1">Cabang 1 - Mill / Pabrik</option>
-                                <option value="Cabang 2">Cabang 2 - Kebun Barat</option>
+                                <option value="Pusat">Cabang Pusat</option>
+                                <option value="Cabang A">Cabang A</option>
+                                <option value="Cabang B">Cabang B</option>
                             </select>
 
                             <button type="button" @click="loadSalesReport()"
@@ -648,12 +1120,18 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             <p class="text-xs text-gray-500 mt-1">Dihitung otomatis: Omzet kotor dikurangi HPP produk reguler serta memperhitungkan bagi hasil komisi konsinyasi UMKM.</p>
                         </div>
 
-                        <div class="flex items-center gap-2">
+                        <div class="flex flex-wrap items-center gap-2">
                             <input type="date" x-model="plStartDate" @change="loadProfitLossReport()" class="bg-white border rounded-xl px-3 py-1.5 text-xs font-semibold">
                             <span class="text-xs text-gray-400">s/d</span>
                             <input type="date" x-model="plEndDate" @change="loadProfitLossReport()" class="bg-white border rounded-xl px-3 py-1.5 text-xs font-semibold">
-                            <button type="button" @click="loadProfitLossReport()" class="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl">
+                            <button type="button" @click="loadProfitLossReport()" class="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl cursor-pointer" title="Segarkan Data Laba Rugi">
                                 <span class="material-symbols-rounded text-[18px]">refresh</span>
+                            </button>
+                            <button type="button"
+                                    @click="openPrintPdfModal()"
+                                    class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#0052cc] hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer">
+                                <span class="material-symbols-rounded text-[17px]">picture_as_pdf</span>
+                                <span>Ekspor PDF</span>
                             </button>
                         </div>
                     </div>
@@ -1060,11 +1538,11 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             <input type="date" x-model="consolidatedEndDate" @change="loadConsolidatedReport()"
                                    class="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 focus:outline-none">
                             <select x-model="consolidatedBranch" @change="loadConsolidatedReport()"
-                                    class="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 focus:outline-none">
+                                    class="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 focus:outline-none cursor-pointer">
                                 <option value="all">Semua Cabang (Konsolidasi)</option>
-                                <option value="Pusat">Minimarket Pusat</option>
-                                <option value="Cabang 1 - Mill / Pabrik">Cabang 1 - Mill / Pabrik</option>
-                                <option value="Cabang 2 - Kebun Barat">Cabang 2 - Kebun Barat</option>
+                                <option value="Pusat">Cabang Pusat</option>
+                                <option value="Cabang A">Cabang A</option>
+                                <option value="Cabang B">Cabang B</option>
                             </select>
                             <button type="button" @click="loadConsolidatedReport()"
                                     class="px-3.5 py-2 bg-purple-900 hover:bg-purple-950 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer">
@@ -1130,7 +1608,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <div class="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden">
                         <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-purple-50/30">
                             <div>
-                                <h3 class="text-sm font-black text-gray-900">Performa Komparasi 3 Cabang (Pusat &amp; Unit Kebun)</h3>
+                                <h3 class="text-sm font-black text-gray-900">Performa Komparasi 3 Cabang (Pusat, Cabang A, Cabang B)</h3>
                                 <p class="text-[11px] text-gray-500">Omzet, Laba Kotor, dan Portofolio Piutang Kasbon Karyawan</p>
                             </div>
                             <span class="text-[11px] font-bold text-purple-900 bg-purple-100 px-3 py-1 rounded-full">
@@ -1221,9 +1699,650 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </main>
 
+    <!-- ========================================================= -->
+    <!-- MODAL PRATINJAU DOKUMEN CETAK RESMI (PDF / PRINT READY)    -->
+    <!-- ========================================================= -->
+    <div x-show="showPrintModal"
+         x-cloak
+         class="fixed inset-0 z-[9999] overflow-y-auto bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6"
+         style="display: none;">
+            
+            <div class="relative w-full max-w-5xl bg-white rounded-3xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden border border-gray-200">
+                <!-- Modal Top Action Toolbar (No-Print) -->
+                <div class="px-6 py-4 bg-gray-900 text-white flex items-center justify-between shrink-0 no-print">
+                    <div class="flex items-center gap-3">
+                        <span class="w-9 h-9 rounded-xl bg-blue-600/30 border border-blue-500/40 flex items-center justify-center text-blue-400">
+                            <span class="material-symbols-rounded text-xl">picture_as_pdf</span>
+                        </span>
+                        <div>
+                            <h3 class="text-sm font-black tracking-tight text-white flex items-center gap-2">
+                                <span>Pratinjau Dokumen Laporan Resmi (PDF)</span>
+                                <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">Siap Cetak / Unduh PDF</span>
+                            </h3>
+                            <p class="text-[11px] text-gray-400">Dokumen diformat khusus standar A4 dengan Kop Surat Resmi &amp; Pengesahan 3 Kolom.</p>
+                        </div>
+                    </div>
 
-    <!-- Toast Notification -->
+                    <div class="flex items-center gap-2">
+                        <button type="button"
+                                @click="printOfficialDocument()"
+                                class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0052cc] hover:bg-blue-600 text-white text-xs font-bold shadow-md transition-all cursor-pointer">
+                            <span class="material-symbols-rounded text-[17px]">print</span>
+                            <span>Cetak / Simpan PDF</span>
+                        </button>
+                        <button type="button"
+                                @click="showPrintModal = false"
+                                class="px-3.5 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-bold transition-all cursor-pointer">
+                            Tutup
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Printable Document Preview Container -->
+                <div class="flex-1 overflow-y-auto p-4 sm:p-8 bg-gray-200/80 flex justify-center">
+                    <!-- The Actual Paper Document (Target of @media print) -->
+                    <div id="official-printable-doc-root" class="bg-white text-gray-900 w-full max-w-4xl p-8 sm:p-10 shadow-lg border border-gray-300 rounded-sm font-sans">
+                        
+                        <!-- 1. KOP SURAT RESMI PERUSAHAAN & KOPERASI -->
+                        <div class="flex items-center gap-5 pb-4 border-b-4 border-double border-gray-900">
+                            <div class="w-16 h-16 rounded-xl bg-blue-900 flex items-center justify-center text-white font-black text-2xl tracking-tighter shrink-0 border border-blue-950">
+                                ILP
+                            </div>
+                            <div class="flex-1 text-center pr-16">
+                                <h2 class="text-base sm:text-lg font-black tracking-tight uppercase text-gray-900 leading-tight">
+                                    KOPERASI PEKERJA PT INDO LAMPUNG PERKASA (ILP)
+                                </h2>
+                                <h3 class="text-xs sm:text-sm font-bold tracking-wide uppercase text-blue-900 mt-0.5">
+                                    UNIT USAHA RETAIL MINIMARKET &amp; TOKO SERBA ADA
+                                </h3>
+                                <p class="text-[10.5px] text-gray-600 mt-1 leading-snug">
+                                    Jl. Lintas Timur KM. 120, Kawasan Industri PT ILP, Gedung Koperasi Lantai 1, Menggala, Tulang Bawang, Lampung 34596<br>
+                                    Telepon: (0726) 775123 | Layanan Anggota: ext. 402 | Email: koperasi.ilp@sugarindogroup.com
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- 2. JUDUL DOKUMEN & METADATA RESMI -->
+                        <div class="mt-6 mb-5 text-center">
+                            <h1 class="text-base font-black uppercase tracking-wider text-gray-900" x-text="'LAPORAN RESMI: ' + getTabTitle()"></h1>
+                            <div class="inline-block mt-1 px-3 py-0.5 bg-gray-100 rounded text-[11px] font-mono font-bold text-gray-700">
+                                DOKUMEN STANDAR AKUNTANSI KOPERASI (SAK EP)
+                            </div>
+                        </div>
+
+                        <!-- Metadata Grid -->
+                        <div class="grid grid-cols-2 gap-x-6 gap-y-2 p-3.5 bg-gray-50 border border-gray-200 rounded-lg text-xs mb-6">
+                            <div class="flex justify-between">
+                                <span class="text-gray-500 font-semibold">Periode Laporan:</span>
+                                <span class="font-bold text-gray-900" x-text="getPdfPeriodLabel()"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-500 font-semibold">Cakupan Cabang:</span>
+                                <span class="font-bold text-gray-900" x-text="getPdfBranchLabel()"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-500 font-semibold">Waktu Pencetakan:</span>
+                                <span class="font-mono text-gray-700" x-text="new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-500 font-semibold">Penanggung Jawab:</span>
+                                <span class="font-bold text-gray-900">{{ Auth::user()->name ?? 'Manager Toko' }} (Manager Unit)</span>
+                            </div>
+                        </div>
+
+                        <!-- 3. RINGKASAN EKSEKUTIF / KPI CARDS -->
+                        <!-- If Sales -->
+                        <template x-if="activeTab === 'sales_accounting'">
+                            <div class="grid grid-cols-4 gap-3 mb-6 text-center">
+                                <div class="p-2.5 bg-gray-50 border border-gray-200 rounded">
+                                    <div class="text-[9.5px] uppercase font-bold text-gray-500">Total Omzet Bersih</div>
+                                    <div class="text-xs font-mono font-black text-gray-900 mt-0.5" x-text="formatRupiah(salesData?.summary?.grand_total || 0)"></div>
+                                </div>
+                                <div class="p-2.5 bg-gray-50 border border-gray-200 rounded">
+                                    <div class="text-[9.5px] uppercase font-bold text-gray-500">Jumlah Transaksi</div>
+                                    <div class="text-xs font-mono font-black text-gray-900 mt-0.5" x-text="(salesData?.summary?.transaction_count || 0) + ' Struk'"></div>
+                                </div>
+                                <div class="p-2.5 bg-gray-50 border border-gray-200 rounded">
+                                    <div class="text-[9.5px] uppercase font-bold text-gray-500">Pembayaran Tunai</div>
+                                    <div class="text-xs font-mono font-black text-gray-900 mt-0.5" x-text="formatRupiah(salesData?.summary?.payment_breakdown?.tunai || 0)"></div>
+                                </div>
+                                <div class="p-2.5 bg-gray-50 border border-gray-200 rounded">
+                                    <div class="text-[9.5px] uppercase font-bold text-gray-500">Non-Tunai &amp; Kasbon</div>
+                                    <div class="text-xs font-mono font-black text-gray-900 mt-0.5" x-text="formatRupiah((salesData?.summary?.payment_breakdown?.qris || 0) + (salesData?.summary?.payment_breakdown?.kredit_kasbon || 0))"></div>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- If Profit Loss -->
+                        <template x-if="activeTab === 'profit_loss'">
+                            <div class="grid grid-cols-4 gap-3 mb-6 text-center">
+                                <div class="p-2.5 bg-gray-50 border border-gray-200 rounded">
+                                    <div class="text-[9.5px] uppercase font-bold text-gray-500">Total Penjualan Kotor</div>
+                                    <div class="text-xs font-mono font-black text-gray-900 mt-0.5" x-text="formatRupiah(plData?.statement?.gross_sales || 0)"></div>
+                                </div>
+                                <div class="p-2.5 bg-gray-50 border border-gray-200 rounded">
+                                    <div class="text-[9.5px] uppercase font-bold text-gray-500">Total Penjualan Bersih</div>
+                                    <div class="text-xs font-mono font-black text-[#0052cc] mt-0.5" x-text="formatRupiah(plData?.statement?.net_sales || 0)"></div>
+                                </div>
+                                <div class="p-2.5 bg-gray-50 border border-gray-200 rounded">
+                                    <div class="text-[9.5px] uppercase font-bold text-gray-500">Total Laba Kotor</div>
+                                    <div class="text-xs font-mono font-black text-emerald-800 mt-0.5" x-text="formatRupiah(plData?.statement?.total_gross_profit || 0)"></div>
+                                </div>
+                                <div class="p-2.5 bg-gray-50 border border-gray-200 rounded">
+                                    <div class="text-[9.5px] uppercase font-bold text-gray-500">Laba Bersih Operasional</div>
+                                    <div class="text-xs font-mono font-black text-emerald-700 mt-0.5" x-text="formatRupiah(plData?.statement?.net_profit || 0)"></div>
+                                    <div class="text-[9px] font-bold text-gray-500" x-text="'Margin: ' + (plData?.statement?.profit_margin_percent || 0) + '%'"></div>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- If Fast Moving -->
+                        <template x-if="activeTab === 'fast_moving'">
+                            <div class="grid grid-cols-3 gap-3 mb-6 text-center">
+                                <div class="p-2.5 bg-gray-50 border border-gray-200 rounded">
+                                    <div class="text-[9.5px] uppercase font-bold text-gray-500">Total Item Dianalisis</div>
+                                    <div class="text-xs font-mono font-black text-gray-900 mt-0.5" x-text="(fastMovingData || []).length + ' SKU'"></div>
+                                </div>
+                                <div class="p-2.5 bg-gray-50 border border-gray-200 rounded">
+                                    <div class="text-[9.5px] uppercase font-bold text-gray-500">Perlu Restock</div>
+                                    <div class="text-xs font-mono font-black text-amber-700 mt-0.5" x-text="(fastMovingData || []).filter(i => (i.recommended_restock_qty || 0) > 0).length + ' SKU'"></div>
+                                </div>
+                                <div class="p-2.5 bg-gray-50 border border-gray-200 rounded">
+                                    <div class="text-[9.5px] uppercase font-bold text-gray-500">Kondisi Stok Rendah</div>
+                                    <div class="text-xs font-mono font-black text-red-600 mt-0.5" x-text="(fastMovingData || []).filter(i => i.is_low_stock).length + ' SKU'"></div>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- If Cash Reconciliation -->
+                        <template x-if="activeTab === 'cash_reconciliation'">
+                            <div class="grid grid-cols-4 gap-3 mb-6 text-center">
+                                <div class="p-2.5 bg-gray-50 border border-gray-200 rounded">
+                                    <div class="text-[9.5px] uppercase font-bold text-gray-500">Shift Diaudit</div>
+                                    <div class="text-xs font-mono font-black text-gray-900 mt-0.5" x-text="reconData?.summary?.total_audited_shifts || 0"></div>
+                                </div>
+                                <div class="p-2.5 bg-gray-50 border border-gray-200 rounded">
+                                    <div class="text-[9.5px] uppercase font-bold text-gray-500">Estimasi Kas Sistem</div>
+                                    <div class="text-xs font-mono font-black text-gray-900 mt-0.5" x-text="formatRupiah(reconData?.summary?.total_expected_cash || 0)"></div>
+                                </div>
+                                <div class="p-2.5 bg-gray-50 border border-gray-200 rounded">
+                                    <div class="text-[9.5px] uppercase font-bold text-gray-500">Total Kas Fisik Laci</div>
+                                    <div class="text-xs font-mono font-black text-gray-900 mt-0.5" x-text="formatRupiah(reconData?.summary?.total_actual_cash || 0)"></div>
+                                </div>
+                                <div class="p-2.5 bg-gray-50 border border-gray-200 rounded">
+                                    <div class="text-[9.5px] uppercase font-bold text-gray-500">Net Selisih Kasir</div>
+                                    <div class="text-xs font-mono font-black mt-0.5" :class="(reconData?.summary?.net_variance || 0) < 0 ? 'text-red-600' : 'text-gray-900'" x-text="formatRupiah(reconData?.summary?.net_variance || 0)"></div>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- If Product Taxes -->
+                        <template x-if="activeTab === 'product_taxes'">
+                            <div class="grid grid-cols-3 gap-3 mb-6 text-center">
+                                <div class="p-2.5 bg-gray-50 border border-gray-200 rounded">
+                                    <div class="text-[9.5px] uppercase font-bold text-gray-500">Produk Kena Pajak (PPN)</div>
+                                    <div class="text-xs font-mono font-black text-gray-900 mt-0.5" x-text="(taxSummary?.taxable_products || 0) + ' SKU'"></div>
+                                </div>
+                                <div class="p-2.5 bg-gray-50 border border-gray-200 rounded">
+                                    <div class="text-[9.5px] uppercase font-bold text-gray-500">Produk Bebas Pajak</div>
+                                    <div class="text-xs font-mono font-black text-gray-900 mt-0.5" x-text="(taxSummary?.non_taxable_products || 0) + ' SKU'"></div>
+                                </div>
+                                <div class="p-2.5 bg-gray-50 border border-gray-200 rounded">
+                                    <div class="text-[9.5px] uppercase font-bold text-gray-500">Tarif PPN Global</div>
+                                    <div class="text-xs font-mono font-black text-purple-900 mt-0.5" x-text="(taxSummary?.global_tax_rate || 11) + '%'"></div>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- If Payroll Debt -->
+                        <template x-if="activeTab === 'payroll_debt'">
+                            <div class="grid grid-cols-4 gap-3 mb-6 text-center">
+                                <div class="p-2.5 bg-gray-50 border border-gray-200 rounded">
+                                    <div class="text-[9.5px] uppercase font-bold text-gray-500">Total Piutang Berjalan</div>
+                                    <div class="text-xs font-mono font-black text-amber-800 mt-0.5" x-text="formatRupiah(debtSummary?.total_active_debt || 0)"></div>
+                                </div>
+                                <div class="p-2.5 bg-gray-50 border border-gray-200 rounded">
+                                    <div class="text-[9.5px] uppercase font-bold text-gray-500">Anggota Berhutang</div>
+                                    <div class="text-xs font-mono font-black text-gray-900 mt-0.5" x-text="(debtSummary?.members_with_active_debt || 0) + ' Karyawan'"></div>
+                                </div>
+                                <div class="p-2.5 bg-gray-50 border border-gray-200 rounded">
+                                    <div class="text-[9.5px] uppercase font-bold text-gray-500">Total Plafon Kredit</div>
+                                    <div class="text-xs font-mono font-black text-gray-900 mt-0.5" x-text="formatRupiah(debtSummary?.total_credit_limit || 0)"></div>
+                                </div>
+                                <div class="p-2.5 bg-gray-50 border border-gray-200 rounded">
+                                    <div class="text-[9.5px] uppercase font-bold text-gray-500">Sisa Plafon Tersedia</div>
+                                    <div class="text-xs font-mono font-black text-emerald-700 mt-0.5" x-text="formatRupiah(debtSummary?.total_remaining_credit || 0)"></div>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- If Consolidated -->
+                        <template x-if="activeTab === 'consolidated_3branches'">
+                            <div class="grid grid-cols-4 gap-3 mb-6 text-center">
+                                <div class="p-2.5 bg-gray-50 border border-gray-200 rounded">
+                                    <div class="text-[9.5px] uppercase font-bold text-gray-500">Total Omzet Konsolidasi</div>
+                                    <div class="text-xs font-mono font-black text-gray-900 mt-0.5" x-text="formatRupiah(consolidatedData?.financial_summary?.consolidated_gross_sales || 0)"></div>
+                                </div>
+                                <div class="p-2.5 bg-gray-50 border border-gray-200 rounded">
+                                    <div class="text-[9.5px] uppercase font-bold text-gray-500">Total Laba Kotor</div>
+                                    <div class="text-xs font-mono font-black text-gray-900 mt-0.5" x-text="formatRupiah(consolidatedData?.financial_summary?.consolidated_gross_profit || 0)"></div>
+                                </div>
+                                <div class="p-2.5 bg-gray-50 border border-gray-200 rounded">
+                                    <div class="text-[9.5px] uppercase font-bold text-gray-500">Total Piutang Berjalan</div>
+                                    <div class="text-xs font-mono font-black text-gray-900 mt-0.5" x-text="formatRupiah(consolidatedData?.financial_summary?.total_active_member_debt || 0)"></div>
+                                </div>
+                                <div class="p-2.5 bg-gray-50 border border-gray-200 rounded">
+                                    <div class="text-[9.5px] uppercase font-bold text-gray-500">Valuasi Stok Gabungan</div>
+                                    <div class="text-xs font-mono font-black text-gray-900 mt-0.5" x-text="formatRupiah(consolidatedData?.financial_summary?.total_inventory_valuation || 0)"></div>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- 4. COMPLETE TABULAR DATA ACCORDING TO ACTIVE TAB -->
+                        <!-- TAB 1: Penjualan -->
+                        <template x-if="activeTab === 'sales_accounting'">
+                            <div class="space-y-6">
+                                <div>
+                                    <h4 class="text-xs font-black uppercase text-gray-700 mb-2">A. Rekapitulasi Performa Antar Cabang</h4>
+                                    <table class="w-full text-left text-[11px] border-collapse border border-gray-300">
+                                        <thead>
+                                            <tr class="bg-gray-100 border-b border-gray-300 font-bold uppercase">
+                                                <th class="p-2 border border-gray-300">Kode</th>
+                                                <th class="p-2 border border-gray-300">Nama Cabang Outlet</th>
+                                                <th class="p-2 border border-gray-300 text-center">Transaksi</th>
+                                                <th class="p-2 border border-gray-300 text-right">Total Penjualan (Rp)</th>
+                                                <th class="p-2 border border-gray-300 text-center">Kontribusi (%)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <template x-for="b in (salesData?.branch_breakdown || [])" :key="b.branch_code">
+                                                <tr class="border-b border-gray-200">
+                                                    <td class="p-2 border border-gray-300 font-mono" x-text="b.branch_code"></td>
+                                                    <td class="p-2 border border-gray-300 font-bold" x-text="b.branch_name"></td>
+                                                    <td class="p-2 border border-gray-300 text-center font-mono" x-text="b.transaction_count"></td>
+                                                    <td class="p-2 border border-gray-300 text-right font-mono" x-text="formatRupiah(b.total_sales)"></td>
+                                                    <td class="p-2 border border-gray-300 text-center font-bold" x-text="b.contribution_percent + '%'"></td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <div>
+                                    <h4 class="text-xs font-black uppercase text-gray-700 mb-2">B. Rekapitulasi Penjualan Per Shift Kasir</h4>
+                                    <table class="w-full text-left text-[11px] border-collapse border border-gray-300">
+                                        <thead>
+                                            <tr class="bg-gray-100 border-b border-gray-300 font-bold uppercase">
+                                                <th class="p-2 border border-gray-300">Kode Shift</th>
+                                                <th class="p-2 border border-gray-300">Terminal</th>
+                                                <th class="p-2 border border-gray-300">Nama Kasir</th>
+                                                <th class="p-2 border border-gray-300 text-center">Transaksi</th>
+                                                <th class="p-2 border border-gray-300 text-right">Modal Awal (Rp)</th>
+                                                <th class="p-2 border border-gray-300 text-right">Penjualan Tunai (Rp)</th>
+                                                <th class="p-2 border border-gray-300 text-right">Total Omzet (Rp)</th>
+                                                <th class="p-2 border border-gray-300 text-center">Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <template x-for="s in (salesData?.shifts_breakdown || [])" :key="s.shift_id || s.shift_code">
+                                                <tr class="border-b border-gray-200">
+                                                    <td class="p-2 border border-gray-300 font-mono" x-text="s.shift_code"></td>
+                                                    <td class="p-2 border border-gray-300 font-mono font-bold" x-text="s.terminal_code"></td>
+                                                    <td class="p-2 border border-gray-300 font-bold" x-text="s.cashier_name"></td>
+                                                    <td class="p-2 border border-gray-300 text-center font-mono" x-text="s.transaction_count"></td>
+                                                    <td class="p-2 border border-gray-300 text-right font-mono" x-text="formatRupiah(s.opening_cash)"></td>
+                                                    <td class="p-2 border border-gray-300 text-right font-mono" x-text="formatRupiah(s.cash_sales)"></td>
+                                                    <td class="p-2 border border-gray-300 text-right font-mono font-bold" x-text="formatRupiah(s.total_sales)"></td>
+                                                    <td class="p-2 border border-gray-300 text-center font-bold" x-text="s.status"></td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- TAB 2: Laporan Laba / Rugi Bersih (P&L Statement - Sinkron 100% dengan Aplikasi) -->
+                        <template x-if="activeTab === 'profit_loss'">
+                            <div class="space-y-4">
+                                <div class="flex items-center justify-between border-b border-gray-300 pb-2">
+                                    <div>
+                                        <h4 class="text-xs font-black uppercase text-gray-900">IKHTISAR LABA / RUGI OPERASIONAL</h4>
+                                        <p class="text-[11px] text-gray-600" x-text="'Periode: ' + plStartDate + ' s/d ' + plEndDate"></p>
+                                    </div>
+                                    <span class="text-[11px] font-mono font-bold text-gray-500">Mata Uang: IDR (Rp)</span>
+                                </div>
+
+                                <table class="w-full text-left text-[11.5px] border-collapse border border-gray-300">
+                                    <thead>
+                                        <tr class="bg-gray-100 border-b border-gray-300 font-bold uppercase text-gray-800">
+                                            <th class="p-2.5 border border-gray-300">Komponen Akuntansi Laba / Rugi Operasional</th>
+                                            <th class="p-2.5 border border-gray-300 text-right w-48">Nominal (Rp)</th>
+                                            <th class="p-2.5 border border-gray-300 text-center w-28">% Terhadap Gross</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Section I: Pendapatan Penjualan -->
+                                        <tr class="bg-slate-100 font-bold text-gray-900">
+                                            <td colspan="3" class="p-2 border border-gray-300 uppercase tracking-wider text-[10.5px]">I. PENDAPATAN PENJUALAN (REVENUES)</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="p-2 border border-gray-300 pl-4 text-gray-700">Penjualan Produk Reguler Koperasi</td>
+                                            <td class="p-2 border border-gray-300 text-right font-mono font-bold text-gray-900" x-text="formatRupiah(plData?.statement?.regular_product_sales || 0)"></td>
+                                            <td class="p-2 border border-gray-300 text-center font-mono text-gray-600" x-text="getPlRatio(plData?.statement?.regular_product_sales)"></td>
+                                        </tr>
+                                        <tr>
+                                            <td class="p-2 border border-gray-300 pl-4 text-gray-700">Penjualan Produk Titipan Konsinyasi UMKM</td>
+                                            <td class="p-2 border border-gray-300 text-right font-mono font-bold text-gray-900" x-text="formatRupiah(plData?.statement?.consignment_product_sales || 0)"></td>
+                                            <td class="p-2 border border-gray-300 text-center font-mono text-gray-600" x-text="getPlRatio(plData?.statement?.consignment_product_sales)"></td>
+                                        </tr>
+                                        <tr class="font-bold bg-gray-50">
+                                            <td class="p-2 border border-gray-300 pl-4 text-gray-900">Total Penjualan Kotor (Gross Sales)</td>
+                                            <td class="p-2 border border-gray-300 text-right font-mono text-gray-900" x-text="formatRupiah(plData?.statement?.gross_sales || 0)"></td>
+                                            <td class="p-2 border border-gray-300 text-center font-mono" x-text="(Number(plData?.statement?.gross_sales || 0) > 0) ? '100.0%' : '0.0%'"></td>
+                                        </tr>
+                                        <tr class="text-red-700">
+                                            <td class="p-2 border border-gray-300 pl-4">(-) Potongan / Diskon Promosi &amp; Expired Clearance</td>
+                                            <td class="p-2 border border-gray-300 text-right font-mono font-bold" x-text="'- ' + formatRupiah(plData?.statement?.total_discounts || 0)"></td>
+                                            <td class="p-2 border border-gray-300 text-center font-mono" x-text="getPlRatio(plData?.statement?.total_discounts)"></td>
+                                        </tr>
+                                        <tr class="bg-blue-50/70 font-bold text-gray-900">
+                                            <td class="p-2.5 border border-gray-300 pl-4">Total Penjualan Bersih (Net Sales)</td>
+                                            <td class="p-2.5 border border-gray-300 text-right font-mono text-[#0052cc]" x-text="formatRupiah(plData?.statement?.net_sales || 0)"></td>
+                                            <td class="p-2.5 border border-gray-300 text-center font-mono text-[#0052cc]" x-text="getPlRatio(plData?.statement?.net_sales)"></td>
+                                        </tr>
+
+                                        <!-- Section II: Biaya Pokok Penjualan & Bagi Hasil Mitra -->
+                                        <tr class="bg-slate-100 font-bold text-gray-900">
+                                            <td colspan="3" class="p-2 border border-gray-300 uppercase tracking-wider text-[10.5px]">II. BIAYA POKOK PENJUALAN &amp; BAGI HASIL MITRA</td>
+                                        </tr>
+                                        <tr class="text-red-700">
+                                            <td class="p-2 border border-gray-300 pl-4">(-) Harga Pokok Penjualan (HPP) Barang Reguler</td>
+                                            <td class="p-2 border border-gray-300 text-right font-mono font-bold" x-text="'- ' + formatRupiah(plData?.statement?.regular_cogs || 0)"></td>
+                                            <td class="p-2 border border-gray-300 text-center font-mono" x-text="getPlRatio(plData?.statement?.regular_cogs)"></td>
+                                        </tr>
+                                        <tr class="text-amber-800">
+                                            <td class="p-2 border border-gray-300 pl-4">(-) Hak Setoran Hasil Penjualan ke Mitra UMKM</td>
+                                            <td class="p-2 border border-gray-300 text-right font-mono font-bold" x-text="'- ' + formatRupiah(plData?.statement?.umkm_partner_share || 0)"></td>
+                                            <td class="p-2 border border-gray-300 text-center font-mono" x-text="getPlRatio(plData?.statement?.umkm_partner_share)"></td>
+                                        </tr>
+                                        <tr class="text-emerald-800 bg-emerald-50/40">
+                                            <td class="p-2 border border-gray-300 pl-4 font-semibold">(+) Pendapatan Bagi Hasil / Komisi Koperasi dari UMKM</td>
+                                            <td class="p-2 border border-gray-300 text-right font-mono font-bold" x-text="'+ ' + formatRupiah(plData?.statement?.cooperative_commission_earned || 0)"></td>
+                                            <td class="p-2 border border-gray-300 text-center font-mono" x-text="getPlRatio(plData?.statement?.cooperative_commission_earned)"></td>
+                                        </tr>
+
+                                        <!-- Section III: Laba Kotor, Pajak & Laba Bersih -->
+                                        <tr class="bg-emerald-50 font-black text-emerald-900">
+                                            <td class="p-2.5 border border-gray-300">TOTAL LABA KOTOR (GROSS PROFIT)</td>
+                                            <td class="p-2.5 border border-gray-300 text-right font-mono" x-text="formatRupiah(plData?.statement?.total_gross_profit || 0)"></td>
+                                            <td class="p-2.5 border border-gray-300 text-center font-mono" x-text="getPlRatio(plData?.statement?.total_gross_profit)"></td>
+                                        </tr>
+                                        <tr>
+                                            <td class="p-2 border border-gray-300 pl-4 text-gray-600">Pajak Pertambahan Nilai (PPN 11%) Terkumpul</td>
+                                            <td class="p-2 border border-gray-300 text-right font-mono text-gray-700" x-text="formatRupiah(plData?.statement?.collected_tax_ppn || 0)"></td>
+                                            <td class="p-2 border border-gray-300 text-center font-mono text-gray-500" x-text="getPlRatio(plData?.statement?.collected_tax_ppn)"></td>
+                                        </tr>
+                                        <tr class="bg-emerald-100 font-black text-gray-900 border-t-2 border-emerald-700">
+                                            <td class="p-3 border border-gray-400">
+                                                <div>LABA BERSIH OPERASIONAL (NET PROFIT)</div>
+                                                <div class="text-[10.5px] font-bold text-emerald-800 mt-0.5"
+                                                     x-text="'Margin Keuntungan Bersih: ' + (plData?.statement?.profit_margin_percent || 0) + '%'"></div>
+                                            </td>
+                                            <td class="p-3 border border-gray-400 text-right font-mono text-sm text-emerald-900" x-text="formatRupiah(plData?.statement?.net_profit || 0)"></td>
+                                            <td class="p-3 border border-gray-400 text-center font-mono text-emerald-900" x-text="(plData?.statement?.profit_margin_percent || 0) + '%'"></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </template>
+
+                        <!-- TAB 3: Fast Moving Items -->
+                        <template x-if="activeTab === 'fast_moving'">
+                            <div>
+                                <table class="w-full text-left text-[10.5px] border-collapse border border-gray-300">
+                                    <thead>
+                                        <tr class="bg-gray-100 border-b border-gray-300 font-bold uppercase">
+                                            <th class="p-2 border border-gray-300 text-center w-10">Rank</th>
+                                            <th class="p-2 border border-gray-300">SKU</th>
+                                            <th class="p-2 border border-gray-300">Nama Produk</th>
+                                            <th class="p-2 border border-gray-300">Kategori</th>
+                                            <th class="p-2 border border-gray-300 text-center">Terjual</th>
+                                            <th class="p-2 border border-gray-300 text-right">Omzet Penjualan (Rp)</th>
+                                            <th class="p-2 border border-gray-300 text-center">Share (%)</th>
+                                            <th class="p-2 border border-gray-300 text-center">Sisa Stok</th>
+                                            <th class="p-2 border border-gray-300 text-center">Saran Restock</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template x-for="item in (fastMovingData || [])" :key="item.sku">
+                                            <tr class="border-b border-gray-200">
+                                                <td class="p-2 border border-gray-300 text-center font-bold" x-text="item.rank"></td>
+                                                <td class="p-2 border border-gray-300 font-mono text-[10px]" x-text="item.sku"></td>
+                                                <td class="p-2 border border-gray-300 font-bold" x-text="item.name"></td>
+                                                <td class="p-2 border border-gray-300" x-text="item.category"></td>
+                                                <td class="p-2 border border-gray-300 text-center font-mono" x-text="item.total_qty_sold + ' ' + item.unit"></td>
+                                                <td class="p-2 border border-gray-300 text-right font-mono" x-text="formatRupiah(item.total_revenue)"></td>
+                                                <td class="p-2 border border-gray-300 text-center font-bold" x-text="item.revenue_share_percent + '%'"></td>
+                                                <td class="p-2 border border-gray-300 text-center font-mono" x-text="item.current_stock + ' ' + item.unit"></td>
+                                                <td class="p-2 border border-gray-300 text-center font-bold" :class="item.recommended_restock_qty > 0 ? 'text-amber-800' : 'text-gray-400'" x-text="item.recommended_restock_qty > 0 ? ('+' + item.recommended_restock_qty + ' ' + item.unit) : 'Aman'"></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </template>
+
+                        <!-- TAB 4: Rekonsiliasi Kas Shift -->
+                        <template x-if="activeTab === 'cash_reconciliation'">
+                            <div>
+                                <table class="w-full text-left text-[10.5px] border-collapse border border-gray-300">
+                                    <thead>
+                                        <tr class="bg-gray-100 border-b border-gray-300 font-bold uppercase">
+                                            <th class="p-2 border border-gray-300">Kode Shift</th>
+                                            <th class="p-2 border border-gray-300">Terminal</th>
+                                            <th class="p-2 border border-gray-300">Kasir</th>
+                                            <th class="p-2 border border-gray-300 text-right">Modal Awal</th>
+                                            <th class="p-2 border border-gray-300 text-right">Penjualan Tunai</th>
+                                            <th class="p-2 border border-gray-300 text-right">Estimasi Sistem</th>
+                                            <th class="p-2 border border-gray-300 text-right">Fisik Laci</th>
+                                            <th class="p-2 border border-gray-300 text-right">Selisih</th>
+                                            <th class="p-2 border border-gray-300 text-center">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template x-for="s in (reconData?.data || [])" :key="s.id || s.shift_code">
+                                            <tr class="border-b border-gray-200">
+                                                <td class="p-2 border border-gray-300 font-mono text-[10px]" x-text="s.shift_code"></td>
+                                                <td class="p-2 border border-gray-300 font-bold" x-text="s.terminal_code"></td>
+                                                <td class="p-2 border border-gray-300" x-text="s.cashier_name"></td>
+                                                <td class="p-2 border border-gray-300 text-right font-mono" x-text="formatRupiah(s.opening_cash)"></td>
+                                                <td class="p-2 border border-gray-300 text-right font-mono" x-text="formatRupiah(s.cash_sales_total)"></td>
+                                                <td class="p-2 border border-gray-300 text-right font-mono" x-text="formatRupiah(s.expected_cash)"></td>
+                                                <td class="p-2 border border-gray-300 text-right font-mono font-bold" x-text="formatRupiah(s.actual_cash)"></td>
+                                                <td class="p-2 border border-gray-300 text-right font-mono font-bold" :class="s.variance < 0 ? 'text-red-600' : (s.variance > 0 ? 'text-emerald-700' : 'text-gray-900')" x-text="formatRupiah(s.variance)"></td>
+                                                <td class="p-2 border border-gray-300 text-center font-bold" x-text="s.variance_status"></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </template>
+
+                        <!-- TAB 5: Pajak PPN -->
+                        <template x-if="activeTab === 'product_taxes'">
+                            <div>
+                                <table class="w-full text-left text-[10.5px] border-collapse border border-gray-300">
+                                    <thead>
+                                        <tr class="bg-gray-100 border-b border-gray-300 font-bold uppercase">
+                                            <th class="p-2 border border-gray-300">SKU</th>
+                                            <th class="p-2 border border-gray-300">Barcode</th>
+                                            <th class="p-2 border border-gray-300">Nama Produk</th>
+                                            <th class="p-2 border border-gray-300">Kategori</th>
+                                            <th class="p-2 border border-gray-300 text-right">Harga Jual (Rp)</th>
+                                            <th class="p-2 border border-gray-300 text-center">Status Pajak</th>
+                                            <th class="p-2 border border-gray-300 text-center">Tarif PPN</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template x-for="item in (taxProductList || [])" :key="item.id || item.sku">
+                                            <tr class="border-b border-gray-200">
+                                                <td class="p-2 border border-gray-300 font-mono text-[10px]" x-text="item.sku"></td>
+                                                <td class="p-2 border border-gray-300 font-mono text-[10px]" x-text="item.barcode || '-'"></td>
+                                                <td class="p-2 border border-gray-300 font-bold" x-text="item.name"></td>
+                                                <td class="p-2 border border-gray-300" x-text="item.category"></td>
+                                                <td class="p-2 border border-gray-300 text-right font-mono" x-text="formatRupiah(item.price)"></td>
+                                                <td class="p-2 border border-gray-300 text-center font-bold" x-text="item.is_taxable ? 'KENA PAJAK' : 'BEBAS PAJAK'"></td>
+                                                <td class="p-2 border border-gray-300 text-center font-mono font-bold" x-text="(item.is_taxable ? (item.tax_rate || 11) : 0) + '%'"></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </template>
+
+                        <!-- TAB 6: Piutang Payroll -->
+                        <template x-if="activeTab === 'payroll_debt'">
+                            <div>
+                                <table class="w-full text-left text-[10.5px] border-collapse border border-gray-300">
+                                    <thead>
+                                        <tr class="bg-gray-100 border-b border-gray-300 font-bold uppercase">
+                                            <th class="p-2 border border-gray-300">NIK / ID Anggota</th>
+                                            <th class="p-2 border border-gray-300">Nama Anggota Karyawan</th>
+                                            <th class="p-2 border border-gray-300">Departemen / Divisi</th>
+                                            <th class="p-2 border border-gray-300">Cabang</th>
+                                            <th class="p-2 border border-gray-300 text-right">Plafon Kredit</th>
+                                            <th class="p-2 border border-gray-300 text-right">Kasbon Berjalan</th>
+                                            <th class="p-2 border border-gray-300 text-right">Sisa Plafon</th>
+                                            <th class="p-2 border border-gray-300 text-center">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template x-for="m in (debtRows || [])" :key="m.id || m.nik">
+                                            <tr class="border-b border-gray-200">
+                                                <td class="p-2 border border-gray-300 font-mono text-[10px]" x-text="m.nik || m.member_code"></td>
+                                                <td class="p-2 border border-gray-300 font-bold" x-text="m.name"></td>
+                                                <td class="p-2 border border-gray-300" x-text="m.department || '-'"></td>
+                                                <td class="p-2 border border-gray-300" x-text="m.branch || '-'"></td>
+                                                <td class="p-2 border border-gray-300 text-right font-mono" x-text="formatRupiah(m.credit_limit)"></td>
+                                                <td class="p-2 border border-gray-300 text-right font-mono font-bold text-amber-800" x-text="formatRupiah(m.total_debt)"></td>
+                                                <td class="p-2 border border-gray-300 text-right font-mono font-bold text-emerald-700" x-text="formatRupiah(m.remaining_credit)"></td>
+                                                <td class="p-2 border border-gray-300 text-center font-bold" x-text="m.status || 'AKTIF'"></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </template>
+
+                        <!-- TAB 7: Konsolidasi 3 Cabang -->
+                        <template x-if="activeTab === 'consolidated_3branches'">
+                            <div>
+                                <table class="w-full text-left text-[11px] border-collapse border border-gray-300">
+                                    <thead>
+                                        <tr class="bg-gray-100 border-b border-gray-300 font-bold uppercase">
+                                            <th class="p-2 border border-gray-300">Kode &amp; Cabang Outlet</th>
+                                            <th class="p-2 border border-gray-300 text-right">Omzet Penjualan (Rp)</th>
+                                            <th class="p-2 border border-gray-300 text-center">Jumlah Struk</th>
+                                            <th class="p-2 border border-gray-300 text-right">Laba Kotor (Rp)</th>
+                                            <th class="p-2 border border-gray-300 text-right">Piutang Anggota (Rp)</th>
+                                            <th class="p-2 border border-gray-300 text-right">Alokasi Stok Aset (Rp)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template x-for="b in (consolidatedData?.branch_comparison || [])" :key="b.branch_code">
+                                            <tr class="border-b border-gray-200">
+                                                <td class="p-2 border border-gray-300 font-bold" x-text="b.branch_name + ' (' + b.branch_code + ')'"></td>
+                                                <td class="p-2 border border-gray-300 text-right font-mono font-bold" x-text="formatRupiah(b.total_revenue)"></td>
+                                                <td class="p-2 border border-gray-300 text-center font-mono" x-text="b.transaction_count + ' Struk'"></td>
+                                                <td class="p-2 border border-gray-300 text-right font-mono" x-text="formatRupiah(b.gross_profit)"></td>
+                                                <td class="p-2 border border-gray-300 text-right font-mono" x-text="formatRupiah(b.member_debt)"></td>
+                                                <td class="p-2 border border-gray-300 text-right font-mono" x-text="formatRupiah(b.stock_valuation_share)"></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </template>
+
+                        <!-- 5. TANDA TANGAN & PENGESAHAN RESMI (3 KOLOM STANDAR KOPERASI) -->
+                        <div class="mt-10 pt-6 border-t border-gray-300 grid grid-cols-3 gap-6 text-center text-xs break-inside-avoid">
+                            <div>
+                                <p class="text-gray-500 font-medium">Dibuat Oleh,</p>
+                                <p class="text-gray-400 text-[10px] mt-0.5">Staf Akuntansi / Kasir SPV</p>
+                                <div class="h-16 flex items-end justify-center">
+                                    <div class="w-32 border-b border-dashed border-gray-400"></div>
+                                </div>
+                                <p class="font-bold text-gray-900 mt-1">Petugas Administrasi</p>
+                                <p class="text-[10px] text-gray-400">Unit Retail ILP</p>
+                            </div>
+
+                            <div>
+                                <p class="text-gray-500 font-medium">Diperiksa Oleh,</p>
+                                <p class="text-gray-400 text-[10px] mt-0.5">Manager Operasional Retail</p>
+                                <div class="h-16 flex items-end justify-center">
+                                    <div class="w-32 border-b border-dashed border-gray-400"></div>
+                                </div>
+                                <p class="font-bold text-gray-900 mt-1">{{ Auth::user()->name ?? 'Manager Toko' }}</p>
+                                <p class="text-[10px] text-gray-400">Manager Operasional PT ILP</p>
+                            </div>
+
+                            <div>
+                                <p class="text-gray-500 font-medium">Mengetahui &amp; Menyetujui,</p>
+                                <p class="text-gray-400 text-[10px] mt-0.5">Pengurus / Direksi Koperasi</p>
+                                <div class="h-16 flex items-end justify-center">
+                                    <div class="w-32 border-b border-dashed border-gray-400"></div>
+                                </div>
+                                <p class="font-bold text-gray-900 mt-1">Ketua Koperasi / Owner</p>
+                                <p class="text-[10px] text-gray-400">PT Indo Lampung Perkasa</p>
+                            </div>
+                        </div>
+
+                        <!-- 6. DISCLAIMER RESMI -->
+                        <div class="mt-8 pt-4 border-t border-gray-200 text-[10px] text-gray-400 text-center leading-relaxed">
+                            Dokumen ini merupakan laporan resmi yang dikeluarkan dan diotorisasi secara elektronik oleh Sistem POS &amp; Akuntansi Koperasi Karyawan PT Indo Lampung Perkasa. Seluruh angka finansial dan stok yang tertera dicatat secara real-time dan mengikat secara hukum serta manajerial.
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PRINT STYLESHEET (A4 PDF EXPORT) -->
+    <style>
+    @media print {
+        body * {
+            visibility: hidden !important;
+        }
+        #official-printable-doc-root, #official-printable-doc-root * {
+            visibility: visible !important;
+        }
+        #official-printable-doc-root {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 8mm 12mm !important;
+            box-shadow: none !important;
+            border: none !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+        }
+        @page {
+            size: A4 portrait;
+            margin: 6mm;
+        }
+        .no-print {
+            display: none !important;
+        }
+    }
+    </style>
     <div x-show="showToast"
          class="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl shadow-xl border text-xs font-bold"
          :class="toastType === 'error' ? 'bg-red-900 text-white border-red-800' : 'bg-gray-900 text-white border-gray-800'"

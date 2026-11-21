@@ -3,7 +3,7 @@
 <aside x-data="{
            ...cashierOpeningData(),
            openMenus: {
-               produk: {{ in_array($active, ['produk_masuk', 'inventory', 'produk']) ? 'true' : 'false' }},
+               produk: {{ in_array($active, ['produk_masuk', 'inventory', 'produk_umkm', 'produk']) ? 'true' : 'false' }},
                retur: {{ in_array($active, ['retur', 'retur_masuk']) ? 'true' : 'false' }},
                transaksi: {{ in_array($active, ['transaksi_riwayat', 'transaksi_ditahan', 'transaksi_refund', 'transaksi']) ? 'true' : 'false' }},
                laporan: {{ in_array($active, ['reports', 'laporan_kasir', 'laporan_sesi', 'laporan_operasional', 'laporan']) ? 'true' : 'false' }}
@@ -13,6 +13,9 @@
        @pos-session-sync.window="initOpening()"
        @open-closing-wizard.window="openClosingWizard()"
        @open-cash-movement.window="showCashMovementModal = true"
+       @lock-terminal.window="lockTerminal()"
+       @pos:session_updated.window="initOpening()"
+       @cashier_assignment_updated.window="initOpening()"
        class="w-64 bg-[#f1f5f9] border-r border-gray-200 flex flex-col justify-between shrink-0 h-screen overflow-y-auto">
     <div>
         <!-- Terminal & Cashier Header -->
@@ -44,15 +47,15 @@
                         @click="openMenus.produk = !openMenus.produk"
                         :aria-expanded="openMenus.produk ? 'true' : 'false'"
                         aria-controls="submenu-produk"
-                        class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-colors text-[13px] {{ in_array($active, ['produk_masuk', 'inventory', 'produk']) ? 'bg-[#eef2ff] text-[#0052cc] font-bold' : 'text-gray-600 hover:bg-gray-200 font-semibold' }} cursor-pointer">
+                        class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-colors text-[13px] {{ in_array($active, ['produk_masuk', 'inventory', 'produk_umkm', 'produk']) ? 'bg-[#eef2ff] text-[#0052cc] font-bold' : 'text-gray-600 hover:bg-gray-200 font-semibold' }} cursor-pointer">
                     <div class="flex items-center gap-3">
-                        <span class="material-symbols-rounded text-[20px] {{ in_array($active, ['produk_masuk', 'inventory', 'produk']) ? 'filled' : '' }}">inventory_2</span>
+                        <span class="material-symbols-rounded text-[20px] {{ in_array($active, ['produk_masuk', 'inventory', 'produk_umkm', 'produk']) ? 'filled' : '' }}">inventory_2</span>
                         <span>Produk</span>
                     </div>
                     <span class="material-symbols-rounded text-[18px] transition-transform duration-200 text-gray-400"
                           :class="openMenus.produk ? 'rotate-180 text-[#0052cc]' : ''">expand_more</span>
                 </button>
-                <div id="submenu-produk" @if(!in_array($active, ['produk_masuk', 'inventory', 'produk'])) x-cloak @endif x-show="openMenus.produk" x-transition.origin.top class="flex flex-col gap-1 pl-8 pr-1 py-1">
+                <div id="submenu-produk" @if(!in_array($active, ['produk_masuk', 'inventory', 'produk_umkm', 'produk'])) x-cloak @endif x-show="openMenus.produk" x-transition.origin.top class="flex flex-col gap-1 pl-8 pr-1 py-1">
                     <a href="{{ url('/kasir/produk/masuk') }}" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12.5px] transition-colors {{ $active === 'produk_masuk' ? 'bg-[#0052cc] text-white font-bold' : 'text-gray-600 hover:bg-gray-200 font-medium' }}">
                         <span class="w-1.5 h-1.5 rounded-full {{ $active === 'produk_masuk' ? 'bg-white' : 'bg-gray-400' }}"></span>
                         <span>Barang Masuk</span>
@@ -60,6 +63,10 @@
                     <a href="{{ url('/kasir/inventory') }}" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12.5px] transition-colors {{ $active === 'inventory' ? 'bg-[#0052cc] text-white font-bold' : 'text-gray-600 hover:bg-gray-200 font-medium' }}">
                         <span class="w-1.5 h-1.5 rounded-full {{ $active === 'inventory' ? 'bg-white' : 'bg-gray-400' }}"></span>
                         <span>Informasi Stok</span>
+                    </a>
+                    <a href="{{ url('/kasir/produk/umkm') }}" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12.5px] transition-colors {{ $active === 'produk_umkm' ? 'bg-[#0052cc] text-white font-bold' : 'text-gray-600 hover:bg-gray-200 font-medium' }}">
+                        <span class="w-1.5 h-1.5 rounded-full {{ $active === 'produk_umkm' ? 'bg-white' : 'bg-gray-400' }}"></span>
+                        <span>Produk UMKM</span>
                     </a>
                 </div>
             </div>

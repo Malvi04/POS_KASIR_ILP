@@ -305,9 +305,14 @@ if (typeof window.ilpNotificationBell === 'undefined') {
 
                 this.isOpen = false;
 
-                // Navigate if link exists
+                // Navigate if link exists, preserving current tab role isolation
                 if (item.link) {
-                    window.location.href = item.link;
+                    let targetUrl = item.link;
+                    const activeRole = (window.POS_ACTIVE_ROLE || this.role || '').toString().toLowerCase();
+                    if (activeRole === 'owner' && !targetUrl.startsWith('/owner') && !targetUrl.includes('role=owner')) {
+                        targetUrl += (targetUrl.includes('?') ? '&' : '?') + 'role=owner';
+                    }
+                    window.location.href = targetUrl;
                 }
             },
 

@@ -244,6 +244,11 @@
                                                 class="px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-bold text-[11px] cursor-pointer transition-colors">
                                             Edit
                                         </button>
+                                        <button type="button"
+                                                @click="openDeleteModal(sup)"
+                                                class="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-[11px] cursor-pointer transition-colors">
+                                            Hapus
+                                        </button>
                                     @endif
                                 </div>
                             </td>
@@ -457,6 +462,54 @@
             </form>
         </div>
     </template>
+
+    <!-- MODAL: KONFIRMASI HAPUS SUPPLIER -->
+    <template x-teleport="body">
+        <div x-show="showDeleteModal"
+             x-transition.opacity
+             style="display: none;"
+             class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <div @click.away="if (!isDeleting) showDeleteModal = false"
+                 class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200 flex flex-col">
+
+                <div class="p-6 text-center space-y-4">
+                    <div class="w-14 h-14 rounded-2xl bg-rose-50 text-rose-600 border border-rose-100 flex items-center justify-center mx-auto">
+                        <span class="material-symbols-rounded text-[32px]">delete_forever</span>
+                    </div>
+
+                    <div>
+                        <h3 class="text-base font-black text-gray-900">Hapus Master Supplier?</h3>
+                        <p class="text-xs text-gray-500 mt-1.5 leading-relaxed">
+                            Apakah Anda yakin ingin menghapus supplier <strong class="text-gray-800" x-text="supplierToDelete ? supplierToDelete.name + ' (' + supplierToDelete.code + ')' : ''"></strong>?
+                        </p>
+                    </div>
+
+                    <div class="p-3.5 bg-blue-50 border border-blue-200 rounded-xl text-left flex items-start gap-2.5 text-xs text-blue-900 leading-relaxed">
+                        <span class="material-symbols-rounded text-blue-600 text-[18px] shrink-0 mt-0.5">verified_user</span>
+                        <span>
+                            <strong>Data Produk &amp; Stok Aman:</strong> Seluruh produk yang sudah approve dan masuk ke Stok Master Gudang <u>TIDAK AKAN terhapus</u>. Hanya data master supplier ini saja yang dihapus.
+                        </span>
+                    </div>
+                </div>
+
+                <div class="px-6 py-4 bg-slate-50 border-t border-gray-100 flex items-center justify-end gap-2.5">
+                    <button type="button"
+                            :disabled="isDeleting"
+                            @click="showDeleteModal = false"
+                            class="px-4 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-100 text-gray-700 font-bold text-xs cursor-pointer disabled:opacity-50">
+                        Batal
+                    </button>
+                    <button type="button"
+                            :disabled="isDeleting"
+                            @click="executeDeleteSupplier()"
+                            class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50">
+                        <span x-show="isDeleting" class="material-symbols-rounded text-[16px] animate-spin">progress_activity</span>
+                        <span x-text="isDeleting ? 'Menghapus...' : 'Ya, Hapus Supplier'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </template>
     @endif
 </div>
 
@@ -515,6 +568,43 @@ function supplierListApp(config) {
             business_categories: [],
             status: 'AKTIF',
             notes: ''
+        },
+
+        // Delete Confirmation Modal
+        showDeleteModal: false,
+        supplierToDelete: null,
+        isDeleting: false,
+
+        openDeleteModal(sup) {
+            this.supplierToDelete = sup;
+            this.showDeleteModal = true;
+        },
+
+        async executeDeleteSupplier() {
+            if (this.isDeleting || !this.supplierToDelete) return;
+            this.isDeleting = true;
+            try {
+                const res = await fetch(`/api/suppliers/${this.supplierToDelete.id}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': this.csrfToken
+                    }
+                });
+                const json = await res.json();
+                if (!res.ok || !json.success) {
+                    this.notify(json.message || 'Gagal menghapus supplier.', 'error');
+                    return;
+                }
+                this.showDeleteModal = false;
+                this.supplierToDelete = null;
+                this.notify(json.message || 'Supplier berhasil dihapus.', 'success');
+                await Promise.all([this.loadMeta(), this.loadSuppliers()]);
+            } catch (e) {
+                this.notify('Terjadi kesalahan koneksi saat menghapus supplier.', 'error');
+            } finally {
+                this.isDeleting = false;
+            }
         },
 
         notify(msg, type = 'success') {

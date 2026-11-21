@@ -12,9 +12,12 @@
     showVerifyModal: false,
     showBastModal: false,
     showReturnBackModal: false,
+    showRejectInboundModal: false,
 
     // Active Selection
     selectedDoc: null,
+    selectedDocForReject: null,
+    rejectReason: '',
     verifyNotes: '',
     isSubmitting: false,
 
@@ -250,12 +253,12 @@
             });
 
             // Tentukan status dokumen
-            if (totalRejected === 0 && !hasVarianceWithSent) {
+            if (totalAccepted === 0 && totalRejected > 0) {
+                original.status = 'DITOLAK';
+            } else if (totalRejected === 0 && !hasVarianceWithSent) {
                 original.status = 'DITERIMA_LENGKAP';
             } else if (totalAccepted > 0 && totalRejected > 0) {
                 original.status = 'DITERIMA_SEBAGIAN';
-            } else if (totalAccepted === 0 && totalRejected > 0) {
-                original.status = 'MENUNGGU_PENGEMBALIAN';
             } else if (totalAccepted > 0 && totalRejected === 0 && hasVarianceWithSent) {
                 original.status = 'DITERIMA_SEBAGIAN';
             } else {
@@ -268,23 +271,122 @@
             original.sisaBarangDitolakDiGudang = totalRejected;
             if (!original.returnHistory) original.returnHistory = [];
 
-            if (typeof original.id === 'number') {
+            if (original.id) {
                 const targetApiStatus = totalAccepted === 0 && totalRejected > 0 ? 'ditolak' : 'selesai';
+                const rejectReasons = (this.selectedDoc.items || [])
+                    .filter(it => (parseInt(it.qtyRejected, 10) || 0) > 0 && it.rejectReason)
+                    .map(it => it.rejectReason)
+                    .join(', ');
+                const reasonPayload = rejectReasons || this.verifyNotes.trim() || 'Verifikasi fisik barang masuk retur selesai diperiksa.';
+
                 fetch(`/api/returns/${original.id}/status`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
-                    body: JSON.stringify({ status: targetApiStatus })
+                    body: JSON.stringify({
+                        status: targetApiStatus,
+                        reason: reasonPayload,
+                        notes: this.verifyNotes.trim()
+                    })
+                }).then(() => {
+                    if (window.PosRealtime?.broadcast) {
+                        window.PosRealtime.broadcast('returns_updated', { id: original.id, status: targetApiStatus });
+                    }
                 }).catch(() => {});
             }
 
             this.showVerifyModal = false;
             this.isSubmitting = false;
 
-            let notif = `Dokumen ${original.docNo} selesai diverifikasi! Diterima ke Stok Retur: ${totalAccepted} Pcs`;
-            if (totalRejected > 0) {
-                notif += `, Ditolak di Gudang: ${totalRejected} Pcs (Menunggu Pengembalian ke Toko).`;
+            let notif = totalAccepted === 0 && totalRejected > 0
+                ? `Dokumen ${original.docNo} telah Ditolak! Kuantitas ditolak: ${totalRejected} Pcs.`
+                : `Dokumen ${original.docNo} selesai diverifikasi! Diterima ke Stok Retur: ${totalAccepted} Pcs`;
+            if (totalRejected > 0 && totalAccepted > 0) {
+                notif += `, Ditolak di Gudang: ${totalRejected} Pcs.`;
             }
             this.showToastNotice(notif, 'success');
+        }
+    },
+
+    openRejectInboundModal(doc) {
+        this.selectedDocForReject = doc;
+        this.rejectReason = '';
+        this.showRejectInboundModal = true;
+    },
+
+    async confirmRejectInbound() {
+        if (!this.selectedDocForReject || this.isSubmitting) return;
+        const reason = (this.rejectReason || '').trim() || 'Ditolak saat pemeriksaan fisik gudang';
+        this.isSubmitting = true;
+        try {
+            const res = await fetch(`/api/returns/${this.selectedDocForReject.id}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    status: 'ditolak',
+                    reason: reason,
+                    notes: reason
+                })
+            });
+            if (res.ok) {
+                this.selectedDocForReject.status = 'DITOLAK';
+                if (window.PosRealtime?.broadcast) {
+                    window.PosRealtime.broadcast('returns_updated', { id: this.selectedDocForReject.id, status: 'ditolak' });
+                }
+                this.showRejectInboundModal = false;
+                this.showToastNotice(`Pengajuan ${this.selectedDocForReject.docNo} berhasil ditolak.`, 'success');
+            } else {
+                const err = await res.json().catch(() => ({}));
+                this.showToastNotice(err.message || 'Gagal menolak dokumen di server.', 'error');
+            }
+        } catch (e) {
+            console.error('Failed to reject inbound return doc:', e);
+            this.showToastNotice('Gagal menghubungi server.', 'error');
+        } finally {
+            this.isSubmitting = false;
+        }
+    },
+
+    async rejectFromVerifyModal() {
+        if (!this.selectedDoc || this.isSubmitting) return;
+        const reason = (this.verifyNotes || '').trim() || 'Ditolak seluruhnya saat verifikasi fisik gudang';
+        this.isSubmitting = true;
+        try {
+            const res = await fetch(`/api/returns/${this.selectedDoc.id}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    status: 'ditolak',
+                    reason: reason,
+                    notes: reason
+                })
+            });
+            if (res.ok) {
+                const original = this.returnInDocuments.find(d => d.id === this.selectedDoc.id);
+                if (original) {
+                    original.status = 'DITOLAK';
+                }
+                if (window.PosRealtime?.broadcast) {
+                    window.PosRealtime.broadcast('returns_updated', { id: this.selectedDoc.id, status: 'ditolak' });
+                }
+                this.showVerifyModal = false;
+                this.showToastNotice(`Dokumen ${this.selectedDoc.docNo} berhasil ditolak.`, 'success');
+            } else {
+                const err = await res.json().catch(() => ({}));
+                this.showToastNotice(err.message || 'Gagal menolak dokumen di server.', 'error');
+            }
+        } catch (e) {
+            console.error('Failed to reject from verify modal:', e);
+            this.showToastNotice('Gagal menghubungi server.', 'error');
+        } finally {
+            this.isSubmitting = false;
         }
     },
 
@@ -380,44 +482,22 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
     <!-- Main Content Area -->
     <main class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
         <!-- Top Header Manager -->
-        <header class="h-[68px] bg-white border-b border-gray-200 px-6 flex items-center justify-between shrink-0 z-10 shadow-2xs">
+        <header class="h-20 bg-[#f8f9fa] border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
             <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center font-bold">
-                    <span class="material-symbols-rounded text-[22px]">assignment_return</span>
-                </div>
-                <div>
-                    <h1 class="text-base font-black text-gray-900 tracking-tight leading-tight">Barang Masuk Retur (Cabang ke Gudang)</h1>
-                    <span class="text-[11px] text-gray-500 font-medium">Verifikasi fisik &amp; penerimaan barang retur dari Toko Pusat/Cabang ke Gudang Pusat</span>
-                </div>
+                <h1 class="text-[20px] font-bold text-gray-900">Barang Masuk Retur</h1>
+                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200 flex items-center gap-1.5">
+                    <span class="material-symbols-rounded text-[14px]">assignment_return</span>
+                    <span>Verifikasi Fisik Gudang</span>
+                </span>
             </div>
 
-            <div class="flex items-center gap-3">
-                <a href="{{ route('manager.retur') }}" class="px-3 py-1.5 rounded-xl border border-gray-200 hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors">
-                    <span class="material-symbols-rounded text-[16px] text-[#0052cc]">verified</span>
-                    <span>Persetujuan Retur Cabang</span>
-                </a>
-                <a href="{{ route('manager.inventory') }}?tab=retur" class="px-3 py-1.5 rounded-xl border border-gray-200 hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors">
-                    <span class="material-symbols-rounded text-[16px] text-purple-600">inventory_2</span>
-                    <span>Stok Karantina Retur</span>
-                </a>
-
-                <div class="h-6 w-[1px] bg-gray-200"></div>
-
+            <div class="flex items-center gap-4 text-gray-500">
                 <x-notification-bell role="MANAGER" />
-
+                <button type="button" @click="window.PosRealtime?.syncNow?.(); initReturnIn();" class="hover:text-gray-900 transition-colors cursor-pointer" title="Sinkronkan Data">
+                    <span class="material-symbols-rounded text-[24px]" :class="$store.network?.isChecking ? 'animate-spin text-[#0052cc]' : ''">autorenew</span>
+                </button>
+                <div class="h-6 w-px bg-gray-300"></div>
                 <x-realtime-network-badge />
-
-                <div class="h-6 w-[1px] bg-gray-200"></div>
-
-                <div class="flex items-center gap-2.5 bg-slate-50 border border-gray-200 px-3 py-1.5 rounded-xl">
-                    <div class="w-7 h-7 rounded-lg bg-[#0052cc] text-white flex items-center justify-center text-xs font-black">
-                        {{ collect(explode(' ', trim(auth()->user()?->name ?? 'M')))->filter()->take(2)->map(fn($w) => strtoupper(substr($w, 0, 1)))->implode('') ?: 'M' }}
-                    </div>
-                    <div class="flex flex-col text-left">
-                        <span class="text-[11px] font-bold text-gray-900 leading-tight">{{ auth()->user()?->name ?? 'Manager' }}</span>
-                        <span class="text-[9.5px] font-semibold text-gray-500">{{ ucfirst(strtolower(auth()->user()?->role ?? 'Manager')) }} Operasional</span>
-                    </div>
-                </div>
             </div>
         </header>
 
@@ -439,12 +519,22 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <p class="text-xs text-gray-500 mt-1 font-medium">Verifikasi fisik dan penerimaan barang retur dari Toko Pusat/Cabang ke Gudang Pusat.</p>
                     </div>
 
-                    <!-- Portal Retur Masuk Badge -->
-                    <div class="bg-white border border-gray-200 rounded-xl px-4 py-2.5 flex items-center gap-3 shadow-xs">
-                        <div class="w-2.5 h-2.5 rounded-full bg-purple-600 animate-pulse"></div>
-                        <div class="flex flex-col">
-                            <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">PORTAL RETUR MASUK</span>
-                            <span class="text-xs font-extrabold text-[#0052cc]">Toko/Cabang &rarr; Gudang Pusat</span>
+                    <div class="flex items-center gap-2.5 flex-wrap">
+                        <a href="{{ route('manager.retur') }}" class="px-3.5 py-2 rounded-xl border border-gray-200 hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors bg-white shadow-2xs">
+                            <span class="material-symbols-rounded text-[16px] text-[#0052cc]">verified</span>
+                            <span>Persetujuan Retur Cabang</span>
+                        </a>
+                        <a href="{{ route('manager.inventory') }}?tab=retur" class="px-3.5 py-2 rounded-xl border border-gray-200 hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors bg-white shadow-2xs">
+                            <span class="material-symbols-rounded text-[16px] text-purple-600">inventory_2</span>
+                            <span>Stok Karantina Retur</span>
+                        </a>
+                        <!-- Portal Retur Masuk Badge -->
+                        <div class="bg-white border border-gray-200 rounded-xl px-4 py-2 flex items-center gap-3 shadow-2xs">
+                            <div class="w-2.5 h-2.5 rounded-full bg-purple-600 animate-pulse"></div>
+                            <div class="flex flex-col">
+                                <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">PORTAL RETUR MASUK</span>
+                                <span class="text-xs font-extrabold text-[#0052cc]">Toko/Cabang &rarr; Gudang Pusat</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -539,6 +629,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <option value="DITERIMA_SEBAGIAN">Diterima Sebagian</option>
                                 <option value="MENUNGGU_PENGEMBALIAN">Menunggu Pengembalian</option>
                                 <option value="PENGEMBALIAN_SEBAGIAN">Pengembalian Sebagian</option>
+                                <option value="DITOLAK">Ditolak</option>
                                 <option value="SELESAI">Selesai</option>
                             </select>
                             <span class="material-symbols-rounded absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-[20px]">expand_more</span>
@@ -672,6 +763,12 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                             <span>Pengembalian Sebagian</span>
                                                         </span>
                                                     </template>
+                                                    <template x-if="doc.status === 'DITOLAK'">
+                                                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">
+                                                            <span class="material-symbols-rounded text-[14px]">cancel</span>
+                                                            <span>Ditolak</span>
+                                                        </span>
+                                                    </template>
                                                     <template x-if="doc.status === 'SELESAI'">
                                                         <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 whitespace-nowrap">
                                                             <span class="material-symbols-rounded text-[14px]">done_all</span>
@@ -686,12 +783,21 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                 <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap text-center bg-white">
                                                     <div class="inline-flex items-center justify-center gap-1.5">
                                                         <template x-if="doc.status === 'MENUNGGU_VERIFIKASI'">
-                                                            <button type="button"
-                                                                    @click="openVerification(doc)"
-                                                                    class="px-3 py-1.5 bg-[#0052cc] hover:bg-[#003994] text-white rounded-xl text-xs font-bold transition-all shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
-                                                                <span class="material-symbols-rounded text-[16px]">fact_check</span>
-                                                                <span>Verifikasi Fisik</span>
-                                                            </button>
+                                                            <div class="inline-flex items-center gap-1.5">
+                                                                <button type="button"
+                                                                        @click="openVerification(doc)"
+                                                                        class="px-3 py-1.5 bg-[#0052cc] hover:bg-[#003994] text-white rounded-xl text-xs font-bold transition-all shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
+                                                                    <span class="material-symbols-rounded text-[16px]">fact_check</span>
+                                                                    <span>Verifikasi Fisik</span>
+                                                                </button>
+                                                                <button type="button"
+                                                                        @click="openRejectInboundModal(doc)"
+                                                                        class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all shadow-xs inline-flex items-center gap-1 cursor-pointer"
+                                                                        title="Tolak Pengajuan Retur dari Toko">
+                                                                    <span class="material-symbols-rounded text-[15px]">cancel</span>
+                                                                    <span>Tolak</span>
+                                                                </button>
+                                                            </div>
                                                         </template>
                                                         <template x-if="doc.status !== 'MENUNGGU_VERIFIKASI'">
                                                             <button type="button"
@@ -977,11 +1083,18 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             Batal
                         </button>
                         <button type="button"
+                                @click="rejectFromVerifyModal()"
+                                :disabled="isSubmitting"
+                                class="px-4 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50">
+                            <span class="material-symbols-rounded text-[18px]">cancel</span>
+                            <span>Tolak Pengajuan</span>
+                        </button>
+                        <button type="button"
                                 @click="confirmReturnReceipt()"
                                 :disabled="!isVerificationValid() || isSubmitting"
                                 class="px-5 py-2 rounded-xl bg-[#0052cc] hover:bg-[#003994] text-white font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                             <span class="material-symbols-rounded text-[18px]">verified</span>
-                            <span x-text="isSubmitting ? 'Memproses...' : 'Konfirmasi Penerimaan Fisik'"></span>
+                            <span x-text="isSubmitting ? 'Memproses...' : (totalVerifyAccepted() === 0 && totalVerifyRejected() > 0 ? 'Konfirmasi Tolak Retur' : 'Konfirmasi Penerimaan Fisik')"></span>
                         </button>
                     </div>
                 </div>
@@ -1249,6 +1362,66 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             Tutup
                         </button>
                     </div>
+                </div>
+
+            </div>
+        </div>
+    </template>
+
+    <!-- MODAL 4: TOLAK RETUR INBOUND -->
+    <template x-teleport="body">
+        <div x-show="showRejectInboundModal"
+             x-transition.opacity
+             style="display: none;"
+             class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+
+            <div x-show="showRejectInboundModal"
+                 @click.away="showRejectInboundModal = false"
+                 x-transition.scale.origin.bottom
+                 class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200 flex flex-col">
+
+                <div class="px-6 py-5 border-b border-gray-100 flex items-center justify-between bg-rose-50/60">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center font-bold">
+                            <span class="material-symbols-rounded text-[22px]">cancel</span>
+                        </div>
+                        <div>
+                            <h3 class="text-base font-black text-gray-900">Tolak Pengajuan Retur</h3>
+                            <span class="font-mono text-xs text-rose-700 font-bold" x-text="selectedDocForReject?.docNo"></span>
+                        </div>
+                    </div>
+                    <button @click="showRejectInboundModal = false" class="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer">
+                        <span class="material-symbols-rounded text-[24px]">close</span>
+                    </button>
+                </div>
+
+                <div class="p-6 space-y-4 text-xs">
+                    <p class="text-gray-600 text-[13px] leading-relaxed">
+                        Anda akan menolak pengajuan retur barang dari <strong class="text-gray-900" x-text="selectedDocForReject?.warehouseOrigin"></strong>. Status pengajuan di kasir akan langsung diubah menjadi <strong>Ditolak</strong> dan stok toko akan dikembalikan.
+                    </p>
+
+                    <div class="space-y-1.5">
+                        <label class="font-bold text-gray-700 text-xs uppercase tracking-wider">Alasan Penolakan (Wajib Diisi):</label>
+                        <textarea x-model="rejectReason"
+                                  rows="3"
+                                  placeholder="Contoh: Kondisi barang tidak sesuai SOP, masa garansi kedaluwarsa, atau dokumen fisik tidak lengkap..."
+                                  class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs text-gray-800 focus:outline-none focus:border-rose-500"></textarea>
+                    </div>
+                </div>
+
+                <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-2.5 bg-slate-50">
+                    <button type="button"
+                            @click="showRejectInboundModal = false"
+                            class="px-4 py-2 rounded-xl text-gray-700 font-bold hover:bg-slate-200 transition-colors cursor-pointer">
+                        Batal
+                    </button>
+                    <button type="button"
+                            @click="confirmRejectInbound()"
+                            :disabled="isSubmitting"
+                            class="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50">
+                        <span class="material-symbols-rounded text-[16px]">cancel</span>
+                        <span x-text="isSubmitting ? 'Memproses...' : 'Tolak Pengajuan'"></span>
+                    </button>
                 </div>
 
             </div>

@@ -56,16 +56,181 @@
     // Form Member
     formData: {
         id: null,
+        customer_id: '',
+        member_code: '',
+        kode_out: '',
         nik: '',
         name: '',
         department: 'Logistik & Distribusi',
+        division: '',
+        address: '',
         branch: 'Cabang 1 - Mill / Pabrik',
         phone: '',
-        credit_limit: 5000000,
+        fax: '',
+        contact: '',
+        tempo_bayar: '',
+        idtk: '',
+        credit_limit: 1000000,
+        no_rekening: '',
         status: 'AKTIF',
         notes: ''
     },
     formErrors: {},
+
+    // Import & Export Excel Feature State
+    showImportModal: false,
+    importStep: 'upload', // 'upload', 'invalid_structure', 'preview', 'processing', 'result'
+    importFile: null,
+    importFileName: '',
+    isUploading: false,
+    isDragging: false,
+    validationData: null,
+    validationErrorDetails: null,
+    duplicateAction: 'update',
+    importResult: null,
+
+    openImportModal() {
+        this.showImportModal = true;
+        this.importStep = 'upload';
+        this.importFile = null;
+        this.importFileName = '';
+        this.isUploading = false;
+        this.isDragging = false;
+        this.validationData = null;
+        this.validationErrorDetails = null;
+        this.duplicateAction = 'update';
+        this.importResult = null;
+        this.$nextTick(() => {
+            const f = document.getElementById('memberExcelFileInput');
+            if (f) f.value = '';
+        });
+    },
+
+    triggerFileInput() {
+        const f = document.getElementById('memberExcelFileInput');
+        if (f) f.click();
+    },
+
+    resetFileInput() {
+        this.importFile = null;
+        this.importFileName = '';
+        this.isDragging = false;
+        const f = document.getElementById('memberExcelFileInput');
+        if (f) f.value = '';
+    },
+
+    onFileSelected(event) {
+        const file = event.target.files && event.target.files[0];
+        if (file) {
+            this.importFile = file;
+            this.importFileName = file.name;
+        }
+    },
+
+    handleFileDrop(event) {
+        this.isDragging = false;
+        const files = event.dataTransfer ? event.dataTransfer.files : null;
+        if (files && files.length > 0) {
+            this.importFile = files[0];
+            this.importFileName = files[0].name;
+        }
+    },
+
+    async uploadAndValidateFile() {
+        if (!this.importFile) {
+            this.triggerToast('Silakan pilih file Excel terlebih dahulu.', 'error');
+            return;
+        }
+
+        this.isUploading = true;
+        const fd = new FormData();
+        fd.append('file', this.importFile);
+
+        try {
+            const res = await fetch('/api/members/import/validate', {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: fd
+            });
+
+            const json = await res.json();
+            if (res.ok && json.success) {
+                this.validationData = json.data;
+                this.importStep = 'preview';
+                this.triggerToast('Struktur Excel anggota valid! Menampilkan pratinjau data...');
+            } else {
+                this.validationErrorDetails = json.details || { message: json.message || 'Format file tidak sesuai standar ILP.' };
+                this.importStep = 'invalid_structure';
+                this.triggerToast(json.message || 'Struktur file Excel tidak sesuai standar Master Anggota ILP.', 'error');
+            }
+        } catch (e) {
+            console.error('Validation error:', e);
+            this.triggerToast('Gagal memvalidasi file: ' + e.message, 'error');
+        } finally {
+            this.isUploading = false;
+        }
+    },
+
+    async confirmExecuteImport() {
+        if (!this.validationData || !this.validationData.token) {
+            this.triggerToast('Token data import tidak ditemukan.', 'error');
+            return;
+        }
+
+        this.importStep = 'processing';
+
+        try {
+            const res = await fetch('/api/members/import/process', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    token: this.validationData.token,
+                    duplicate_action: this.duplicateAction
+                })
+            });
+
+            const json = await res.json();
+            if (res.ok && json.success) {
+                this.importResult = json;
+                this.importStep = 'result';
+                await this.fetchMembers(1);
+                this.triggerToast('Import master anggota berhasil diselesaikan!');
+            } else {
+                this.triggerToast('Gagal memproses import: ' + (json.message || 'Terjadi kesalahan sistem.'), 'error');
+                this.importStep = 'preview';
+            }
+        } catch (e) {
+            console.error('Import execution error:', e);
+            this.triggerToast('Terjadi kesalahan jaringan saat import: ' + e.message, 'error');
+            this.importStep = 'preview';
+        }
+    },
+
+    exportExcelData() {
+        const params = new URLSearchParams();
+        if (this.searchQuery && this.searchQuery.trim()) {
+            params.append('search', this.searchQuery.trim());
+        }
+        if (this.selectedBranch && this.selectedBranch !== 'all') {
+            params.append('branch', this.selectedBranch);
+        }
+        if (this.selectedDept && this.selectedDept !== 'all') {
+            params.append('department', this.selectedDept);
+        }
+        window.location.href = '/manager/members/export?' + params.toString();
+        this.triggerToast('Mengunduh Master Anggota Excel (16 Kolom)...');
+    },
+
+    downloadILPTemplate() {
+        window.location.href = '/manager/members/template';
+    },
 
     // Toast
     toastMessage: '',
@@ -135,12 +300,22 @@
         this.formErrors = {};
         this.formData = {
             id: null,
+            customer_id: '',
+            member_code: '',
+            kode_out: '',
             nik: '',
             name: '',
-            department: this.departments[0] || 'Logistik & Gudang',
+            department: this.departments[0] || 'General Affairs',
+            division: this.departments[0] || 'General Affairs',
+            address: '',
             branch: this.selectedBranch !== 'all' ? this.selectedBranch : 'Cabang 1 - Mill / Pabrik',
             phone: '',
-            credit_limit: 5000000,
+            fax: '',
+            contact: '',
+            tempo_bayar: '',
+            idtk: '',
+            credit_limit: 1000000,
+            no_rekening: '',
             status: 'AKTIF',
             notes: 'Pendaftaran anggota baru'
         };
@@ -153,12 +328,22 @@
         this.formErrors = {};
         this.formData = {
             id: m.id,
-            nik: m.nik,
-            name: m.name,
-            department: m.department,
-            branch: m.branch || 'Cabang 1 - Mill / Pabrik',
+            customer_id: m.customer_id || '',
+            member_code: m.member_code || '',
+            kode_out: m.kode_out || '',
+            nik: m.nik || '',
+            name: m.name || '',
+            department: m.department || '',
+            division: m.division || m.department || '',
+            address: m.address || '',
+            branch: m.branch || '',
             phone: m.phone || '',
+            fax: m.fax || '',
+            contact: m.contact || '',
+            tempo_bayar: m.tempo_bayar || '',
+            idtk: m.idtk || '',
             credit_limit: m.credit_limit,
+            no_rekening: m.no_rekening || '',
             status: m.status,
             notes: m.notes || ''
         };
@@ -169,10 +354,15 @@
     async saveMember() {
         if (this.isLoading) return;
         this.formErrors = {};
-        if (!this.formData.name || !this.formData.name.trim()) this.formErrors.name = 'Nama lengkap wajib diisi.';
-        if (!this.formData.nik || !this.formData.nik.trim()) this.formErrors.nik = 'NIK karyawan wajib diisi.';
-        if (!this.formData.department) this.formErrors.department = 'Departemen wajib dipilih.';
-        if (!this.formData.branch) this.formErrors.branch = 'Cabang wajib dipilih.';
+        if (!this.formData.name || !String(this.formData.name).trim()) this.formErrors.name = 'Nama lengkap wajib diisi.';
+        if ((this.formData.nik === null || this.formData.nik === undefined || String(this.formData.nik).trim() === '') && (!this.formData.member_code || String(this.formData.member_code).trim() === '')) {
+            this.formErrors.nik = 'NIP / NIK atau Kode wajib diisi.';
+        }
+        if (!this.formData.nik || String(this.formData.nik).trim() === '') {
+            this.formData.nik = String(this.formData.member_code).trim();
+        }
+        if (!this.formData.department) this.formData.department = this.formData.division || 'Umum';
+        if (!this.formData.division) this.formData.division = this.formData.department;
         if (Object.keys(this.formErrors).length > 0) return;
 
         this.isLoading = true;
@@ -408,22 +598,21 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
     <main class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
         
         <!-- Top Header -->
-        <header class="h-[72px] bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
+        <header class="h-20 bg-[#f8f9fa] border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
             <div class="flex items-center gap-3">
-                <h1 class="text-[18px] font-black text-gray-900 tracking-tight">Database Anggota Multi-Cabang & Kasbon</h1>
-                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200">PT Indo Lampung Perkasa</span>
+                <h1 class="text-[20px] font-bold text-gray-900">Database Anggota</h1>
+                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200 flex items-center gap-1.5">
+                    <span class="material-symbols-rounded text-[14px]">groups</span>
+                    <span>Multi-Cabang &amp; Kasbon</span>
+                </span>
             </div>
 
             <div class="flex items-center gap-4 text-gray-500">
                 <x-notification-bell role="MANAGER" />
-                <a href="{{ url('/reports') }}" class="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-200 transition-colors">
-                    <span class="material-symbols-rounded text-[18px] text-[#0052cc]">assessment</span>
-                    Laporan Piutang
-                </a>
-                <button @click="window.PosRealtime?.syncNow?.(); fetchMembers(currentPage)" class="p-2 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="Refresh Data API">
-                    <span class="material-symbols-rounded text-[22px]" :class="(isLoading || $store.network?.isChecking) ? 'animate-spin text-[#0052cc]' : ''">autorenew</span>
+                <button @click="window.PosRealtime?.syncNow?.(); fetchMembers(currentPage)" class="hover:text-gray-900 transition-colors cursor-pointer" title="Sinkronkan Data">
+                    <span class="material-symbols-rounded text-[24px]" :class="(isLoading || $store.network?.isChecking) ? 'animate-spin text-[#0052cc]' : ''">autorenew</span>
                 </button>
-                <div class="h-6 w-px bg-gray-200"></div>
+                <div class="h-6 w-px bg-gray-300"></div>
                 <x-realtime-network-badge />
             </div>
         </header>
@@ -455,8 +644,11 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
                 </div>
 
-                <div class="flex items-center gap-2">
-                    <span class="text-xs text-gray-400">Akses terpusat transparan real-time antar 3 cabang</span>
+                <div class="flex items-center gap-3">
+                    <a href="{{ url('/reports') }}" class="flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-xl border border-gray-200 transition-colors shadow-2xs">
+                        <span class="material-symbols-rounded text-[18px] text-[#0052cc]">assessment</span>
+                        <span>Laporan Piutang</span>
+                    </a>
                 </div>
             </div>
 
@@ -562,13 +754,29 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </select>
                 </div>
 
-                <!-- Add Button -->
-                <div class="shrink-0">
+                <!-- Action Buttons: Import Excel, Export Excel, Tambah Karyawan -->
+                <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+                    <button type="button"
+                            @click.stop="openImportModal()"
+                            class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-[13px] flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
+                            title="Import data master anggota massal dari file Excel ILP (16 Kolom)">
+                        <span class="material-symbols-rounded text-[18px]">upload_file</span>
+                        <span>Import Excel</span>
+                    </button>
+
+                    <button type="button"
+                            @click="exportExcelData()"
+                            class="px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-gray-300 rounded-xl font-bold text-[13px] flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
+                            title="Export seluruh master anggota database ke file Excel 16 kolom ILP">
+                        <span class="material-symbols-rounded text-[18px]">download</span>
+                        <span>Export Excel</span>
+                    </button>
+
                     <button type="button"
                             @click="openCreateModal()"
-                            class="w-full md:w-auto flex items-center justify-center gap-2 px-5 py-2.5 bg-[#0052cc] rounded-xl text-[13px] font-bold text-white hover:bg-[#0043a8] transition-colors shadow-xs active:scale-95">
+                            class="flex items-center justify-center gap-2 px-5 py-2.5 bg-[#0052cc] rounded-xl text-[13px] font-bold text-white hover:bg-[#0043a8] transition-colors shadow-xs active:scale-95 cursor-pointer">
                         <span class="material-symbols-rounded text-[18px]">person_add</span>
-                        Tambah Karyawan
+                        <span>Tambah Karyawan</span>
                     </button>
                 </div>
             </div>
@@ -576,25 +784,34 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
             <!-- Data Table Card -->
             <div class="bg-white border border-gray-200/90 rounded-2xl shadow-xs overflow-hidden flex flex-col mb-6">
                 <div class="overflow-x-auto min-w-0 w-full">
-                    <table class="w-full text-left text-[13px] min-w-[1050px] border-collapse">
+                    <table class="w-full text-left text-[12.5px] min-w-[1800px] border-collapse">
                         <thead class="bg-gray-50/90 border-b border-gray-200 text-gray-600 text-[11px] font-bold tracking-wider uppercase whitespace-nowrap">
                             <tr>
-                                <th class="px-6 py-4 text-left">NAMA KARYAWAN & NO. HP</th>
-                                <th class="px-6 py-4 text-left">NIK & KODE ANGGOTA</th>
-                                <th class="px-6 py-4 text-left">DEPARTEMEN</th>
-                                <th class="px-6 py-4 text-left">CABANG PENUGASAN</th>
-                                <th class="px-6 py-4 text-right">PLAFON BULANAN</th>
-                                <th class="px-6 py-4 text-right">KASBON BERJALAN</th>
-                                <th class="px-6 py-4 text-right">SISA PLAFON</th>
-                                <th class="px-6 py-4 text-center">STATUS</th>
-                                <th class="px-6 py-4 text-center">AKSI MANAJEMEN</th>
+                                <th class="px-4 py-3.5 text-left">ID</th>
+                                <th class="px-4 py-3.5 text-left">Kode</th>
+                                <th class="px-4 py-3.5 text-left">KodeOut</th>
+                                <th class="px-4 py-3.5 text-left">Nip</th>
+                                <th class="px-4 py-3.5 text-left">Nama</th>
+                                <th class="px-4 py-3.5 text-left">Dept</th>
+                                <th class="px-4 py-3.5 text-left">Divisi</th>
+                                <th class="px-4 py-3.5 text-left">Alamat</th>
+                                <th class="px-4 py-3.5 text-left">Tlp</th>
+                                <th class="px-4 py-3.5 text-left">Fax</th>
+                                <th class="px-4 py-3.5 text-left">Contact</th>
+                                <th class="px-4 py-3.5 text-center">TempoBayar</th>
+                                <th class="px-4 py-3.5 text-left">IDTK</th>
+                                <th class="px-4 py-3.5 text-right">Plafon</th>
+                                <th class="px-4 py-3.5 text-left">NoRekening</th>
+                                <th class="px-4 py-3.5 text-left">Cabang Penugasan</th>
+                                <th class="px-4 py-3.5 text-center">Status</th>
+                                <th class="px-4 py-3.5 text-center sticky right-0 bg-gray-50 z-10 shadow-l">Aksi</th>
                             </tr>
                         </thead>
                         <tbody class="text-gray-700 divide-y divide-gray-100">
                             <!-- Loading Skeleton -->
                             <template x-if="isLoading && members.length === 0">
                                 <tr>
-                                    <td colspan="9" class="px-6 py-12 text-center text-gray-400">
+                                    <td colspan="18" class="px-6 py-12 text-center text-gray-400">
                                         <div class="flex items-center justify-center gap-3">
                                             <span class="material-symbols-rounded animate-spin text-[26px] text-[#0052cc]">progress_activity</span>
                                             <span class="text-sm font-semibold">Mengambil data anggota dari backend API...</span>
@@ -606,10 +823,10 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             <!-- Empty State -->
                             <template x-if="!isLoading && members.length === 0">
                                 <tr>
-                                    <td colspan="9" class="px-6 py-14 text-center text-gray-400">
+                                    <td colspan="18" class="px-6 py-14 text-center text-gray-400">
                                         <span class="material-symbols-rounded text-[48px] text-gray-300 block mb-2">person_search</span>
                                         <p class="font-bold text-gray-700 text-sm">Tidak ada data anggota ditemukan</p>
-                                        <p class="text-xs text-gray-400 mt-1">Coba sesuaikan kata kunci pencarian atau filter cabang.</p>
+                                        <p class="text-xs text-gray-400 mt-1">Coba sesuaikan kata kunci pencarian, filter cabang, atau import data Excel.</p>
                                     </td>
                                 </tr>
                             </template>
@@ -617,52 +834,84 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             <!-- Member Rows -->
                             <template x-for="m in members" :key="m.id">
                                 <tr class="hover:bg-blue-50/20 transition-colors">
-                                    <!-- Nama & HP -->
-                                    <td class="px-6 py-4">
+                                    <!-- 1. ID -->
+                                    <td class="px-4 py-3 font-mono text-gray-500 whitespace-nowrap"
+                                        x-text="(m.customer_id !== null && m.customer_id !== undefined && String(m.customer_id) !== '') ? m.customer_id : m.id"></td>
+
+                                    <!-- 2. Kode -->
+                                    <td class="px-4 py-3 font-mono font-bold text-[#0052cc] whitespace-nowrap"
+                                        x-text="(m.member_code !== null && m.member_code !== undefined && String(m.member_code) !== '') ? m.member_code : '-'"></td>
+
+                                    <!-- 3. KodeOut -->
+                                    <td class="px-4 py-3 font-mono text-gray-600 whitespace-nowrap"
+                                        x-text="m.kode_out || '-'"></td>
+
+                                    <!-- 4. Nip -->
+                                    <td class="px-4 py-3 font-mono font-bold text-gray-800 whitespace-nowrap"
+                                        x-text="(m.nik !== null && m.nik !== undefined && String(m.nik) !== '') ? m.nik : '-'"></td>
+
+                                    <!-- 5. Nama -->
+                                    <td class="px-4 py-3 whitespace-nowrap">
                                         <a :href="'/member-detail?id=' + m.id" class="font-bold text-gray-900 hover:text-[#0052cc] leading-tight block" x-text="m.name"></a>
-                                        <span class="text-[11px] text-gray-400 flex items-center gap-1 mt-0.5">
-                                            <span class="material-symbols-rounded text-[13px]">phone</span>
-                                            <span x-text="m.phone || '-'"></span>
-                                        </span>
                                     </td>
 
-                                    <!-- NIK & Member Code -->
-                                    <td class="px-6 py-4 font-mono whitespace-nowrap">
-                                        <span class="block font-bold text-xs text-gray-800" x-text="m.nik"></span>
-                                        <span class="text-[10px] text-gray-400" x-text="m.member_code"></span>
-                                    </td>
+                                    <!-- 6. Dept -->
+                                    <td class="px-4 py-3 text-gray-700 font-semibold whitespace-nowrap"
+                                        x-text="m.department || '-'"></td>
 
-                                    <!-- Departemen -->
-                                    <td class="px-6 py-4 text-gray-700 font-semibold whitespace-nowrap" x-text="m.department"></td>
+                                    <!-- 7. Divisi -->
+                                    <td class="px-4 py-3 text-gray-700 whitespace-nowrap"
+                                        x-text="m.division || m.department || '-'"></td>
 
-                                    <!-- Cabang -->
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold border"
-                                              :class="getBranchBadgeClass(m.branch)">
-                                            <span class="material-symbols-rounded text-[14px]">storefront</span>
-                                            <span x-text="m.branch"></span>
-                                        </span>
-                                    </td>
+                                    <!-- 8. Alamat -->
+                                    <td class="px-4 py-3 text-gray-600 max-w-[200px] truncate"
+                                        :title="m.address || ''"
+                                        x-text="m.address || '-'"></td>
 
-                                    <!-- Plafon Bulanan -->
-                                    <td class="px-6 py-4 text-right font-mono font-bold text-gray-900 whitespace-nowrap">
-                                        <span x-text="formatRupiah(m.credit_limit)"></span>
-                                    </td>
+                                    <!-- 9. Tlp -->
+                                    <td class="px-4 py-3 font-mono text-gray-600 whitespace-nowrap"
+                                        x-text="m.phone || '-'"></td>
 
-                                    <!-- Kasbon Berjalan -->
-                                    <td class="px-6 py-4 text-right font-mono font-bold whitespace-nowrap"
-                                        :class="m.current_debt > 0 ? 'text-amber-600' : 'text-gray-400'"
-                                        x-text="formatRupiah(m.current_debt)">
-                                    </td>
+                                    <!-- 10. Fax -->
+                                    <td class="px-4 py-3 font-mono text-gray-700 whitespace-nowrap"
+                                        x-text="m.fax || '-'"></td>
 
-                                    <!-- Sisa Plafon -->
-                                    <td class="px-6 py-4 text-right whitespace-nowrap">
-                                        <div class="font-mono font-bold text-emerald-600" x-text="formatRupiah(m.remaining_credit)"></div>
-                                        <div class="text-[10px] text-gray-400" x-text="'Terpakai ' + (m.debt_utilization_percent || 0) + '%'"></div>
+                                    <!-- 11. Contact -->
+                                    <td class="px-4 py-3 text-gray-600 whitespace-nowrap"
+                                        x-text="m.contact || '-'"></td>
+
+                                    <!-- 12. TempoBayar -->
+                                    <td class="px-4 py-3 text-center font-mono text-gray-600 whitespace-nowrap"
+                                        x-text="m.tempo_bayar || '-'"></td>
+
+                                    <!-- 13. IDTK -->
+                                    <td class="px-4 py-3 font-mono text-gray-600 whitespace-nowrap"
+                                        x-text="m.idtk || '-'"></td>
+
+                                    <!-- 14. Plafon -->
+                                    <td class="px-4 py-3 text-right font-mono font-bold text-gray-900 whitespace-nowrap"
+                                        x-text="formatRupiah(m.credit_limit)"></td>
+
+                                    <!-- 15. NoRekening -->
+                                    <td class="px-4 py-3 font-mono text-gray-600 whitespace-nowrap"
+                                        x-text="m.no_rekening || '-'"></td>
+
+                                    <!-- 16. Cabang Penugasan -->
+                                    <td class="px-4 py-3 whitespace-nowrap">
+                                        <template x-if="m.branch">
+                                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold border"
+                                                  :class="getBranchBadgeClass(m.branch)">
+                                                <span class="material-symbols-rounded text-[14px]">storefront</span>
+                                                <span x-text="m.branch"></span>
+                                            </span>
+                                        </template>
+                                        <template x-if="!m.branch">
+                                            <span class="text-gray-400">-</span>
+                                        </template>
                                     </td>
 
                                     <!-- Status Toggle -->
-                                    <td class="px-6 py-4 text-center whitespace-nowrap">
+                                    <td class="px-4 py-3 text-center whitespace-nowrap">
                                         <button type="button"
                                                 @click="toggleStatus(m)"
                                                 :title="m.status === 'AKTIF' ? 'Klik untuk memblokir' : 'Klik untuk mengaktifkan'"
@@ -674,7 +923,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     </td>
 
                                     <!-- Aksi -->
-                                    <td class="px-6 py-4 text-center whitespace-nowrap">
+                                    <td class="px-4 py-3 text-center whitespace-nowrap sticky right-0 bg-white shadow-l">
                                         <div class="inline-flex items-center gap-1">
                                             <!-- Detail Profil & Riwayat -->
                                             <a :href="'/member-detail?id=' + m.id"
@@ -761,7 +1010,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
          class="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4"
          style="display: none;">
         
-        <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-gray-200"
+        <div class="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-gray-200 max-h-[92vh] overflow-y-auto"
              @click.outside="showModal = false">
             <div class="flex items-center justify-between pb-4 border-b border-gray-100">
                 <div class="flex items-center gap-3">
@@ -770,7 +1019,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
                     <div>
                         <h3 class="text-base font-black text-gray-900" x-text="modalMode === 'create' ? 'Daftarkan Karyawan Baru' : 'Edit Data Karyawan'"></h3>
-                        <p class="text-xs text-gray-400">Master Data Anggota Koperasi Multi-Cabang</p>
+                        <p class="text-xs text-gray-400">Master Data Anggota Koperasi Multi-Cabang (16 Kolom ILP)</p>
                     </div>
                 </div>
                 <button type="button" @click="showModal = false" class="text-gray-400 hover:text-gray-600 p-1">
@@ -778,69 +1027,141 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                 </button>
             </div>
 
-            <form @submit.prevent="saveMember()" class="space-y-4 mt-5">
-                <!-- NIK & Nama -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <form @submit.prevent="saveMember()" class="space-y-3.5 mt-4">
+                <!-- Row 1: ID, Kode, KodeOut, Nip -->
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
                     <div>
-                        <label class="block text-xs font-bold text-gray-700 mb-1">NIK Karyawan <span class="text-red-500">*</span></label>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">ID</label>
+                        <input type="text"
+                               x-model="formData.customer_id"
+                               placeholder="Auto / ID"
+                               class="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-mono focus:outline-none focus:border-[#0052cc]">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Kode</label>
+                        <input type="text"
+                               x-model="formData.member_code"
+                               placeholder="01-0001"
+                               class="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-mono focus:outline-none focus:border-[#0052cc]">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">KodeOut</label>
+                        <input type="text"
+                               x-model="formData.kode_out"
+                               placeholder="-"
+                               class="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-mono focus:outline-none focus:border-[#0052cc]">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Nip / NIK <span class="text-red-500">*</span></label>
                         <input type="text"
                                x-model="formData.nik"
-                               :disabled="modalMode === 'edit'"
-                               placeholder="Contoh: 32750100..."
-                               class="w-full px-3.5 py-2 rounded-xl border text-xs font-mono focus:ring-2 focus:ring-[#0052cc]/20 focus:border-[#0052cc] focus:outline-none"
+                               placeholder="199701002"
+                               class="w-full px-3 py-2 rounded-xl border text-xs font-mono focus:ring-2 focus:ring-[#0052cc]/20 focus:border-[#0052cc] focus:outline-none"
                                :class="formErrors.nik ? 'border-red-400 bg-red-50/20' : 'border-gray-300'">
                         <p x-show="formErrors.nik" x-text="formErrors.nik" class="text-[11px] text-red-500 mt-1"></p>
                     </div>
+                </div>
 
+                <!-- Row 2: Nama, Dept, Divisi -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
-                        <label class="block text-xs font-bold text-gray-700 mb-1">Nama Lengkap <span class="text-red-500">*</span></label>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Nama <span class="text-red-500">*</span></label>
                         <input type="text"
                                x-model="formData.name"
                                placeholder="Nama karyawan"
-                               class="w-full px-3.5 py-2 rounded-xl border text-xs focus:ring-2 focus:ring-[#0052cc]/20 focus:border-[#0052cc] focus:outline-none"
+                               class="w-full px-3 py-2 rounded-xl border text-xs focus:ring-2 focus:ring-[#0052cc]/20 focus:border-[#0052cc] focus:outline-none"
                                :class="formErrors.name ? 'border-red-400 bg-red-50/20' : 'border-gray-300'">
                         <p x-show="formErrors.name" x-text="formErrors.name" class="text-[11px] text-red-500 mt-1"></p>
                     </div>
-                </div>
-
-                <!-- Cabang Penugasan (Multi-Cabang) & Departemen -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-xs font-bold text-gray-700 mb-1">Cabang Penugasan <span class="text-red-500">*</span></label>
-                        <select x-model="formData.branch"
-                                class="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-semibold focus:outline-none focus:border-[#0052cc]">
-                            <template x-for="b in branches" :key="b">
-                                <option :value="b" x-text="b"></option>
-                            </template>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label class="block text-xs font-bold text-gray-700 mb-1">Departemen / Divisi <span class="text-red-500">*</span></label>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Dept <span class="text-red-500">*</span></label>
                         <input type="text"
                                x-model="formData.department"
-                               placeholder="Misal: Operasional Kebun"
-                               class="w-full px-3.5 py-2 rounded-xl border border-gray-300 text-xs focus:outline-none focus:border-[#0052cc]">
+                               placeholder="Central Personnel"
+                               class="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs focus:outline-none focus:border-[#0052cc]">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Divisi</label>
+                        <input type="text"
+                               x-model="formData.division"
+                               placeholder="Central Personnel"
+                               class="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs focus:outline-none focus:border-[#0052cc]">
                     </div>
                 </div>
 
-                <!-- Plafon Kredit & No HP -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <!-- Row 3: Alamat, Tlp, Fax, Contact -->
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
                     <div>
-                        <label class="block text-xs font-bold text-gray-700 mb-1">Plafon Kasbon Bulanan (Rp) <span class="text-red-500">*</span></label>
-                        <input type="number"
-                               x-model="formData.credit_limit"
-                               :disabled="modalMode === 'edit'"
-                               class="w-full px-3.5 py-2 rounded-xl border border-gray-300 text-xs font-mono font-bold focus:outline-none focus:border-[#0052cc]">
-                        <p class="text-[10px] text-gray-400 mt-1" x-text="modalMode === 'edit' ? 'Untuk ubah limit gunakan tombol Atur Plafon' : 'Batas maksimal kasbon per bulan'"></p>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Alamat</label>
+                        <input type="text"
+                               x-model="formData.address"
+                               placeholder="Alamat..."
+                               class="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs focus:outline-none focus:border-[#0052cc]">
                     </div>
-
                     <div>
-                        <label class="block text-xs font-bold text-gray-700 mb-1">No. WhatsApp / HP</label>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Tlp</label>
                         <input type="text"
                                x-model="formData.phone"
-                               placeholder="0812-xxxx-xxxx"
-                               class="w-full px-3.5 py-2 rounded-xl border border-gray-300 text-xs focus:outline-none focus:border-[#0052cc]">
+                               placeholder="0812-xxxx"
+                               class="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-mono focus:outline-none focus:border-[#0052cc]">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Fax</label>
+                        <input type="text"
+                               x-model="formData.fax"
+                               placeholder="I/22"
+                               class="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-mono focus:outline-none focus:border-[#0052cc]">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Contact</label>
+                        <input type="text"
+                               x-model="formData.contact"
+                               placeholder="-"
+                               class="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs focus:outline-none focus:border-[#0052cc]">
+                    </div>
+                </div>
+
+                <!-- Row 4: TempoBayar, IDTK, Plafon, NoRekening, Cabang Penugasan -->
+                <div class="grid grid-cols-1 sm:grid-cols-5 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">TempoBayar</label>
+                        <input type="text"
+                               x-model="formData.tempo_bayar"
+                               placeholder="-"
+                               class="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-mono focus:outline-none focus:border-[#0052cc]">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">IDTK</label>
+                        <input type="text"
+                               x-model="formData.idtk"
+                               placeholder="-"
+                               class="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-mono focus:outline-none focus:border-[#0052cc]">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Plafon (Rp) <span class="text-red-500">*</span></label>
+                        <input type="number"
+                               x-model="formData.credit_limit"
+                               class="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-mono font-bold focus:outline-none focus:border-[#0052cc]">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">NoRekening</label>
+                        <input type="text"
+                               x-model="formData.no_rekening"
+                               placeholder="-"
+                               class="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-mono focus:outline-none focus:border-[#0052cc]">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Cabang Penugasan</label>
+                        <input type="text"
+                               x-model="formData.branch"
+                               list="branchOptionsList"
+                               placeholder="Cabang 1 - Mill / Pabrik"
+                               class="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-semibold focus:outline-none focus:border-[#0052cc]">
+                        <datalist id="branchOptionsList">
+                            <template x-for="b in branches" :key="b">
+                                <option :value="b"></option>
+                            </template>
+                        </datalist>
                     </div>
                 </div>
 
@@ -857,15 +1178,6 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             <span class="text-xs font-bold text-red-700">DIBLOKIR (Transaksi Ditolak)</span>
                         </label>
                     </div>
-                </div>
-
-                <!-- Catatan -->
-                <div>
-                    <label class="block text-xs font-bold text-gray-700 mb-1">Catatan Tambahan</label>
-                    <textarea x-model="formData.notes"
-                              rows="2"
-                              placeholder="Keterangan penugasan atau riwayat"
-                              class="w-full px-3.5 py-2 rounded-xl border border-gray-300 text-xs focus:outline-none focus:border-[#0052cc]"></textarea>
                 </div>
 
                 <div class="flex items-center justify-end gap-3 pt-3 border-t border-gray-100">
@@ -1051,6 +1363,379 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
             </div>
         </div>
     </div>
+
+    <!-- ============================================================== -->
+    <!-- MODAL IMPORT EXCEL MASTER ANGGOTA (STANDAR 16 KOLOM ILP)       -->
+    <!-- ============================================================== -->
+    <template x-teleport="body">
+        <div x-show="showImportModal"
+             x-cloak
+             class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-xs"
+             style="display: none;">
+            <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+                 @click.away="if (importStep !== 'processing') showImportModal = false">
+
+                <!-- Modal Header -->
+                <div class="px-6 py-4.5 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-between shrink-0">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-400">
+                            <span class="material-symbols-rounded text-[22px]">upload_file</span>
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <h3 class="text-base font-bold text-white">Import Master Anggota Excel</h3>
+                                <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 border border-emerald-400/30 text-emerald-300">Format ILP 16 Kolom</span>
+                            </div>
+                            <p class="text-xs text-slate-300 mt-0.5">Unggah dan sinkronisasi cepat puluhan ribu data anggota koperasi / customer</p>
+                        </div>
+                    </div>
+                    <button type="button"
+                            x-show="importStep !== 'processing'"
+                            @click="showImportModal = false"
+                            class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer">
+                        <span class="material-symbols-rounded text-[18px]">close</span>
+                    </button>
+                </div>
+
+                <!-- Modal Body -->
+                <div class="flex-1 overflow-y-auto p-6 space-y-5">
+
+                    <!-- STEP 1: UPLOAD FILE -->
+                    <div x-show="importStep === 'upload'" class="space-y-5">
+                        <div class="p-4 bg-emerald-50/80 border border-emerald-200 rounded-xl text-emerald-950 flex items-start gap-3">
+                            <span class="material-symbols-rounded text-emerald-600 text-[22px] shrink-0 mt-0.5">verified</span>
+                            <div class="text-xs space-y-1">
+                                <span class="font-bold text-emerald-900 block text-sm">Standar Format Master Anggota / Customer ILP (16 Kolom)</span>
+                                <p class="text-emerald-800 leading-relaxed">
+                                    File Excel memuat kolom: <strong>ID, Kode, KodeOut, Nip, Nama, Dept, Divisi, Alamat, Tlp, Fax, Contact, TempoBayar, IDTK, Plafon, NoRekening, Cabang Penugasan</strong>. Mendukung pembacaan berkecepatan tinggi hingga puluhan ribu baris data.
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Drag and drop / File Picker Area -->
+                        <div class="border-2 border-dashed rounded-2xl p-8 text-center transition-all cursor-pointer relative select-none"
+                             :class="importFile ? 'border-emerald-400 bg-emerald-50/30' : (isDragging ? 'border-[#0052cc] bg-blue-50/50' : 'border-slate-300 hover:border-[#0052cc] hover:bg-slate-50/50')"
+                             @click="triggerFileInput()"
+                             @dragenter.prevent="isDragging = true"
+                             @dragover.prevent="isDragging = true"
+                             @dragleave.prevent="isDragging = false"
+                             @drop.prevent="handleFileDrop($event)">
+                            <input type="file"
+                                   id="memberExcelFileInput"
+                                   x-ref="memberExcelFileInput"
+                                   @click.stop=""
+                                   @change="onFileSelected($event)"
+                                   accept=".xlsx,.xls,.csv"
+                                   class="hidden">
+
+                            <template x-if="!importFile">
+                                <div class="space-y-3 pointer-events-none">
+                                    <div class="w-14 h-14 mx-auto rounded-2xl bg-blue-50 text-[#0052cc] flex items-center justify-center">
+                                        <span class="material-symbols-rounded text-[32px]">cloud_upload</span>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-bold text-slate-800">Pilih file Excel Master Anggota atau tarik file ke sini</p>
+                                        <p class="text-xs text-slate-400 mt-1">Mendukung format .XLSX, .XLS, atau .CSV (Maksimal 50MB • Puluhan Ribu Baris)</p>
+                                    </div>
+                                    <button type="button" @click.stop="triggerFileInput()" class="pointer-events-auto px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer">
+                                        <span class="material-symbols-rounded text-[16px]">folder_open</span>
+                                        <span>Telusuri File di Komputer</span>
+                                    </button>
+                                </div>
+                            </template>
+
+                            <template x-if="importFile">
+                                <div class="flex items-center justify-between p-4 bg-white rounded-xl border border-emerald-200 shadow-2xs text-left" @click.stop="">
+                                    <div class="flex items-center gap-3.5">
+                                        <div class="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                                            <span class="material-symbols-rounded text-[28px]">description</span>
+                                        </div>
+                                        <div>
+                                            <p class="font-bold text-slate-800 text-sm" x-text="importFileName"></p>
+                                            <p class="text-xs text-slate-400 font-mono mt-0.5" x-text="(importFile.size / 1024).toFixed(1) + ' KB'"></p>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <button type="button"
+                                                @click.stop="resetFileInput()"
+                                                class="px-3 py-1.5 rounded-lg text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer">
+                                            Ganti File
+                                        </button>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- Template Download Row -->
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-100">
+                            <div class="flex items-center gap-2 text-xs text-slate-500">
+                                <span class="material-symbols-rounded text-blue-600 text-[18px]">info</span>
+                                <span>Perlu contoh format struktur 16 kolom anggota?</span>
+                            </div>
+                            <button type="button"
+                                    @click="downloadILPTemplate()"
+                                    class="px-3.5 py-2 rounded-xl border border-slate-200 hover:border-[#0052cc] hover:bg-blue-50/40 text-xs font-bold text-[#0052cc] inline-flex items-center gap-1.5 transition-colors cursor-pointer">
+                                <span class="material-symbols-rounded text-[16px]">download</span>
+                                <span>Unduh Template Excel (16 Kolom ILP)</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- STEP 2: INVALID STRUCTURE -->
+                    <div x-show="importStep === 'invalid_structure'" style="display: none;" class="space-y-4">
+                        <div class="p-5 bg-rose-50 border-2 border-rose-200 rounded-2xl text-rose-950 space-y-3">
+                            <div class="flex items-start gap-3">
+                                <div class="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0">
+                                    <span class="material-symbols-rounded text-[24px]">gpp_bad</span>
+                                </div>
+                                <div>
+                                    <h4 class="text-sm font-black text-rose-900">Import Ditolak: Struktur Kolom Tidak Sesuai!</h4>
+                                    <p class="text-xs text-rose-700 mt-0.5 leading-relaxed" x-text="validationErrorDetails?.message || 'File yang diunggah tidak sesuai dengan struktur kolom Master Anggota ILP.'"></p>
+                                </div>
+                            </div>
+
+                            <template x-if="validationErrorDetails?.missing_columns && validationErrorDetails.missing_columns.length > 0">
+                                <div class="p-3 bg-white rounded-xl border border-rose-200">
+                                    <span class="text-[11px] font-extrabold text-rose-700 uppercase block mb-1.5">Kolom yang Tidak Ditemukan:</span>
+                                    <div class="flex flex-wrap gap-1.5">
+                                        <template x-for="col in validationErrorDetails.missing_columns" :key="col">
+                                            <span class="px-2 py-0.5 bg-rose-100 text-rose-800 rounded text-[11px] font-mono font-bold" x-text="col"></span>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- STEP 3: PREVIEW DATA SEBELUM IMPORT -->
+                    <div x-show="importStep === 'preview'" style="display: none;" class="space-y-5">
+                        <!-- Summary Banner -->
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+                                <span class="text-[10px] font-bold uppercase text-slate-400 block">Total Baris Dibaca</span>
+                                <span class="text-xl font-black text-slate-800 font-mono mt-0.5 block" x-text="validationData?.summary?.total_rows || 0">0</span>
+                            </div>
+                            <div class="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200">
+                                <span class="text-[10px] font-bold uppercase text-emerald-700 block">Baris Valid Siap Import</span>
+                                <span class="text-xl font-black text-emerald-700 font-mono mt-0.5 block" x-text="validationData?.summary?.valid_rows || 0">0</span>
+                            </div>
+                            <div class="p-3.5 rounded-xl bg-blue-50 border border-blue-200">
+                                <span class="text-[10px] font-bold uppercase text-blue-700 block">Kode Sudah Ada di DB</span>
+                                <span class="text-xl font-black text-[#0052cc] font-mono mt-0.5 block" x-text="validationData?.summary?.existing_in_db_count || 0">0</span>
+                            </div>
+                            <div class="p-3.5 rounded-xl bg-rose-50 border border-rose-200">
+                                <span class="text-[10px] font-bold uppercase text-rose-700 block">Baris Error / Dilewati</span>
+                                <span class="text-xl font-black text-rose-600 font-mono mt-0.5 block" x-text="validationData?.summary?.error_rows || 0">0</span>
+                            </div>
+                        </div>
+
+                        <!-- Duplicate Action Option -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div>
+                                <span class="text-xs font-bold text-slate-800 block">Perlakuan untuk Kode Anggota yang Sudah Ada:</span>
+                                <span class="text-[11px] text-slate-500">Saldo kasbon berjalan anggota lama tetap aman dan tidak akan ter-reset.</span>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <label class="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 cursor-pointer">
+                                    <input type="radio" value="update" x-model="duplicateAction" class="text-[#0052cc]">
+                                    <span>Perbarui Data (Update)</span>
+                                </label>
+                                <label class="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 cursor-pointer">
+                                    <input type="radio" value="skip" x-model="duplicateAction" class="text-[#0052cc]">
+                                    <span>Lewati (Skip)</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Preview Table (First 25 Rows) -->
+                        <div class="border border-slate-200 rounded-xl overflow-hidden">
+                            <div class="px-4 py-2.5 bg-slate-100 border-b border-slate-200 flex items-center justify-between text-xs font-bold text-slate-700">
+                                <span>Pratinjau 25 Baris Pertama (16 Kolom Standar ILP)</span>
+                                <span class="text-[11px] text-slate-500 font-normal">Geser tabel ke kanan untuk melihat seluruh kolom &rarr;</span>
+                            </div>
+                            <div class="overflow-x-auto max-h-64">
+                                <table class="w-full text-left text-[11px] whitespace-nowrap border-collapse">
+                                    <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase sticky top-0">
+                                        <tr>
+                                            <th class="px-3 py-2">Baris</th>
+                                            <th class="px-3 py-2">Status</th>
+                                            <th class="px-3 py-2">ID</th>
+                                            <th class="px-3 py-2">Kode</th>
+                                            <th class="px-3 py-2">KodeOut</th>
+                                            <th class="px-3 py-2">Nip</th>
+                                            <th class="px-3 py-2">Nama</th>
+                                            <th class="px-3 py-2">Dept</th>
+                                            <th class="px-3 py-2">Divisi</th>
+                                            <th class="px-3 py-2">Alamat</th>
+                                            <th class="px-3 py-2">Tlp</th>
+                                            <th class="px-3 py-2">Fax</th>
+                                            <th class="px-3 py-2">Contact</th>
+                                            <th class="px-3 py-2">TempoBayar</th>
+                                            <th class="px-3 py-2">IDTK</th>
+                                            <th class="px-3 py-2 text-right">Plafon</th>
+                                            <th class="px-3 py-2">NoRekening</th>
+                                            <th class="px-3 py-2">Cabang Penugasan</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-100">
+                                        <template x-for="r in (validationData?.preview_rows || [])" :key="r.row">
+                                            <tr :class="r.has_error ? 'bg-rose-50/60' : 'hover:bg-slate-50'">
+                                                <td class="px-3 py-2 font-mono text-slate-400" x-text="r.row"></td>
+                                                <td class="px-3 py-2">
+                                                    <template x-if="r.has_error">
+                                                        <span class="px-2 py-0.5 rounded bg-rose-100 text-rose-700 font-bold text-[10px]" x-text="r.error_message || 'Error'"></span>
+                                                    </template>
+                                                    <template x-if="!r.has_error && r.is_existing">
+                                                        <span class="px-2 py-0.5 rounded bg-blue-100 text-[#0052cc] font-bold text-[10px]">Update DB</span>
+                                                    </template>
+                                                    <template x-if="!r.has_error && !r.is_existing">
+                                                        <span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 font-bold text-[10px]">Baru</span>
+                                                    </template>
+                                                </td>
+                                                <td class="px-3 py-2 font-mono" x-text="r.customer_id || '-'"></td>
+                                                <td class="px-3 py-2 font-mono font-bold text-[#0052cc]" x-text="r.member_code"></td>
+                                                <td class="px-3 py-2 font-mono" x-text="r.kode_out || '-'"></td>
+                                                <td class="px-3 py-2 font-mono font-bold" x-text="r.nik"></td>
+                                                <td class="px-3 py-2 font-bold text-slate-800" x-text="r.name"></td>
+                                                <td class="px-3 py-2" x-text="r.department || '-'"></td>
+                                                <td class="px-3 py-2" x-text="r.division || '-'"></td>
+                                                <td class="px-3 py-2" x-text="r.address || '-'"></td>
+                                                <td class="px-3 py-2 font-mono" x-text="r.phone || '-'"></td>
+                                                <td class="px-3 py-2 font-mono" x-text="r.fax || '-'"></td>
+                                                <td class="px-3 py-2" x-text="r.contact || '-'"></td>
+                                                <td class="px-3 py-2 font-mono text-center" x-text="r.tempo_bayar || '-'"></td>
+                                                <td class="px-3 py-2 font-mono" x-text="r.idtk || '-'"></td>
+                                                <td class="px-3 py-2 text-right font-mono font-bold" x-text="formatRupiah(r.credit_limit)"></td>
+                                                <td class="px-3 py-2 font-mono" x-text="r.no_rekening || '-'"></td>
+                                                <td class="px-3 py-2" x-text="r.branch || '-'"></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- STEP 4: PROCESSING -->
+                    <div x-show="importStep === 'processing'" style="display: none;" class="py-12 flex flex-col items-center justify-center text-center space-y-4">
+                        <div class="w-16 h-16 rounded-2xl bg-blue-50 text-[#0052cc] flex items-center justify-center">
+                            <span class="material-symbols-rounded text-[36px] animate-spin">progress_activity</span>
+                        </div>
+                        <div>
+                            <h4 class="text-base font-black text-slate-800">Memproses Bulk Import Master Anggota...</h4>
+                            <p class="text-xs text-slate-500 mt-1">Mohon tunggu, sedang menyimpan data anggota secara batch ke database.</p>
+                        </div>
+                    </div>
+
+                    <!-- STEP 5: RESULT -->
+                    <div x-show="importStep === 'result'" style="display: none;" class="py-6 space-y-6 text-center">
+                        <div class="w-16 h-16 mx-auto rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                            <span class="material-symbols-rounded text-[38px]">task_alt</span>
+                        </div>
+                        <div>
+                            <h4 class="text-lg font-black text-slate-800">Import Master Anggota Berhasil Selesai!</h4>
+                            <p class="text-xs text-slate-500 mt-1" x-text="importResult?.message || 'Seluruh data anggota valid telah tersimpan.'"></p>
+                        </div>
+
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-2xl mx-auto text-left">
+                            <div class="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200">
+                                <span class="text-[10px] font-bold uppercase text-emerald-700 block">Anggota Baru</span>
+                                <span class="text-xl font-black text-emerald-700 font-mono mt-0.5 block" x-text="importResult?.summary?.created || 0">0</span>
+                            </div>
+                            <div class="p-3.5 rounded-xl bg-blue-50 border border-blue-200">
+                                <span class="text-[10px] font-bold uppercase text-blue-700 block">Diperbarui</span>
+                                <span class="text-xl font-black text-[#0052cc] font-mono mt-0.5 block" x-text="importResult?.summary?.updated || 0">0</span>
+                            </div>
+                            <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+                                <span class="text-[10px] font-bold uppercase text-slate-500 block">Dilewati</span>
+                                <span class="text-xl font-black text-slate-700 font-mono mt-0.5 block" x-text="importResult?.summary?.skipped || 0">0</span>
+                            </div>
+                            <div class="p-3.5 rounded-xl bg-rose-50 border border-rose-200">
+                                <span class="text-[10px] font-bold uppercase text-rose-700 block">Gagal</span>
+                                <span class="text-xl font-black text-rose-600 font-mono mt-0.5 block" x-text="importResult?.summary?.failed || 0">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Modal Footer -->
+                <div class="px-6 py-4 bg-slate-50 border-t border-slate-200/80 flex items-center justify-between shrink-0">
+                    <!-- Footer Step 1: Upload -->
+                    <template x-if="importStep === 'upload'">
+                        <div class="w-full flex items-center justify-end gap-2.5">
+                            <button type="button"
+                                    @click="showImportModal = false"
+                                    class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer">
+                                Batal
+                            </button>
+                            <button type="button"
+                                    @click="uploadAndValidateFile()"
+                                    :disabled="!importFile || isUploading"
+                                    class="h-10 px-5 bg-[#0052cc] hover:bg-[#0043a8] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-colors cursor-pointer">
+                                <span class="material-symbols-rounded text-[18px]" :class="isUploading ? 'animate-spin' : ''" x-text="isUploading ? 'progress_activity' : 'fact_check'"></span>
+                                <span x-text="isUploading ? 'Memvalidasi File...' : 'Validasi & Pratinjau Data'"></span>
+                            </button>
+                        </div>
+                    </template>
+
+                    <!-- Footer Step 2: Invalid Structure -->
+                    <template x-if="importStep === 'invalid_structure'">
+                        <div class="w-full flex items-center justify-between">
+                            <button type="button"
+                                    @click="downloadILPTemplate()"
+                                    class="px-4 py-2 rounded-xl text-xs font-bold text-[#0052cc] hover:bg-blue-50 border border-blue-200 transition-colors inline-flex items-center gap-1.5 cursor-pointer">
+                                <span class="material-symbols-rounded text-[16px]">download</span>
+                                <span>Unduh Format Template Resmi ILP</span>
+                            </button>
+                            <button type="button"
+                                    @click="importStep = 'upload'; resetFileInput();"
+                                    class="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer inline-flex items-center gap-1.5">
+                                <span class="material-symbols-rounded text-[16px]">replay</span>
+                                <span>Unggah Ulang File Lain</span>
+                            </button>
+                        </div>
+                    </template>
+
+                    <!-- Footer Step 3: Preview -->
+                    <template x-if="importStep === 'preview'">
+                        <div class="w-full flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <button type="button"
+                                        @click="showImportModal = false"
+                                        class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer">
+                                    Batal
+                                </button>
+                                <button type="button"
+                                        @click="importStep = 'upload'; resetFileInput();"
+                                        class="px-4 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer">
+                                    Ganti File
+                                </button>
+                            </div>
+                            <button type="button"
+                                    @click="confirmExecuteImport()"
+                                    :disabled="!validationData || (validationData?.summary?.valid_rows || 0) === 0"
+                                    class="h-10 px-5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-colors cursor-pointer">
+                                <span class="material-symbols-rounded text-[18px]">cloud_done</span>
+                                <span>Konfirmasi &amp; Mulai Import (<span x-text="validationData?.summary?.valid_rows || 0"></span> Anggota)</span>
+                            </button>
+                        </div>
+                    </template>
+
+                    <!-- Footer Step 5: Result -->
+                    <template x-if="importStep === 'result'">
+                        <div class="w-full flex items-center justify-end">
+                            <button type="button"
+                                    @click="showImportModal = false"
+                                    class="h-10 px-6 bg-[#0052cc] hover:bg-[#0043a8] text-white rounded-xl text-xs font-bold transition-colors cursor-pointer">
+                                Selesai &amp; Tutup
+                            </button>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </template>
 
     <!-- Toast Notification -->
     <div x-show="showToast"

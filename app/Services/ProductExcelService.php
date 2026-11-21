@@ -89,7 +89,13 @@ class ProductExcelService
         $file->move($tempDir, $token);
 
         try {
-            $spreadsheet = IOFactory::load($tempPath);
+            @set_time_limit(300);
+            @ini_set('memory_limit', '1024M');
+            $reader = IOFactory::createReaderForFile($tempPath);
+            if (method_exists($reader, 'setReadDataOnly')) {
+                $reader->setReadDataOnly(true);
+            }
+            $spreadsheet = $reader->load($tempPath);
             $sheet = $spreadsheet->getActiveSheet();
             $highestRow = $sheet->getHighestRow();
             $highestColumn = $sheet->getHighestColumn();
@@ -329,7 +335,13 @@ class ProductExcelService
         }
 
         try {
-            $spreadsheet = IOFactory::load($tempPath);
+            @set_time_limit(300);
+            @ini_set('memory_limit', '1024M');
+            $reader = IOFactory::createReaderForFile($tempPath);
+            if (method_exists($reader, 'setReadDataOnly')) {
+                $reader->setReadDataOnly(true);
+            }
+            $spreadsheet = $reader->load($tempPath);
             $sheet = $spreadsheet->getActiveSheet();
             $highestRow = $sheet->getHighestRow();
             $highestColumn = $sheet->getHighestColumn();

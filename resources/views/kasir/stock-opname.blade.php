@@ -7,6 +7,9 @@
     ...cashierOpeningData(),
     searchQuery: '',
     statusFilter: 'all', // all | selisih | sesuai | pending
+    categoryFilter: 'all',
+    opnameMode: 'harian', // harian (rak/parsial) | grand (bulanan)
+    blindCountMode: false, // mode hitung buta ala alfamart
     scanBarcode: '',
     items: [],
     showFinishModal: false,
@@ -134,8 +137,15 @@
         this.scanBarcode = '';
     },
 
+    get categories() {
+        const set = new Set();
+        (this.items || []).forEach(i => { if (i.kategori) set.add(i.kategori); });
+        return Array.from(set).sort();
+    },
+
     get filteredItems() {
         return this.items.filter(i => {
+            if (this.categoryFilter !== 'all' && i.kategori !== this.categoryFilter) return false;
             if (this.statusFilter === 'selisih' && i.selisih === 0) return false;
             if (this.statusFilter === 'sesuai' && i.selisih !== 0) return false;
             if (this.statusFilter === 'pending' && i.isAudited) return false;
@@ -229,10 +239,11 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-Idempotency-Key': idemKey },
                     body: JSON.stringify({
-                        title: 'Stock Opname ' + (this.activeSession?.terminalLabel || '-'),
+                        title: (this.opnameMode === 'harian' ? 'SO Harian (Rak/Parsial): ' : 'SO Grand Bulanan: ') + (this.categoryFilter !== 'all' ? this.categoryFilter : (this.activeSession?.terminalLabel || '-')),
+                        opname_type: this.opnameMode.toUpperCase(),
                         branch: this.activeSession?.storeLocation || localStorage.getItem('pos_kasir_branch') || '',
                         conducted_by: (this.activeSession?.cashierName || localStorage.getItem('pos_user_name') || 'Kasir') + ' (Kasir)',
-                        notes: 'Audit kasir ' + historyRecord.totalAudited + ' SKU. Selisih: ' + historyRecord.totalVariance + ' unit.'
+                        notes: 'Audit kasir kinerja Alfamart (' + (this.opnameMode === 'harian' ? 'SO Harian' : 'SO Grand') + '). Total SKU: ' + historyRecord.totalAudited + '. Selisih: ' + historyRecord.totalVariance + ' unit (Rp ' + this.totalVarianceValue.toLocaleString('id-ID') + ').'
                     })
                 });
             } catch(e) {
@@ -314,24 +325,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
     <!-- Main Content -->
     <main class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
 
-        <!-- Top Header -->
-        <header class="h-[68px] bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
-            <div class="flex items-center gap-3">
-                <h1 class="text-[16px] font-black text-gray-900 tracking-tight">Stock Opname</h1>
-                <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200" x-text="activeSession?.terminalLabel || '-'"></span>
-            </div>
-
-            <div class="flex items-center gap-3 text-gray-600">
-                <x-notification-bell role="KASIR" />
-                <x-realtime-network-badge />
-                <button type="button"
-                        @click="finishOpname()"
-                        class="bg-[#0052cc] hover:bg-[#0043a8] text-white px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 shadow-xs transition-colors cursor-pointer">
-                    <span class="material-symbols-rounded text-[18px]">check_circle</span>
-                    <span>Selesaikan Stock Opname</span>
-                </button>
-            </div>
-        </header>
+        <!-- Top Header: Consistent Cashier Navbar across all pages -->
+        <x-cashier-header title="Stock Opname Kasir" />
 
         <!-- Scrollable Workspace -->
         <div class="flex-1 overflow-y-auto p-8 flex flex-col">
@@ -390,6 +385,53 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 :class="totalVarianceValue === 0 ? 'text-emerald-600' : 'text-orange-500'"
                                 x-text="'Rp ' + totalVarianceValue.toLocaleString('id-ID')"></h3>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Mode Opname & Filter Bar (Alfamart Standard) -->
+                <div class="bg-white rounded-2xl border border-gray-200 p-4 mb-6 shadow-xs flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-black text-gray-500 uppercase tracking-wider">TIPE OPNAME:</span>
+                        <div class="flex items-center bg-gray-100 p-1 rounded-xl text-xs font-bold">
+                            <button type="button"
+                                    @click="opnameMode = 'harian'"
+                                    :class="opnameMode === 'harian' ? 'bg-[#0052cc] text-white shadow-xs' : 'text-gray-600 hover:text-gray-900'"
+                                    class="px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5">
+                                <span class="material-symbols-rounded text-[16px]">calendar_today</span>
+                                <span>SO Harian (Rak/Parsial)</span>
+                            </button>
+                            <button type="button"
+                                    @click="opnameMode = 'grand'"
+                                    :class="opnameMode === 'grand' ? 'bg-[#0052cc] text-white shadow-xs' : 'text-gray-600 hover:text-gray-900'"
+                                    class="px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5">
+                                <span class="material-symbols-rounded text-[16px]">domain_verification</span>
+                                <span>SO Grand (Bulanan Toko)</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-3">
+                        <!-- Filter Rak / Kategori (SO Harian) -->
+                        <div class="relative">
+                            <select x-model="categoryFilter"
+                                    class="appearance-none bg-slate-50 border border-gray-200 rounded-xl px-3.5 py-1.5 pr-8 text-xs font-bold text-gray-700 focus:outline-none focus:border-[#0052cc] cursor-pointer">
+                                <option value="all">Semua Kategori / Rak</option>
+                                <template x-for="cat in categories" :key="cat">
+                                    <option :value="cat" x-text="cat"></option>
+                                </template>
+                            </select>
+                            <span class="material-symbols-rounded absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-[16px]">expand_more</span>
+                        </div>
+
+                        <!-- Toggle Blind Count (Hitung Buta Alfamart) -->
+                        <button type="button"
+                                @click="blindCountMode = !blindCountMode"
+                                :class="blindCountMode ? 'bg-amber-50 text-amber-700 border-amber-300 ring-2 ring-amber-200' : 'bg-white text-gray-600 border-gray-200'"
+                                class="px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                                title="Sembunyikan angka stok sistem untuk audit fisik murni tanpa bias">
+                            <span class="material-symbols-rounded text-[16px]" x-text="blindCountMode ? 'visibility_off' : 'visibility'"></span>
+                            <span x-text="blindCountMode ? 'Hitung Buta (Aktif)' : 'Hitung Buta: Nonaktif'"></span>
+                        </button>
                     </div>
                 </div>
 
@@ -459,7 +501,17 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                 <span class="text-[11px] text-gray-400 font-mono mt-0.5" x-text="item.sku"></span>
                                             </div>
                                         </td>
-                                        <td class="px-6 py-3.5 text-center font-bold text-gray-800 font-mono text-sm whitespace-nowrap" x-text="item.stokSistem"></td>
+                                        <td class="px-6 py-3.5 text-center font-bold text-gray-800 font-mono text-sm whitespace-nowrap">
+                                            <template x-if="blindCountMode && !item.isAudited">
+                                                <span class="inline-flex items-center gap-1 text-slate-400 font-mono text-xs bg-slate-100 px-2 py-0.5 rounded" title="Hitung Buta: angka sistem disembunyikan sampai fisik diinput">
+                                                    <span class="material-symbols-rounded text-[13px]">visibility_off</span>
+                                                    <span>***</span>
+                                                </span>
+                                            </template>
+                                            <template x-if="!blindCountMode || item.isAudited">
+                                                <span x-text="item.stokSistem"></span>
+                                            </template>
+                                        </td>
                                         <td class="px-6 py-3.5 whitespace-nowrap">
                                             <div class="flex justify-center">
                                                 <input type="number"
@@ -559,14 +611,20 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
                 </div>
 
-                <!-- Bottom Action Button -->
-                <div>
-                    <button type="button"
-                            @click="finishOpname()"
-                            class="bg-[#0052cc] hover:bg-[#0043a8] text-white px-5 py-2.5 rounded-xl font-bold text-xs inline-flex items-center gap-2 shadow-xs transition-colors cursor-pointer">
-                        <span class="material-symbols-rounded text-[18px]">check_circle</span>
-                        <span>Selesaikan Stock Opname</span>
-                    </button>
+                <!-- Info Pencatatan Fisik Kasir -->
+                <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-gray-500 pt-3 border-t border-gray-200">
+                    <div class="flex items-center gap-2 text-slate-600 font-medium">
+                        <span class="material-symbols-rounded text-[18px] text-[#0052cc]">info</span>
+                        <span>Pencatatan fisik stock opname kasir tersimpan otomatis di draft lokal. Verifikasi dan penyesuaian stok master dilakukan oleh Supervisor / Manager.</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button type="button"
+                                @click="exportData()"
+                                class="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-2xs transition-colors cursor-pointer">
+                            <span class="material-symbols-rounded text-[16px]">table_chart</span>
+                            <span>Unduh Laporan Audit (Excel)</span>
+                        </button>
+                    </div>
                 </div>
 
             </div>

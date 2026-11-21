@@ -347,31 +347,22 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
     <main class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
         
         <!-- Top Header -->
-        <header class="h-[68px] bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
-            <div class="flex items-center gap-8">
-                <span class="text-[18px] font-black text-[#0052cc] tracking-tight">ILP POS</span>
-                <nav class="flex items-center gap-6 text-[13.5px] font-medium text-gray-600">
-                    <span class="text-gray-900 font-bold">Modul Promo</span>
-                    <a href="/inventory" class="hover:text-gray-900 transition-colors">Master Produk</a>
-                    <a href="/reports" class="hover:text-gray-900 transition-colors">Laporan Penjualan</a>
-                </nav>
+        <header class="h-20 bg-[#f8f9fa] border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
+            <div class="flex items-center gap-3">
+                <h1 class="text-[20px] font-bold text-gray-900">Promosi &amp; Diskon</h1>
+                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200 flex items-center gap-1.5">
+                    <span class="material-symbols-rounded text-[14px]">sell</span>
+                    <span>Program Diskon &amp; Promo</span>
+                </span>
             </div>
 
-            <div class="flex items-center gap-4">
+            <div class="flex items-center gap-4 text-gray-500">
                 <x-notification-bell role="MANAGER" />
-                <x-realtime-network-badge />
-                <button type="button"
-                        @click="showAddModal = true"
-                        class="bg-[#0052cc] hover:bg-[#0043a8] text-white px-4 py-2 rounded-xl font-bold text-[12.5px] shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer">
-                    <span class="material-symbols-rounded text-[18px]">add_circle</span>
-                    <span>Tambah Promo Baru</span>
+                <button type="button" @click="window.PosRealtime?.syncNow?.(); initPromotions();" class="hover:text-gray-900 transition-colors cursor-pointer" title="Sinkronkan Data">
+                    <span class="material-symbols-rounded text-[24px]" :class="$store.network?.isChecking ? 'animate-spin text-[#0052cc]' : ''">autorenew</span>
                 </button>
-                <div class="flex items-center gap-2 bg-gray-100 border border-gray-200 rounded-full pl-3.5 pr-1.5 py-1">
-                    <span class="text-[12.5px] font-bold text-gray-800">{{ auth()->user()?->name ?? 'Manager' }}</span>
-                    <div class="w-6 h-6 rounded-full bg-gray-800 text-white flex items-center justify-center">
-                        <span class="material-symbols-rounded text-[16px]">person</span>
-                    </div>
-                </div>
+                <div class="h-6 w-px bg-gray-300"></div>
+                <x-realtime-network-badge />
             </div>
         </header>
 
@@ -380,17 +371,25 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
             <div class="max-w-[1400px] mx-auto">
                 
                 <!-- Page Title -->
-                <div class="mb-6 flex items-center justify-between">
+                <div class="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                        <h1 class="text-[26px] font-black text-gray-900 tracking-tight leading-tight">Manajemen Promo & Diskon</h1>
+                        <h1 class="text-[26px] font-black text-gray-900 tracking-tight leading-tight">Manajemen Promo &amp; Diskon</h1>
                         <p class="text-[14px] text-gray-500 mt-1">Optimalkan penjualan toko koperasi dengan penawaran dan diskon cerdas.</p>
                     </div>
-                    <!-- Quick status filter badges -->
-                    <div class="flex items-center gap-2">
-                        <button type="button" @click="statusFilter = 'all'" :class="statusFilter === 'all' ? 'bg-gray-900 text-white font-bold' : 'bg-white text-gray-600 border border-gray-200'" class="px-3 py-1.5 rounded-lg text-xs cursor-pointer transition-colors">Semua</button>
-                        <button type="button" @click="statusFilter = 'AKTIF'" :class="statusFilter === 'AKTIF' ? 'bg-green-600 text-white font-bold' : 'bg-white text-gray-600 border border-gray-200'" class="px-3 py-1.5 rounded-lg text-xs cursor-pointer transition-colors">Aktif</button>
-                        <button type="button" @click="statusFilter = 'MENDATANG'" :class="statusFilter === 'MENDATANG' ? 'bg-[#0052cc] text-white font-bold' : 'bg-white text-gray-600 border border-gray-200'" class="px-3 py-1.5 rounded-lg text-xs cursor-pointer transition-colors">Mendatang</button>
-                        <button type="button" @click="statusFilter = 'BERAKHIR'" :class="statusFilter === 'BERAKHIR' ? 'bg-gray-600 text-white font-bold' : 'bg-white text-gray-600 border border-gray-200'" class="px-3 py-1.5 rounded-lg text-xs cursor-pointer transition-colors">Berakhir</button>
+                    <!-- Quick status filter badges & Actions -->
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <div class="flex items-center gap-2">
+                            <button type="button" @click="statusFilter = 'all'" :class="statusFilter === 'all' ? 'bg-gray-900 text-white font-bold' : 'bg-white text-gray-600 border border-gray-200'" class="px-3 py-1.5 rounded-lg text-xs cursor-pointer transition-colors">Semua</button>
+                            <button type="button" @click="statusFilter = 'AKTIF'" :class="statusFilter === 'AKTIF' ? 'bg-green-600 text-white font-bold' : 'bg-white text-gray-600 border border-gray-200'" class="px-3 py-1.5 rounded-lg text-xs cursor-pointer transition-colors">Aktif</button>
+                            <button type="button" @click="statusFilter = 'MENDATANG'" :class="statusFilter === 'MENDATANG' ? 'bg-[#0052cc] text-white font-bold' : 'bg-white text-gray-600 border border-gray-200'" class="px-3 py-1.5 rounded-lg text-xs cursor-pointer transition-colors">Mendatang</button>
+                            <button type="button" @click="statusFilter = 'BERAKHIR'" :class="statusFilter === 'BERAKHIR' ? 'bg-gray-600 text-white font-bold' : 'bg-white text-gray-600 border border-gray-200'" class="px-3 py-1.5 rounded-lg text-xs cursor-pointer transition-colors">Berakhir</button>
+                        </div>
+                        <button type="button"
+                                @click="showAddModal = true"
+                                class="bg-[#0052cc] hover:bg-[#0043a8] text-white px-4 py-2 rounded-xl font-bold text-[12.5px] shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer">
+                            <span class="material-symbols-rounded text-[18px]">add_circle</span>
+                            <span>Tambah Promo Baru</span>
+                        </button>
                     </div>
                 </div>
 

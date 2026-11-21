@@ -11,6 +11,7 @@ class GoodsReceipt extends Model
     protected $fillable = [
         'receipt_number',
         'purchase_id',
+        'sent_by',
         'from_location_id',
         'to_location_id',
         'received_by',
@@ -47,6 +48,11 @@ class GoodsReceipt extends Model
     public function receiver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'received_by');
+    }
+
+    public function sender(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'sent_by');
     }
 
     public function items(): HasMany

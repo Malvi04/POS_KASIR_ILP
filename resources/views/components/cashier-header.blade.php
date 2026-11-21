@@ -1,8 +1,55 @@
-<header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0 select-none z-20">
-    <!-- Title & Left Slot -->
-    <div class="flex items-center gap-4 min-w-0">
-        <h2 class="text-lg font-bold text-gray-800 truncate">{{ $title }}</h2>
-        {{ $slot ?? '' }}
+<header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 sm:px-6 lg:px-8 shrink-0 select-none z-20">
+    <!-- Title & Consistent Cashier Control Bar -->
+    <div class="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 mr-2 overflow-hidden">
+        <h2 class="text-base sm:text-lg font-bold text-gray-800 truncate shrink-0">{{ $title }}</h2>
+
+        <!-- Custom Slot Badges if any (e.g. from refund, held-bills, etc) -->
+        @if(isset($slot) && trim($slot))
+            <div class="hidden 2xl:flex items-center shrink-0">
+                {{ $slot }}
+            </div>
+        @endif
+
+        <!-- Consistent Cashier Control Bar (Identical across all cashier pages) -->
+        <div class="flex items-center gap-2 overflow-x-auto py-1 no-scrollbar shrink-0">
+            <!-- Terminal & Active Operator Pill -->
+            <a href="{{ url('/kasir/sesi') }}"
+               class="flex items-center gap-2 bg-blue-50 hover:bg-blue-100 text-[#0052cc] border border-blue-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 shadow-2xs"
+               :title="'ID Sesi: ' + (activeSession?.sessionId || '-')">
+                <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                <span class="font-extrabold text-[#0052cc]" x-text="activeSession?.terminalLabel || localStorage.getItem('pos_kasir_shift') || 'POS-01'">POS-01</span>
+                <span class="text-gray-300">•</span>
+                <span class="material-symbols-rounded text-[15px] text-[#0052cc]">badge</span>
+                <span class="text-gray-800 font-black" x-text="activeOperator ? activeOperator.name : (activeSession?.cashierName || localStorage.getItem('pos_user_name') || 'Kasir 1')">Kasir 1</span>
+            </a>
+
+            <!-- Kunci Layar Terminal -->
+            <button type="button"
+                    @click="typeof lockTerminal === 'function' ? lockTerminal() : $dispatch('lock-terminal')"
+                    class="flex items-center gap-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs shrink-0"
+                    title="Kunci Layar Terminal Sementara">
+                <span class="material-symbols-rounded text-[16px]">lock</span>
+                <span class="hidden sm:inline">Kunci</span>
+            </button>
+
+            <!-- Fitur Kas Laci (Total uang laci ada di dalam popup fitur Kas Laci, tidak terlihat di tampilan depan) -->
+            <button type="button"
+                    @click="$dispatch('open-cash-movement')"
+                    class="flex items-center gap-1.5 bg-white hover:bg-blue-50/50 text-gray-700 hover:text-[#0052cc] border border-gray-200 hover:border-blue-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 shadow-2xs group"
+                    title="Buka Fitur Kas Laci (Catat Kas Masuk / Keluar / Setor Brankas & Cek Saldo Laci)">
+                <span class="material-symbols-rounded text-[16px] text-[#0052cc]">account_balance_wallet</span>
+                <span>Kas Laci</span>
+            </button>
+
+            <!-- Tutup Sesi (Audit) -->
+            <button type="button"
+                    @click="$dispatch('open-closing-wizard')"
+                    class="flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 shadow-2xs"
+                    title="Tutup Sesi & Audit Kasir">
+                <span class="material-symbols-rounded text-[16px] text-amber-700">logout</span>
+                <span class="hidden sm:inline">Tutup Sesi (Audit)</span>
+            </button>
+        </div>
     </div>
 
     <!-- Right Actions & Realtime Status -->

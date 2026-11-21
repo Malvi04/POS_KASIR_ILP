@@ -18,6 +18,28 @@
             </button>
         </div>
 
+        <!-- Total Uang Laci Saat Ini Card -->
+        <div class="mx-6 mt-4 p-4 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200/90 shadow-2xs flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                    <span class="material-symbols-rounded text-[22px]">payments</span>
+                </div>
+                <div>
+                    <span class="text-[10px] font-extrabold text-emerald-800 tracking-wider uppercase block">Total Uang Laci Saat Ini</span>
+                    <span class="text-[11px] text-gray-500 font-medium">Saldo kas fisik di laci kasir</span>
+                </div>
+            </div>
+            <div class="text-right">
+                <span class="font-mono text-xl font-black text-emerald-700 block tracking-tight"
+                      x-text="typeof getExpectedClosingCash === 'function' ? formatRupiah(getExpectedClosingCash()) : (activeSession ? formatRupiah((Number(activeSession.openingCash)||0) + (Number(activeSession.cashSalesNet)||0) + (Number(activeSession.cashIn)||0) - (Number(activeSession.cashReturn)||0) - (Number(activeSession.cashOut)||0) - (Number(activeSession.cashDrop)||0)) : 'Rp 0')">
+                    Rp 0
+                </span>
+                <span class="text-[10px] text-gray-400 font-mono block mt-0.5"
+                      x-text="'Modal Awal: ' + formatRupiah(activeSession?.openingCash || 0)">
+                </span>
+            </div>
+        </div>
+
         <div class="p-6 space-y-4">
             <div>
                 <label class="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Jenis Transaksi Kas</label>
@@ -327,3 +349,37 @@
         </div>
     </div>
 </div>
+
+<!-- MODAL: LAYAR KUNCI TERMINAL (GLOBAL SEMUA HALAMAN) -->
+<template x-if="isTerminalLocked">
+    <div class="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/95 backdrop-blur-md">
+        <div class="bg-white rounded-3xl max-w-sm w-full p-8 shadow-2xl text-center space-y-5 border border-slate-700/30">
+            <div class="w-16 h-16 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto ring-8 ring-amber-50/50">
+                <span class="material-symbols-rounded text-3xl">lock</span>
+            </div>
+
+            <div>
+                <h3 class="text-lg font-black text-gray-900">Terminal Kasir Dikunci</h3>
+                <p class="text-xs text-gray-500 mt-1">Terminal diamankan sementara dari akses yang tidak berwenang.</p>
+            </div>
+
+            <div class="space-y-3">
+                <input type="password"
+                       x-model="lockPinInput"
+                       @keydown.enter.prevent="unlockTerminal()"
+                       placeholder="Masukkan PIN Operator..."
+                       autofocus
+                       class="w-full text-center tracking-widest font-mono text-xl py-3 px-4 bg-gray-50 border border-gray-300 rounded-2xl focus:bg-white focus:border-[#0052cc] outline-none">
+                
+                <span x-show="lockErrorMsg" class="text-xs font-bold text-rose-600 block" x-text="lockErrorMsg"></span>
+
+                <button type="button"
+                        @click="unlockTerminal()"
+                        class="w-full py-3 bg-[#0052cc] hover:bg-[#0043a8] text-white font-bold text-xs rounded-2xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer">
+                    <span class="material-symbols-rounded text-[18px]">lock_open</span>
+                    <span>Buka Kunci Terminal</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</template>

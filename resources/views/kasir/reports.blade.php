@@ -50,20 +50,32 @@
     },
 
     get filteredTransactions() {
-        const todayStr = new Date().toISOString().split('T')[0];
-        const yestStr = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+        const now = new Date();
+        const todayStr = now.toISOString().split('T')[0];
+        const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay()).toISOString().split('T')[0];
+        const monthPrefix = now.toISOString().substring(0, 7);
+        const yearPrefix = now.getFullYear().toString();
 
         return this.transactions.filter(t => {
-            // Period filter
+            // Period filter (Harian, Mingguan, Bulanan, Tahunan)
             if (this.periodFilter === 'today' && t.date && t.date !== todayStr) return false;
-            if (this.periodFilter === 'yesterday' && t.date && t.date !== yestStr) return false;
+            if (this.periodFilter === 'week' && t.date && t.date < startOfWeek) return false;
+            if (this.periodFilter === 'month' && t.date && !t.date.startsWith(monthPrefix)) return false;
+            if (this.periodFilter === 'year' && t.date && !t.date.startsWith(yearPrefix)) return false;
 
             // Session filter
             if (this.selectedSessionFilter === 'active' && this.activeSession && t.sessionId !== this.activeSession.sessionId) return false;
             if (this.selectedSessionFilter !== 'all' && this.selectedSessionFilter !== 'active' && t.sessionId !== this.selectedSessionFilter) return false;
 
             // Method filter
-            if (this.selectedMethodFilter !== 'all' && t.method !== this.selectedMethodFilter) return false;
+            if (this.selectedMethodFilter !== 'all') {
+                const meth = (t.method || '').toUpperCase();
+                if (this.selectedMethodFilter === 'QRIS' && !meth.includes('QRIS')) return false;
+                else if (this.selectedMethodFilter === 'TRANSFER' && !meth.includes('TRANSFER')) return false;
+                else if (this.selectedMethodFilter === 'TUNAI' && meth !== 'TUNAI') return false;
+                else if (this.selectedMethodFilter === 'KREDIT' && !meth.includes('KREDIT') && !meth.includes('PIUTANG')) return false;
+                else if (this.selectedMethodFilter === 'CAMPURAN' && !meth.includes('CAMPURAN')) return false;
+            }
 
             // Status filter
             if (this.selectedStatusFilter !== 'all') {
@@ -184,25 +196,37 @@ class="flex flex-col h-screen w-full font-sans">
                 <!-- Filter Section -->
                 <div class="bg-white rounded-t-xl p-5 border border-gray-200 shadow-xs flex flex-col gap-4 border-b-0">
                     <div class="flex items-center justify-between flex-wrap gap-3">
-                        <!-- Quick Period Switcher -->
-                        <div class="flex items-center gap-1.5 bg-gray-100 p-1 rounded-xl">
+                        <!-- Quick Period Switcher (Harian, Mingguan, Bulanan, Tahunan) -->
+                        <div class="flex items-center gap-1.5 bg-gray-100 p-1 rounded-xl overflow-x-auto">
                             <button type="button"
                                     @click="periodFilter = 'today'"
                                     :class="periodFilter === 'today' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
-                                    class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer">
+                                    class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
                                 Hari Ini
                             </button>
                             <button type="button"
-                                    @click="periodFilter = 'yesterday'"
-                                    :class="periodFilter === 'yesterday' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
-                                    class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer">
-                                Kemarin
+                                    @click="periodFilter = 'week'"
+                                    :class="periodFilter === 'week' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
+                                    class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
+                                Minggu Ini
+                            </button>
+                            <button type="button"
+                                    @click="periodFilter = 'month'"
+                                    :class="periodFilter === 'month' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
+                                    class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
+                                Bulan Ini
+                            </button>
+                            <button type="button"
+                                    @click="periodFilter = 'year'"
+                                    :class="periodFilter === 'year' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
+                                    class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
+                                Tahun Ini
                             </button>
                             <button type="button"
                                     @click="periodFilter = 'all'"
                                     :class="periodFilter === 'all' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
-                                    class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer">
-                                Semua Periode
+                                    class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
+                                Semua
                             </button>
                         </div>
 
@@ -231,11 +255,12 @@ class="flex flex-col h-screen w-full font-sans">
                         <div class="flex flex-col gap-1.5">
                             <label class="text-[10px] font-black text-gray-500 uppercase tracking-widest">Metode Bayar</label>
                             <div class="relative">
-                                <select x-model="selectedMethodFilter" class="appearance-none pl-3.5 pr-9 py-2 border border-gray-200 rounded-lg text-xs font-bold text-gray-800 w-[160px] outline-none bg-white cursor-pointer focus:border-[#0052cc]">
+                                <select x-model="selectedMethodFilter" class="appearance-none pl-3.5 pr-9 py-2 border border-gray-200 rounded-lg text-xs font-bold text-gray-800 w-[180px] outline-none bg-white cursor-pointer focus:border-[#0052cc]">
                                     <option value="all">Semua Metode</option>
                                     <option value="TUNAI">Tunai</option>
-                                    <option value="QRIS">QRIS / Debit</option>
-                                    <option value="KREDIT ANGGOTA">Kredit Anggota</option>
+                                    <option value="TRANSFER">Transfer Bank</option>
+                                    <option value="QRIS">QRIS</option>
+                                    <option value="KREDIT">Piutang / Kredit</option>
                                     <option value="CAMPURAN">Campuran</option>
                                 </select>
                                 <span class="material-symbols-rounded absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none text-[18px]">expand_more</span>

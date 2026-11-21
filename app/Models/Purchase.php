@@ -22,6 +22,7 @@ class Purchase extends Model
         'warehouse_name',
         'created_by',
         'purchase_date',
+        'arrived_at',
         'status',
         'total_amount',
         'notes',
@@ -29,6 +30,7 @@ class Purchase extends Model
 
     protected $casts = [
         'purchase_date' => 'date',
+        'arrived_at' => 'datetime',
         'total_amount' => 'decimal:2',
     ];
 

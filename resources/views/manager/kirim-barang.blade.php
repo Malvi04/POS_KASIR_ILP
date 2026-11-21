@@ -74,7 +74,7 @@
 
     async loadAvailableProducts() {
         try {
-            const res = await fetch('/api/products?location_code=GDG-001&per_page=100', { headers: { 'Accept': 'application/json' } });
+            const res = await fetch('/api/products?location_code=GDG-001&per_page=500', { headers: { 'Accept': 'application/json' } });
             if (res.ok) {
                 const json = await res.json();
                 const prods = json.data || json;
@@ -82,10 +82,15 @@
                     this.availableProducts = prods.map(p => ({
                         id: p.id,
                         sku: p.sku || p.barcode || '-',
+                        barcode: p.barcode || p.sku || '-',
                         name: p.name || p.nama || '-',
                         category: p.category || p.kategori || 'Umum',
                         unit: p.unit || 'Pcs',
-                        stock: Math.max(0, Number(p.stock !== undefined ? p.stock : (p.stok || 0)))
+                        stock: Math.max(0, Number(p.stock !== undefined ? p.stock : (p.stok || 0))),
+                        is_consignment: Boolean(p.is_consignment),
+                        product_type: p.is_consignment ? 'UMKM' : 'UMUM',
+                        product_type_label: p.is_consignment ? 'Produk UMKM' : 'Produk Umum',
+                        supplier_name: p.supplier_name || (p.supplier ? p.supplier.name : '') || ''
                     }));
                     return;
                 }
@@ -139,12 +144,17 @@
             generalNotes: '',
             items: [
                 {
+                    product_id: firstWithStock ? firstWithStock.id : null,
                     sku: firstWithStock ? firstWithStock.sku : '',
                     name: firstWithStock ? firstWithStock.name : '',
                     category: firstWithStock ? firstWithStock.category : '',
                     unit: firstWithStock ? firstWithStock.unit : 'Pcs',
                     availableStock: firstWithStock ? firstWithStock.stock : 0,
-                    qtySent: firstWithStock && Number(firstWithStock.stock) > 0 ? 1 : 0
+                    qtySent: firstWithStock && Number(firstWithStock.stock) > 0 ? 1 : 0,
+                    is_consignment: firstWithStock ? Boolean(firstWithStock.is_consignment) : false,
+                    product_type: firstWithStock && firstWithStock.is_consignment ? 'UMKM' : 'UMUM',
+                    product_type_label: firstWithStock && firstWithStock.is_consignment ? 'Produk UMKM' : 'Produk Umum',
+                    supplier_name: firstWithStock ? (firstWithStock.supplier_name || '') : ''
                 }
             ]
         };
@@ -157,12 +167,17 @@
         const nextProd = (this.availableProducts || []).find(p => p && !selectedSkus.includes(p.sku) && Number(p.stock) > 0) || (this.availableProducts || [])[0];
 
         this.form.items.push({
+            product_id: nextProd ? nextProd.id : null,
             sku: nextProd ? nextProd.sku : '',
             name: nextProd ? nextProd.name : '',
             category: nextProd ? nextProd.category : '',
             unit: nextProd ? nextProd.unit : 'Pcs',
             availableStock: nextProd ? nextProd.stock : 0,
-            qtySent: nextProd && Number(nextProd.stock) > 0 ? 1 : 0
+            qtySent: nextProd && Number(nextProd.stock) > 0 ? 1 : 0,
+            is_consignment: nextProd ? Boolean(nextProd.is_consignment) : false,
+            product_type: nextProd && nextProd.is_consignment ? 'UMKM' : 'UMUM',
+            product_type_label: nextProd && nextProd.is_consignment ? 'Produk UMKM' : 'Produk Umum',
+            supplier_name: nextProd ? (nextProd.supplier_name || '') : ''
         });
     },
 
@@ -177,19 +192,29 @@
     onProductChange(item) {
         const prod = (this.availableProducts || []).find(p => p && p.sku === item.sku);
         if (prod) {
+            item.product_id = prod.id;
             item.name = prod.name;
             item.category = prod.category;
             item.unit = prod.unit;
             item.availableStock = prod.stock;
+            item.is_consignment = Boolean(prod.is_consignment);
+            item.product_type = prod.is_consignment ? 'UMKM' : 'UMUM';
+            item.product_type_label = prod.is_consignment ? 'Produk UMKM' : 'Produk Umum';
+            item.supplier_name = prod.supplier_name || '';
             if (item.qtySent > prod.stock || item.qtySent <= 0) {
                 item.qtySent = prod.stock > 0 ? 1 : 0;
             }
         } else {
+            item.product_id = null;
             item.name = '';
             item.category = '';
             item.unit = 'Pcs';
             item.availableStock = 0;
             item.qtySent = 0;
+            item.is_consignment = false;
+            item.product_type = 'UMUM';
+            item.product_type_label = 'Produk Umum';
+            item.supplier_name = '';
         }
     },
 
@@ -240,13 +265,18 @@
             const status = isDraft ? 'DRAFT' : 'MENUNGGU_VERIFIKASI';
 
             const preparedItems = this.form.items.map(it => ({
+                product_id: it.product_id,
                 sku: it.sku,
                 name: it.name,
                 category: it.category || 'Umum',
                 qtySent: Number(it.qtySent),
                 qtyReceived: 0,
                 unit: it.unit || 'Pcs',
-                condition: 'BAIK'
+                condition: 'BAIK',
+                is_consignment: Boolean(it.is_consignment),
+                product_type: it.is_consignment ? 'UMKM' : 'UMUM',
+                product_type_label: it.is_consignment ? 'Produk UMKM' : 'Produk Umum',
+                supplier_name: it.supplier_name || ''
             }));
 
             let newDoc = {
@@ -287,6 +317,7 @@
                     status: newDoc.status,
                     notes: newDoc.generalNotes,
                     items: preparedItems.map(it => ({
+                        product_id: it.product_id,
                         sku: it.sku,
                         name: it.name,
                         category: it.category,
@@ -452,14 +483,19 @@
         switch(status) {
             case 'DRAFT':
                 return { label: 'Draft Pengiriman', class: 'bg-slate-100 text-slate-700 border-slate-300' };
+            case 'BELUM_SAMPAI':
             case 'MENUNGGU_VERIFIKASI':
-                return { label: 'Dalam Pengiriman', class: 'bg-amber-50 text-amber-700 border-amber-300' };
+                return { label: 'Belum Sampai (Di Perjalanan)', class: 'bg-amber-50 text-amber-700 border-amber-300' };
+            case 'SUDAH_SAMPAI':
+                return { label: 'Sudah Sampai di Toko', class: 'bg-blue-50 text-blue-700 border-blue-300' };
+            case 'APPROVED':
             case 'DITERIMA_LENGKAP':
-                return { label: 'Diterima Lengkap', class: 'bg-emerald-50 text-emerald-700 border-emerald-300' };
+                return { label: 'Approved (Selesai)', class: 'bg-emerald-50 text-emerald-700 border-emerald-300' };
             case 'DITERIMA_SELISIH':
                 return { label: 'Diterima Selisih', class: 'bg-rose-50 text-rose-700 border-rose-300' };
+            case 'TIDAK_SAMPAI':
             case 'DIBATALKAN':
-                return { label: 'Dibatalkan', class: 'bg-red-50 text-red-600 border-red-200' };
+                return { label: 'Tidak Sampai / Batal', class: 'bg-red-50 text-red-600 border-red-200' };
             default:
                 return { label: status, class: 'bg-gray-100 text-gray-700 border-gray-300' };
         }
@@ -476,31 +512,26 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
     <main class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
 
         <!-- Top Header Navigation -->
-        <header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 z-10 shrink-0 select-none">
-            <div class="flex items-center gap-2">
-                <span class="text-xs font-bold text-gray-400 uppercase tracking-wider">Persediaan</span>
-                <span class="material-symbols-rounded text-gray-400 text-sm">chevron_right</span>
-                <h1 class="text-base font-bold text-gray-800">Kirim Barang</h1>
+        <header class="h-20 bg-[#f8f9fa] border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
+            <div class="flex items-center gap-3">
+                <h1 class="text-[20px] font-bold text-gray-900">Kirim Barang</h1>
+                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200 flex items-center gap-1.5">
+                    <span class="material-symbols-rounded text-[14px]">local_shipping</span>
+                    <span>Distribusi Antar Cabang</span>
+                </span>
             </div>
 
             <!-- Header Right Actions & Realtime Status -->
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-4 text-gray-500">
                 <x-notification-bell role="MANAGER" />
                 <button type="button" 
                         @click="window.PosRealtime?.syncNow?.(); initKirimBarang();" 
-                        class="p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer" 
-                        title="Sinkronisasi Data Realtime">
-                    <span class="material-symbols-rounded text-[20px]" :class="$store.network?.isChecking ? 'animate-spin text-[#0052cc]' : ''">sync</span>
+                        class="hover:text-gray-900 transition-colors cursor-pointer" 
+                        title="Sinkronkan Data">
+                    <span class="material-symbols-rounded text-[24px]" :class="$store.network?.isChecking ? 'animate-spin text-[#0052cc]' : ''">autorenew</span>
                 </button>
+                <div class="h-6 w-px bg-gray-300"></div>
                 <x-realtime-network-badge />
-                <div class="h-6 w-px bg-gray-200 mx-1"></div>
-                <!-- Header Action Button -->
-                <button type="button"
-                        @click.stop="openCreateModal()"
-                        class="px-4 py-2 bg-[#0052cc] hover:bg-[#0043a8] text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-2 cursor-pointer transition-colors">
-                    <span class="material-symbols-rounded text-[18px]">add</span>
-                    <span>Buat Pengiriman</span>
-                </button>
             </div>
         </header>
 
@@ -544,6 +575,14 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             </select>
                             <span class="material-symbols-rounded absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-[20px]">expand_more</span>
                         </div>
+
+                        <!-- Button Buat Pengiriman -->
+                        <button type="button"
+                                @click.stop="openCreateModal()"
+                                class="px-4 py-2.5 bg-[#0052cc] hover:bg-[#0043a8] text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 cursor-pointer transition-colors shrink-0">
+                            <span class="material-symbols-rounded text-[18px]">add</span>
+                            <span>Buat Pengiriman</span>
+                        </button>
                     </div>
                 </div>
 
@@ -645,8 +684,27 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                             <!-- Child Col 6: SKU -->
                                             <td class="px-4 py-3 align-middle whitespace-nowrap font-mono font-bold text-gray-700 text-xs" x-text="it.sku || '-'"></td>
 
-                                            <!-- Child Col 7: Nama Produk -->
-                                            <td class="px-4 py-3 align-middle whitespace-nowrap font-bold text-gray-900 text-xs max-w-[200px] truncate" :title="it.name" x-text="it.name || '-'"></td>
+                                            <!-- Child Col 7: Nama Produk & Jenis -->
+                                            <td class="px-4 py-3 align-middle whitespace-nowrap text-xs">
+                                                <div class="flex flex-col">
+                                                    <span class="font-bold text-gray-900 max-w-[220px] truncate" :title="it.name" x-text="it.name || '-'"></span>
+                                                    <div class="flex items-center gap-1 mt-0.5">
+                                                        <template x-if="it.is_consignment || it.product_type === 'UMKM'">
+                                                            <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                                                <span class="material-symbols-rounded text-[11px]">storefront</span>
+                                                                <span>Produk UMKM</span>
+                                                                <span x-show="it.supplier_name" x-text="'• ' + it.supplier_name" class="truncate max-w-[120px]"></span>
+                                                            </span>
+                                                        </template>
+                                                        <template x-if="!it.is_consignment && it.product_type !== 'UMKM'">
+                                                            <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                                                                <span class="material-symbols-rounded text-[11px]">inventory_2</span>
+                                                                <span>Produk Umum</span>
+                                                            </span>
+                                                        </template>
+                                                    </div>
+                                                </div>
+                                            </td>
 
                                             <!-- Child Col 8: Kategori -->
                                             <td class="px-4 py-3 align-middle whitespace-nowrap text-xs text-slate-500" x-text="it.category || '-'"></td>
@@ -849,10 +907,25 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                 <template x-for="p in availableProducts" :key="p.sku">
                                                     <option :value="p.sku"
                                                             :disabled="p.stock <= 0"
-                                                            x-text="p.name + ' (' + p.sku + ') - Stok: ' + p.stock + ' ' + p.unit + (p.stock <= 0 ? ' [HABIS]' : '')">
+                                                            x-text="(p.is_consignment ? '[UMKM' + (p.supplier_name ? ' • ' + p.supplier_name : '') + '] ' : '[Umum] ') + p.name + ' (' + p.sku + ') - Stok: ' + p.stock + ' ' + p.unit + (p.stock <= 0 ? ' [HABIS]' : '')">
                                                     </option>
                                                 </template>
                                             </select>
+                                            <div class="mt-1 flex items-center gap-1.5" x-show="item.sku">
+                                                <template x-if="item.is_consignment || item.product_type === 'UMKM'">
+                                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                                        <span class="material-symbols-rounded text-[12px]">storefront</span>
+                                                        <span>Produk UMKM</span>
+                                                        <span x-show="item.supplier_name" x-text="'• Mitra: ' + item.supplier_name"></span>
+                                                    </span>
+                                                </template>
+                                                <template x-if="!item.is_consignment && item.product_type !== 'UMKM'">
+                                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 text-blue-900 border border-blue-300">
+                                                        <span class="material-symbols-rounded text-[12px]">inventory_2</span>
+                                                        <span>Produk Umum</span>
+                                                    </span>
+                                                </template>
+                                            </div>
                                         </td>
 
                                         <!-- Info Stok Tersedia -->
@@ -1008,6 +1081,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <thead class="bg-gray-50 border-b border-gray-200 text-gray-600 font-bold uppercase text-[10.5px] whitespace-nowrap">
                                     <tr>
                                         <th class="px-3.5 py-2.5">No</th>
+                                        <th class="px-3.5 py-2.5">Jenis Produk</th>
                                         <th class="px-3.5 py-2.5">SKU</th>
                                         <th class="px-3.5 py-2.5">Nama Produk</th>
                                         <th class="px-3.5 py-2.5">Kategori</th>
@@ -1019,13 +1093,32 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     <template x-for="(it, idx) in selectedDoc.items" :key="idx">
                                         <tr class="hover:bg-slate-50/50">
                                             <td class="px-3.5 py-2.5 text-gray-400 font-bold" x-text="idx + 1"></td>
+                                            <td class="px-3.5 py-2.5 whitespace-nowrap">
+                                                <template x-if="it.is_consignment || it.product_type === 'UMKM'">
+                                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                                        <span class="material-symbols-rounded text-[13px]">storefront</span>
+                                                        <span>Produk UMKM</span>
+                                                    </span>
+                                                </template>
+                                                <template x-if="!it.is_consignment && it.product_type !== 'UMKM'">
+                                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-bold bg-blue-100 text-blue-900 border border-blue-300">
+                                                        <span class="material-symbols-rounded text-[13px]">inventory_2</span>
+                                                        <span>Produk Umum</span>
+                                                    </span>
+                                                </template>
+                                            </td>
                                             <td class="px-3.5 py-2.5 font-mono font-bold text-gray-800" x-text="it.sku"></td>
-                                            <td class="px-3.5 py-2.5 font-bold text-gray-900" x-text="it.name"></td>
+                                            <td class="px-3.5 py-2.5 font-bold text-gray-900">
+                                                <div class="flex flex-col">
+                                                    <span x-text="it.name"></span>
+                                                    <span x-show="it.supplier_name" class="text-[10px] text-amber-700 font-medium" x-text="'Mitra: ' + it.supplier_name"></span>
+                                                </div>
+                                            </td>
                                             <td class="px-3.5 py-2.5 text-gray-500" x-text="it.category || '-'"></td>
                                             <td class="px-3.5 py-2.5 text-center font-mono font-bold text-blue-700 bg-blue-50/30" x-text="it.qtySent + ' ' + (it.unit || 'Pcs')"></td>
                                             <td class="px-3.5 py-2.5 text-center font-mono font-bold"
-                                                :class="selectedDoc.status.includes('DITERIMA') ? (it.qtyReceived === it.qtySent ? 'text-emerald-700 bg-emerald-50/30' : 'text-rose-700 bg-rose-50/30') : 'text-gray-400'"
-                                                x-text="selectedDoc.status.includes('DITERIMA') ? (it.qtyReceived + ' ' + (it.unit || 'Pcs')) : '-'"></td>
+                                                :class="selectedDoc.status.includes('DITERIMA') || selectedDoc.status === 'APPROVED' ? (it.qtyReceived === it.qtySent ? 'text-emerald-700 bg-emerald-50/30' : 'text-rose-700 bg-rose-50/30') : 'text-gray-400'"
+                                                x-text="(selectedDoc.status.includes('DITERIMA') || selectedDoc.status === 'APPROVED') ? (it.qtyReceived + ' ' + (it.unit || 'Pcs')) : '-'"></td>
                                         </tr>
                                     </template>
                                 </tbody>

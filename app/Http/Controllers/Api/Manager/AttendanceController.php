@@ -9,10 +9,12 @@ use App\Models\Attendance;
 use App\Models\CashierShift;
 use App\Models\LeaveRequest;
 use App\Models\User;
+use App\Services\ExcelExportService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AttendanceController extends Controller
 {
@@ -148,26 +150,148 @@ class AttendanceController extends Controller
     }
 
     /**
-     * List leave / izin / sakit requests.
+     * Build query for leave requests with time periods and search filters.
      */
-    public function leaves(): JsonResponse
+    protected function buildLeavesQuery(Request $request)
     {
-        $leaves = LeaveRequest::orderBy('id', 'desc')->get();
+        $query = LeaveRequest::with(['user.branch'])->orderBy('id', 'desc');
+
+        $period = $request->input('period', 'all');
+
+        if ($period === 'hari' || $period === 'day') {
+            $date = $request->input('date', Carbon::today()->toDateString());
+            $query->whereDate('created_at', $date);
+        } elseif ($period === 'minggu' || $period === 'week') {
+            $refDate = $request->filled('date') ? Carbon::parse($request->date) : Carbon::today();
+            $startOfWeek = $refDate->copy()->startOfWeek();
+            $endOfWeek = $refDate->copy()->endOfWeek();
+            $query->whereBetween('created_at', [$startOfWeek, $endOfWeek]);
+        } elseif ($period === 'bulan' || $period === 'month') {
+            if ($request->filled('month')) {
+                if (preg_match('/^\d{4}-\d{2}$/', $request->month)) {
+                    [$year, $month] = explode('-', $request->month);
+                } else {
+                    $month = (int) $request->month;
+                    $year = $request->input('year', Carbon::now()->year);
+                }
+            } else {
+                $month = Carbon::now()->month;
+                $year = $request->input('year', Carbon::now()->year);
+            }
+            $query->whereYear('created_at', $year)->whereMonth('created_at', $month);
+        } elseif ($period === 'tahun' || $period === 'year') {
+            $year = $request->input('year', Carbon::now()->year);
+            $query->whereYear('created_at', $year);
+        }
+
+        if ($request->filled('type') && $request->type !== 'all') {
+            $query->where('type', strtoupper($request->type));
+        }
+
+        if ($request->filled('status') && $request->status !== 'all') {
+            $query->where('status', strtoupper($request->status));
+        }
+
+        if ($request->filled('q')) {
+            $term = $request->q;
+            $query->where(function ($q) use ($term) {
+                $q->where('staff_name', 'ilike', "%{$term}%")
+                  ->orWhere('reason', 'ilike', "%{$term}%")
+                  ->orWhere('date_range', 'ilike', "%{$term}%")
+                  ->orWhere('approved_by', 'ilike', "%{$term}%");
+            });
+        }
+
+        return $query;
+    }
+
+    /**
+     * List leave / izin / sakit requests with period filters and summary.
+     */
+    public function leaves(Request $request): JsonResponse
+    {
+        $leaves = $this->buildLeavesQuery($request)->get();
+
+        $summary = [
+            'total' => $leaves->count(),
+            'disetujui' => $leaves->where('status', 'DISETUJUI')->count(),
+            'menunggu' => $leaves->where('status', 'MENUNGGU')->count(),
+            'ditolak' => $leaves->where('status', 'DITOLAK')->count(),
+            'izin' => $leaves->where('type', 'IZIN')->count(),
+            'cuti' => $leaves->where('type', 'CUTI')->count(),
+            'sakit' => $leaves->where('type', 'SAKIT')->count(),
+        ];
 
         return response()->json([
             'success' => true,
+            'summary' => $summary,
             'data' => $leaves->map(function ($l) {
                 return [
                     'id' => $l->id,
                     'staffName' => $l->staff_name,
+                    'branch' => $l->user?->branch?->name ?? ($l->user?->branch_assignment ?? '-'),
                     'type' => $l->type,
                     'date' => $l->date_range,
                     'reason' => $l->reason,
                     'status' => $l->status,
                     'approved_by' => $l->approved_by,
+                    'created_at' => $l->created_at?->format('d/m/Y H:i'),
                 ];
             }),
         ]);
+    }
+
+    /**
+     * Export leave requests to Excel (.xlsx) based on active period filter.
+     */
+    public function exportLeavesExcel(Request $request, ExcelExportService $excelService): StreamedResponse
+    {
+        $leaves = $this->buildLeavesQuery($request)->get();
+
+        $period = $request->input('period', 'all');
+        $periodLabel = 'Semua Periode';
+        $filenameSuffix = 'Semua';
+
+        if ($period === 'hari' || $period === 'day') {
+            $date = $request->input('date', Carbon::today()->toDateString());
+            $periodLabel = 'Hari: ' . Carbon::parse($date)->isoFormat('D MMMM YYYY');
+            $filenameSuffix = 'Hari_' . Carbon::parse($date)->format('Y-m-d');
+        } elseif ($period === 'minggu' || $period === 'week') {
+            $refDate = $request->filled('date') ? Carbon::parse($request->date) : Carbon::today();
+            $startOfWeek = $refDate->copy()->startOfWeek();
+            $endOfWeek = $refDate->copy()->endOfWeek();
+            $periodLabel = 'Minggu: ' . $startOfWeek->isoFormat('D MMM YYYY') . ' - ' . $endOfWeek->isoFormat('D MMM YYYY');
+            $filenameSuffix = 'Minggu_' . $startOfWeek->format('Ymd') . '-' . $endOfWeek->format('Ymd');
+        } elseif ($period === 'bulan' || $period === 'month') {
+            if ($request->filled('month') && preg_match('/^\d{4}-\d{2}$/', $request->month)) {
+                [$year, $month] = explode('-', $request->month);
+            } else {
+                $month = $request->input('month', Carbon::now()->month);
+                $year = $request->input('year', Carbon::now()->year);
+            }
+            $periodCarbon = Carbon::createFromDate((int)$year, (int)$month, 1);
+            $periodLabel = 'Bulan: ' . $periodCarbon->isoFormat('MMMM YYYY');
+            $filenameSuffix = 'Bulan_' . $periodCarbon->format('Y-m');
+        } elseif ($period === 'tahun' || $period === 'year') {
+            $year = $request->input('year', Carbon::now()->year);
+            $periodLabel = 'Tahun: ' . $year;
+            $filenameSuffix = 'Tahun_' . $year;
+        }
+
+        $meta = [
+            'period_label' => $periodLabel,
+            'generated_by' => Auth::user()?->name ?? 'Manager Operasional',
+            'generated_at' => Carbon::now()->isoFormat('D MMMM YYYY, HH:mm'),
+            'total_records' => $leaves->count(),
+            'disetujui' => $leaves->where('status', 'DISETUJUI')->count(),
+            'menunggu' => $leaves->where('status', 'MENUNGGU')->count(),
+            'ditolak' => $leaves->where('status', 'DITOLAK')->count(),
+        ];
+
+        $spreadsheet = $excelService->createLeaveRequestsSpreadsheet($leaves, $meta);
+        $filename = 'Rekap_Pengajuan_Izin_Cuti_' . $filenameSuffix . '_' . date('His') . '.xlsx';
+
+        return $excelService->downloadSpreadsheet($spreadsheet, $filename);
     }
 
     /**

@@ -11,8 +11,8 @@
  *  - Versi cache dinaikkan agar cache lama yang rusak otomatis dihapus.
  */
 
-const CACHE_NAME = 'pos-ilp-cache-v4.3';
-const PAGES_CACHE = 'pos-ilp-pages-v4.3';
+const CACHE_NAME = 'pos-ilp-cache-v4.4';
+const PAGES_CACHE = 'pos-ilp-pages-v4.4';
 
 const PRECACHE_STATIC = [
     '/fonts/material-symbols-rounded.woff2',

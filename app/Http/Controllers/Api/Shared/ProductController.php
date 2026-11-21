@@ -32,7 +32,7 @@ class ProductController extends Controller
         $expiredFilter = trim($request->query('expired_filter', ''));
         $consignmentFilter = trim($request->query('consignment', ''));
         $supplierId = $request->query('supplier_id');
-        $perPage = max(10, min(100, (int) $request->query('per_page', 20)));
+        $perPage = max(10, min(500, (int) $request->query('per_page', 20)));
 
         // Optional location filter (e.g. GDG-001 for Kirim Barang, or branch for Kasir Inventory)
         $locationCode = $request->query('location_code');
@@ -72,7 +72,7 @@ class ProductController extends Controller
 
         $query = Product::with(['supplier', 'units', 'supplierProducts.supplier', 'productStocks.location']);
 
-        if ($targetLocation && $onlyRegisteredInLoc) {
+        if ($targetLocation && ($onlyRegisteredInLoc || $locationCode || $branchParam)) {
             $query->whereHas('productStocks', function ($q) use ($targetLocation) {
                 $q->where('location_id', $targetLocation->id)->where('is_active', true);
             });
@@ -483,6 +483,195 @@ class ProductController extends Controller
     }
 
     /**
+     * List Produk Mitra UMKM for Cashier (with branch stock & availability status).
+     */
+    public function umkmProducts(Request $request): JsonResponse
+    {
+        $this->stockService->ensureDefaultLocations();
+
+        $locContext = $this->resolvePosStoreContext($request);
+        $location = $locContext['location']
+            ?? $this->stockService->resolveLocation(null, 'Toko Pusat', null, Auth::user(), 'STORE')
+            ?? Location::where('type', '!=', 'WAREHOUSE')->first();
+
+        $warehouse = $this->stockService->getWarehouseLocation();
+        $search = trim((string) $request->query('q', $request->query('search', '')));
+        $supplierId = $request->query('supplier_id');
+        $category = trim((string) $request->query('category', ''));
+
+        $query = Product::with(['supplier', 'units', 'productStocks.location'])
+            ->where(function ($q) {
+                $q->where('is_consignment', true)
+                  ->orWhereHas('supplier', fn ($sq) => $sq->where('supplier_type', \App\Models\Supplier::TYPE_CONSIGNMENT));
+            });
+
+        // Strict Branch Isolation: Only display UMKM products that have actually been sent/allocated to this branch
+        if ($location) {
+            $query->whereHas('productStocks', function ($sq) use ($location) {
+                $sq->where('location_id', $location->id)
+                   ->where('is_active', true)
+                   ->where(function ($q2) {
+                       $q2->where('stock', '>', 0)
+                          ->orWhereNotNull('first_received_at');
+                   });
+            });
+        }
+
+        if ($supplierId && $supplierId !== 'all') {
+            $query->where('supplier_id', (int) $supplierId);
+        }
+
+        if ($category !== '' && $category !== 'all' && $category !== 'Semua') {
+            $query->where('category', $category);
+        }
+
+        if ($search !== '') {
+            $lower = strtolower($search);
+            $query->where(function ($sub) use ($search, $lower) {
+                $sub->where('sku', 'like', "%{$search}%")
+                    ->orWhere('barcode', 'like', "%{$search}%")
+                    ->orWhereRaw('LOWER(name) LIKE ?', ["%{$lower}%"])
+                    ->orWhereHas('supplier', fn ($sq) => $sq->whereRaw('LOWER(name) LIKE ?', ["%{$lower}%"]));
+            });
+        }
+
+        $products = $query->orderBy('name', 'asc')->get();
+        $whCode = $warehouse?->code ?? 'GDG-001';
+
+        $items = $products->map(function (Product $p) use ($location, $whCode) {
+            $payload = $this->formatProductPayload($p, $location?->id, $location);
+            $locPs = $location ? $p->stockAtLocation($location->id) : null;
+            $branchQty = $locPs ? (int) $locPs->stock : 0;
+            $whQty = (int) ($payload['branch_stock'][$whCode] ?? (empty($payload['branch_stock']) ? $p->stock : 0));
+
+            $payload['branch_stock_qty'] = $branchQty;
+            $payload['warehouse_stock_qty'] = $whQty;
+            $payload['is_registered_in_branch'] = $locPs !== null && (bool) $locPs->is_active;
+            $payload['can_transact'] = $branchQty > 0;
+            $payload['is_consignment'] = true;
+
+            return $payload;
+        })->values();
+
+        $partners = \App\Models\Supplier::consignment()
+            ->orderBy('name')
+            ->get(['id', 'code', 'name', 'owner_name', 'category', 'commission_percent', 'status']);
+
+        return response()->json([
+            'success' => true,
+            'location' => $location ? [
+                'id' => $location->id,
+                'code' => $location->code,
+                'name' => $location->name,
+            ] : null,
+            'summary' => [
+                'total_umkm_skus' => $items->count(),
+                'ready_to_transact_count' => $items->where('can_transact', true)->count(),
+                'total_branch_stock' => (int) $items->sum('branch_stock_qty'),
+                'total_warehouse_stock' => (int) $items->sum('warehouse_stock_qty'),
+                'total_partners' => $partners->count(),
+            ],
+            'partners' => $partners,
+            'data' => $items,
+        ]);
+    }
+
+    /**
+     * Load / Synchronize Produk Mitra UMKM into the Cashier's Active Store Catalog (Stock Toko)
+     * so all UMKM products are registered and ready for POS transactions.
+     */
+    public function loadUmkmProducts(Request $request): JsonResponse
+    {
+        $this->stockService->ensureDefaultLocations();
+
+        $locContext = $this->resolvePosStoreContext($request);
+        $location = $locContext['location']
+            ?? $this->stockService->resolveLocation(null, $request->input('branch') ?: 'Toko Pusat', $request->input('terminal_code'), Auth::user(), 'STORE')
+            ?? Location::where('type', '!=', 'WAREHOUSE')->first();
+
+        if (!$location) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Lokasi cabang kasir tidak ditemukan.',
+            ], 422);
+        }
+
+        $targetProductId = $request->integer('product_id') ?: null;
+        $warehouse = $this->stockService->getWarehouseLocation();
+
+        return DB::transaction(function () use ($location, $warehouse, $targetProductId) {
+            $transferredUnits = 0;
+
+            // 1. Clean up any unshipped 0-stock ProductStock rows at this branch (never received stock)
+            ProductStock::where('location_id', $location->id)
+                ->where('stock', '<=', 0)
+                ->whereNull('first_received_at')
+                ->whereHas('product', fn ($pq) => $pq->where('is_consignment', true))
+                ->delete();
+
+            // 2. Query ONLY UMKM products that have actually been sent/allocated to this branch
+            $branchUmkmQuery = Product::with(['supplier', 'units', 'productStocks.location'])
+                ->where(function ($q) {
+                    $q->where('is_consignment', true)
+                      ->orWhereHas('supplier', fn ($sq) => $sq->where('supplier_type', \App\Models\Supplier::TYPE_CONSIGNMENT));
+                })
+                ->whereHas('productStocks', function ($sq) use ($location) {
+                    $sq->where('location_id', $location->id)
+                       ->where('is_active', true)
+                       ->where(function ($q2) {
+                           $q2->where('stock', '>', 0)
+                              ->orWhereNotNull('first_received_at');
+                       });
+                });
+
+            if ($targetProductId) {
+                $branchUmkmQuery->where('id', $targetProductId);
+            }
+
+            $allUmkm = $branchUmkmQuery->orderBy('name', 'asc')->get();
+
+            $whCode = $warehouse?->code ?? 'GDG-001';
+            $items = $allUmkm->map(function (Product $p) use ($location, $whCode) {
+                $payload = $this->formatProductPayload($p, $location->id, $location);
+                $locPs = $p->stockAtLocation($location->id);
+                $branchQty = $locPs ? (int) $locPs->stock : 0;
+                $whQty = (int) ($payload['branch_stock'][$whCode] ?? 0);
+
+                $payload['branch_stock_qty'] = $branchQty;
+                $payload['warehouse_stock_qty'] = $whQty;
+                $payload['is_registered_in_branch'] = $locPs !== null && (bool) $locPs->is_active;
+                $payload['can_transact'] = $branchQty > 0;
+                $payload['is_consignment'] = true;
+
+                return $payload;
+            })->values();
+
+            $readyCount = $items->where('can_transact', true)->count();
+            $message = $items->isEmpty()
+                ? "Belum ada produk Mitra UMKM yang dikirim ke {$location->name}."
+                : "Berhasil memuat {$items->count()} Produk Mitra UMKM ke katalog kasir {$location->name} ({$readyCount} SKU siap transaksi).";
+
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'location' => [
+                    'id' => $location->id,
+                    'code' => $location->code,
+                    'name' => $location->name,
+                ],
+                'summary' => [
+                    'total_umkm_skus' => $items->count(),
+                    'ready_to_transact_count' => $readyCount,
+                    'total_branch_stock' => (int) $items->sum('branch_stock_qty'),
+                    'total_warehouse_stock' => (int) $items->sum('warehouse_stock_qty'),
+                    'transferred_units' => $transferredUnits,
+                ],
+                'data' => $items,
+            ]);
+        });
+    }
+
+    /**
      * Store new product in Stock Master. Initial stock (if > 0) belongs to Gudang Pusat (not Store Stock).
      */
     public function store(Request $request): JsonResponse
@@ -492,6 +681,7 @@ class ProductController extends Controller
             'ilp_id' => 'nullable|string|max:50',
             'barcode' => 'required|string|max:50|unique:products,barcode',
             'name' => 'required|string|max:150',
+            'brand' => 'nullable|string|max:100',
             'category' => 'required|string|max:50',
             'unit' => 'required|string|max:20',
             'cost_price' => 'required|numeric|min:0',
@@ -578,8 +768,9 @@ class ProductController extends Controller
             }
 
             // Place initial stock into Gudang Pusat (never auto-register into Store Stock)
+            $warehouseLoc = $this->stockService->getWarehouseLocation();
             if ($initialStock > 0) {
-                $targetLocId = $validated['location_id'] ?? $this->stockService->getWarehouseLocation()?->id;
+                $targetLocId = $validated['location_id'] ?? $warehouseLoc?->id;
                 if ($targetLocId) {
                     $this->stockService->addStock($product->id, $targetLocId, $initialStock, [
                         'movement_type' => 'PURCHASE_IN',
@@ -589,6 +780,11 @@ class ProductController extends Controller
                         'notes' => 'Stok awal pendaftaran Master Produk di Gudang Pusat',
                     ]);
                 }
+            } elseif ($warehouseLoc) {
+                ProductStock::firstOrCreate(
+                    ['product_id' => $product->id, 'location_id' => $warehouseLoc->id],
+                    ['stock' => 0, 'is_active' => true, 'version' => 1]
+                );
             }
 
             return response()->json([
@@ -617,6 +813,7 @@ class ProductController extends Controller
             'barcode' => "required|string|max:50|unique:products,barcode,{$id}",
             'ilp_id' => 'nullable|string|max:50',
             'name' => 'required|string|max:150',
+            'brand' => 'nullable|string|max:100',
             'category' => 'required|string|max:50',
             'unit' => 'required|string|max:20',
             'cost_price' => 'required|numeric|min:0',
@@ -830,26 +1027,26 @@ class ProductController extends Controller
             $badge = "KEDALUWARSA";
         }
 
+        $branchStock = [];
+        $allocatedBranches = [];
+        $stocks = $p->relationLoaded('productStocks') ? $p->productStocks : $p->productStocks()->with('location')->get();
+        foreach ($stocks as $ps) {
+            if ($ps->location && $ps->is_active !== false) {
+                if ($ps->location->type !== 'WAREHOUSE' && (int) $ps->stock <= 0 && $ps->first_received_at === null) {
+                    continue;
+                }
+                $branchStock[$ps->location->code] = (int) $ps->stock;
+                $allocatedBranches[] = $ps->location->code;
+            }
+        }
+
         $locStock = $locationId ? $p->stockAtLocation($locationId) : null;
-        $effectiveStock = $locationId ? (int) ($locStock?->stock ?? 0) : (int) $p->stock;
+        $warehouseStock = (int) ($branchStock['GDG-001'] ?? (count($branchStock) === 0 ? $p->stock : 0));
+        $effectiveStock = $locationId ? (int) ($locStock?->stock ?? 0) : $warehouseStock;
         $effectiveMinStock = ($locStock && $locStock->min_stock !== null) ? (int) $locStock->min_stock : (int) $p->min_stock;
         $stockStatus = $effectiveStock <= 0
             ? 'HABIS'
             : ($effectiveStock <= $effectiveMinStock ? 'STOK_RENDAH' : 'TERSEDIA');
-
-        $branchStock = [
-            'GDG-001' => 0,
-            'CAB-001' => 0,
-            'CAB-002' => 0,
-            'CAB-003' => 0,
-        ];
-        if ($p->relationLoaded('productStocks')) {
-            foreach ($p->productStocks as $ps) {
-                if ($ps->location) {
-                    $branchStock[$ps->location->code] = (int) $ps->stock;
-                }
-            }
-        }
 
         return [
             'id' => $p->id,
@@ -857,6 +1054,7 @@ class ProductController extends Controller
             'sku' => $p->sku,
             'barcode' => $p->barcode,
             'name' => $p->name,
+            'brand' => $p->brand ?: ($p->supplier?->name ?: 'ILP'),
             'category' => $p->category,
             'unit' => $p->unit,
             'min_qty1' => $p->min_qty1 !== null ? (float) $p->min_qty1 : 1.0,
@@ -875,9 +1073,10 @@ class ProductController extends Controller
             'raw_last_cost_price' => $p->last_cost_price !== null ? (float) $p->last_cost_price : null,
             'original_price' => (float) $p->price,
             'original_member_price' => (float) ($p->member_price ?? $p->price),
-            // Location-scoped Stock (Stock Toko or Master aggregate)
+            // Location-scoped Stock (Stock Toko or Master Gudang stock)
             'stock' => $effectiveStock,
             'master_stock' => (int) $p->stock,
+            'warehouse_stock' => $warehouseStock,
             'min_stock' => $effectiveMinStock,
             'is_in_stock' => $effectiveStock > 0,
             'is_low_stock' => $effectiveStock > 0 && $effectiveStock <= $effectiveMinStock,
@@ -888,6 +1087,7 @@ class ProductController extends Controller
             'location_name' => $location?->name,
             'stock_version' => $locStock?->version ?? 1,
             'branch_stock' => $branchStock,
+            'allocated_branches' => array_values(array_unique($allocatedBranches)),
             // Expired Date & Two-Tier Alarm System
             'expired_date' => $p->expired_date ? $p->expired_date->toDateString() : null,
             'days_until_expiration' => $p->days_until_expiration,

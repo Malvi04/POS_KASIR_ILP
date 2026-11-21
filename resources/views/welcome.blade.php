@@ -578,7 +578,11 @@
 
                         if (res.ok && json.success) {
                             const u = json.user;
-                            localStorage.setItem('pos_current_role', 'kasir');
+                            try {
+                                sessionStorage.setItem('pos_tab_role', 'kasir');
+                                sessionStorage.setItem('pos_user_role', 'Kasir');
+                                sessionStorage.setItem('pos_user_name', u.name || 'Kasir');
+                            } catch (e) {}
                             localStorage.setItem('pos_portal_logged_in_staff_id', u.id);
                             localStorage.setItem('pos_kasir_staff_id', u.id);
                             localStorage.setItem('pos_portal_logged_in_staff_name', u.name);
@@ -587,8 +591,9 @@
                             if (u.username) localStorage.setItem('pos_portal_logged_in_username', u.username);
                             if (u.nik) localStorage.setItem('pos_portal_logged_in_nik', u.nik);
                             if (u.branch) {
-                                localStorage.setItem('pos_kasir_branch', u.branch);
-                                localStorage.setItem('pos_kasir_location', u.branch);
+                                const primary = String(u.branch).split(',')[0].trim();
+                                localStorage.setItem('pos_kasir_branch', primary);
+                                localStorage.setItem('pos_kasir_location', primary);
                             }
 
                             window.location.href = json.redirect_url || "{{ url('/select-shift') }}";
@@ -649,10 +654,13 @@
 
                         if (res.ok && json.success) {
                             const u = json.user;
-                            localStorage.setItem('pos_user_role', 'Manager');
-                            localStorage.setItem('pos_user_name', u.name);
-                            localStorage.setItem('pos_user_title', 'Manager Gerai');
-                            localStorage.setItem('pos_user_branch', u.branch || '');
+                            try {
+                                sessionStorage.setItem('pos_tab_role', 'manager');
+                                sessionStorage.setItem('pos_user_role', 'Manager');
+                                sessionStorage.setItem('pos_user_name', u.name || 'Manager');
+                            } catch (e) {}
+                            localStorage.setItem('pos_manager_user_name', u.name || 'Manager');
+                            localStorage.setItem('pos_manager_user_branch', u.branch || '');
 
                             window.location.href = json.redirect_url || "{{ url('/dashboard') }}";
                         } else {
@@ -852,13 +860,13 @@
                 const data = await res.json();
                 if (res.ok && data.success) {
                     const u = data.user;
-                    localStorage.setItem('pos_current_role', 'owner');
-                    localStorage.setItem('pos_user_role', u.role || 'Owner');
-                    localStorage.setItem('pos_user_name', u.name || 'Owner');
-                    localStorage.setItem('pos_user_title', 'Pemilik / Superadmin');
-                    localStorage.setItem('pos_user_branch', u.branch || '');
-                    localStorage.setItem('pos_portal_logged_in_staff_id', u.id || '');
-                    localStorage.setItem('pos_portal_logged_in_username', u.username || username);
+                    try {
+                        sessionStorage.setItem('pos_tab_role', 'owner');
+                        sessionStorage.setItem('pos_user_role', u.role || 'Owner');
+                        sessionStorage.setItem('pos_user_name', u.name || 'Owner');
+                    } catch (e) {}
+                    localStorage.setItem('pos_owner_user_name', u.name || 'Owner');
+                    localStorage.setItem('pos_owner_user_branch', u.branch || '');
                     window.location.href = data.redirect_url || "{{ url('/owner') }}";
                     return false;
                 } else {
@@ -899,11 +907,14 @@
                     });
                     const data = await res.json();
                     if (res.ok && data.success) {
-                        localStorage.setItem('pos_user_role', data.user.role || 'Owner');
-                        localStorage.setItem('pos_user_name', data.user.name || 'Owner');
-                        localStorage.setItem('pos_user_title', 'Pemilik / Superadmin');
-                        localStorage.setItem('pos_user_branch', data.user.branch || '');
-                        window.location.href = data.redirect_url || "{{ url('/dashboard?role=owner') }}";
+                        try {
+                            sessionStorage.setItem('pos_tab_role', 'owner');
+                            sessionStorage.setItem('pos_user_role', data.user.role || 'Owner');
+                            sessionStorage.setItem('pos_user_name', data.user.name || 'Owner');
+                        } catch (e) {}
+                        localStorage.setItem('pos_owner_user_name', data.user.name || 'Owner');
+                        localStorage.setItem('pos_owner_user_branch', data.user.branch || '');
+                        window.location.href = data.redirect_url || "{{ url('/owner') }}";
                         return;
                     } else {
                         alert(data.message || 'PIN Otorisasi Owner tidak valid! Silakan masukkan PIN 6 digit yang benar.');

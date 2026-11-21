@@ -12,22 +12,25 @@
     showScannerModal: false,
     scannerInput: '',
     tableMode: 'standard', // 'standard' | 'ilp_25'
-    selectedBranch: 'all', // 'all' (Produk Master), 'CAB-001' (Cabang Pusat), 'CAB-002' (Cabang A), 'CAB-003' (Cabang B)
+    selectedBranch: 'all', // 'all' (Produk Master (Stok Gudang)), 'CAB-001' (Cabang Pusat), 'CAB-002' (Cabang A), 'CAB-003' (Cabang B)
 
     getBranchName(code) {
-        if (code === 'all') return 'Produk Master';
+        if (code === 'all') return 'Produk Master (Stok Gudang)';
         if (code === 'CAB-001') return 'Cabang Pusat';
         if (code === 'CAB-002') return 'Cabang A';
         if (code === 'CAB-003') return 'Cabang B';
-        if (code === 'GDG-001') return 'Gudang Pusat';
+        if (code === 'GDG-001') return 'Gudang Pusat (DC)';
         return code;
     },
 
     getProductStock(p, branchCode = null) {
         const b = branchCode || this.selectedBranch;
         if (!p) return 0;
-        if (b === 'all') {
-            return Number(p.masterStock !== undefined ? p.masterStock : p.stock) || 0;
+        if (b === 'all' || b === 'GDG-001') {
+            if (p.branchStock && p.branchStock['GDG-001'] !== undefined) {
+                return Number(p.branchStock['GDG-001']) || 0;
+            }
+            return Number(p.warehouseStock !== undefined ? p.warehouseStock : (p.masterStock !== undefined ? p.masterStock : p.stock)) || 0;
         }
         if (p.branchStock && p.branchStock[b] !== undefined) {
             return Number(p.branchStock[b]) || 0;
@@ -42,6 +45,27 @@
         if (st <= 0) return 'HABIS';
         if (st <= min) return 'STOK_RENDAH';
         return 'TERSEDIA';
+    },
+
+    isProductInBranch(p, branchCode = null) {
+        const b = branchCode || this.selectedBranch;
+        if (!b || b === 'all') return true;
+        if (!p) return false;
+
+        if (Array.isArray(p.allocatedBranches)) {
+            return p.allocatedBranches.includes(b);
+        }
+        if (p.branchStock && typeof p.branchStock === 'object') {
+            return Object.prototype.hasOwnProperty.call(p.branchStock, b);
+        }
+        return false;
+    },
+
+    get branchProducts() {
+        if (this.selectedBranch === 'all') {
+            return this.products;
+        }
+        return this.products.filter(p => this.isProductInBranch(p, this.selectedBranch));
     },
 
     // Toast Notification
@@ -137,7 +161,9 @@
                         dump: p.dump || '',
                         rackLocation: p.rack_location || 'Lorong Toko',
                         branchStock: (p.branch_stock && typeof p.branch_stock === 'object') ? p.branch_stock : {},
+                        allocatedBranches: Array.isArray(p.allocated_branches) ? p.allocated_branches : Object.keys(p.branch_stock || {}),
                         masterStock: Number(p.master_stock !== undefined ? p.master_stock : p.stock) || 0,
+                        warehouseStock: Number(p.warehouse_stock !== undefined ? p.warehouse_stock : (p.branch_stock && p.branch_stock['GDG-001'] !== undefined ? p.branch_stock['GDG-001'] : p.stock)) || 0,
                         stock: Number(p.stock) || 0,
                         status: p.stock_status || this.calculateStatus(p.stock, p.min_stock, p.expired_date),
                         batchLot: 'LOT-' + p.sku,
@@ -175,7 +201,7 @@
     },
 
     get filteredProducts() {
-        return this.products.filter(p => {
+        return this.branchProducts.filter(p => {
             if (this.selectedCategory !== 'all' && p.category !== this.selectedCategory) return false;
             if (this.searchQuery.trim() !== '') {
                 const q = this.searchQuery.toLowerCase();
@@ -245,7 +271,9 @@
                         dump: p.dump || '',
                         rackLocation: p.rack_location || 'Lorong Toko',
                         branchStock: (p.branch_stock && typeof p.branch_stock === 'object') ? p.branch_stock : {},
+                        allocatedBranches: Array.isArray(p.allocated_branches) ? p.allocated_branches : Object.keys(p.branch_stock || {}),
                         masterStock: Number(p.master_stock !== undefined ? p.master_stock : p.stock) || 0,
+                        warehouseStock: Number(p.warehouse_stock !== undefined ? p.warehouse_stock : (p.branch_stock && p.branch_stock['GDG-001'] !== undefined ? p.branch_stock['GDG-001'] : p.stock)) || 0,
                         stock: Number(p.stock) || 0,
                         status: p.stock_status || this.calculateStatus(p.stock, p.min_stock, p.expired_date),
                         batchLot: 'LOT-' + p.sku,
@@ -435,23 +463,23 @@
     },
 
     get totalItems() {
-        return this.products.length;
+        return this.branchProducts.length;
     },
 
     get lowStockCount() {
-        return this.products.filter(p => this.getProductStatus(p) === 'STOK_RENDAH').length;
+        return this.branchProducts.filter(p => this.getProductStatus(p) === 'STOK_RENDAH').length;
     },
 
     get nearExpiredCount() {
-        return this.products.filter(p => p.status === 'NEAR_EXPIRED').length;
+        return this.branchProducts.filter(p => p.status === 'NEAR_EXPIRED').length;
     },
 
     get outOfStockCount() {
-        return this.products.filter(p => this.getProductStatus(p) === 'HABIS').length;
+        return this.branchProducts.filter(p => this.getProductStatus(p) === 'HABIS').length;
     },
 
     get totalInventoryValue() {
-        return this.products.reduce((acc, p) => acc + (this.getProductStock(p) * (Number(p.costPrice || p.price) || 0)), 0);
+        return this.branchProducts.reduce((acc, p) => acc + (this.getProductStock(p) * (Number(p.costPrice || p.price) || 0)), 0);
     },
 
     calculateStatus(stock, minStock, expiredDate) {
@@ -856,6 +884,14 @@
                     if (json.data && json.data.id) {
                         payload.id = json.data.id;
                     }
+                    payload.allocatedBranches = (json.data && Array.isArray(json.data.allocated_branches))
+                        ? json.data.allocated_branches
+                        : ['GDG-001'];
+                    payload.branchStock = (json.data && json.data.branch_stock && typeof json.data.branch_stock === 'object')
+                        ? json.data.branch_stock
+                        : { 'GDG-001': Number(payload.stock) || 0 };
+                    payload.masterStock = Number(payload.stock) || 0;
+                    payload.warehouseStock = (json.data && json.data.warehouse_stock !== undefined) ? Number(json.data.warehouse_stock) : Number(payload.stock) || 0;
                     this.products.unshift(payload);
                     this.saveProductsToStorage();
                     this.showProductModal = false;
@@ -886,6 +922,9 @@
                         }
                     }
                     payload.id = existingProduct.id;
+                    payload.allocatedBranches = existingProduct.allocatedBranches || ['GDG-001'];
+                    payload.branchStock = existingProduct.branchStock || {};
+                    payload.masterStock = Number(payload.stock) || 0;
                     this.products[idx] = payload;
                     this.saveProductsToStorage();
                     if (this.selectedProduct && this.selectedProduct.sku === this.formSkuOriginal) {
@@ -1295,15 +1334,15 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
             <!-- ========================================== -->
             <div x-show="inventoryTab === 'normal'" class="space-y-6">
 
-                <!-- Quick Branch Selector Tabs (Produk Master, Cabang Pusat, Cabang A, Cabang B) -->
+                <!-- Quick Branch Selector Tabs (Produk Master (Stok Gudang), Cabang Pusat, Cabang A, Cabang B) -->
                 <div class="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden">
                     <div class="px-5 pt-3.5 border-b border-gray-100 flex items-center gap-2 overflow-x-auto bg-slate-50/70">
                         <button type="button" 
                                 @click="selectedBranch = 'all'; currentPage = 1;"
                                 class="px-4 py-2.5 text-xs font-bold transition-all border-b-2 inline-flex items-center gap-2 whitespace-nowrap cursor-pointer"
                                 :class="selectedBranch === 'all' ? 'border-[#0052cc] text-[#0052cc] bg-white rounded-t-xl shadow-2xs' : 'border-transparent text-slate-600 hover:text-slate-900'">
-                            <span class="material-symbols-rounded text-[16px]">all_inclusive</span>
-                            <span>Produk Master (Semua Cabang)</span>
+                            <span class="material-symbols-rounded text-[16px]">warehouse</span>
+                            <span>Produk Master (Stok Gudang)</span>
                         </button>
 
                         <button type="button" 
@@ -1336,7 +1375,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <div class="flex items-center gap-1.5">
                             <span class="material-symbols-rounded text-[16px] text-[#0052cc]">info</span>
                             <span x-show="selectedBranch === 'all'">
-                                <strong>Katalog Master Koperasi:</strong> Menampilkan total stok konsolidasi seluruh cabang dan struktur tabel master produk.
+                                <strong>Inventaris Gudang Pusat (Stok Master):</strong> Menampilkan saldo fisik stok barang yang tersedia di Gudang Pusat (DC). Ketika barang dikirim ke cabang via Kirim Barang, stok gudang ini otomatis berkurang.
                             </span>
                             <span x-show="selectedBranch === 'CAB-001'">
                                 <strong>Inventaris Cabang Pusat:</strong> Menampilkan saldo stok fisik dan status barang khusus gerai ritel Cabang Pusat (Toko Pusat).
@@ -1412,7 +1451,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                 <!-- Stats Cards -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                     <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs flex flex-col justify-between">
-                        <span class="text-[11px] font-bold text-gray-500 tracking-wider uppercase">TOTAL SKU KATALOG</span>
+                        <span class="text-[11px] font-bold text-gray-500 tracking-wider uppercase">TOTAL SKU (<span x-text="selectedBranch === 'all' ? 'STOK GUDANG' : getBranchName(selectedBranch)"></span>)</span>
                         <div class="flex items-center justify-between mt-3">
                             <span class="text-3xl font-black text-gray-800 tracking-tight" x-text="totalItems">0</span>
                             <span class="bg-[#dbeafe] text-[#0052cc] text-[11px] font-bold px-2.5 py-1 rounded-md" x-text="totalItems + ' Aktif'"></span>
@@ -1420,7 +1459,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
 
                     <div class="bg-white rounded-2xl border border-amber-200 p-5 shadow-xs flex flex-col justify-between relative overflow-hidden border-l-4 border-l-amber-500">
-                        <span class="text-[11px] font-bold text-amber-700 tracking-wider uppercase">STOK RENDAH (<span x-text="selectedBranch === 'all' ? 'MASTER' : getBranchName(selectedBranch)"></span>)</span>
+                        <span class="text-[11px] font-bold text-amber-700 tracking-wider uppercase">STOK RENDAH (<span x-text="selectedBranch === 'all' ? 'GUDANG' : getBranchName(selectedBranch)"></span>)</span>
                         <div class="flex items-center justify-between mt-3 relative z-10">
                             <span class="text-3xl font-black text-amber-500 tracking-tight" x-text="lowStockCount">0</span>
                             <span class="material-symbols-rounded text-amber-500 text-[26px]">warning</span>
@@ -1436,7 +1475,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
 
                     <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs flex flex-col justify-between">
-                        <span class="text-[11px] font-bold text-gray-500 tracking-wider uppercase">NILAI INVENTARIS (<span x-text="selectedBranch === 'all' ? 'MASTER' : getBranchName(selectedBranch)"></span>)</span>
+                        <span class="text-[11px] font-bold text-gray-500 tracking-wider uppercase">NILAI INVENTARIS (<span x-text="selectedBranch === 'all' ? 'GUDANG' : getBranchName(selectedBranch)"></span>)</span>
                         <div class="flex items-center justify-between mt-3">
                             <span class="text-[22px] font-black text-gray-800 tracking-tight font-mono" x-text="formatRupiah(totalInventoryValue)">Rp 0</span>
                             <span class="text-[12px] font-bold text-gray-400">IDR</span>
@@ -1498,7 +1537,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         <th class="px-3 py-3.5 text-center font-mono">24. Barang - Up</th>
                                         <th class="px-4 py-3.5 text-left">25. Barang - Dump</th>
                                         <th class="px-4 py-3.5 text-center font-mono bg-blue-50/70 text-[#0052cc]">
-                                            <span x-text="selectedBranch === 'all' ? 'STOK MASTER' : ('STOK ' + getBranchName(selectedBranch).toUpperCase())"></span>
+                                            <span x-text="selectedBranch === 'all' ? 'STOK GUDANG' : ('STOK ' + getBranchName(selectedBranch).toUpperCase())"></span>
                                         </th>
                                         <th class="px-4 py-3.5 text-center sticky right-0 bg-gray-100 z-10 shadow-l">AKSI</th>
                                     </tr>
@@ -1548,6 +1587,32 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                             </td>
                                         </tr>
                                     </template>
+                                    <template x-if="filteredProducts.length === 0">
+                                        <tr>
+                                            <td colspan="27" class="px-6 py-12 text-center bg-white">
+                                                <div class="flex flex-col items-center justify-center max-w-sm mx-auto space-y-3">
+                                                    <div class="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center text-gray-400">
+                                                        <span class="material-symbols-rounded text-[28px]" x-text="selectedBranch === 'all' ? 'search_off' : 'inventory_2'"></span>
+                                                    </div>
+                                                    <h4 class="text-sm font-bold text-gray-800" x-text="selectedBranch === 'all' ? 'Tidak Ada Produk Ditemukan' : ('Belum Ada Produk di ' + getBranchName(selectedBranch))"></h4>
+                                                    <p class="text-xs text-gray-500" x-text="selectedBranch === 'all' ? 'Tidak ada produk yang sesuai dengan filter pencarian.' : 'Belum ada produk yang didistribusikan ke cabang ini. Produk baru di Gudang Pusat dapat didistribusikan melalui menu Kirim Barang.'"></p>
+                                                    <template x-if="selectedBranch !== 'all'">
+                                                        <a href="/manager/kirim-barang" class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0052cc] hover:bg-[#0043a8] text-white rounded-xl text-xs font-bold transition-all shadow-xs">
+                                                            <span class="material-symbols-rounded text-[16px]">local_shipping</span>
+                                                            <span>Buka Kirim Barang</span>
+                                                        </a>
+                                                    </template>
+                                                    <template x-if="selectedBranch === 'all'">
+                                                        <button type="button"
+                                                                @click="searchQuery = ''; selectedCategory = 'all'; currentPage = 1;"
+                                                                class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-gray-700 rounded-xl text-xs font-bold transition-all cursor-pointer">
+                                                            Reset Filter
+                                                        </button>
+                                                    </template>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </template>
                                 </tbody>
                             </table>
                         </div>
@@ -1563,7 +1628,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         <th class="px-4 py-3.5 text-left w-[170px]">BARCODE &amp; KODE</th>
                                         <th class="px-4 py-3.5 text-left w-[130px]">KATEGORI &amp; RAK</th>
                                         <th class="px-4 py-3.5 text-center w-[130px]">
-                                            <span x-text="selectedBranch === 'all' ? 'STOK MASTER' : ('STOK ' + getBranchName(selectedBranch).toUpperCase())"></span>
+                                            <span x-text="selectedBranch === 'all' ? 'STOK GUDANG' : ('STOK ' + getBranchName(selectedBranch).toUpperCase())"></span>
                                         </th>
                                         <th class="px-4 py-3.5 text-right w-[150px]">HARGA JUAL</th>
                                         <th class="px-4 py-3.5 text-center w-[120px]">STATUS</th>
@@ -1608,7 +1673,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                           :class="getProductStock(p) <= 0 ? 'bg-rose-50 text-rose-600 border border-rose-200' : (getProductStock(p) <= (p.minStock || 5) ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200')"
                                                           x-text="getProductStock(p) + ' ' + (p.unit || 'Pcs')"></span>
                                                     <template x-if="selectedBranch !== 'all'">
-                                                        <span class="text-[10px] text-gray-400 font-mono mt-0.5" x-text="'Master: ' + (p.masterStock ?? p.stock)"></span>
+                                                        <span class="text-[10px] text-gray-400 font-mono mt-0.5" x-text="'Gudang: ' + getProductStock(p, 'GDG-001')"></span>
                                                     </template>
                                                 </div>
                                             </td>
@@ -1665,15 +1730,23 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                             <td colspan="8" class="px-6 py-12 text-center">
                                                 <div class="flex flex-col items-center justify-center max-w-sm mx-auto space-y-3">
                                                     <div class="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center text-gray-400">
-                                                        <span class="material-symbols-rounded text-[28px]">search_off</span>
+                                                        <span class="material-symbols-rounded text-[28px]" x-text="selectedBranch === 'all' ? 'search_off' : 'inventory_2'"></span>
                                                     </div>
-                                                    <h4 class="text-sm font-bold text-gray-800">Tidak Ada Produk Ditemukan</h4>
-                                                    <p class="text-xs text-gray-500">Tidak ada produk yang sesuai dengan filter pencarian.</p>
-                                                    <button type="button"
-                                                            @click="searchQuery = ''; selectedCategory = 'all'; currentPage = 1;"
-                                                            class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-gray-700 rounded-xl text-xs font-bold transition-all cursor-pointer">
-                                                        Reset Filter
-                                                    </button>
+                                                    <h4 class="text-sm font-bold text-gray-800" x-text="selectedBranch === 'all' ? 'Tidak Ada Produk Ditemukan' : ('Belum Ada Produk di ' + getBranchName(selectedBranch))"></h4>
+                                                    <p class="text-xs text-gray-500" x-text="selectedBranch === 'all' ? 'Tidak ada produk yang sesuai dengan filter pencarian.' : 'Belum ada produk yang didistribusikan ke cabang ini. Produk baru di Gudang Pusat dapat didistribusikan melalui menu Kirim Barang.'"></p>
+                                                    <template x-if="selectedBranch !== 'all'">
+                                                        <a href="/manager/kirim-barang" class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0052cc] hover:bg-[#0043a8] text-white rounded-xl text-xs font-bold transition-all shadow-xs">
+                                                            <span class="material-symbols-rounded text-[16px]">local_shipping</span>
+                                                            <span>Buka Kirim Barang</span>
+                                                        </a>
+                                                    </template>
+                                                    <template x-if="selectedBranch === 'all'">
+                                                        <button type="button"
+                                                                @click="searchQuery = ''; selectedCategory = 'all'; currentPage = 1;"
+                                                                class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-gray-700 rounded-xl text-xs font-bold transition-all cursor-pointer">
+                                                            Reset Filter
+                                                        </button>
+                                                    </template>
                                                 </div>
                                             </td>
                                         </tr>
@@ -2854,11 +2927,11 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             <span class="text-[11px] font-mono font-bold text-[#0052cc]" x-text="'Total Master: ' + (selectedProduct?.masterStock ?? selectedProduct?.stock ?? 0) + ' ' + (selectedProduct?.unit || 'Pcs')"></span>
                         </div>
                         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
-                            <!-- Produk Master -->
+                            <!-- Gudang Pusat (Stok Master) -->
                             <div class="p-2.5 rounded-lg bg-blue-50/70 border border-blue-200">
-                                <span class="text-[10px] font-bold text-[#0052cc] uppercase block">Produk Master</span>
-                                <div class="text-base font-black text-[#0052cc] font-mono mt-0.5" x-text="(selectedProduct?.masterStock ?? selectedProduct?.stock ?? 0) + ' ' + (selectedProduct?.unit || 'Pcs')"></div>
-                                <span class="text-[9.5px] text-gray-400">Total Konsolidasi</span>
+                                <span class="text-[10px] font-bold text-[#0052cc] uppercase block">Gudang Pusat</span>
+                                <div class="text-base font-black text-[#0052cc] font-mono mt-0.5" x-text="getProductStock(selectedProduct, 'GDG-001') + ' ' + (selectedProduct?.unit || 'Pcs')"></div>
+                                <span class="text-[9.5px] text-gray-400">Stok Gudang (DC)</span>
                             </div>
                             <!-- Cabang Pusat -->
                             <div class="p-2.5 rounded-lg bg-white border border-gray-200">

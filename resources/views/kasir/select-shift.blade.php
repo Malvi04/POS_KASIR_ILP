@@ -5,7 +5,8 @@
 @section('content')
 <div class="bg-[#f8f9fa] min-h-screen w-full flex flex-col text-gray-800 font-sans overflow-y-auto"
      x-data="cashierOpeningData()"
-     x-init="initOpening()">
+     x-init="initOpening()"
+     @cashier_assignment_updated.window="initOpening()">
 
     <!-- Topbar -->
     <header class="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0 sticky top-0 z-20">
@@ -94,7 +95,7 @@
                     </div>
 
                     <!-- Logout / Kembali ke Portal -->
-                    <a href="{{ url('/logout') }}" data-no-spa
+                    <a href="{{ url('/logout?role=kasir') }}" data-no-spa
                        class="mt-1 text-center py-2 px-3 text-xs font-bold text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl border border-gray-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer">
                         <span class="material-symbols-rounded text-[16px]">logout</span>
                         <span>Keluar / Ganti Akun Portal</span>
@@ -118,17 +119,69 @@
                             Belum ada riwayat sesi pada terminal ini hari ini.
                         </div>
                     </template>
-                    <template x-for="sess in selectedTerminalSessionsToday" :key="sess.sessionId">
-                        <div class="p-3.5 rounded-xl bg-slate-50 border border-gray-200/80 text-xs space-y-1.5">
-                            <div class="flex items-center justify-between">
-                                <span class="font-bold text-gray-900" x-text="sess.cashierName"></span>
-                                <span class="font-mono text-[10px] font-bold text-gray-500" x-text="sess.startedAt + ' – ' + (sess.endedAt || 'Sekarang')"></span>
+                    <template x-for="sess in selectedTerminalSessionsToday" :key="sess.sessionId || sess.id">
+                        <div class="p-3.5 rounded-xl bg-slate-50 border border-gray-200/80 text-xs space-y-2">
+                            <!-- Baris 1: Nama Kasir & Badge Status Penutupan -->
+                            <div class="flex items-center justify-between gap-2">
+                                <div class="flex items-center gap-1.5 min-w-0">
+                                    <span class="material-symbols-rounded text-gray-400 text-[16px] shrink-0">badge</span>
+                                    <span class="font-bold text-gray-900 truncate" x-text="sess.cashierName || sess.cashier_name"></span>
+                                </div>
+                                
+                                <div class="shrink-0 flex items-center gap-1.5">
+                                    <!-- Badge Serah Terima -->
+                                    <template x-if="sess.isHandover || sess.is_handover || sess.handoverType === 'handover' || (sess.closeNote && sess.closeNote.includes('[SERAH TERIMA]')) || (sess.closing_notes && sess.closing_notes.includes('[SERAH TERIMA]'))">
+                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300">
+                                            <span class="material-symbols-rounded text-[12px]">swap_horiz</span>
+                                            SERAH TERIMA
+                                        </span>
+                                    </template>
+                                    <!-- Badge Tutup Biasa (Bukan Serah Terima dan status CLOSED) -->
+                                    <template x-if="sess.status === 'CLOSED' && !(sess.isHandover || sess.is_handover || sess.handoverType === 'handover' || (sess.closeNote && sess.closeNote.includes('[SERAH TERIMA]')) || (sess.closing_notes && sess.closing_notes.includes('[SERAH TERIMA]')))">
+                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-gray-200 text-gray-700 border border-gray-300">
+                                            <span class="material-symbols-rounded text-[12px]">lock</span>
+                                            TUTUP
+                                        </span>
+                                    </template>
+                                    <!-- Badge Sesi Aktif -->
+                                    <template x-if="sess.status === 'OPEN'">
+                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-100 text-[#0052cc] border border-blue-200">
+                                            <span class="material-symbols-rounded text-[12px]">play_circle</span>
+                                            AKTIF
+                                        </span>
+                                    </template>
+                                </div>
                             </div>
+
+                            <!-- Baris 2: Waktu Sesi & Shift Code -->
+                            <div class="flex items-center justify-between text-[11px] text-gray-500 font-mono">
+                                <span x-text="sess.sessionId || sess.shift_code"></span>
+                                <span class="font-bold" x-text="(sess.startedAt || '-') + ' – ' + (sess.endedAt || (sess.status === 'OPEN' ? 'Sekarang' : '-'))"></span>
+                            </div>
+
+                            <!-- Baris 3: Fisik Laci & Status Selisih Kas -->
                             <div class="flex items-center justify-between text-[11px] pt-1.5 border-t border-gray-200/60">
-                                <span class="text-gray-500">Fisik: <strong class="text-gray-800 font-mono" x-text="formatRupiah(sess.actualClosingCash)"></strong></span>
-                                <span class="font-mono font-bold"
-                                      :class="sess.cashVariance === 0 ? 'text-emerald-600' : 'text-red-600'"
-                                      x-text="sess.cashVariance === 0 ? 'Sesuai' : formatRupiah(sess.cashVariance)"></span>
+                                <span class="text-gray-500">
+                                    Fisik: <strong class="text-gray-800 font-mono" x-text="formatRupiah(sess.actualClosingCash ?? sess.actual_cash ?? 0)"></strong>
+                                </span>
+                                <div>
+                                    <template x-if="(sess.cashVariance ?? sess.variance ?? 0) === 0">
+                                        <span class="inline-flex items-center gap-0.5 font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                                            <span class="material-symbols-rounded text-[12px]">check_circle</span>
+                                            <span>Sesuai (Rp 0)</span>
+                                        </span>
+                                    </template>
+                                    <template x-if="(sess.cashVariance ?? sess.variance ?? 0) > 0">
+                                        <span class="inline-flex items-center gap-0.5 font-mono font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                                            <span>Lebih (+<span x-text="formatRupiah(sess.cashVariance ?? sess.variance)"></span>)</span>
+                                        </span>
+                                    </template>
+                                    <template x-if="(sess.cashVariance ?? sess.variance ?? 0) < 0">
+                                        <span class="inline-flex items-center gap-0.5 font-mono font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded-md border border-red-200">
+                                            <span>Kurang (<span x-text="formatRupiah(sess.cashVariance ?? sess.variance)"></span>)</span>
+                                        </span>
+                                    </template>
+                                </div>
                             </div>
                         </div>
                     </template>
@@ -322,8 +375,9 @@
                                  'border-gray-300 bg-gray-100 opacity-70': term.isActive === false,
                                  'border-red-400 bg-red-50/50 ring-2 ring-red-300/60': term.isActive !== false && selectedShift === term.id && term.status === 'ACTIVE_OTHER',
                                  'border-[#0052cc] bg-[#eef2ff] ring-2 ring-[#0052cc]/20': term.isActive !== false && selectedShift === term.id && term.status !== 'ACTIVE_OTHER',
+                                 'border-amber-300 bg-amber-50/40 hover:border-amber-400': term.isActive !== false && selectedShift !== term.id && term.status === 'HANDOVER_PENDING',
                                  'border-gray-200 bg-gray-50/70 hover:border-gray-300 opacity-90': term.isActive !== false && selectedShift !== term.id && term.status === 'ACTIVE_OTHER',
-                                 'border-gray-200 hover:border-blue-300 bg-white': term.isActive !== false && selectedShift !== term.id && term.status !== 'ACTIVE_OTHER'
+                                 'border-gray-200 hover:border-blue-300 bg-white': term.isActive !== false && selectedShift !== term.id && term.status !== 'ACTIVE_OTHER' && term.status !== 'HANDOVER_PENDING'
                              }"
                              class="p-4 rounded-xl border-[1.5px] cursor-pointer transition-all flex items-center justify-between gap-3 shadow-2xs">
                             
@@ -339,8 +393,8 @@
                                             <span x-text="term.inactiveReason || 'Terminal Nonaktif'"></span>
                                         </span>
                                     </template>
-                                    <template x-if="term.isActive !== false && term.status === 'HANDOVER_PENDING' && term.handover">
-                                        <span>Operan <strong class="text-gray-700" x-text="term.handover.fromCashierName"></strong>: <strong class="font-mono text-emerald-700 font-bold" x-text="formatRupiah(term.handover.actualCash)"></strong></span>
+                                    <template x-if="term.isActive !== false && term.status === 'HANDOVER_PENDING'">
+                                        <span>Serah terima dari <strong class="text-gray-900 font-bold" x-text="term.handover?.fromCashierName || term.lastCashierName || 'Kasir Sebelumnya'"></strong><template x-if="term.handover?.actualCash"><span> • <strong class="font-mono text-emerald-700 font-bold" x-text="formatRupiah(term.handover.actualCash)"></strong></span></template></span>
                                     </template>
                                     <template x-if="term.isActive !== false && term.status === 'AVAILABLE'">
                                         <span>Siap dibuka</span>
@@ -365,7 +419,8 @@
                                     <span class="material-symbols-rounded text-[13px]">block</span>
                                     NONAKTIF
                                 </span>
-                                <span x-show="term.isActive !== false && term.status === 'HANDOVER_PENDING'" class="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300">
+                                <span x-show="term.isActive !== false && term.status === 'HANDOVER_PENDING'" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300">
+                                    <span class="material-symbols-rounded text-[13px]">swap_horiz</span>
                                     SERAH TERIMA
                                 </span>
                                 <span x-show="term.isActive !== false && term.status === 'AVAILABLE'" class="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">

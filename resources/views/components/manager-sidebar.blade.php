@@ -200,7 +200,7 @@
         </div>
 
         <!-- Keluar ke Portal -->
-        <a href="{{ url('/logout') }}" data-no-spa @click="localStorage.removeItem('pos_user_role'); localStorage.removeItem('pos_user_name');" class="flex w-full items-center justify-center gap-2 px-3.5 py-2 text-red-600 hover:bg-red-50 rounded-xl transition-colors font-bold text-[12.5px] cursor-pointer mt-1">
+        <a :href="isOwner() ? '{{ url('/logout?role=owner') }}' : '{{ url('/logout?role=manager') }}'" data-no-spa @click="try { sessionStorage.removeItem('pos_tab_role'); sessionStorage.removeItem('pos_user_role'); sessionStorage.removeItem('pos_user_name'); } catch(e){}" class="flex w-full items-center justify-center gap-2 px-3.5 py-2 text-red-600 hover:bg-red-50 rounded-xl transition-colors font-bold text-[12.5px] cursor-pointer mt-1">
             <span class="material-symbols-rounded text-[18px]">logout</span>
             <span>Keluar ke Portal</span>
         </a>

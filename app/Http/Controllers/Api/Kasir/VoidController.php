@@ -153,6 +153,10 @@ class VoidController extends Controller
             'invoice_number' => 'required|string',
             'pin_or_password' => 'required|string',
             'reason' => 'required|string|max:500',
+        ], [
+            'pin_or_password.required' => 'Wajib memasukkan PIN Otorisasi Manager atau Supervisor.',
+            'invoice_number.required' => 'Nomor faktur transaksi wajib diisi.',
+            'reason.required' => 'Alasan pengembalian dana / void wajib diisi.',
         ]);
 
         $credential = trim($validated['pin_or_password']);
@@ -171,8 +175,8 @@ class VoidController extends Controller
             });
 
             $msg = $cashier
-                ? 'Otorisasi ditolak. Akun Kasir tidak memiliki wewenang untuk Void transaksi tanpa persetujuan Supervisor atau Manager.'
-                : 'Otorisasi gagal! Pembatalan nota wajib memasukkan PIN otorisasi Supervisor atau Admin.';
+                ? 'Otorisasi ditolak. Akun Kasir tidak memiliki wewenang untuk menyetujui refund tanpa persetujuan Supervisor atau Manager.'
+                : 'Otorisasi gagal! PIN Otorisasi Manager atau Supervisor salah.';
 
             return response()->json([
                 'success' => false,
@@ -328,7 +332,18 @@ class VoidController extends Controller
                     'invoice_number' => $transaction->invoice_number,
                     'status' => 'VOIDED',
                     'voided_by' => $transaction->voided_by,
+                    'supervisor_name' => $supervisor->name,
+                    'supervisor_role' => $supervisor->role,
                     'void_log_id' => $log->id,
+                    'shift' => $transaction->shift ? [
+                        'id' => $transaction->shift->id,
+                        'cash_sales_total' => (float) $transaction->shift->cash_sales_total,
+                        'qris_sales_total' => (float) $transaction->shift->qris_sales_total,
+                        'cash_in' => (float) $transaction->shift->cash_in,
+                        'cash_out' => (float) $transaction->shift->cash_out,
+                        'expected_cash' => (float) $transaction->shift->expected_cash,
+                        'transaction_count' => (int) $transaction->shift->transaction_count,
+                    ] : null,
                 ],
             ]);
         });

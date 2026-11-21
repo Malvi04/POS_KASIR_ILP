@@ -30,7 +30,7 @@
         @yield('header')
 
         <!-- Scrollable Page Content -->
-        <main class="flex-1 overflow-y-auto min-w-0 p-6 md:p-8 bg-[#f8fafc] relative">
+        <main class="flex-1 overflow-y-auto min-w-0 p-6 md:p-8 bg-[#f8fafc]">
             <div class="max-w-[1520px] mx-auto space-y-6">
                 @yield('admin_content')
             </div>

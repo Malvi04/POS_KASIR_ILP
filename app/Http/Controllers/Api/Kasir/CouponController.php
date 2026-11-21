@@ -21,12 +21,20 @@ class CouponController extends Controller
         $category = trim($request->query('category', 'all'));
         $status = trim($request->query('status', 'all'));
         $search = trim($request->query('search', ''));
+        $branch = trim($request->query('branch', ''));
         $perPage = max(5, min(100, (int) $request->query('per_page', 50)));
 
-        $query = CouponUnit::with(['redemptions.redeemedByUser'])->latest('id');
+        $query = CouponUnit::with(['redemptions.redeemedByUser', 'product', 'location'])->latest('id');
 
         if ($category !== '' && $category !== 'all') {
             $query->where('category', strtolower($category));
+        }
+
+        if ($branch !== '' && $branch !== 'all') {
+            $query->where(function ($q) use ($branch) {
+                $q->where('branch', 'like', "%{$branch}%")
+                  ->orWhereHas('location', fn($lq) => $lq->where('name', 'like', "%{$branch}%"));
+            });
         }
 
         if ($status !== '' && $status !== 'all') {
@@ -39,7 +47,8 @@ class CouponController extends Controller
                   ->orWhere('recipient_name', 'like', "%{$search}%")
                   ->orWhere('recipient_nik', 'like', "%{$search}%")
                   ->orWhere('vehicle_no', 'like', "%{$search}%")
-                  ->orWhere('notes', 'like', "%{$search}%");
+                  ->orWhere('notes', 'like', "%{$search}%")
+                  ->orWhereHas('product', fn($pq) => $pq->where('name', 'like', "%{$search}%")->orWhere('sku', 'like', "%{$search}%"));
             });
         }
 
@@ -77,11 +86,17 @@ class CouponController extends Controller
                     'dotClass' => 'bg-purple-500',
                     'defaultDetail' => 'Paket Data Driver & Operasional'
                 ],
+                'produk' => [
+                    'label' => 'Produk Khusus',
+                    'badgeClass' => 'bg-amber-50 text-amber-700 border-amber-200',
+                    'dotClass' => 'bg-amber-500',
+                    'defaultDetail' => $c->product?->name ?? 'Produk Alokasi Cabang'
+                ],
                 default => [
                     'label' => ucfirst($c->category),
                     'badgeClass' => 'bg-gray-50 text-gray-700 border-gray-200',
                     'dotClass' => 'bg-gray-500',
-                    'defaultDetail' => 'Voucher Koperasi'
+                    'defaultDetail' => $c->product?->name ?? 'Voucher Koperasi'
                 ]
             };
 
@@ -98,19 +113,23 @@ class CouponController extends Controller
                 'raw_id' => $c->id,
                 'category' => $c->category,
                 'categoryLabel' => $categoryInfo['label'],
-                'badgeClass' => $categoryInfo['badgeClass'],
-                'dotClass' => $categoryInfo['dotClass'],
-                'itemDetail' => $c->notes ?: $categoryInfo['defaultDetail'],
-                'recipientName' => $c->recipient_name,
-                'recipientRole' => $c->recipient_dept ?: 'Karyawan',
-                'recipientNik' => $c->recipient_nik,
-                'vehicleNo' => $c->vehicle_no ?: '-',
-                'qty' => $c->volume ?: '1 Pcs',
+                'detail' => $c->product?->name ?: ($c->notes ?: $categoryInfo['defaultDetail']),
+                'product_name' => $c->product?->name ?? null,
+                'product_sku' => $c->product?->sku ?? null,
+                'branch' => $c->branch ?? ($c->location?->name ?? 'Semua Cabang'),
+                'quota' => (int) ($c->quota ?? 1),
+                'recipient' => $c->recipient_name,
+                'nik' => $c->recipient_nik ?? '-',
+                'dept' => $c->recipient_dept ?? 'Operasional Toko',
+                'vehicleNo' => $c->vehicle_no ?? '-',
+                'volume' => $c->volume ?? '1 Unit',
                 'nominal' => (float) $c->nominal_value,
-                'date' => $c->created_at->format('d M Y • H:i') . ' WIB',
-                'cashier' => 'Sistem Koperasi',
                 'status' => $c->status,
                 'statusLabel' => $statusLabel,
+                'badgeClass' => $categoryInfo['badgeClass'],
+                'dotClass' => $categoryInfo['dotClass'],
+                'notes' => $c->notes,
+                'created_at' => $c->created_at ? $c->created_at->format('d M Y H:i') : '-',
             ];
         });
 
@@ -138,6 +157,9 @@ class CouponController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
+            'product_id' => 'nullable|integer|exists:products,id',
+            'branch' => 'nullable|string|max:100',
+            'quota' => 'nullable|integer|min:1',
             'category' => 'required|string|max:50',
             'serial_number' => 'nullable|string|max:100|unique:coupon_units,serial_number',
             'recipient_name' => 'required|string|max:150',
@@ -155,6 +177,7 @@ class CouponController extends Controller
             'beras' => '#KPN-BRS-',
             'galon' => '#KPN-GLN-',
             'pulsa' => '#KPN-PLS-',
+            'produk' => '#KPN-PRD-',
             default => '#KPN-VCH-'
         };
 
@@ -163,6 +186,10 @@ class CouponController extends Controller
             : $prefix . mt_rand(1000, 9999);
 
         $coupon = CouponUnit::create([
+            'product_id' => $validated['product_id'] ?? null,
+            'branch' => $validated['branch'] ?? null,
+            'quota' => $validated['quota'] ?? 1,
+            'allocated_by' => Auth::id(),
             'category' => strtolower($validated['category']),
             'serial_number' => $serial,
             'recipient_name' => $validated['recipient_name'],

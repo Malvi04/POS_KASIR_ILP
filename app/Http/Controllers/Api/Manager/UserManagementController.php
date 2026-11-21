@@ -81,6 +81,7 @@ class UserManagementController extends Controller
                 'role' => $u->role,
                 'role_category' => $u->isOwnerOrSuperadmin() ? 'Owner / Superadmin' : ($u->isSupervisorOrManager() ? 'Supervisor / Manager' : 'Kasir'),
                 'branch' => $u->branch ?? '',
+                'assigned_branches' => $u->getAssignedBranchesList(),
                 'is_active' => (bool) $u->is_active,
                 'pin' => $u->pin ?? '',
                 'created_at' => $u->created_at ? $u->created_at->format('Y-m-d H:i') : null,
@@ -106,7 +107,8 @@ class UserManagementController extends Controller
             'nik' => 'nullable|string|max:50|unique:users,nik',
             'role' => 'required|string|max:50',
             'pin' => 'nullable|string|size:6|regex:/^[0-9]+$/',
-            'branch' => 'required|string|max:100',
+            'branch' => 'required|string|max:200',
+            'assigned_branches' => 'nullable|array',
             'password' => 'required|string|min:4',
             'is_active' => 'nullable|boolean',
         ], [
@@ -117,6 +119,17 @@ class UserManagementController extends Controller
             'nik.unique' => 'NIK ini sudah terdaftar pada pengguna lain.',
         ]);
 
+        $assignedBranches = $validated['assigned_branches'] ?? null;
+        if (empty($assignedBranches)) {
+            $assignedBranches = [
+                [
+                    'branch' => $validated['branch'],
+                    'status' => 'AKTIF',
+                    'assignedAt' => date('Y-m-d')
+                ]
+            ];
+        }
+
         $user = User::create([
             'name' => $validated['name'],
             'username' => $validated['username'],
@@ -125,14 +138,20 @@ class UserManagementController extends Controller
             'role' => $validated['role'],
             'pin' => !empty($validated['pin']) ? $validated['pin'] : str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT),
             'branch' => $validated['branch'],
+            'assigned_branches' => $assignedBranches,
             'password' => Hash::make($validated['password']),
             'is_active' => $request->boolean('is_active', true),
         ]);
 
+        $user->syncLocationAccess();
+
+        $userData = $user->toArray();
+        $userData['assigned_branches'] = $user->getAssignedBranchesList();
+
         return response()->json([
             'success' => true,
             'message' => "Pengguna {$user->name} ({$user->role}) berhasil didaftarkan.",
-            'data' => $user,
+            'data' => $userData,
         ], 201);
     }
 
@@ -153,6 +172,7 @@ class UserManagementController extends Controller
                 'nik' => $user->nik,
                 'role' => $user->role,
                 'branch' => $user->branch,
+                'assigned_branches' => $user->getAssignedBranchesList(),
                 'is_active' => (bool) $user->is_active,
                 'pin' => $user->pin,
                 'created_at' => $user->created_at?->format('Y-m-d H:i:s'),
@@ -169,26 +189,54 @@ class UserManagementController extends Controller
         $user = User::findOrFail($id);
 
         $validated = $request->validate([
-            'name' => 'required|string|max:150',
-            'username' => ['required', 'string', 'max:50', Rule::unique('users')->ignore($user->id)],
-            'email' => ['required', 'email', 'max:150', Rule::unique('users')->ignore($user->id)],
+            'name' => 'sometimes|required|string|max:150',
+            'username' => ['sometimes', 'required', 'string', 'max:50', Rule::unique('users')->ignore($user->id)],
+            'email' => ['sometimes', 'required', 'email', 'max:150', Rule::unique('users')->ignore($user->id)],
             'nik' => ['nullable', 'string', 'max:50', Rule::unique('users')->ignore($user->id)],
-            'role' => 'required|string|max:50',
+            'role' => 'sometimes|required|string|max:50',
             'pin' => 'nullable|string|size:6|regex:/^[0-9]+$/',
-            'branch' => 'required|string|max:100',
+            'branch' => 'nullable|string|max:200',
+            'assigned_branches' => 'nullable|array',
             'password' => 'nullable|string|min:4',
             'is_active' => 'nullable|boolean',
         ]);
 
-        $updateData = [
-            'name' => $validated['name'],
-            'username' => $validated['username'],
-            'email' => $validated['email'],
-            'nik' => $validated['nik'] ?? $user->nik,
-            'role' => $validated['role'],
-            'branch' => $validated['branch'],
-            'is_active' => $request->boolean('is_active', $user->is_active),
-        ];
+        $updateData = [];
+        if (isset($validated['name'])) $updateData['name'] = $validated['name'];
+        if (isset($validated['username'])) $updateData['username'] = $validated['username'];
+        if (isset($validated['email'])) $updateData['email'] = $validated['email'];
+        if (array_key_exists('nik', $validated)) $updateData['nik'] = $validated['nik'] ?? $user->nik;
+        if (isset($validated['role'])) $updateData['role'] = $validated['role'];
+        if ($request->has('is_active')) $updateData['is_active'] = $request->boolean('is_active');
+
+        // Handle Branch & Assigned Branches
+        if ($request->has('assigned_branches')) {
+            $assigned = $request->input('assigned_branches');
+            if (is_array($assigned)) {
+                $updateData['assigned_branches'] = array_values($assigned);
+
+                // Recompute branch string based on active assignments
+                $activeNames = [];
+                foreach ($assigned as $item) {
+                    $st = strtoupper($item['status'] ?? 'AKTIF');
+                    if ($st === 'AKTIF' && !empty($item['branch'])) {
+                        $activeNames[] = trim($item['branch']);
+                    }
+                }
+                if (!empty($activeNames)) {
+                    $updateData['branch'] = implode(', ', array_unique($activeNames));
+                } elseif (!empty($validated['branch'])) {
+                    $updateData['branch'] = $validated['branch'];
+                }
+            }
+        } elseif (!empty($validated['branch'])) {
+            $updateData['branch'] = $validated['branch'];
+            // Sync assigned_branches array if branch changed
+            $parts = array_filter(array_map('trim', explode(',', $validated['branch'])));
+            $updateData['assigned_branches'] = array_map(function($p) {
+                return ['branch' => $p, 'status' => 'AKTIF', 'assignedAt' => date('Y-m-d')];
+            }, $parts);
+        }
 
         if (!empty($validated['pin'])) {
             $updateData['pin'] = $validated['pin'];
@@ -199,11 +247,64 @@ class UserManagementController extends Controller
         }
 
         $user->update($updateData);
+        $user->refresh();
+        $user->syncLocationAccess();
+
+        $userData = $user->toArray();
+        $userData['assigned_branches'] = $user->getAssignedBranchesList();
 
         return response()->json([
             'success' => true,
-            'message' => "Data pengguna {$user->name} berhasil diperbarui.",
-            'data' => $user,
+            'message' => "Data pengguna {$user->name} berhasil diperbarui di database.",
+            'data' => $userData,
+        ]);
+    }
+
+    /**
+     * Update branch assignment specifically (Dedicated endpoint for Manager & Owner).
+     */
+    public function updateBranchAssignment(Request $request, int $id): JsonResponse
+    {
+        $user = User::findOrFail($id);
+
+        $validated = $request->validate([
+            'assigned_branches' => 'required|array',
+            'branch' => 'nullable|string|max:200',
+        ]);
+
+        $assigned = $validated['assigned_branches'];
+        $activeBranches = [];
+        foreach ($assigned as $ab) {
+            $status = strtoupper($ab['status'] ?? 'AKTIF');
+            if ($status === 'AKTIF' && !empty($ab['branch'])) {
+                $activeBranches[] = trim($ab['branch']);
+            }
+        }
+
+        $branchString = !empty($activeBranches)
+            ? implode(', ', array_unique($activeBranches))
+            : ($validated['branch'] ?? ($assigned[0]['branch'] ?? 'Pusat'));
+
+        $user->update([
+            'assigned_branches' => array_values($assigned),
+            'branch' => $branchString,
+        ]);
+
+        $user->refresh();
+        $user->syncLocationAccess();
+
+        return response()->json([
+            'success' => true,
+            'message' => "Penugasan cabang untuk {$user->name} berhasil disimpan ke database.",
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'username' => $user->username,
+                'nik' => $user->nik,
+                'role' => $user->role,
+                'branch' => $user->branch,
+                'assigned_branches' => $user->getAssignedBranchesList(),
+            ],
         ]);
     }
 

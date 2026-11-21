@@ -258,35 +258,25 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
     <main class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
         
         <!-- Top Header -->
-        <header class="h-[72px] bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
+        <header class="h-20 bg-[#f8f9fa] border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
             <div class="flex items-center gap-3">
-                <span class="material-symbols-rounded text-[#0052cc] text-[26px]">fact_check</span>
-                <div>
-                    <h1 class="text-[18px] font-black text-gray-900 tracking-tight leading-none mb-0.5">Stock Opname &amp; Variance Report</h1>
-                    <p class="text-xs text-gray-400">Pencatatan fisik tanpa mengganggu operasional penjualan toko</p>
-                </div>
+                <h1 class="text-[20px] font-bold text-gray-900">Stock Opname</h1>
+                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200 flex items-center gap-1.5">
+                    <span class="material-symbols-rounded text-[14px]">fact_check</span>
+                    <span>Audit Fisik &amp; Selisih Stok</span>
+                </span>
             </div>
 
-            <div class="flex items-center gap-3">
-                <x-realtime-network-badge />
+            <div class="flex items-center gap-4 text-gray-500">
                 <x-notification-bell role="MANAGER" />
-
-                <template x-if="currentSession && currentSession.status === 'DRAFT'">
-                    <button type="button"
-                            @click="finishNotes = ''; showFinishModal = true;"
-                            :disabled="auditedCount === 0"
-                            class="bg-[#0052cc] hover:bg-[#0043a8] text-white px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 shadow-xs transition-colors disabled:opacity-40 active:scale-95">
-                        <span class="material-symbols-rounded text-[18px]">verified</span>
-                        <span>Selesaikan &amp; Terapkan Penyesuaian</span>
-                    </button>
-                </template>
-
                 <button type="button"
-                        @click="showNewSessionModal = true"
-                        class="bg-gray-900 hover:bg-black text-white px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 shadow-xs transition-colors active:scale-95">
-                    <span class="material-symbols-rounded text-[18px]">add_circle</span>
-                    <span>Sesi Opname Baru</span>
+                        @click="window.PosRealtime?.syncNow?.(); loadSessionDetail(activeSessionId);"
+                        class="hover:text-gray-900 transition-colors cursor-pointer"
+                        title="Sinkronkan Data">
+                    <span class="material-symbols-rounded text-[24px]" :class="$store.network?.isChecking ? 'animate-spin text-[#0052cc]' : ''">autorenew</span>
                 </button>
+                <div class="h-6 w-px bg-gray-300"></div>
+                <x-realtime-network-badge />
             </div>
         </header>
 
@@ -307,15 +297,15 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </select>
                 </div>
 
-                <div class="flex items-center gap-3">
+                <div class="flex items-center gap-2.5 flex-wrap">
                     <template x-if="currentSession">
-                        <span class="text-xs font-bold px-2.5 py-0.5 rounded-full border"
+                        <span class="text-xs font-bold px-2.5 py-1 rounded-full border"
                               :class="currentSession.status === 'DRAFT' ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200'"
                               x-text="'STATUS: ' + currentSession.status">
                         </span>
                     </template>
                     <a :href="exportExcelUrl()"
-                       class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors">
+                       class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors">
                         <span class="material-symbols-rounded text-[17px]">table_chart</span>
                         <span>Ekspor Excel (.xlsx)</span>
                     </a>
@@ -325,6 +315,21 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <span class="material-symbols-rounded text-[16px] text-gray-500">csv</span>
                         <span>CSV</span>
                     </a>
+                    <template x-if="currentSession && currentSession.status === 'DRAFT'">
+                        <button type="button"
+                                @click="finishNotes = ''; showFinishModal = true;"
+                                :disabled="auditedCount === 0"
+                                class="bg-[#0052cc] hover:bg-[#0043a8] text-white px-3.5 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors disabled:opacity-40 cursor-pointer">
+                            <span class="material-symbols-rounded text-[17px]">verified</span>
+                            <span>Selesaikan &amp; Terapkan</span>
+                        </button>
+                    </template>
+                    <button type="button"
+                            @click="showNewSessionModal = true"
+                            class="bg-gray-900 hover:bg-black text-white px-3.5 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer">
+                        <span class="material-symbols-rounded text-[17px]">add_circle</span>
+                        <span>Sesi Opname Baru</span>
+                    </button>
                 </div>
             </div>
 

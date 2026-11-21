@@ -47,14 +47,14 @@
                         date: d.date,
                         storeLocation: d.branch || this.activeSession?.storeLocation || '-',
                         targetWarehouse: d.target_warehouse || 'Gudang DC',
-                        sopStatus: d.statusKey === 'disetujui' ? 'DISETUJUI_SPV' : (d.statusKey === 'draft' ? 'DIAJUKAN_TOKO' : (d.statusKey === 'selesai' ? 'DITERIMA_GUDANG' : 'DIAJUKAN_TOKO')),
-                        statusLabel: d.statusLabel,
-                        statusDesc: d.conditionDesc || 'Pengajuan retur barang ke gudang logistik.',
+                        sopStatus: d.statusKey === 'disetujui' ? 'DISETUJUI_SPV' : (d.statusKey === 'ditolak' ? 'DITOLAK' : (d.statusKey === 'draft' ? 'DIAJUKAN_TOKO' : (d.statusKey === 'selesai' ? 'DITERIMA_GUDANG' : (d.statusKey === 'cek_fisik' ? 'DIAJUKAN_TOKO' : 'DIAJUKAN_TOKO')))),
+                        statusLabel: d.statusKey === 'ditolak' ? 'Ditolak' : (d.statusKey === 'disetujui' ? 'Disetujui SPV' : (d.statusLabel || 'Menunggu Review SPV')),
+                        statusDesc: d.statusKey === 'ditolak' ? ('Pengajuan ditolak oleh Supervisor/Gudang. ' + (d.conditionDesc || '')) : (d.conditionDesc || 'Pengajuan retur barang ke gudang logistik.'),
                         totalSku: (d.products || []).length || 1,
                         totalKoli: (d.products || []).reduce((sum, p) => sum + (parseInt(p.qty, 10) || 1), 0),
                         totalClaimValue: parseInt((d.subtotal || '').replace(/[^0-9]/g, ''), 10) || 0,
                         submittedBy: d.submitted_by || (this.activeSession?.cashierName || localStorage.getItem('pos_user_name') || 'Kasir'),
-                        spvApprover: d.statusKey === 'disetujui' ? 'Supervisor Toko' : null,
+                        spvApprover: d.statusKey === 'ditolak' ? 'Ditolak Supervisor / Gudang' : (d.statusKey === 'disetujui' ? 'Supervisor Toko' : null),
                         dispatchedAt: null,
                         items: (d.products || []).map(p => ({
                             sku: p.sku || '-',
@@ -268,12 +268,24 @@
                 body: JSON.stringify({
                     direction: 'toko_ke_gudang',
                     condition_type: this.draftItems[0]?.reason === 'RUSAK_BOCOR' ? 'rusak' : (this.draftItems[0]?.reason === 'KEDALUWARSA' ? 'ed' : 'overstock'),
+                    branch: this.selectedBranch || this.activeSession?.storeLocation || localStorage.getItem('pos_kasir_branch') || 'Cabang A',
+                    cashier_username: this.selectedStaffObj?.username || this.activeSession?.cashierId || localStorage.getItem('pos_portal_logged_in_username') || localStorage.getItem('pos_user_username') || 'kasir1',
+                    terminal_code: this.selectedShift || this.activeSession?.terminalLabel || this.activeSession?.terminalId || localStorage.getItem('pos_kasir_shift') || 'POS-01',
+                    pos_kasir: this.selectedShift || this.activeSession?.terminalLabel || this.activeSession?.terminalId || localStorage.getItem('pos_kasir_shift') || 'POS-01',
                     sku: this.draftItems[0]?.sku || '',
                     qty: this.totalDraftQty || 1,
                     unit: this.draftItems[0]?.unit || 'Pcs',
                     reason: this.draftItems[0]?.note || 'Pengajuan retur toko ke DC',
                     use_fleet: true,
-                    subtotal: this.totalDraftValue || 0
+                    subtotal: this.totalDraftValue || 0,
+                    items: this.draftItems.map(it => ({
+                        sku: it.sku,
+                        name: it.name,
+                        qty: it.qty,
+                        unit: it.unit || 'Pcs',
+                        condition_type: it.reason === 'RUSAK_BOCOR' ? 'rusak' : (it.reason === 'KEDALUWARSA' ? 'ed' : 'overstock'),
+                        reason: it.note || 'Pengajuan retur toko'
+                    }))
                 })
             });
             const json = await res.json().catch(() => ({}));
@@ -307,6 +319,8 @@
 }"
 x-init="initRetur()"
 @pos-session-sync.window="initRetur()"
+@pos:returns_updated.window="initRetur()"
+@pos:realtime.window="if ($event.detail?.type === 'returns_updated' || $event.detail?.entity === 'returns') initRetur()"
 class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden">
 
     <!-- Sidebar Kasir -->
@@ -697,6 +711,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <option value="all">Semua Status SOP</option>
                                 <option value="DIAJUKAN_TOKO">Draft Diajukan (Menunggu SPV)</option>
                                 <option value="DISETUJUI_SPV">Disetujui SPV (Siap Angkut)</option>
+                                <option value="DITOLAK">Ditolak SPV / Gudang</option>
                                 <option value="PENYERAHAN_FISIK">Penyerahan Fisik (Stok Dimutasi)</option>
                                 <option value="DITERIMA_GUDANG">Selesai (Diterima DC)</option>
                             </select>
@@ -783,6 +798,12 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                             <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200 whitespace-nowrap">
                                                                 <span class="material-symbols-rounded text-[14px]">check</span>
                                                                 <span>Disetujui SPV</span>
+                                                            </span>
+                                                        </template>
+                                                        <template x-if="doc.sopStatus === 'DITOLAK'">
+                                                            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">
+                                                                <span class="material-symbols-rounded text-[14px]">cancel</span>
+                                                                <span>Ditolak</span>
                                                             </span>
                                                         </template>
                                                         <template x-if="doc.sopStatus === 'PENYERAHAN_FISIK'">

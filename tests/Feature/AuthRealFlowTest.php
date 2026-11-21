@@ -287,4 +287,84 @@ class AuthRealFlowTest extends TestCase
         $response->assertStatus(200);
         $this->assertStringContainsString('no-store', strtolower((string) $response->headers->get('Cache-Control')));
     }
+
+    public function test_concurrent_multi_role_sessions_in_same_browser_do_not_jump_accounts(): void
+    {
+        // 1. Window 1 logs in as Manager
+        $this->postJson('/api/auth/login', [
+            'role' => 'manager',
+            'identifier' => 'test_manager_flow',
+            'password' => 'managerpass123',
+        ])->assertStatus(200)
+          ->assertJsonPath('user.username', 'test_manager_flow');
+
+        // 2. Window 2 (same browser session) logs in as Owner
+        $this->postJson('/api/auth/login', [
+            'role' => 'owner',
+            'identifier' => 'test_owner_flow',
+            'password' => 'ownerpass123',
+        ])->assertStatus(200)
+          ->assertJsonPath('user.username', 'test_owner_flow');
+
+        // 3. Window 3 (same browser session) logs in as Kasir
+        $this->postJson('/api/auth/login', [
+            'role' => 'kasir',
+            'identifier' => 'test_kasir_flow',
+            'password' => 'kasirpass123',
+        ])->assertStatus(200)
+          ->assertJsonPath('user.username', 'test_kasir_flow');
+
+        // 4. Re-login Manager in Window 1 to simulate Manager logging in after Owner
+        $this->postJson('/api/auth/login', [
+            'role' => 'manager',
+            'identifier' => 'test_manager_flow',
+            'password' => 'managerpass123',
+        ])->assertStatus(200);
+
+        // Verify Owner window navigating to other Owner features stays on Owner console (does NOT jump to Manager dashboard)
+        $this->get('/owner')->assertStatus(200)->assertSee('Owner Flow Test');
+        $this->get('/owner/products')->assertStatus(200)->assertSee('Owner Flow Test');
+        $this->get('/owner/reports')->assertStatus(200)->assertSee('Owner Flow Test');
+        $this->get('/owner/cabang')->assertStatus(200)->assertSee('Owner Flow Test');
+        $this->get('/owner/kelola-akun')->assertStatus(200)->assertSee('Owner Flow Test');
+
+        // Verify Manager window navigating to other Manager features stays as Manager (does NOT turn into Owner or bounce to Kasir)
+        $this->get('/dashboard')->assertStatus(200)->assertSee('Manager Flow Test');
+        $this->get('/inventory')->assertStatus(200)->assertSee('Manager Flow Test');
+        $this->get('/reports')->assertStatus(200)->assertSee('Manager Flow Test');
+        $this->get('/umkm-partners')->assertStatus(200)->assertSee('Manager Flow Test');
+
+        // Verify Kasir window navigating to Kasir features stays as Kasir
+        $this->get('/pos')->assertStatus(200);
+        $this->get('/kasir/produk/umkm')->assertStatus(200);
+
+        // Verify /api/auth/me returns the exact isolated user for each tab via X-POS-Role or Referer
+        $this->withHeaders(['X-POS-Role' => 'owner'])
+            ->getJson('/api/auth/me')
+            ->assertStatus(200)
+            ->assertJsonPath('user.username', 'test_owner_flow');
+
+        $this->withHeaders(['X-POS-Role' => 'manager'])
+            ->getJson('/api/auth/me')
+            ->assertStatus(200)
+            ->assertJsonPath('user.username', 'test_manager_flow');
+
+        $this->withHeaders(['X-POS-Role' => 'kasir'])
+            ->getJson('/api/auth/me')
+            ->assertStatus(200)
+            ->assertJsonPath('user.username', 'test_kasir_flow');
+
+        // Verify logging out Owner tab only logs out Owner while Manager and Kasir remain active
+        $this->get('/logout?role=owner')->assertRedirect('/');
+
+        $this->withHeaders(['X-POS-Role' => 'manager'])
+            ->getJson('/api/auth/me')
+            ->assertStatus(200)
+            ->assertJsonPath('user.username', 'test_manager_flow');
+
+        $this->withHeaders(['X-POS-Role' => 'kasir'])
+            ->getJson('/api/auth/me')
+            ->assertStatus(200)
+            ->assertJsonPath('user.username', 'test_kasir_flow');
+    }
 }

@@ -31,31 +31,25 @@
     <main class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
 
         <!-- Top Header Bar -->
-        <header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 sm:px-6 z-10 shrink-0 select-none">
-            <div class="flex items-center gap-2 min-w-0">
-                <span class="text-xs font-bold text-gray-400 uppercase tracking-wider hidden sm:inline">Persediaan</span>
-                <span class="material-symbols-rounded text-gray-400 text-sm hidden sm:inline">chevron_right</span>
-                <h1 class="text-sm sm:text-base font-bold text-gray-800 truncate">Master Supplier</h1>
+        <header class="h-20 bg-[#f8f9fa] border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
+            <div class="flex items-center gap-3">
+                <h1 class="text-[20px] font-bold text-gray-900">Master Supplier</h1>
+                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200 flex items-center gap-1.5">
+                    <span class="material-symbols-rounded text-[14px]">store</span>
+                    <span>Pemasok &amp; Pengadaan</span>
+                </span>
             </div>
 
-            <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+            <div class="flex items-center gap-4 text-gray-500">
                 <x-notification-bell role="MANAGER" />
                 <button type="button"
                         @click="$dispatch('refresh-suppliers')"
-                        class="p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
-                        title="Sinkronisasi Data">
-                    <span class="material-symbols-rounded text-[20px]">sync</span>
+                        class="hover:text-gray-900 transition-colors cursor-pointer"
+                        title="Sinkronkan Data">
+                    <span class="material-symbols-rounded text-[24px]" :class="$store.network?.isChecking ? 'animate-spin text-[#0052cc]' : ''">autorenew</span>
                 </button>
+                <div class="h-6 w-px bg-gray-300"></div>
                 <x-realtime-network-badge />
-                @if($canManage)
-                    <div class="h-6 w-px bg-gray-200 mx-0.5 hidden sm:block"></div>
-                    <button type="button"
-                            @click="$dispatch('open-create-supplier')"
-                            class="px-3.5 py-2 bg-[#0052cc] hover:bg-[#0043a8] text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 cursor-pointer transition-colors">
-                        <span class="material-symbols-rounded text-[18px]">add</span>
-                        <span class="hidden sm:inline">Tambah Supplier</span>
-                    </button>
-                @endif
             </div>
         </header>
 

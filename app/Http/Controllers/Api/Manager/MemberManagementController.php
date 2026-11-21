@@ -8,6 +8,7 @@ use App\Models\Location;
 use App\Models\Member;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -22,21 +23,26 @@ class MemberManagementController extends Controller
         $branch = trim($request->query('branch', ''));
         $department = trim($request->query('department', ''));
         $status = trim($request->query('status', ''));
-        $perPage = max(5, min(100, (int) $request->query('per_page', 15)));
-        $sortBy = in_array($request->query('sort_by'), ['name', 'nik', 'department', 'credit_limit', 'current_debt', 'created_at'])
+        $perPage = max(5, min(200, (int) $request->query('per_page', 15)));
+        $sortBy = in_array($request->query('sort_by'), ['id', 'member_code', 'name', 'nik', 'department', 'credit_limit', 'current_debt', 'created_at'])
             ? $request->query('sort_by')
-            : 'name';
+            : 'id';
         $sortOrder = strtolower($request->query('sort_order', 'asc')) === 'desc' ? 'desc' : 'asc';
 
         // Base Query
         $query = Member::query();
 
         if ($search !== '') {
-            $query->where(function ($q) use ($search) {
+            $lowerSearch = strtolower($search);
+            $query->where(function ($q) use ($search, $lowerSearch) {
                 $q->where('nik', 'like', "%{$search}%")
                   ->orWhere('member_code', 'like', "%{$search}%")
-                  ->orWhereRaw('LOWER(name) LIKE ?', ['%' . strtolower($search) . '%'])
-                  ->orWhereRaw('LOWER(department) LIKE ?', ['%' . strtolower($search) . '%']);
+                  ->orWhere('customer_id', 'like', "%{$search}%")
+                  ->orWhere('phone', 'like', "%{$search}%")
+                  ->orWhere('no_rekening', 'like', "%{$search}%")
+                  ->orWhereRaw('LOWER(name) LIKE ?', ["%{$lowerSearch}%"])
+                  ->orWhereRaw('LOWER(department) LIKE ?', ["%{$lowerSearch}%"])
+                  ->orWhereRaw('LOWER(division) LIKE ?', ["%{$lowerSearch}%"]);
             });
         }
 
@@ -45,52 +51,70 @@ class MemberManagementController extends Controller
         }
 
         if ($department !== '' && $department !== 'all') {
-            $query->where('department', $department);
+            $query->where(function ($q) use ($department) {
+                $q->where('department', $department)
+                  ->orWhere('division', $department);
+            });
         }
 
         if ($status !== '' && $status !== 'all') {
             $query->where('status', strtoupper($status));
         }
 
-        // Summary Aggregations across whole database in a single aggregate query
-        $agg = Member::selectRaw(
-            "COUNT(*) as total_members,"
-            . " COALESCE(SUM(CASE WHEN status = 'AKTIF' THEN 1 ELSE 0 END), 0) as active_members,"
-            . " COALESCE(SUM(CASE WHEN status = 'DIBLOKIR' THEN 1 ELSE 0 END), 0) as blocked_members,"
-            . " COALESCE(SUM(credit_limit), 0) as total_credit_limit,"
-            . " COALESCE(SUM(current_debt), 0) as total_current_debt"
-        )->first();
-        $totalLimit = (float) ($agg->total_credit_limit ?? 0);
-        $totalDebt = (float) ($agg->total_current_debt ?? 0);
+        // Cached Summary Aggregations & Metadata for fast pagination on 10,000+ rows
+        $cachedMeta = Cache::remember('members_kpi_summary', 60, function () {
+            $agg = Member::selectRaw(
+                "COUNT(*) as total_members,"
+                . " COALESCE(SUM(CASE WHEN status = 'AKTIF' THEN 1 ELSE 0 END), 0) as active_members,"
+                . " COALESCE(SUM(CASE WHEN status = 'DIBLOKIR' THEN 1 ELSE 0 END), 0) as blocked_members,"
+                . " COALESCE(SUM(credit_limit), 0) as total_credit_limit,"
+                . " COALESCE(SUM(current_debt), 0) as total_current_debt"
+            )->first();
+            $totalLimit = (float) ($agg->total_credit_limit ?? 0);
+            $totalDebt = (float) ($agg->total_current_debt ?? 0);
 
-        $summary = [
-            'total_members' => (int) ($agg->total_members ?? 0),
-            'active_members' => (int) ($agg->active_members ?? 0),
-            'blocked_members' => (int) ($agg->blocked_members ?? 0),
-            'total_credit_limit' => $totalLimit,
-            'total_current_debt' => $totalDebt,
-            'total_remaining_credit' => (float) max(0, $totalLimit - $totalDebt),
-            'branch_distribution' => Member::select('branch', DB::raw('count(*) as count'), DB::raw('sum(current_debt) as total_debt'))
-                ->groupBy('branch')
-                ->get(),
-        ];
+            $summary = [
+                'total_members' => (int) ($agg->total_members ?? 0),
+                'active_members' => (int) ($agg->active_members ?? 0),
+                'blocked_members' => (int) ($agg->blocked_members ?? 0),
+                'total_credit_limit' => $totalLimit,
+                'total_current_debt' => $totalDebt,
+                'total_remaining_credit' => (float) max(0, $totalLimit - $totalDebt),
+                'branch_distribution' => Member::select('branch', DB::raw('count(*) as count'), DB::raw('sum(current_debt) as total_debt'))
+                    ->groupBy('branch')
+                    ->get(),
+            ];
 
-        // Paginated results with lightweight fields
+            $branches = Location::where('type', '!=', 'WAREHOUSE')
+                ->orderBy('code')
+                ->pluck('name')
+                ->merge(Member::whereNotNull('branch')->where('branch', '!=', '')->distinct()->pluck('branch'))
+                ->filter()
+                ->unique()
+                ->values();
+
+            $departments = Member::whereNotNull('department')
+                ->where('department', '!=', '')
+                ->distinct()
+                ->pluck('department')
+                ->filter()
+                ->values();
+
+            return [
+                'summary' => $summary,
+                'branches' => $branches,
+                'departments' => $departments,
+            ];
+        });
+
+        // Paginated results
         $paginated = $query->orderBy($sortBy, $sortOrder)->paginate($perPage);
-
-        $branches = Location::where('type', '!=', 'WAREHOUSE')
-            ->orderBy('code')
-            ->pluck('name')
-            ->merge(Member::whereNotNull('branch')->distinct()->pluck('branch'))
-            ->filter()
-            ->unique()
-            ->values();
 
         return response()->json([
             'success' => true,
-            'summary' => $summary,
-            'branches' => $branches,
-            'departments' => Member::whereNotNull('department')->distinct()->pluck('department')->filter()->values(),
+            'summary' => $cachedMeta['summary'],
+            'branches' => $cachedMeta['branches'],
+            'departments' => $cachedMeta['departments'],
             'data' => $paginated->items(),
             'meta' => [
                 'current_page' => $paginated->currentPage(),
@@ -106,8 +130,9 @@ class MemberManagementController extends Controller
      */
     public function show(string $idOrNik): JsonResponse
     {
-        $member = Member::where('id', $idOrNik)
+        $member = Member::where('id', is_numeric($idOrNik) ? (int) $idOrNik : -1)
             ->orWhere('nik', $idOrNik)
+            ->orWhere('member_code', $idOrNik)
             ->first();
 
         if (!$member) {
@@ -124,12 +149,21 @@ class MemberManagementController extends Controller
             'success' => true,
             'data' => [
                 'id' => $member->id,
+                'customer_id' => $member->customer_id ?? (string) $member->id,
                 'member_code' => $member->member_code,
+                'kode_out' => $member->kode_out ?? '',
                 'nik' => $member->nik,
                 'name' => $member->name,
                 'department' => $member->department,
+                'division' => $member->division ?? $member->department,
+                'address' => $member->address ?? '',
                 'branch' => $member->branch ?? '-',
                 'phone' => $member->phone ?? '-',
+                'fax' => $member->fax ?? '',
+                'contact' => $member->contact ?? '',
+                'tempo_bayar' => $member->tempo_bayar ?? '',
+                'idtk' => $member->idtk ?? '',
+                'no_rekening' => $member->no_rekening ?? '',
                 'join_date' => $member->join_date ? $member->join_date->format('d M Y') : '-',
                 'credit_limit' => (float) $member->credit_limit,
                 'current_debt' => (float) $member->current_debt,
@@ -149,11 +183,21 @@ class MemberManagementController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'nik' => 'required|string|max:30|unique:members,nik',
+            'customer_id' => 'nullable|string|max:60',
+            'member_code' => 'nullable|string|max:60|unique:members,member_code',
+            'kode_out' => 'nullable|string|max:60',
+            'nik' => 'required|string|max:60|unique:members,nik',
             'name' => 'required|string|max:150',
             'department' => 'required|string|max:100',
-            'branch' => 'required|string|max:100',
+            'division' => 'nullable|string|max:150',
+            'address' => 'nullable|string',
+            'branch' => 'nullable|string|max:100',
             'phone' => 'nullable|string|max:30',
+            'fax' => 'nullable|string|max:100',
+            'contact' => 'nullable|string|max:150',
+            'tempo_bayar' => 'nullable|string|max:60',
+            'idtk' => 'nullable|string|max:100',
+            'no_rekening' => 'nullable|string|max:100',
             'join_date' => 'nullable|date',
             'credit_limit' => 'required|numeric|min:0',
             'status' => 'required|in:AKTIF,DIBLOKIR',
@@ -161,15 +205,26 @@ class MemberManagementController extends Controller
         ]);
 
         return DB::transaction(function () use ($validated, $request) {
-            $memberCode = 'MBR-' . Str::padLeft((string) (Member::max('id') + 1), 4, '0');
+            $memberCode = !empty($validated['member_code'])
+                ? trim($validated['member_code'])
+                : ('MBR-' . Str::padLeft((string) (Member::max('id') + 1), 4, '0'));
 
             $member = Member::create([
+                'customer_id' => $validated['customer_id'] ?? null,
                 'member_code' => $memberCode,
+                'kode_out' => $validated['kode_out'] ?? null,
                 'nik' => $validated['nik'],
                 'name' => $validated['name'],
                 'department' => $validated['department'],
-                'branch' => $validated['branch'],
+                'division' => $validated['division'] ?? $validated['department'],
+                'address' => $validated['address'] ?? null,
+                'branch' => $validated['branch'] ?? 'Cabang 1 - Mill / Pabrik',
                 'phone' => $validated['phone'] ?? null,
+                'fax' => $validated['fax'] ?? null,
+                'contact' => $validated['contact'] ?? null,
+                'tempo_bayar' => $validated['tempo_bayar'] ?? null,
+                'idtk' => $validated['idtk'] ?? null,
+                'no_rekening' => $validated['no_rekening'] ?? null,
                 'join_date' => $validated['join_date'] ?? now()->toDateString(),
                 'credit_limit' => (float) $validated['credit_limit'],
                 'current_debt' => 0,
@@ -183,6 +238,8 @@ class MemberManagementController extends Controller
                 processedBy: $request->user()?->name ?? 'Admin Koperasi',
                 notes: 'Pemberian plafon kredit awal saat pendaftaran anggota baru.'
             );
+
+            Cache::forget('members_kpi_summary');
 
             return response()->json([
                 'success' => true,
@@ -206,15 +263,38 @@ class MemberManagementController extends Controller
         }
 
         $validated = $request->validate([
+            'customer_id' => 'nullable|string|max:60',
+            'member_code' => 'nullable|string|max:60|unique:members,member_code,' . $member->id,
+            'kode_out' => 'nullable|string|max:60',
+            'nik' => 'nullable|string|max:60',
             'name' => 'required|string|max:150',
             'department' => 'required|string|max:100',
-            'branch' => 'required|string|max:100',
+            'division' => 'nullable|string|max:150',
+            'address' => 'nullable|string',
+            'branch' => 'nullable|string|max:100',
             'phone' => 'nullable|string|max:30',
+            'fax' => 'nullable|string|max:100',
+            'contact' => 'nullable|string|max:150',
+            'tempo_bayar' => 'nullable|string|max:60',
+            'idtk' => 'nullable|string|max:100',
+            'no_rekening' => 'nullable|string|max:100',
+            'credit_limit' => 'nullable|numeric|min:0',
             'status' => 'required|in:AKTIF,DIBLOKIR',
             'notes' => 'nullable|string',
         ]);
 
+        if (empty($validated['member_code'])) {
+            unset($validated['member_code']);
+        }
+        if (empty($validated['nik'])) {
+            unset($validated['nik']);
+        }
+        if (!isset($validated['credit_limit'])) {
+            unset($validated['credit_limit']);
+        }
+
         $member->update($validated);
+        Cache::forget('members_kpi_summary');
 
         return response()->json([
             'success' => true,
@@ -245,6 +325,7 @@ class MemberManagementController extends Controller
 
         $name = $member->name;
         $member->delete();
+        Cache::forget('members_kpi_summary');
 
         return response()->json([
             'success' => true,
@@ -286,6 +367,7 @@ class MemberManagementController extends Controller
             processedBy: $validated['processed_by'] ?? ($request->user()?->name ?? 'Manager Koperasi'),
             notes: $validated['notes'] ?? "Perubahan plafon kredit kasbon dari Rp " . number_format($oldLimit, 0, ',', '.') . " ke Rp " . number_format($newLimit, 0, ',', '.')
         );
+        Cache::forget('members_kpi_summary');
 
         return response()->json([
             'success' => true,
@@ -332,6 +414,7 @@ class MemberManagementController extends Controller
             type: $validated['type'],
             notes: $validated['notes'] ?? "{$typeLabel} kasbon anggota."
         );
+        Cache::forget('members_kpi_summary');
 
         return response()->json([
             'success' => true,
@@ -417,6 +500,7 @@ class MemberManagementController extends Controller
                 }
             }
         });
+        Cache::forget('members_kpi_summary');
 
         return response()->json([
             'success' => true,

@@ -95,13 +95,22 @@
     // Normalizer to ensure complete cashier info, clean units, and detailed item structures
     normalizeReturnDoc(doc) {
         if (!doc.branchOrigin) {
-            doc.branchOrigin = doc.docNo && doc.docNo.includes('TK') ? 'Cabang' : 'Gudang Pusat';
+            doc.branchOrigin = doc.branch || (doc.docNo && doc.docNo.includes('TK') ? 'Cabang A' : 'Gudang Pusat');
+        }
+        if (!doc.branch) {
+            doc.branch = doc.branchOrigin;
+        }
+        if (!doc.cashierUsername) {
+            doc.cashierUsername = doc.cashier_username || doc.cashierName || 'kasir1';
         }
         if (!doc.cashierName) {
-            doc.cashierName = '-';
+            doc.cashierName = doc.cashierUsername || 'Kasir 1';
         }
         if (!doc.terminalId) {
-            doc.terminalId = '-';
+            doc.terminalId = doc.terminalCode || doc.posKasir || 'POS-01';
+        }
+        if (!doc.posKasir) {
+            doc.posKasir = doc.terminalId;
         }
         if (!doc.invoiceRef) {
             doc.invoiceRef = doc.ref || '-';
@@ -240,6 +249,9 @@
                 item.statusLabel = 'DISETUJUI MANAGER';
                 item.statusSub = 'Siap Muat ke Gudang DC';
                 item.needsApproval = false;
+                if (window.PosRealtime?.broadcast) {
+                    window.PosRealtime.broadcast('returns_updated', { id: item.id, status: 'disetujui' });
+                }
                 this.triggerToast('Pengajuan ' + item.docNo + ' berhasil di-Approve oleh Manager.');
             } else {
                 this.triggerToast('Gagal menyetujui pengajuan di server.', 'error');
@@ -261,6 +273,9 @@
                 item.statusLabel = 'DITOLAK MANAGER';
                 item.statusSub = 'Dikembalikan ke Staf Toko';
                 item.needsApproval = false;
+                if (window.PosRealtime?.broadcast) {
+                    window.PosRealtime.broadcast('returns_updated', { id: item.id, status: 'ditolak' });
+                }
                 this.triggerToast('Pengajuan ' + item.docNo + ' telah ditolak.');
             } else {
                 this.triggerToast('Gagal menolak pengajuan di server.', 'error');
@@ -335,9 +350,31 @@
         this.showApproveModal = true;
     },
 
-    confirmApprove() {
+    async confirmApprove() {
         if (!this.selectedDocForApproval) return;
         const doc = this.selectedDocForApproval;
+
+        try {
+            const res = await fetch(`/api/returns/${doc.id}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({ status: 'disetujui' })
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                this.triggerToast(err.message || 'Gagal menyetujui pengajuan di server.', 'error');
+                return;
+            }
+        } catch (e) {
+            console.error('Failed to sync return approval to server:', e);
+            this.triggerToast('Gagal menghubungi server.', 'error');
+            return;
+        }
+
         doc.statusKey = 'disetujui';
         doc.statusLabel = 'DISETUJUI MANAGER';
         doc.statusSub = 'Siap Kirim & Cek Fisik Gudang';
@@ -351,6 +388,10 @@
             `Manager menyetujui pengajuan retur ${doc.docNo} dari ${doc.branchOrigin} (Kasir: ${doc.cashierName}). Barang diizinkan dikirim ke Gudang Pusat (Belum masuk Stok Retur).`
         );
 
+        if (window.PosRealtime?.broadcast) {
+            window.PosRealtime.broadcast('returns_updated', { id: doc.id, status: 'disetujui' });
+        }
+
         this.showApproveModal = false;
         this.triggerToast(`Pengajuan ${doc.docNo} berhasil disetujui! Barang siap diterima fisik di Gudang Pusat.`);
     },
@@ -361,12 +402,37 @@
         this.showRejectModal = true;
     },
 
-    confirmReject() {
+    async confirmReject() {
         if (!this.selectedDocForReject || !this.rejectReason.trim()) {
             alert('Wajib mengisi alasan penolakan retur.');
             return;
         }
         const doc = this.selectedDocForReject;
+
+        try {
+            const res = await fetch(`/api/returns/${doc.id}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    status: 'ditolak',
+                    reason: this.rejectReason.trim()
+                })
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                this.triggerToast(err.message || 'Gagal menolak pengajuan di server.', 'error');
+                return;
+            }
+        } catch (e) {
+            console.error('Failed to sync return rejection to server:', e);
+            this.triggerToast('Gagal menghubungi server.', 'error');
+            return;
+        }
+
         doc.statusKey = 'ditolak';
         doc.statusLabel = 'DITOLAK MANAGER';
         doc.statusSub = 'Ditolak: ' + this.rejectReason.trim();
@@ -379,6 +445,10 @@
             doc.docNo,
             `Manager menolak pengajuan retur ${doc.docNo} dari ${doc.branchOrigin}. Alasan: ${this.rejectReason.trim()}`
         );
+
+        if (window.PosRealtime?.broadcast) {
+            window.PosRealtime.broadcast('returns_updated', { id: doc.id, status: 'ditolak' });
+        }
 
         this.showRejectModal = false;
         this.triggerToast(`Pengajuan ${doc.docNo} telah ditolak.`);
@@ -719,18 +789,22 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
     <div class="flex-1 flex flex-col h-screen overflow-hidden min-w-0">
 
         <!-- Top Header Bar -->
-        <header class="h-[64px] bg-white border-b border-slate-200/80 px-8 flex items-center justify-between shrink-0 z-10">
-            <div class="relative w-full max-w-[380px]">
-                <span class="material-symbols-rounded absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">search</span>
-                <input type="text" x-model="searchQuery" placeholder="Cari dokumen, kasir, SKU, produk, driver..." class="w-full bg-[#f1f5f9] border border-transparent focus:border-blue-500 focus:bg-white rounded-xl pl-10 pr-4 py-2 text-[13px] font-medium text-slate-700 placeholder-slate-400 focus:outline-none transition-all">
-            </div>
+        <header class="h-20 bg-[#f8f9fa] border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
             <div class="flex items-center gap-3">
-                <a href="{{ url('/manager/inventory?tab=retur') }}" class="px-3 py-1.5 rounded-lg text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 flex items-center gap-1.5 transition-colors">
-                    <span class="material-symbols-rounded text-[16px]">warehouse</span>
-                    <span>Monitoring Stok Retur Gudang</span>
-                </a>
-                <x-realtime-network-badge />
+                <h1 class="text-[20px] font-bold text-gray-900">Persetujuan Retur</h1>
+                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200 flex items-center gap-1.5">
+                    <span class="material-symbols-rounded text-[14px]">local_shipping</span>
+                    <span>Toko ke Gudang Pusat</span>
+                </span>
+            </div>
+
+            <div class="flex items-center gap-4 text-gray-500">
                 <x-notification-bell role="MANAGER" />
+                <button type="button" @click="window.PosRealtime?.syncNow?.(); initReturns();" class="hover:text-gray-900 transition-colors cursor-pointer" title="Sinkronkan Data">
+                    <span class="material-symbols-rounded text-[24px]" :class="$store.network?.isChecking ? 'animate-spin text-[#0052cc]' : ''">autorenew</span>
+                </button>
+                <div class="h-6 w-px bg-gray-300"></div>
+                <x-realtime-network-badge />
             </div>
         </header>
 
@@ -874,6 +948,10 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
 
                     <!-- Right Action Button -->
                     <div class="flex items-center gap-2.5">
+                        <a href="{{ url('/manager/inventory?tab=retur') }}" class="px-3.5 py-2.5 rounded-xl text-[12px] font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 flex items-center gap-1.5 transition-colors">
+                            <span class="material-symbols-rounded text-[16px]">warehouse</span>
+                            <span>Monitoring Stok Retur Gudang</span>
+                        </a>
                         <button type="button"
                                 @click="modalMode = 'toko_ke_gudang'; showModal = true;"
                                 class="bg-[#0047b3] hover:bg-[#003994] text-white px-4 py-2.5 rounded-xl text-[12px] font-extrabold flex items-center gap-2 shadow-xs transition-all cursor-pointer">
@@ -890,7 +968,12 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
 
                     <!-- Filter Toolbar -->
                     <div class="bg-white border border-slate-200/80 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-3 shadow-2xs">
-                        <div class="flex items-center gap-2 w-full md:w-auto">
+                        <div class="relative w-full md:w-72">
+                            <span class="material-symbols-rounded absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">search</span>
+                            <input type="text" x-model="searchQuery" placeholder="Cari dokumen, SKU, kasir, produk..." class="w-full bg-[#f1f5f9] border border-slate-200 focus:border-[#0047b3] focus:bg-white rounded-xl pl-10 pr-4 py-2 text-[12px] font-medium text-slate-700 placeholder-slate-400 focus:outline-none transition-all">
+                        </div>
+
+                        <div class="flex items-center gap-2 w-full md:w-auto flex-wrap">
                             <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Status:</span>
                             <div class="flex items-center gap-1.5 flex-wrap">
                                 <button type="button" @click="statusFilterApproval = 'all'" :class="statusFilterApproval === 'all' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer">Semua</button>
@@ -913,7 +996,9 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
                                 <thead class="bg-slate-50 border-b border-slate-200/80 text-slate-500 font-extrabold uppercase tracking-wider text-[11px] whitespace-nowrap">
                                     <tr>
                                         <th class="py-3 px-4">No. Dokumen</th>
-                                        <th class="py-3 px-4">Asal Toko</th>
+                                        <th class="py-3 px-4">Username Kasir</th>
+                                        <th class="py-3 px-4">Cabang</th>
+                                        <th class="py-3 px-4">POS Kasir</th>
                                         <th class="py-3 px-4">Tanggal</th>
                                         <th class="py-3 px-4">Alasan Retur</th>
                                         <th class="py-3 px-4">SKU</th>
@@ -942,17 +1027,37 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
                                                     </td>
                                                 </template>
 
-                                                <!-- Parent Col 2: Asal Toko -->
+                                                <!-- Parent Col 2: Username Kasir -->
                                                 <template x-if="pIdx === 0">
                                                     <td :rowspan="item.products && item.products.length > 0 ? item.products.length : 1" class="py-3 px-4 align-middle whitespace-nowrap bg-white">
-                                                        <div class="inline-flex items-center gap-1.5 font-bold text-slate-800 text-xs">
-                                                            <span class="material-symbols-rounded text-[15px] text-[#0052cc]">store</span>
-                                                            <span x-text="item.branchOrigin || 'Cabang A'"></span>
+                                                        <div class="inline-flex items-center gap-1.5 font-bold text-slate-800 text-xs font-mono">
+                                                            <span class="material-symbols-rounded text-[15px] text-[#0052cc]">badge</span>
+                                                            <span x-text="item.cashierUsername || item.cashier_username || item.cashierName || '-'"></span>
                                                         </div>
                                                     </td>
                                                 </template>
 
-                                                <!-- Parent Col 3: Tanggal -->
+                                                <!-- Parent Col 3: Cabang -->
+                                                <template x-if="pIdx === 0">
+                                                    <td :rowspan="item.products && item.products.length > 0 ? item.products.length : 1" class="py-3 px-4 align-middle whitespace-nowrap bg-white">
+                                                        <div class="inline-flex items-center gap-1.5 font-bold text-slate-800 text-xs">
+                                                            <span class="material-symbols-rounded text-[15px] text-emerald-600">store</span>
+                                                            <span x-text="item.branch || item.branchOrigin || 'Cabang A'"></span>
+                                                        </div>
+                                                    </td>
+                                                </template>
+
+                                                <!-- Parent Col 4: POS Kasir -->
+                                                <template x-if="pIdx === 0">
+                                                    <td :rowspan="item.products && item.products.length > 0 ? item.products.length : 1" class="py-3 px-4 align-middle whitespace-nowrap bg-white">
+                                                        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-black bg-blue-50 text-[#0047b3] border border-blue-200">
+                                                            <span class="material-symbols-rounded text-[14px]">point_of_sale</span>
+                                                            <span x-text="item.posKasir || item.terminalCode || item.terminalId || 'POS-01'"></span>
+                                                        </span>
+                                                    </td>
+                                                </template>
+
+                                                <!-- Parent Col 5: Tanggal -->
                                                 <template x-if="pIdx === 0">
                                                     <td :rowspan="item.products && item.products.length > 0 ? item.products.length : 1" class="py-3 px-4 align-middle whitespace-nowrap bg-white text-xs text-slate-600 font-medium" x-text="item.date">
                                                     </td>
@@ -1078,7 +1183,7 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
                                         </template>
                                     </template>
                                     <tr x-show="filteredApprovalList.length === 0">
-                                        <td colspan="11" class="py-10 text-center text-slate-400">
+                                        <td colspan="13" class="py-10 text-center text-slate-400">
                                             <span class="material-symbols-rounded text-3xl block text-slate-300 mb-1">inbox</span>
                                             <span class="font-bold text-xs text-slate-600">Tidak ada pengajuan retur yang cocok.</span>
                                         </td>

@@ -31,26 +31,32 @@
 
         <!-- Body -->
         <div class="flex-1 flex flex-col">
-            <!-- 4 Payment Method Tabs -->
+            <!-- 5 Payment Method Tabs -->
             <div class="px-6 pt-4 pb-4">
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 bg-gray-100 p-1.5 rounded-xl">
+                <div class="grid grid-cols-2 sm:grid-cols-5 gap-1.5 bg-gray-100 p-1.5 rounded-xl">
                     <button type="button" @click="paymentModal.method = 'tunai'"
                             :class="paymentModal.method === 'tunai' ? 'bg-white shadow-xs text-[#0052cc] font-bold' : 'text-gray-600 hover:text-gray-800 font-semibold'"
                             class="py-2.5 rounded-lg flex items-center justify-center gap-1.5 text-xs transition-all cursor-pointer">
                         <span class="material-symbols-rounded text-[18px]">payments</span>
                         <span>Tunai</span>
                     </button>
+                    <button type="button" @click="paymentModal.method = 'transfer'"
+                            :class="paymentModal.method === 'transfer' ? 'bg-white shadow-xs text-[#0052cc] font-bold' : 'text-gray-600 hover:text-gray-800 font-semibold'"
+                            class="py-2.5 rounded-lg flex items-center justify-center gap-1.5 text-xs transition-all cursor-pointer">
+                        <span class="material-symbols-rounded text-[18px]">account_balance</span>
+                        <span>Transfer</span>
+                    </button>
                     <button type="button" @click="paymentModal.method = 'qris'"
                             :class="paymentModal.method === 'qris' ? 'bg-white shadow-xs text-[#0052cc] font-bold' : 'text-gray-600 hover:text-gray-800 font-semibold'"
                             class="py-2.5 rounded-lg flex items-center justify-center gap-1.5 text-xs transition-all cursor-pointer">
                         <span class="material-symbols-rounded text-[18px]">qr_code_scanner</span>
-                        <span>QRIS / Transfer</span>
+                        <span>QRIS</span>
                     </button>
                     <button type="button" @click="paymentModal.method = 'kredit'"
                             :class="paymentModal.method === 'kredit' ? 'bg-white shadow-xs text-[#0052cc] font-bold' : 'text-gray-600 hover:text-gray-800 font-semibold'"
                             class="py-2.5 rounded-lg flex items-center justify-center gap-1.5 text-xs transition-all cursor-pointer">
                         <span class="material-symbols-rounded text-[18px]">badge</span>
-                        <span>Kredit Anggota</span>
+                        <span>Piutang</span>
                     </button>
                     <button type="button" @click="paymentModal.method = 'campuran'; calcSplitPayment()"
                             :class="paymentModal.method === 'campuran' ? 'bg-white shadow-xs text-[#0052cc] font-bold' : 'text-gray-600 hover:text-gray-800 font-semibold'"
@@ -106,24 +112,122 @@
                 </div>
             </div>
 
-            <!-- Tab Content 2: QRIS / Transfer -->
+            <!-- Tab Content 2: Transfer Bank -->
+            <div x-show="paymentModal.method === 'transfer'" 
+                 style="display: none;"
+                 class="px-6 pb-6 space-y-4">
+                 
+                 <div class="bg-blue-50/70 border border-blue-200 rounded-xl p-4 flex items-center justify-between">
+                     <div class="flex items-center gap-3">
+                         <div class="w-10 h-10 rounded-xl bg-blue-100 text-[#0052cc] flex items-center justify-center">
+                             <span class="material-symbols-rounded text-[22px]">account_balance</span>
+                         </div>
+                         <div>
+                             <h4 class="font-bold text-gray-900 text-xs">Transfer Bank Rekening Koperasi</h4>
+                             <p class="text-[11px] text-gray-500">Pilih rekening tujuan dan masukkan nomor resi / referensi transfer.</p>
+                         </div>
+                     </div>
+                     <span class="font-mono font-bold text-xs text-[#0052cc]" x-text="'Tagihan: Rp ' + formatNumber(grandTotal)"></span>
+                 </div>
+
+                 <!-- Pilih Bank Tujuan -->
+                 <div class="grid grid-cols-3 gap-2.5">
+                     <button type="button" @click="paymentModal.transferBank = 'BCA'"
+                             :class="paymentModal.transferBank === 'BCA' ? 'border-[#0052cc] bg-blue-50/50 text-[#0052cc] ring-2 ring-[#0052cc]/20' : 'border-gray-200 bg-white text-gray-700'"
+                             class="p-3 rounded-xl border text-left cursor-pointer transition-all">
+                         <span class="text-[10px] font-bold text-gray-400 block uppercase">BANK BCA</span>
+                         <span class="font-mono font-bold text-xs text-gray-900 block mt-0.5">8201-9283-11</span>
+                         <span class="text-[10px] text-gray-500">Koperasi Konsumen ILP</span>
+                     </button>
+                     <button type="button" @click="paymentModal.transferBank = 'MANDIRI'"
+                             :class="paymentModal.transferBank === 'MANDIRI' ? 'border-[#0052cc] bg-blue-50/50 text-[#0052cc] ring-2 ring-[#0052cc]/20' : 'border-gray-200 bg-white text-gray-700'"
+                             class="p-3 rounded-xl border text-left cursor-pointer transition-all">
+                         <span class="text-[10px] font-bold text-gray-400 block uppercase">BANK MANDIRI</span>
+                         <span class="font-mono font-bold text-xs text-gray-900 block mt-0.5">132-00-9821832-1</span>
+                         <span class="text-[10px] text-gray-500">Koperasi Konsumen ILP</span>
+                     </button>
+                     <button type="button" @click="paymentModal.transferBank = 'BRI'"
+                             :class="paymentModal.transferBank === 'BRI' ? 'border-[#0052cc] bg-blue-50/50 text-[#0052cc] ring-2 ring-[#0052cc]/20' : 'border-gray-200 bg-white text-gray-700'"
+                             class="p-3 rounded-xl border text-left cursor-pointer transition-all">
+                         <span class="text-[10px] font-bold text-gray-400 block uppercase">BANK BRI</span>
+                         <span class="font-mono font-bold text-xs text-gray-900 block mt-0.5">0012-01-002938-50-1</span>
+                         <span class="text-[10px] text-gray-500">Koperasi Konsumen ILP</span>
+                     </button>
+                 </div>
+
+                 <!-- Nomor Referensi Transfer -->
+                 <div class="space-y-1">
+                     <label class="block text-[11px] font-bold text-gray-600 uppercase">Nomor Referensi / Resi Transfer</label>
+                     <input type="text"
+                            x-model="paymentModal.transferRef"
+                            placeholder="Contoh: TRF-BCA-981240 / Resi ATM 10293"
+                            class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 font-mono text-xs font-bold text-gray-800 focus:border-[#0052cc] outline-none">
+                     <p class="text-[10px] text-gray-400">Dicatat otomatis pada laporan transaksi dan struk kasir.</p>
+                 </div>
+            </div>
+
+            <!-- Tab Content 3: QRIS -->
             <div x-show="paymentModal.method === 'qris'" 
                  style="display: none;"
                  class="px-6 pb-6 flex flex-col items-center justify-center text-center">
-                 <div class="w-32 h-32 bg-gray-100 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center mb-3">
-                    <span class="material-symbols-rounded text-6xl text-[#0052cc]">qr_code_2</span>
-                 </div>
-                 <p class="text-gray-800 font-bold text-sm">QRIS Dinamis &amp; Transfer Bank</p>
-                 <p class="text-xs text-gray-500 mt-0.5">Total Tagihan: <span class="font-bold text-gray-900 font-mono" x-text="'Rp ' + formatNumber(grandTotal)"></span></p>
+                 
+                 <!-- Realistic QRIS Display Box -->
+                 <div class="p-4 bg-white rounded-2xl border-2 border-gray-200 shadow-sm flex flex-col items-center max-w-[280px] w-full mb-3">
+                     <div class="flex items-center justify-between w-full pb-2 mb-2 border-b border-gray-100">
+                         <span class="px-2 py-0.5 bg-rose-600 text-white font-black text-[10px] rounded tracking-widest">QRIS</span>
+                         <span class="text-[9px] font-bold text-gray-400 tracking-tight">PEMBAYARAN DIGITAL</span>
+                     </div>
+                     
+                     <!-- Stylized QR Vector Graphic -->
+                     <div class="p-2 bg-white rounded-xl border border-gray-100 shadow-inner flex items-center justify-center mb-2">
+                         <svg class="w-40 h-40 text-gray-900" viewBox="0 0 100 100" fill="currentColor">
+                             <!-- Top-Left Finder -->
+                             <path d="M10,10 h24 v24 h-24 z M14,14 v16 h16 v-16 z M18,18 h8 v8 h-8 z"/>
+                             <!-- Top-Right Finder -->
+                             <path d="M66,10 h24 v24 h-24 z M70,14 v16 h16 v-16 z M74,18 h8 v8 h-8 z"/>
+                             <!-- Bottom-Left Finder -->
+                             <path d="M10,66 h24 v24 h-24 z M14,70 v16 h16 v-16 z M18,74 h8 v8 h-8 z"/>
+                             <!-- Data Matrix Dots Pattern -->
+                             <rect x="42" y="12" width="4" height="4"/>
+                             <rect x="50" y="12" width="4" height="4"/>
+                             <rect x="42" y="20" width="4" height="8"/>
+                             <rect x="54" y="24" width="4" height="4"/>
+                             <rect x="14" y="42" width="4" height="8"/>
+                             <rect x="22" y="46" width="6" height="4"/>
+                             <rect x="32" y="42" width="4" height="4"/>
+                             <rect x="42" y="42" width="16" height="16"/>
+                             <rect x="64" y="42" width="4" height="6"/>
+                             <rect x="74" y="42" width="12" height="4"/>
+                             <rect x="82" y="50" width="4" height="4"/>
+                             <rect x="68" y="54" width="8" height="4"/>
+                             <rect x="12" y="58" width="8" height="4"/>
+                             <rect x="24" y="58" width="8" height="4"/>
+                             <rect x="42" y="66" width="4" height="8"/>
+                             <rect x="50" y="70" width="6" height="4"/>
+                             <rect x="42" y="82" width="8" height="4"/>
+                             <rect x="66" y="66" width="4" height="16"/>
+                             <rect x="74" y="70" width="8" height="4"/>
+                             <rect x="86" y="70" width="4" height="14"/>
+                             <rect x="74" y="82" width="8" height="4"/>
+                         </svg>
+                     </div>
 
-                 <!-- Nomor Referensi Transfer -->
-                 <div class="w-full max-w-sm mt-4 text-left">
-                     <label class="block text-[11px] font-bold text-gray-600 uppercase mb-1">Nomor Referensi Transaksi Transfer / RRN</label>
+                     <div class="text-center">
+                         <p class="font-extrabold text-xs text-gray-900 tracking-tight">KOPERASI KONSUMEN ILP</p>
+                         <p class="text-[10px] text-gray-400 font-mono">NMID: ID102938472910</p>
+                     </div>
+                 </div>
+
+                 <p class="text-xs text-gray-500">Total Tagihan: <span class="font-bold text-gray-900 font-mono text-sm" x-text="'Rp ' + formatNumber(grandTotal)"></span></p>
+
+                 <!-- Nomor Referensi QRIS -->
+                 <div class="w-full max-w-sm mt-3 text-left">
+                     <label class="block text-[11px] font-bold text-gray-600 uppercase mb-1">Nomor RRN / Referensi Transaksi QRIS</label>
                      <input type="text"
                             x-model="paymentModal.qrisRef"
-                            placeholder="Contoh: QRIS-893021 / TRF-BCA-102938"
+                            placeholder="Contoh: RRN-9081293812 / QRIS-893021"
                             class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 font-mono text-xs font-bold text-gray-800 focus:border-[#0052cc] outline-none">
-                     <p class="text-[10px] text-gray-400 mt-1">Dicatat otomatis pada laporan transaksi dan struk.</p>
+                     <p class="text-[10px] text-gray-400 mt-1">Dicatat otomatis pada laporan transaksi dan struk kasir.</p>
                  </div>
             </div>
 
@@ -212,36 +316,64 @@
                  </template>
             </div>
 
-            <!-- Tab Content 4: Pembayaran Campuran -->
+            <!-- Tab Content 5: Pembayaran Campuran -->
             <div x-show="paymentModal.method === 'campuran'"
                  style="display: none;"
-                 class="px-6 pb-6">
+                 class="px-6 pb-6 space-y-4">
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <!-- 1. Input Nominal Tunai Manual -->
                     <div class="p-4 rounded-xl border border-gray-200 bg-gray-50">
-                        <label class="block text-[11px] font-extrabold text-emerald-700 uppercase mb-1.5">Nominal Tunai</label>
+                        <label class="block text-[11px] font-extrabold text-emerald-700 uppercase mb-1.5">1. Nominal Tunai (Ketik Manual)</label>
                         <div class="relative">
                             <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-500">Rp</span>
                             <input type="number"
                                    x-model.number="paymentModal.splitCash"
                                    @input="calcSplitPayment()"
+                                   placeholder="0"
                                    class="w-full pl-10 pr-3 py-2.5 rounded-lg border border-gray-300 bg-white font-mono text-base font-bold text-gray-900 outline-none focus:border-[#0052cc]">
                         </div>
                         <div class="flex gap-1.5 mt-2">
-                            <button type="button" @click="paymentModal.splitCash = 10000; calcSplitPayment()" class="px-2 py-1 text-[11px] font-bold bg-white border border-gray-200 rounded cursor-pointer">Rp 10.000</button>
-                            <button type="button" @click="paymentModal.splitCash = 20000; calcSplitPayment()" class="px-2 py-1 text-[11px] font-bold bg-white border border-gray-200 rounded cursor-pointer">Rp 20.000</button>
+                            <button type="button" @click="paymentModal.splitCash = Math.floor(grandTotal / 2); calcSplitPayment()" class="px-2 py-1 text-[11px] font-bold bg-white border border-gray-200 rounded cursor-pointer">50% Tunai</button>
+                            <button type="button" @click="paymentModal.splitCash = 50000; calcSplitPayment()" class="px-2 py-1 text-[11px] font-bold bg-white border border-gray-200 rounded cursor-pointer">Rp 50.000</button>
+                            <button type="button" @click="paymentModal.splitCash = 100000; calcSplitPayment()" class="px-2 py-1 text-[11px] font-bold bg-white border border-gray-200 rounded cursor-pointer">Rp 100.000</button>
                         </div>
                     </div>
 
-                    <div class="p-4 rounded-xl border border-gray-200 bg-gray-50">
-                        <label class="block text-[11px] font-extrabold text-[#0052cc] uppercase mb-1.5">Sisa QRIS / Debit</label>
-                        <div class="relative">
-                            <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-500">Rp</span>
-                            <input type="text"
-                                   readonly
-                                   :value="formatNumber(paymentModal.splitNonCash)"
-                                   class="w-full pl-10 pr-3 py-2.5 rounded-lg border border-gray-200 bg-slate-100 font-mono text-base font-bold text-[#0052cc] outline-none">
+                    <!-- 2. Sisa Non-Tunai -->
+                    <div class="p-4 rounded-xl border border-gray-200 bg-gray-50 flex flex-col justify-between">
+                        <div>
+                            <label class="block text-[11px] font-extrabold text-[#0052cc] uppercase mb-1.5">2. Sisa Non-Tunai</label>
+                            <div class="relative">
+                                <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-500">Rp</span>
+                                <input type="text"
+                                       readonly
+                                       :value="formatNumber(paymentModal.splitNonCash)"
+                                       class="w-full pl-10 pr-3 py-2.5 rounded-lg border border-gray-200 bg-slate-100 font-mono text-base font-bold text-[#0052cc] outline-none">
+                            </div>
+                        </div>
+
+                        <!-- Pilihan Metode Non-Tunai -->
+                        <div class="mt-3">
+                            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Metode Non-Tunai:</label>
+                            <div class="flex gap-2">
+                                <button type="button" @click="paymentModal.splitType = 'QRIS'"
+                                        :class="paymentModal.splitType === 'QRIS' ? 'bg-[#0052cc] text-white font-bold' : 'bg-white text-gray-700 border border-gray-200 font-semibold'"
+                                        class="flex-1 py-1.5 rounded-lg text-xs transition-colors cursor-pointer">QRIS</button>
+                                <button type="button" @click="paymentModal.splitType = 'TRANSFER'"
+                                        :class="paymentModal.splitType === 'TRANSFER' ? 'bg-[#0052cc] text-white font-bold' : 'bg-white text-gray-700 border border-gray-200 font-semibold'"
+                                        class="flex-1 py-1.5 rounded-lg text-xs transition-colors cursor-pointer">Transfer Bank</button>
+                            </div>
                         </div>
                     </div>
+                </div>
+
+                <!-- Referensi Non-Tunai -->
+                <div>
+                    <label class="block text-[11px] font-bold text-gray-600 uppercase mb-1">Nomor Referensi Non-Tunai (Opsional)</label>
+                    <input type="text"
+                           x-model="paymentModal.transferRef"
+                           placeholder="Contoh: RRN-8921029 / Resi Bank 10291"
+                           class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 font-mono text-xs font-bold text-gray-800 focus:border-[#0052cc] outline-none">
                 </div>
             </div>
         </div>
@@ -254,10 +386,10 @@
             </button>
             <button type="button"
                     @click="processPayment(paymentModal.method)" 
-                    :disabled="(paymentModal.method === 'tunai' && paymentModal.kembalian < 0) || (paymentModal.method === 'tunai' && !paymentModal.uangDiterima) || (paymentModal.method === 'kredit' && (!memberValidation.data || !memberValidation.isEligible))"
+                    :disabled="(paymentModal.method === 'tunai' && paymentModal.kembalian < 0) || (paymentModal.method === 'tunai' && !paymentModal.uangDiterima) || (paymentModal.method === 'kredit' && (!memberValidation.data || !memberValidation.isEligible)) || (paymentModal.method === 'campuran' && (paymentModal.splitCash + paymentModal.splitNonCash < grandTotal))"
                     class="px-6 py-2.5 rounded-xl bg-[#004aad] hover:bg-[#003882] text-white font-bold text-xs flex items-center gap-2 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
                 <span class="material-symbols-rounded text-[18px]">print</span>
-                <span x-text="paymentModal.method === 'kredit' ? 'Konfirmasi Kredit & Cetak Struk' : 'Bayar & Cetak Struk'"></span>
+                <span x-text="paymentModal.method === 'kredit' ? 'Konfirmasi Piutang & Cetak Struk' : 'Bayar & Cetak Struk'"></span>
             </button>
         </div>
     </div>

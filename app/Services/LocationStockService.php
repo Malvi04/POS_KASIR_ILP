@@ -115,19 +115,31 @@ class LocationStockService
                 return $exact;
             }
 
-            // Alias matching for ILP standard facilities
+            // Alias matching for ILP standard facilities (exact code/name match first, then substring match)
             $aliases = $this->branchAliasCandidates($lower);
             if (!empty($aliases)) {
-                $matched = $baseQuery()->get()->first(function (Location $loc) use ($aliases) {
+                $candidates = $baseQuery()->get();
+                $matched = $candidates->first(function (Location $loc) use ($aliases) {
                     $nameL = strtolower($loc->name);
                     $codeL = strtolower($loc->code);
                     foreach ($aliases as $alias) {
-                        if ($codeL === $alias || str_contains($nameL, $alias)) {
+                        if ($codeL === $alias || $nameL === $alias) {
                             return true;
                         }
                     }
                     return false;
                 });
+                if (!$matched) {
+                    $matched = $candidates->first(function (Location $loc) use ($aliases) {
+                        $nameL = strtolower($loc->name);
+                        foreach ($aliases as $alias) {
+                            if (str_contains($nameL, $alias)) {
+                                return true;
+                            }
+                        }
+                        return false;
+                    });
+                }
                 if ($matched) {
                     return $matched;
                 }

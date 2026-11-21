@@ -229,20 +229,22 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
     <!-- Main Content -->
     <main class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
 
-        <!-- Top Header (Identical style to Sales Reports) -->
-        <header class="h-[68px] bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
-            <div class="relative w-[360px]">
-                <span class="material-symbols-rounded absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-[18px]">search</span>
-                <input type="text" x-model="searchSetting" placeholder="Cari pengaturan akun, toko, atau PIN..."
-                       class="w-full pl-11 pr-4 py-2 rounded-full bg-[#f1f5f9] border border-transparent focus:bg-white focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/15 focus:outline-none text-[13px] text-gray-700 placeholder-gray-400 transition-all">
+        <!-- Top Header -->
+        <header class="h-20 bg-[#f8f9fa] border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
+            <div class="flex items-center gap-3">
+                <h1 class="text-[20px] font-bold text-gray-900">Pengaturan</h1>
+                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200 flex items-center gap-1.5">
+                    <span class="material-symbols-rounded text-[14px]">settings</span>
+                    <span>Sistem &amp; Keamanan</span>
+                </span>
             </div>
 
             <div class="flex items-center gap-4 text-gray-500">
                 <x-notification-bell role="MANAGER" />
-                <button @click="triggerToast('Panduan Konfigurasi Vigilant POS v2.4.1')" class="hover:text-gray-900 transition-colors p-1 cursor-pointer" title="Bantuan">
-                    <span class="material-symbols-rounded text-[22px]">help_outline</span>
+                <button type="button" @click="window.PosRealtime?.syncNow?.(); triggerToast('Sistem tersinkronisasi.');" class="hover:text-gray-900 transition-colors cursor-pointer" title="Sinkronkan Data">
+                    <span class="material-symbols-rounded text-[24px]" :class="$store.network?.isChecking ? 'animate-spin text-[#0052cc]' : ''">autorenew</span>
                 </button>
-                <div class="h-6 w-px bg-gray-200 ml-1"></div>
+                <div class="h-6 w-px bg-gray-300"></div>
                 <x-realtime-network-badge />
             </div>
         </header>
@@ -282,6 +284,13 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 class="px-4 py-2 rounded-lg text-[13px] font-bold flex items-center gap-2 transition-colors cursor-pointer">
                             <span class="material-symbols-rounded text-[18px]">receipt_long</span>
                             <span>Pengaturan Pajak (PPN)</span>
+                        </button>
+
+                        <button type="button"
+                                @click="triggerToast('Panduan Konfigurasi Sistem POS Manager')"
+                                class="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+                                title="Bantuan Konfigurasi">
+                            <span class="material-symbols-rounded text-[20px]">help_outline</span>
                         </button>
                     </div>
                 </div>
@@ -617,7 +626,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 </div>
 
                                 <div class="pt-4 border-t border-gray-100">
-                                    <a href="{{ url('/logout') }}" data-no-spa
+                                    <a href="{{ url('/logout?role=manager') }}" data-no-spa
                                        class="w-full py-2.5 px-4 bg-red-50 hover:bg-red-100 text-red-600 font-bold text-[12.5px] rounded-xl transition-colors flex items-center justify-center gap-2">
                                         <span class="material-symbols-rounded text-[18px]">logout</span>
                                         <span>Keluar ke Portal Login</span>

@@ -27,14 +27,23 @@ class MemberDebtReportController extends Controller
         $search = trim($request->query('search', ''));
         $perPage = max(10, min(100, (int) $request->query('per_page', 25)));
 
-        // Date range for the requested month
-        try {
-            $startDate = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
-            $endDate = Carbon::createFromFormat('Y-m', $month)->endOfMonth();
-        } catch (\Exception $e) {
-            $startDate = Carbon::now()->startOfMonth();
-            $endDate = Carbon::now()->endOfMonth();
-            $month = Carbon::now()->format('Y-m');
+        // Date range for the requested period (supports start_date/end_date, year, month, or daily)
+        if ($request->filled('start_date') && $request->filled('end_date')) {
+            $startDate = Carbon::parse($request->query('start_date'))->startOfDay();
+            $endDate = Carbon::parse($request->query('end_date'))->endOfDay();
+        } elseif ($request->filled('year')) {
+            $year = $request->query('year');
+            $startDate = Carbon::createFromDate($year, 1, 1)->startOfYear();
+            $endDate = Carbon::createFromDate($year, 12, 31)->endOfYear();
+        } else {
+            try {
+                $startDate = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
+                $endDate = Carbon::createFromFormat('Y-m', $month)->endOfMonth();
+            } catch (\Exception $e) {
+                $startDate = Carbon::now()->startOfMonth();
+                $endDate = Carbon::now()->endOfMonth();
+                $month = Carbon::now()->format('Y-m');
+            }
         }
 
         // Subquery for monthly kasbon and settlements within the month

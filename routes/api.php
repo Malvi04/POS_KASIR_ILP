@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\Manager\ConsignmentController;
 use App\Http\Controllers\Api\Manager\ConsolidatedReportController;
 use App\Http\Controllers\Api\Manager\ManagerDashboardController;
 use App\Http\Controllers\Api\Manager\MemberDebtReportController;
+use App\Http\Controllers\Api\Manager\MemberImportExportController;
 use App\Http\Controllers\Api\Manager\MemberManagementController;
 use App\Http\Controllers\Api\Manager\ProductImportExportController;
 use App\Http\Controllers\Api\Manager\PromotionController;
@@ -99,12 +100,21 @@ Route::get('/health', function () {
       ->header('Expires', '0');
 });
 
-// Authentication (Kasir, Manager, Owner)
+// Authentication & User Profile (Kasir, Manager, Owner)
 Route::prefix('auth')->group(function () {
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
     Route::match(['get', 'post'], '/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me'])->middleware('auth.api');
+    Route::put('/password', [AuthController::class, 'changePassword'])->middleware('auth.api');
+    Route::put('/pin', [AuthController::class, 'changePin'])->middleware('auth.api');
     Route::get('/cashiers', [AuthController::class, 'cashiers']);
+});
+
+// User Profile Endpoints Alias
+Route::prefix('user')->middleware('auth.api')->group(function () {
+    Route::get('/me', [AuthController::class, 'me']);
+    Route::put('/password', [AuthController::class, 'changePassword']);
+    Route::put('/pin', [AuthController::class, 'changePin']);
 });
 
 // 1. Shift & Modal Kasir (Opening Cash & Audit Closing)
@@ -123,6 +133,8 @@ Route::prefix('pos/products')->middleware('auth.api')->group(function () {
     Route::get('/sync', [ProductController::class, 'syncCatalog']);
     Route::get('/barcode/{barcode}', [ProductController::class, 'lookupBarcode']);
     Route::get('/categories', [ProductController::class, 'categories']);
+    Route::get('/umkm', [ProductController::class, 'umkmProducts']);
+    Route::post('/umkm/load', [ProductController::class, 'loadUmkmProducts']);
 });
 
 // 3. Member Validation & Credit Kasbon Potong Gaji
@@ -169,6 +181,15 @@ Route::prefix('members')->middleware('auth.api')->group(function () {
     Route::get('/', [MemberManagementController::class, 'index']);
     Route::post('/', [MemberManagementController::class, 'store']);
     Route::post('/bulk-limit', [MemberManagementController::class, 'bulkUpdateLimit']);
+
+    // Import & Export Excel Master Anggota (Standard 16 Kolom ILP)
+    Route::middleware('auth.api:manager')->group(function () {
+        Route::post('/import/validate', [MemberImportExportController::class, 'validateAndPreview']);
+        Route::post('/import/process', [MemberImportExportController::class, 'processImport']);
+        Route::get('/export/excel', [MemberImportExportController::class, 'export']);
+        Route::get('/export/template', [MemberImportExportController::class, 'downloadTemplate']);
+    });
+
     Route::get('/{id}', [MemberManagementController::class, 'show']);
     Route::put('/{id}', [MemberManagementController::class, 'update']);
     Route::delete('/{id}', [MemberManagementController::class, 'destroy']);
@@ -214,12 +235,18 @@ Route::prefix('products')->middleware('auth.api')->group(function () {
     });
 });
 
-// Konsinyasi UMKM (Mitra & Bagi Hasil)
+// Konsinyasi UMKM (Mitra, Produk UMKM, Kirim Stok Cabang & Bagi Hasil)
 Route::prefix('consignment')->middleware('auth.api:manager')->group(function () {
     Route::get('/partners', [ConsignmentController::class, 'indexPartners']);
     Route::post('/partners', [ConsignmentController::class, 'storePartner']);
     Route::put('/partners/{id}', [ConsignmentController::class, 'updatePartner']);
     Route::delete('/partners/{id}', [ConsignmentController::class, 'destroyPartner']);
+    Route::get('/products', [ConsignmentController::class, 'indexProducts']);
+    Route::post('/products', [ConsignmentController::class, 'storeProduct']);
+    Route::put('/products/{id}', [ConsignmentController::class, 'updateProduct']);
+    Route::post('/products/{id}/restock', [ConsignmentController::class, 'restockProduct']);
+    Route::delete('/products/{id}', [ConsignmentController::class, 'destroyProduct']);
+    Route::post('/send-stock', [ConsignmentController::class, 'sendStockToBranch']);
     Route::get('/report', [ConsignmentController::class, 'report']);
     Route::post('/settlement', [ConsignmentController::class, 'createSettlement']);
 });
@@ -250,6 +277,7 @@ Route::prefix('users')->middleware('auth.api:manager')->group(function () {
     Route::post('/', [UserManagementController::class, 'store']);
     Route::get('/{id}', [UserManagementController::class, 'show']);
     Route::put('/{id}', [UserManagementController::class, 'update']);
+    Route::put('/{id}/branch-assignment', [UserManagementController::class, 'updateBranchAssignment']);
     Route::delete('/{id}', [UserManagementController::class, 'destroy']);
     Route::put('/{id}/pin', [UserManagementController::class, 'resetPin']);
     Route::put('/{id}/password', [UserManagementController::class, 'resetPassword']);
@@ -363,6 +391,7 @@ Route::prefix('attendance')->middleware('auth.api')->group(function () {
     Route::get('/', [AttendanceController::class, 'index']);
     Route::post('/', [AttendanceController::class, 'store']);
     Route::get('/leaves', [AttendanceController::class, 'leaves']);
+    Route::get('/leaves/export-excel', [AttendanceController::class, 'exportLeavesExcel']);
     Route::post('/leaves', [AttendanceController::class, 'storeLeave']);
     Route::put('/leaves/{id}/status', [AttendanceController::class, 'updateLeaveStatus']);
     Route::get('/shifts', [AttendanceController::class, 'shifts']);

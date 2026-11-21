@@ -43,11 +43,25 @@
     },
 
     getActiveBranch() {
-        const raw = this.activeSession?.storeLocation || this.selectedBranch || localStorage.getItem('pos_kasir_branch') || 'Pusat';
+        const serverBranch = @js(auth()->user()?->branch ? explode(',', auth()->user()->branch)[0] : '');
+        const raw = this.activeSession?.storeLocation || localStorage.getItem('pos_kasir_branch') || serverBranch || this.selectedBranch || 'Pusat';
         return this.normalizeBranchName ? this.normalizeBranchName(raw) : raw;
     },
     getActiveTerminal() {
-        return this.activeSession?.terminalLabel || (this.formatShiftLabel ? this.formatShiftLabel(this.selectedShift) : 'POS-01');
+        if (this.activeSession?.terminalLabel) {
+            return this.activeSession.terminalLabel;
+        }
+        const branch = String(this.getActiveBranch() || '').toLowerCase();
+        const candidate = this.formatShiftLabel ? this.formatShiftLabel(this.selectedShift) : 'POS-01';
+        const m = /^POS-(\d+)$/i.exec(candidate || '');
+        const num = m ? parseInt(m[1], 10) : 1;
+        if (branch.includes('cabang a') || branch.includes('cabang 1')) {
+            return (num >= 6 && num <= 10) ? candidate : 'POS-06';
+        }
+        if (branch.includes('cabang b') || branch.includes('cabang 2')) {
+            return (num >= 11 && num <= 15) ? candidate : 'POS-11';
+        }
+        return (num >= 1 && num <= 5) ? candidate : 'POS-01';
     },
     getBranchCacheKey(branch) {
         const slug = String(branch || 'pusat').toLowerCase().replace(/[^a-z0-9]+/g, '_');
@@ -221,7 +235,19 @@
             // 1. Primary Storage: Dexie.js (IndexedDB)
             if (window.PosDb && typeof window.PosDb.products?.bulkUpsert === 'function') {
                 try {
-                    await window.PosDb.products.bulkUpsert(locId, deduped);
+                    if (window.PosDb.db && window.PosDb.db.product_cache) {
+                        const validIds = new Set(deduped.map(p => String(p.id || p.product_id)));
+                        const existingInLoc = await window.PosDb.db.product_cache.where('location_id').equals(Number(locId)).toArray();
+                        const staleAutoIds = existingInLoc
+                            .filter(item => !validIds.has(String(item.product_id)))
+                            .map(item => item.id);
+                        if (staleAutoIds.length > 0) {
+                            await window.PosDb.db.product_cache.bulkDelete(staleAutoIds);
+                        }
+                    }
+                    if (deduped.length > 0) {
+                        await window.PosDb.products.bulkUpsert(locId, deduped);
+                    }
                     const cats = [...new Set(deduped.map(p => p.category).filter(Boolean))];
                     await window.PosDb.categories.bulkUpsert(locId, cats);
                     await window.PosDb.meta.set('catalog_meta_' + locId, meta);
@@ -240,9 +266,7 @@
             } catch (storageErr) {
                 // Non-fatal because Dexie is storing the authoritative offline catalog
             }
-            if (deduped.length > 0 || this.products.length === 0) {
-                this.products = deduped.slice(0, 100);
-            }
+            this.products = deduped.slice(0, 100);
         } catch (e) {
             console.warn('[StockTokoSync] Incremental sync paused, keeping previous verified cache:', e);
         } finally {
@@ -267,6 +291,56 @@
     },
 
     displayLimit: 100,
+    isLoadingUmkmPos: false,
+    async loadUmkmProductsInPos(switchToUmkmTab = true) {
+        if (this.isLoadingUmkmPos) return;
+        this.isLoadingUmkmPos = true;
+        try {
+            const branch = this.getActiveBranch();
+            const terminal = this.getActiveTerminal();
+            const res = await fetch('/api/pos/products/umkm/load', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    branch: branch,
+                    terminal_code: terminal,
+                    location_id: this.activeSession?.locationId || null
+                })
+            });
+            const json = await res.json();
+            if (res.ok && json.success && Array.isArray(json.data)) {
+                const validUmkmSkus = new Set(json.data.map(p => String(p?.sku || '').toUpperCase()).filter(Boolean));
+                const bySku = new Map();
+                (this.products || []).forEach(p => {
+                    if (!p || !p.sku) return;
+                    const skuU = String(p.sku).toUpperCase();
+                    const isUmkm = Boolean(p.is_consignment) || skuU.startsWith('UMKM-');
+                    if (isUmkm && !validUmkmSkus.has(skuU)) {
+                        return; // Purge UMKM products not sent to this branch
+                    }
+                    bySku.set(skuU, p);
+                });
+                json.data.forEach(p => {
+                    if (p && p.sku) bySku.set(String(p.sku).toUpperCase(), p);
+                });
+                this.products = Array.from(bySku.values());
+                if (switchToUmkmTab) {
+                    this.selectedCategory = 'Produk UMKM';
+                }
+                this.triggerPosToast(json.message || 'Data Produk Mitra UMKM berhasil dimuat ke katalog POS!', json.data.length > 0 ? 'success' : 'info');
+            } else {
+                this.triggerPosToast(json.message || 'Gagal memuat produk UMKM.', 'error');
+            }
+        } catch (e) {
+            this.triggerPosToast('Gagal memuat produk UMKM dari server.', 'error');
+        } finally {
+            this.isLoadingUmkmPos = false;
+        }
+    },
     get visibleProducts() {
         return (this.filteredProducts || []).slice(0, this.displayLimit);
     },
@@ -280,7 +354,9 @@
 
         const list = (this.products || []).filter(p => {
             if (!p) return false;
-            if (selected !== 'semua') {
+            if (selected === 'produk umkm') {
+                if (!p.is_consignment) return false;
+            } else if (selected !== 'semua') {
                 const pCat = (p.category || '').trim().toLowerCase();
                 if (pCat !== selected) return false;
             }
@@ -288,7 +364,8 @@
                 const matchName = (p.name || '').toLowerCase().includes(search);
                 const matchBarcode = (p.barcode || '').toLowerCase().includes(search);
                 const matchSku = (p.sku || '').toLowerCase().includes(search);
-                return matchName || matchBarcode || matchSku;
+                const matchSupplier = (p.supplier_name || '').toLowerCase().includes(search);
+                return matchName || matchBarcode || matchSku || matchSupplier;
             }
             return true;
         });
@@ -823,7 +900,10 @@
         kembalian: 0,
         splitCash: 0,
         splitNonCash: 0,
-        qrisRef: ''
+        splitType: 'QRIS',
+        qrisRef: '',
+        transferBank: 'BCA',
+        transferRef: ''
     },
 
     // Member Live Validation for Kredit Anggota
@@ -959,8 +1039,14 @@
             cashier_nik: (this.activeOperator && this.activeOperator.nik) ? this.activeOperator.nik : (this.activeSession?.cashierNik || localStorage.getItem('pos_portal_logged_in_nik') || ''),
             cashier_name: (this.activeOperator && this.activeOperator.name) ? this.activeOperator.name : (this.activeSession?.cashierName || localStorage.getItem('pos_user_name') || ''),
             payment_method: method.toUpperCase(),
-            cash_received: method === 'tunai' ? (parseInt(this.paymentModal.uangDiterima.replace(/\D/g, ''), 10) || this.grandTotal) : 0,
-            payment_reference: method === 'qris' ? (this.paymentModal.qrisRef || ('QRIS-' + Date.now())) : null,
+            cash_received: method === 'tunai' ? (parseInt(this.paymentModal.uangDiterima.replace(/\D/g, ''), 10) || this.grandTotal) : (method === 'campuran' ? this.paymentModal.splitCash : 0),
+            payment_reference: method === 'qris'
+                ? (this.paymentModal.qrisRef || ('QRIS-' + Date.now()))
+                : (method === 'transfer'
+                    ? ((this.paymentModal.transferBank || 'BANK') + ': ' + (this.paymentModal.transferRef || ('TRF-' + Date.now())))
+                    : (method === 'campuran'
+                        ? ('CAMPURAN (' + (this.paymentModal.splitType || 'NON-TUNAI') + '): ' + (this.paymentModal.transferRef || this.paymentModal.qrisRef || ('REF-' + Date.now())))
+                        : null)),
             split_cash: method === 'campuran' ? this.paymentModal.splitCash : 0,
             split_non_cash: method === 'campuran' ? this.paymentModal.splitNonCash : 0,
             member_nik: method === 'kredit' ? (this.memberValidation.data ? this.memberValidation.data.nik : (this.selectedMember ? this.selectedMember.nik : null)) : (this.isMember && this.selectedMember ? this.selectedMember.nik : null),
@@ -1042,6 +1128,25 @@
 
             localStorage.setItem('pos_ilp_latest_printed_receipt_v1', JSON.stringify(trxRecord));
 
+            // Update Active Session figures locally for immediate real-time cash drawer update!
+            if (this.activeSession) {
+                if (json.data.payment_method === 'TUNAI') {
+                    this.activeSession.cashSalesNet = (Number(this.activeSession.cashSalesNet) || 0) + Number(json.data.grand_total || 0);
+                } else if (json.data.payment_method === 'CAMPURAN') {
+                    this.activeSession.splitCashPortion = (Number(this.activeSession.splitCashPortion) || 0) + Number(json.data.split_cash || 0);
+                    this.activeSession.splitNonCashPortion = (Number(this.activeSession.splitNonCashPortion) || 0) + Number(json.data.split_non_cash || 0);
+                } else if (json.data.payment_method === 'QRIS' || json.data.payment_method === 'TRANSFER') {
+                    this.activeSession.qrisSales = (Number(this.activeSession.qrisSales) || 0) + Number(json.data.grand_total || 0);
+                } else if (json.data.payment_method === 'KREDIT') {
+                    this.activeSession.creditSales = (Number(this.activeSession.creditSales) || 0) + Number(json.data.grand_total || 0);
+                }
+                this.activeSession.trxCount = (Number(this.activeSession.trxCount) || 0) + 1;
+                if (typeof this.recalcClosingFigures === 'function') this.recalcClosingFigures();
+                if (typeof this.persistAllState === 'function') this.persistAllState();
+                window.dispatchEvent(new CustomEvent('pos-session-sync'));
+                window.dispatchEvent(new CustomEvent('pos:session_updated'));
+            }
+
             // Refresh products catalog stock from backend
             this.initProducts();
 
@@ -1090,44 +1195,7 @@ class="flex w-full h-full relative text-gray-800">
     <!-- Main Section -->
     <main class="flex-1 flex flex-col bg-slate-50 min-w-0">
         <!-- Header -->
-        <x-cashier-header title="Terminal POS">
-            <div class="flex flex-wrap items-center gap-2">
-                <!-- Terminal & Active Operator Pill -->
-                <a href="{{ url('/kasir/sesi') }}"
-                   class="flex items-center gap-2 bg-blue-50 hover:bg-blue-100 text-[#0052cc] border border-blue-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
-                   :title="'ID Sesi: ' + (activeSession?.sessionId || '-')">
-                    <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                    <span class="font-extrabold text-[#0052cc]" x-text="activeSession?.terminalLabel || '-'">-</span>
-                    <span class="text-gray-300">•</span>
-                    <span class="material-symbols-rounded text-[15px] text-[#0052cc]">badge</span>
-                    <span class="text-gray-800 font-black" x-text="activeOperator ? activeOperator.name : (activeSession?.cashierName || localStorage.getItem('pos_user_name') || '-')">-</span>
-                </a>
-
-
-                <!-- Kunci Layar Terminal -->
-                <button type="button"
-                        @click="lockTerminal()"
-                        class="flex items-center gap-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
-                        title="Kunci Layar Terminal Sementara">
-                    <span class="material-symbols-rounded text-[16px]">lock</span>
-                    <span class="hidden sm:inline">Kunci</span>
-                </button>
-
-                <button type="button"
-                        @click="$dispatch('open-cash-movement')"
-                        class="flex items-center gap-1.5 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer">
-                    <span class="material-symbols-rounded text-[16px] text-[#0052cc]">account_balance_wallet</span>
-                    <span>Kas Laci</span>
-                </button>
-
-                <button type="button"
-                        @click="$dispatch('open-closing-wizard')"
-                        class="flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer">
-                    <span class="material-symbols-rounded text-[16px] text-amber-700">logout</span>
-                    <span>Tutup Sesi (Audit)</span>
-                </button>
-            </div>
-        </x-cashier-header>
+        <x-cashier-header title="Terminal POS" />
 
         <!-- Real-time Offline Resilience Notification Banner -->
         <template x-if="($store.network && !$store.network.isOnline)">
@@ -1215,7 +1283,17 @@ class="flex w-full h-full relative text-gray-800">
                 </div>
 
                 <!-- Category Tabs -->
-                <div class="flex gap-2 overflow-x-auto pb-3 scrollbar-hide shrink-0">
+                <div class="flex items-center gap-2 overflow-x-auto pb-3 scrollbar-hide shrink-0">
+                    <!-- Quick UMKM Filter & Load Button -->
+                    <button type="button"
+                            @click="loadUmkmProductsInPos(true)"
+                            :class="(selectedCategory || '').trim().toLowerCase() === 'produk umkm' ? 'bg-amber-600 text-white shadow-xs' : 'bg-amber-50 border border-amber-300 text-amber-800 hover:bg-amber-100'"
+                            class="px-3.5 py-2 font-bold rounded-full text-xs transition-colors whitespace-nowrap cursor-pointer flex items-center gap-1.5 shrink-0"
+                            title="Load & Tampilkan Produk Mitra UMKM">
+                        <span class="material-symbols-rounded text-[15px]" :class="isLoadingUmkmPos ? 'animate-spin' : ''">handshake</span>
+                        <span x-text="isLoadingUmkmPos ? 'Memuat UMKM...' : 'Produk UMKM'"></span>
+                    </button>
+
                     <template x-for="cat in availableCategories" :key="cat.toLowerCase()">
                         <button type="button"
                                 @click="selectedCategory = cat; displayLimit = 48"
@@ -1234,10 +1312,18 @@ class="flex w-full h-full relative text-gray-800">
                                  class="bg-white border border-gray-200 rounded-xl p-3.5 shadow-2xs hover:shadow-md hover:border-[#0052cc] cursor-pointer transition-all flex flex-col justify-between group active:scale-[0.98]">
                                 <div>
                                     <div class="flex items-start justify-between gap-1 mb-1">
-                                        <span class="text-[10px] font-bold text-[#0052cc] bg-blue-50 px-2 py-0.5 rounded" x-text="p.category"></span>
+                                        <div class="flex items-center gap-1 flex-wrap">
+                                            <span class="text-[10px] font-bold text-[#0052cc] bg-blue-50 px-2 py-0.5 rounded" x-text="p.category"></span>
+                                            <template x-if="p.is_consignment">
+                                                <span class="text-[9.5px] font-extrabold text-amber-800 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded">UMKM</span>
+                                            </template>
+                                        </div>
                                         <span class="font-mono text-[10px] text-gray-400" x-text="p.sku"></span>
                                     </div>
                                     <h4 class="font-bold text-gray-900 text-xs leading-snug line-clamp-2 group-hover:text-[#0052cc] transition-colors" x-text="p.name"></h4>
+                                    <template x-if="p.is_consignment && p.supplier_name">
+                                        <p class="text-[10px] text-amber-700 font-semibold mt-0.5 truncate" x-text="'Mitra: ' + p.supplier_name"></p>
+                                    </template>
 
                                     <!-- Auto-Discount Expired Badge (Warning H-14) -->
                                     <template x-if="p.is_near_expired">

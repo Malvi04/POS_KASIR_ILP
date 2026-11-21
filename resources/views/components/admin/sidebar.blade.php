@@ -146,7 +146,7 @@
         </div>
 
         <!-- Exit to Portal / Switch Role Button -->
-        <a href="{{ url('/logout') }}" data-no-spa class="flex items-center justify-center gap-2 px-3 py-1.5 rounded-xl text-slate-500 hover:text-red-600 hover:bg-red-50 text-[11.5px] font-medium transition-colors">
+        <a href="{{ url('/logout?role=owner') }}" data-no-spa @click="try { sessionStorage.removeItem('pos_tab_role'); sessionStorage.removeItem('pos_user_role'); sessionStorage.removeItem('pos_user_name'); } catch(e){}" class="flex items-center justify-center gap-2 px-3 py-1.5 rounded-xl text-slate-500 hover:text-red-600 hover:bg-red-50 text-[11.5px] font-medium transition-colors">
             <span class="material-symbols-rounded text-[16px]">logout</span>
             <span>Keluar ke Portal</span>
         </a>

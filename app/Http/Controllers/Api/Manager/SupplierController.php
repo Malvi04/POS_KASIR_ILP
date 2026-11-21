@@ -395,7 +395,9 @@ class SupplierController extends Controller
     }
 
     /**
-     * Delete a supplier ONLY if it has zero transactions or product relations (Rule 7).
+     * Delete a regular supplier safely.
+     * All products previously linked, warehouse physical stocks, purchase orders,
+     * and goods receipts remain completely intact (their supplier_id becomes null).
      */
     public function destroy(int $id): JsonResponse
     {
@@ -408,28 +410,38 @@ class SupplierController extends Controller
             return response()->json(['success' => false, 'message' => 'Data supplier tidak ditemukan.'], 404);
         }
 
-        $hasTransactions = Purchase::where('supplier_id', $supplier->id)->exists()
-            || SupplierProduct::where('supplier_id', $supplier->id)->exists()
-            || PurchasePriceHistory::where('supplier_id', $supplier->id)->exists()
-            || StockBatch::where('supplier_id', $supplier->id)->exists()
-            || Product::where('supplier_id', $supplier->id)->exists();
-
-        if ($hasTransactions) {
-            return response()->json([
-                'success' => false,
-                'message' => "Supplier [{$supplier->name}] memiliki riwayat transaksi atau relasi produk sehingga tidak dapat dihapus permanen. Gunakan status Nonaktif.",
-            ], 422);
-        }
-
         $name = $supplier->name;
         $code = $supplier->code;
-        $supplier->delete();
 
-        $this->recordAudit('DELETE_SUPPLIER', $code, "Menghapus supplier [{$name}] ({$code}) yang belum memiliki transaksi.");
+        DB::transaction(function () use ($supplier) {
+            // 1. Ensure no products are deleted: set supplier_id to NULL on products
+            Product::where('supplier_id', $supplier->id)->update(['supplier_id' => null]);
+
+            // 2. Preserve purchases: record original supplier in notes and set supplier_id to NULL
+            foreach (Purchase::where('supplier_id', $supplier->id)->get() as $p) {
+                $noteAppend = "[Supplier Asal: {$supplier->name} ({$supplier->code})]";
+                $p->update([
+                    'supplier_id' => null,
+                    'notes' => $p->notes ? ($p->notes . ' | ' . $noteAppend) : $noteAppend,
+                ]);
+            }
+
+            // 3. Preserve batches and price histories: set supplier_id to NULL
+            StockBatch::where('supplier_id', $supplier->id)->update(['supplier_id' => null]);
+            PurchasePriceHistory::where('supplier_id', $supplier->id)->update(['supplier_id' => null]);
+
+            // 4. Detach supplier-product mapping
+            SupplierProduct::where('supplier_id', $supplier->id)->delete();
+
+            // 5. Delete the supplier itself
+            $supplier->delete();
+        });
+
+        $this->recordAudit('DELETE_SUPPLIER', $code, "Menghapus master supplier [{$name}] ({$code}). Seluruh data barang di gudang dan riwayat transaksi tetap tersimpan aman.");
 
         return response()->json([
             'success' => true,
-            'message' => "Supplier [{$name}] berhasil dihapus.",
+            'message' => "Supplier [{$name}] ({$code}) berhasil dihapus. Data produk dan stok gudang tetap tersimpan aman.",
         ]);
     }
 

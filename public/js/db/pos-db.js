@@ -222,6 +222,10 @@
                         is_in_stock: stock > 0,
                         is_out_of_stock: stock <= 0,
                         stock_status: status,
+                        is_consignment: !!p.is_consignment,
+                        supplier_id: p.supplier_id || null,
+                        supplier_name: p.supplier_name || null,
+                        commission_percent: Number(p.commission_percent || 0),
                         is_near_expired: !!p.is_near_expired,
                         clearance_discount_percent: Number(p.clearance_discount_percent || 0),
                         updated_at: p.updated_at || new Date().toISOString()

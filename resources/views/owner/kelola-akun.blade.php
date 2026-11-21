@@ -1003,6 +1003,22 @@ function ownerKelolaAkunApp() {
                 if (res.ok) {
                     this.showEditModal = false;
                     if (window.triggerToast) window.triggerToast('Data penugasan ' + this.editingStaff.name + ' berhasil diperbarui di database!', 'success');
+
+                    const broadcastPayload = {
+                        userId: this.editingStaff.id,
+                        userName: this.editingStaff.name,
+                        branch: this.editingStaff.branch
+                    };
+                    if (window.PosRealtime && typeof window.PosRealtime.broadcast === 'function') {
+                        window.PosRealtime.broadcast('cashier_assignment_updated', broadcastPayload);
+                    }
+                    window.dispatchEvent(new CustomEvent('cashier_assignment_updated', { detail: broadcastPayload }));
+                    try {
+                        const bc = new BroadcastChannel('pos_system_channel');
+                        bc.postMessage({ type: 'cashier_assignment_updated', data: broadcastPayload });
+                        setTimeout(() => bc.close(), 1000);
+                    } catch(e) {}
+
                     await this.init();
                     return;
                 }

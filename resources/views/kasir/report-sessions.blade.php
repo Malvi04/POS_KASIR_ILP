@@ -225,9 +225,17 @@ class="flex flex-col h-screen w-full font-sans">
                                             </template>
                                         </td>
                                         <td class="px-5 py-3.5 text-center whitespace-nowrap">
-                                            <span class="px-2 py-0.5 rounded text-[10px] font-bold"
-                                                  :class="sesi.status === 'CLOSED' ? 'bg-gray-100 text-gray-700' : 'bg-blue-50 text-[#0052cc]'"
-                                                  x-text="sesi.status === 'CLOSED' ? 'Selesai Tutup' : 'Serah Terima'"></span>
+                                            <template x-if="sesi.isHandover || sesi.is_handover || sesi.handoverType === 'handover' || (sesi.closing_notes && sesi.closing_notes.includes('[SERAH TERIMA]')) || (sesi.closeNote && sesi.closeNote.includes('[SERAH TERIMA]'))">
+                                                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300">
+                                                    <span class="material-symbols-rounded text-[12px]">swap_horiz</span>
+                                                    Serah Terima
+                                                </span>
+                                            </template>
+                                            <template x-if="!(sesi.isHandover || sesi.is_handover || sesi.handoverType === 'handover' || (sesi.closing_notes && sesi.closing_notes.includes('[SERAH TERIMA]')) || (sesi.closeNote && sesi.closeNote.includes('[SERAH TERIMA]')))">
+                                                <span class="px-2 py-0.5 rounded text-[10px] font-bold"
+                                                      :class="sesi.status === 'CLOSED' ? 'bg-gray-100 text-gray-700' : 'bg-blue-50 text-[#0052cc]'"
+                                                      x-text="sesi.status === 'CLOSED' ? 'Selesai Tutup' : 'Sesi Berjalan'"></span>
+                                            </template>
                                         </td>
                                         <td class="px-5 py-3.5 text-center whitespace-nowrap">
                                             <button type="button"

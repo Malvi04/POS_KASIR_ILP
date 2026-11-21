@@ -574,6 +574,251 @@ class ExcelExportService
     }
 
     /**
+     * Generate Rekap Pengajuan Izin & Cuti Spreadsheet (.xlsx).
+     */
+    public function createLeaveRequestsSpreadsheet(iterable $leaves, array $meta = []): Spreadsheet
+    {
+        $spreadsheet = new Spreadsheet();
+        $spreadsheet->getProperties()
+            ->setCreator('POS Minimarket PT Indo Lampung Perkasa')
+            ->setLastModifiedBy($meta['generated_by'] ?? 'Manager Toko')
+            ->setTitle('Rekap Pengajuan Izin dan Cuti')
+            ->setSubject('Laporan Pengajuan Izin & Cuti Karyawan')
+            ->setDescription('Laporan rekapitulasi data permohonan izin, cuti, dan sakit karyawan koperasi PT Indo Lampung Perkasa.');
+
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Izin & Cuti');
+        $sheet->setShowGridLines(true);
+
+        // ----------------------------------------------------
+        // 1. COMPANY HEADER & REPORT TITLE
+        // ----------------------------------------------------
+        $sheet->setCellValue('A1', 'PT INDO LAMPUNG PERKASA - MINIMARKET KOPERASI');
+        $sheet->mergeCells('A1:I1');
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14)->getColor()->setRGB('003399');
+        $sheet->getStyle('A1')->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
+        $sheet->getRowDimension(1)->setRowHeight(24);
+
+        $sheet->setCellValue('A2', 'LAPORAN REKAPITULASI PENGAJUAN IZIN & CUTI KARYAWAN');
+        $sheet->mergeCells('A2:I2');
+        $sheet->getStyle('A2')->getFont()->setBold(true)->setSize(11)->getColor()->setRGB('334155');
+        $sheet->getStyle('A2')->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
+        $sheet->getRowDimension(2)->setRowHeight(20);
+
+        // Subtitle line
+        $sheet->setCellValue('A3', 'Data resmi permohonan izin, cuti tahunan, dan surat sakit.');
+        $sheet->mergeCells('A3:I3');
+        $sheet->getStyle('A3')->getFont()->setItalic(true)->setSize(9)->getColor()->setRGB('64748B');
+        $sheet->getRowDimension(3)->setRowHeight(16);
+
+        // Thin separator border below title
+        $sheet->getStyle('A3:I3')->getBorders()->getBottom()->setBorderStyle(Border::BORDER_MEDIUM)->getColor()->setRGB('0052CC');
+
+        // ----------------------------------------------------
+        // 2. METADATA BLOCK
+        // ----------------------------------------------------
+        $periodLabel = $meta['period_label'] ?? 'Semua Periode';
+        $generatedBy = $meta['generated_by'] ?? 'Manager Operasional';
+        $generatedAt = $meta['generated_at'] ?? Carbon::now()->isoFormat('D MMMM YYYY, HH:mm');
+        $totalRecords = $meta['total_records'] ?? (is_countable($leaves) ? count($leaves) : 0);
+        $totalDisetujui = $meta['disetujui'] ?? 0;
+        $totalMenunggu = $meta['menunggu'] ?? 0;
+        $totalDitolak = $meta['ditolak'] ?? 0;
+
+        $sheet->setCellValue('A5', 'Periode Filter:');
+        $sheet->setCellValue('B5', $periodLabel);
+        $sheet->getStyle('A5')->getFont()->setBold(true)->getColor()->setRGB('475569');
+        $sheet->getStyle('B5')->getFont()->setBold(true)->getColor()->setRGB('0052CC');
+
+        $sheet->setCellValue('E5', 'Waktu Unduh:');
+        $sheet->setCellValue('F5', $generatedAt . ' WIB');
+        $sheet->getStyle('E5')->getFont()->setBold(true)->getColor()->setRGB('475569');
+
+        $sheet->setCellValue('A6', 'Dicetak Oleh:');
+        $sheet->setCellValue('B6', $generatedBy);
+        $sheet->getStyle('A6')->getFont()->setBold(true)->getColor()->setRGB('475569');
+
+        $sheet->setCellValue('E6', 'Ringkasan:');
+        $sheet->setCellValue('F6', "Total: {$totalRecords} | Disetujui: {$totalDisetujui} | Menunggu: {$totalMenunggu} | Ditolak: {$totalDitolak}");
+        $sheet->getStyle('E6')->getFont()->setBold(true)->getColor()->setRGB('475569');
+        $sheet->getStyle('F6')->getFont()->getColor()->setRGB('334155');
+
+        // Meta background fill
+        $sheet->getStyle('A5:I6')->getFill()
+            ->setFillType(Fill::FILL_SOLID)
+            ->getStartColor()->setRGB(self::COLOR_META_BG);
+        $sheet->getStyle('A5:I6')->getBorders()->getAllBorders()
+            ->setBorderStyle(Border::BORDER_THIN)
+            ->getColor()->setRGB(self::COLOR_BORDER);
+
+        // ----------------------------------------------------
+        // 3. TABLE HEADERS (Row 8)
+        // ----------------------------------------------------
+        $headerRow = 8;
+        $headers = [
+            'A' => 'NO',
+            'B' => 'NAMA PERSONEL',
+            'C' => 'CABANG / PENUGASAN',
+            'D' => 'JENIS PENGAJUAN',
+            'E' => 'TANGGAL / PERIODE',
+            'F' => 'ALASAN / KETERANGAN',
+            'G' => 'STATUS',
+            'H' => 'DISETUJUI / DITINJAU OLEH',
+            'I' => 'TANGGAL PENGAJUAN',
+        ];
+
+        foreach ($headers as $col => $title) {
+            $sheet->setCellValue("{$col}{$headerRow}", $title);
+        }
+
+        $sheet->getRowDimension($headerRow)->setRowHeight(26);
+        $sheet->getStyle("A{$headerRow}:I{$headerRow}")->applyFromArray([
+            'font' => [
+                'bold' => true,
+                'color' => ['rgb' => self::COLOR_HEADER_TEXT],
+                'size' => 10,
+            ],
+            'fill' => [
+                'fillType' => Fill::FILL_SOLID,
+                'startColor' => ['rgb' => self::COLOR_HEADER_BG],
+            ],
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical' => Alignment::VERTICAL_CENTER,
+                'wrapText' => true,
+            ],
+            'borders' => [
+                'allBorders' => [
+                    'borderStyle' => Border::BORDER_THIN,
+                    'color' => ['rgb' => '003399'],
+                ],
+            ],
+        ]);
+
+        // ----------------------------------------------------
+        // 4. DATA ROWS
+        // ----------------------------------------------------
+        $currentRow = $headerRow + 1;
+        $no = 1;
+
+        foreach ($leaves as $leave) {
+            $isEven = ($no % 2 === 0);
+            $sheet->getRowDimension($currentRow)->setRowHeight(22);
+
+            $staffName = $leave->staff_name ?? '-';
+            $branchName = $leave->user?->branch?->name ?? ($leave->user?->branch_assignment ?? '-');
+            $type = strtoupper($leave->type ?? 'IZIN');
+            $dateRange = $leave->date_range ?? '-';
+            $reason = $leave->reason ?? '-';
+            $status = strtoupper($leave->status ?? 'MENUNGGU');
+            $approvedBy = $leave->approved_by ?? ($status === 'MENUNGGU' ? '-' : 'Supervisor');
+            $createdAt = $leave->created_at ? Carbon::parse($leave->created_at)->isoFormat('D MMM YYYY, HH:mm') : '-';
+
+            $sheet->setCellValue("A{$currentRow}", $no);
+            $sheet->setCellValue("B{$currentRow}", $staffName);
+            $sheet->setCellValue("C{$currentRow}", $branchName);
+            $sheet->setCellValue("D{$currentRow}", $type);
+            $sheet->setCellValue("E{$currentRow}", $dateRange);
+            $sheet->setCellValue("F{$currentRow}", $reason);
+            $sheet->setCellValue("G{$currentRow}", $status);
+            $sheet->setCellValue("H{$currentRow}", $approvedBy);
+            $sheet->setCellValue("I{$currentRow}", $createdAt);
+
+            // Row zebra striping
+            if ($isEven) {
+                $sheet->getStyle("A{$currentRow}:I{$currentRow}")->getFill()
+                    ->setFillType(Fill::FILL_SOLID)
+                    ->getStartColor()->setRGB(self::COLOR_ZEBRA_ROW);
+            }
+
+            // Cell alignments
+            $sheet->getStyle("A{$currentRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            $sheet->getStyle("B{$currentRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+            $sheet->getStyle("C{$currentRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+            $sheet->getStyle("D{$currentRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            $sheet->getStyle("E{$currentRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            $sheet->getStyle("F{$currentRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+            $sheet->getStyle("G{$currentRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            $sheet->getStyle("H{$currentRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            $sheet->getStyle("I{$currentRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+            // Status color styling
+            if ($status === 'DISETUJUI') {
+                $sheet->getStyle("G{$currentRow}")->getFont()->setBold(true)->getColor()->setRGB('166534'); // Dark Green
+            } elseif ($status === 'DITOLAK') {
+                $sheet->getStyle("G{$currentRow}")->getFont()->setBold(true)->getColor()->setRGB('DC2626'); // Red
+            } else {
+                $sheet->getStyle("G{$currentRow}")->getFont()->setBold(true)->getColor()->setRGB('D97706'); // Amber
+            }
+
+            // Type bolding
+            $sheet->getStyle("D{$currentRow}")->getFont()->setBold(true);
+
+            // Borders
+            $sheet->getStyle("A{$currentRow}:I{$currentRow}")->getBorders()->getAllBorders()
+                ->setBorderStyle(Border::BORDER_THIN)
+                ->getColor()->setRGB(self::COLOR_BORDER);
+
+            $currentRow++;
+            $no++;
+        }
+
+        // Empty state row if no data
+        if ($no === 1) {
+            $sheet->setCellValue("A{$currentRow}", 'Tidak ada data pengajuan izin atau cuti untuk periode ini.');
+            $sheet->mergeCells("A{$currentRow}:I{$currentRow}");
+            $sheet->getStyle("A{$currentRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            $sheet->getStyle("A{$currentRow}")->getFont()->setItalic(true)->getColor()->setRGB('94A3B8');
+            $sheet->getRowDimension($currentRow)->setRowHeight(28);
+            $sheet->getStyle("A{$currentRow}:I{$currentRow}")->getBorders()->getAllBorders()
+                ->setBorderStyle(Border::BORDER_THIN)
+                ->getColor()->setRGB(self::COLOR_BORDER);
+            $currentRow++;
+        }
+
+        // ----------------------------------------------------
+        // 5. SIGNATURE BLOCK
+        // ----------------------------------------------------
+        $signRow = $currentRow + 2;
+        $sheet->setCellValue("B{$signRow}", 'Dibuat / Dicatat Oleh,');
+        $sheet->setCellValue("F{$signRow}", 'Diperiksa Oleh (SPV),');
+        $sheet->setCellValue("H{$signRow}", 'Disetujui Oleh (Manager),');
+
+        $sheet->getStyle("B{$signRow}:H{$signRow}")->getFont()->setBold(true)->setSize(10)->getColor()->setRGB('334155');
+
+        $nameRow = $signRow + 4;
+        $sheet->setCellValue("B{$nameRow}", '( ' . ($generatedBy ?: '................................') . ' )');
+        $sheet->setCellValue("F{$nameRow}", '( ............................................... )');
+        $sheet->setCellValue("H{$nameRow}", '( ............................................... )');
+
+        $dateRow = $nameRow + 1;
+        $sheet->setCellValue("B{$dateRow}", 'Tanggal: ' . Carbon::now()->format('d/m/Y'));
+        $sheet->setCellValue("F{$dateRow}", 'Tanggal: .......................................');
+        $sheet->setCellValue("H{$dateRow}", 'Tanggal: .......................................');
+
+        // Column widths
+        $widths = [
+            'A' => 6,   // No
+            'B' => 24,  // Nama Personel
+            'C' => 22,  // Cabang
+            'D' => 18,  // Jenis Pengajuan
+            'E' => 22,  // Tanggal / Periode
+            'F' => 32,  // Alasan / Keterangan
+            'G' => 16,  // Status
+            'H' => 24,  // Disetujui Oleh
+            'I' => 22,  // Tanggal Pengajuan
+        ];
+
+        foreach ($widths as $col => $w) {
+            $sheet->getColumnDimension($col)->setWidth($w);
+        }
+
+        $sheet->freezePane('A9');
+
+        return $spreadsheet;
+    }
+
+    /**
      * Helper to stream download Spreadsheet as .xlsx.
      */
     public function downloadSpreadsheet(Spreadsheet $spreadsheet, string $filename): StreamedResponse

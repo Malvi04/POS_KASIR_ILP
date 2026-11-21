@@ -483,12 +483,17 @@
             try {
                 const c = new AbortController();
                 const t = setTimeout(() => c.abort(), 2000);
-                const res = await fetch('/api/goods-receipts', { headers: { 'Accept': 'application/json' }, signal: c.signal });
+                const isKasir = path.includes('goods-in') || path.includes('/kasir/produk/masuk');
+                const branch = localStorage.getItem('pos_kasir_branch') || 'Pusat';
+                const q = isKasir ? ('?branch=' + encodeURIComponent(branch)) : '';
+                const storageKey = isKasir ? ('pos_ilp_goods_in_docs_v1_' + branch) : 'pos_ilp_goods_in_docs_v1';
+
+                const res = await fetch('/api/goods-receipts' + q, { headers: { 'Accept': 'application/json' }, signal: c.signal });
                 clearTimeout(t);
                 if (res.ok) {
                     const json = await res.json();
                     if (json.success && Array.isArray(json.data)) {
-                        const localRaw = localStorage.getItem('pos_ilp_goods_in_docs_v1');
+                        const localRaw = localStorage.getItem(storageKey);
                         const localDocs = localRaw ? JSON.parse(localRaw) : [];
                         
                         const localLatestId = localDocs.length > 0 ? localDocs[0].id : null;
@@ -497,13 +502,8 @@
                         const serverCount = json.data.length;
 
                         if (localCount !== serverCount || localLatestId !== serverLatestId) {
-                            const merged = [...json.data];
-                            for (const loc of localDocs) {
-                                const exists = merged.some(m => (m.id && m.id === loc.id) || (m.docNo && m.docNo === loc.docNo));
-                                if (!exists) merged.push(loc);
-                            }
-                            originalSetItem('pos_ilp_goods_in_docs_v1', JSON.stringify(merged));
-                            PosRealtime.broadcast('goods_in_updated', { source: 'server_poll', documents: merged });
+                            originalSetItem(storageKey, JSON.stringify(json.data));
+                            PosRealtime.broadcast('goods_in_updated', { source: 'server_poll', branch: (isKasir ? branch : null), documents: json.data });
                         }
                     }
                 }

@@ -29,7 +29,7 @@ class GoodsReceiptController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $query = GoodsReceipt::with(['items.product', 'receiver', 'fromLocation', 'toLocation']);
+        $query = GoodsReceipt::with(['items.product.supplier', 'receiver', 'sender', 'fromLocation', 'toLocation']);
 
         if ($request->query('type') !== 'purchase') {
             $query->whereNull('purchase_id');
@@ -39,25 +39,46 @@ class GoodsReceiptController extends Controller
             $query->where('status', strtoupper($request->status));
         }
 
-        if ($request->filled('location_id') || $request->filled('branch')) {
-            $loc = $this->stockService->resolveLocation(
-                $request->integer('location_id') ?: null,
-                $request->query('branch'),
+        $user = Auth::user();
+        $reqBranch = $request->query('branch');
+        $reqLocationId = $request->integer('location_id') ?: null;
+
+        $targetLoc = null;
+        if ($reqLocationId || $reqBranch) {
+            $targetLoc = $this->stockService->resolveLocation(
+                $reqLocationId,
+                $reqBranch,
                 null,
                 null,
                 'STORE'
             );
-            if ($loc) {
-                $locName = strtolower($loc->name);
-                $query->where(function ($sub) use ($loc, $locName) {
-                    $sub->where('to_location_id', $loc->id)
-                        ->orWhereRaw('LOWER(destination_store) = ?', [$locName]);
-                    if (str_contains($locName, 'pusat')) {
-                        $sub->orWhereRaw('LOWER(destination_store) = ?', ['pusat'])
-                            ->orWhereRaw('LOWER(destination_store) = ?', ['toko pusat']);
-                    }
-                });
-            }
+        } elseif ($user && $user->isKasir()) {
+            $targetLoc = $this->stockService->resolveLocation(
+                null,
+                $user->branch,
+                null,
+                $user,
+                'STORE'
+            );
+        }
+
+        if ($targetLoc) {
+            $locName = strtolower($targetLoc->name);
+            $query->where(function ($sub) use ($targetLoc, $locName) {
+                $sub->where('to_location_id', $targetLoc->id)
+                    ->orWhereRaw('LOWER(destination_store) = ?', [$locName]);
+                if (str_contains($locName, 'pusat')) {
+                    $sub->orWhereRaw('LOWER(destination_store) = ?', ['pusat'])
+                        ->orWhereRaw('LOWER(destination_store) = ?', ['toko pusat'])
+                        ->orWhereRaw('LOWER(destination_store) = ?', ['minimarket ilp - pusat']);
+                } elseif (str_contains($locName, 'cabang a') || str_contains($locName, 'sektor a')) {
+                    $sub->orWhereRaw('LOWER(destination_store) = ?', ['cabang a'])
+                        ->orWhereRaw('LOWER(destination_store) = ?', ['toko cabang a']);
+                } elseif (str_contains($locName, 'cabang b') || str_contains($locName, 'sektor b')) {
+                    $sub->orWhereRaw('LOWER(destination_store) = ?', ['cabang b'])
+                        ->orWhereRaw('LOWER(destination_store) = ?', ['toko cabang b']);
+                }
+            });
         }
 
         if ($request->filled('q')) {
@@ -148,11 +169,17 @@ class GoodsReceiptController extends Controller
             $dest = $toLoc?->name ?? $destStr;
             $driver = $validated['driverName'] ?? $validated['driver_name'] ?? '-';
             $plate = $validated['plateNumber'] ?? $validated['plate_number'] ?? '-';
-            $status = strtoupper($validated['status'] ?? 'MENUNGGU_VERIFIKASI');
+            $inputStatus = strtoupper(trim($validated['status'] ?? ''));
+            if (empty($inputStatus) || $inputStatus === 'MENUNGGU_VERIFIKASI') {
+                $status = 'BELUM_SAMPAI';
+            } else {
+                $status = $inputStatus;
+            }
             $notes = $validated['generalNotes'] ?? $validated['notes'] ?? '';
 
             $receipt = GoodsReceipt::create([
                 'receipt_number' => $docNo,
+                'sent_by' => Auth::id(),
                 'from_location_id' => $fromLoc?->id,
                 'to_location_id' => $toLoc?->id,
                 'origin_source' => $origin,
@@ -175,10 +202,10 @@ class GoodsReceiptController extends Controller
 
                 $product = null;
                 if ($productId) {
-                    $product = Product::lockForUpdate()->find($productId);
+                    $product = Product::with('supplier')->lockForUpdate()->find($productId);
                 }
                 if (!$product && $sku) {
-                    $product = Product::where('sku', $sku)->orWhere('barcode', $sku)->lockForUpdate()->first();
+                    $product = Product::with('supplier')->where('sku', $sku)->orWhere('barcode', $sku)->lockForUpdate()->first();
                 }
                 if (!$product) {
                     return response()->json([
@@ -238,7 +265,7 @@ class GoodsReceiptController extends Controller
                 ]);
             }
 
-            $receipt->load(['items.product', 'receiver', 'fromLocation', 'toLocation']);
+            $receipt->load(['items.product.supplier', 'receiver', 'fromLocation', 'toLocation']);
 
             if ($status !== 'DRAFT') {
                 try {
@@ -266,88 +293,124 @@ class GoodsReceiptController extends Controller
     }
 
     /**
-     * Update shipment status (dispatch draft or cancel before verification).
+     * Update shipment status (dispatch draft, mark arrived, approve, or cancel).
      */
     public function updateStatus(Request $request, int $id): JsonResponse
     {
         $validated = $request->validate([
-            'status' => 'required|string|in:DRAFT,MENUNGGU_VERIFIKASI,DIBATALKAN',
+            'status' => 'required|string',
         ]);
 
-        return DB::transaction(function () use ($id, $validated) {
-            $receipt = GoodsReceipt::with(['items.product', 'receiver', 'fromLocation', 'toLocation'])
+        return DB::transaction(function () use ($id, $validated, $request) {
+            $receipt = GoodsReceipt::with(['items.product.supplier', 'receiver', 'sender', 'fromLocation', 'toLocation'])
                 ->lockForUpdate()
                 ->findOrFail($id);
 
-            if (in_array($receipt->status, ['DITERIMA_LENGKAP', 'DITERIMA_SELISIH'], true) || $receipt->verified_at !== null) {
+            $oldStatus = strtoupper($receipt->status);
+            $rawInput = strtoupper(trim(str_replace(' ', '_', $validated['status'])));
+
+            $targetStatus = match ($rawInput) {
+                'SUDAH_SAMPAI' => 'SUDAH_SAMPAI',
+                'APPROVED', 'DITERIMA_LENGKAP' => 'APPROVED',
+                'TIDAK_SAMPAI', 'DIBATALKAN' => 'TIDAK_SAMPAI',
+                'BELUM_SAMPAI', 'MENUNGGU_VERIFIKASI' => 'BELUM_SAMPAI',
+                default => $rawInput,
+            };
+
+            if (in_array($oldStatus, ['APPROVED', 'DITERIMA_LENGKAP', 'DITERIMA_SELISIH'], true) && in_array($targetStatus, ['BELUM_SAMPAI', 'SUDAH_SAMPAI'])) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Status dokumen yang sudah diverifikasi tidak dapat diubah.',
+                    'message' => 'Dokumen yang sudah di-Approve tidak dapat dikembalikan ke status sebelum verifikasi.',
                 ], 422);
             }
 
-            $oldStatus = $receipt->status;
-            $newStatus = strtoupper($validated['status']);
-            $fromLoc = $receipt->fromLocation ?? $this->stockService->getWarehouseLocation();
+            $destLoc = $this->resolveDestinationLocation($receipt);
+            $actingLoc = $this->resolveActorStoreLocation($request);
 
-            if ($oldStatus === 'DRAFT' && $newStatus === 'MENUNGGU_VERIFIKASI' && $fromLoc) {
+            // Validasi otorisasi gerai: kasir cabang lain dilarang memproses surat jalan milik gerai ini!
+            if ($actingLoc && $destLoc && $actingLoc->id !== $destLoc->id) {
+                return response()->json([
+                    'success' => false,
+                    'error_code' => 'FORBIDDEN_BRANCH',
+                    'message' => "Pengiriman ini ditujukan khusus untuk gerai {$receipt->destination_store}. Kasir di {$actingLoc->name} tidak berwenang untuk menerima atau menyetujui dokumen ini.",
+                ], 403);
+            }
+
+            // Jika di-Approve oleh kasir dan belum diverifikasi stoknya:
+            if ($targetStatus === 'APPROVED' && $receipt->verified_at === null) {
+                $toLoc = $destLoc;
+                if (!$toLoc) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Lokasi gerai tujuan ({$receipt->destination_store}) tidak ditemukan dalam sistem.",
+                    ], 422);
+                }
+
                 foreach ($receipt->items as $item) {
-                    $qty = (int) round((float) $item->qty_sent);
-                    if ($qty <= 0) {
-                        continue;
-                    }
-                    $hasWarehousePs = ProductStock::where('product_id', $item->product_id)
-                        ->where('location_id', $fromLoc->id)
-                        ->exists();
-                    if ($hasWarehousePs) {
-                        $deductRes = $this->stockService->deductStock($item->product_id, $fromLoc->id, $qty, [
-                            'movement_type' => 'TRANSFER_OUT',
-                            'reference_type' => GoodsReceipt::class,
-                            'reference_id' => $receipt->id,
-                            'reference_number' => $receipt->receipt_number,
-                            'user_id' => Auth::id(),
-                            'notes' => "Pengiriman draft {$receipt->receipt_number}",
-                        ]);
-                        if (!$deductRes['success']) {
-                            DB::rollBack();
-                            return response()->json([
-                                'success' => false,
-                                'message' => 'Stok Gudang Pusat tidak mencukupi untuk mengirim draft ini.',
-                            ], 422);
-                        }
-                        $item->batch_allocations = $deductRes['allocations'] ?? null;
-                        if (!empty($deductRes['allocations'][0]['expired_date'])) {
-                            $item->expired_date = $deductRes['allocations'][0]['expired_date'];
-                        }
-                        $item->save();
+                    $qtyRec = (int) round((float) $item->qty_sent);
+                    $item->qty_received = $qtyRec;
+                    $item->condition = 'BAIK';
+                    $item->save();
+
+                    if ($qtyRec > 0) {
+                        $this->creditStoreBatchesFromReceiptItem($item, $toLoc->id, $qtyRec, $receipt);
                     }
                 }
-            } elseif ($oldStatus === 'MENUNGGU_VERIFIKASI' && $newStatus === 'DIBATALKAN' && $fromLoc) {
-                foreach ($receipt->items as $item) {
-                    $qty = (int) round((float) $item->qty_sent);
-                    if ($qty <= 0) {
-                        continue;
+
+                $receipt->to_location_id = $toLoc->id;
+                $receipt->verified_at = now();
+                $receipt->received_at = now();
+                $receipt->received_by = Auth::id() ?? $receipt->received_by;
+            } elseif ($targetStatus === 'TIDAK_SAMPAI' && in_array($oldStatus, ['BELUM_SAMPAI', 'MENUNGGU_VERIFIKASI', 'SUDAH_SAMPAI'], true)) {
+                // Kembalikan alokasi stok ke gudang asal jika tidak sampai
+                $fromLoc = $receipt->fromLocation ?? $this->stockService->getWarehouseLocation();
+                if ($fromLoc) {
+                    foreach ($receipt->items as $item) {
+                        $qty = (int) round((float) $item->qty_sent);
+                        if ($qty > 0) {
+                            $this->stockService->addStock($item->product_id, $fromLoc->id, $qty, [
+                                'movement_type' => 'RETURN_IN',
+                                'unit_cost' => (float) $item->actual_unit_cost,
+                                'expired_date' => $item->expired_date?->toDateString(),
+                                'reference_type' => GoodsReceipt::class,
+                                'reference_id' => $receipt->id,
+                                'reference_number' => $receipt->receipt_number,
+                                'user_id' => Auth::id(),
+                                'notes' => "Pengiriman tidak sampai / batal {$receipt->receipt_number}",
+                            ]);
+                        }
                     }
-                    $this->stockService->addStock($item->product_id, $fromLoc->id, $qty, [
-                        'movement_type' => 'RETURN_IN',
-                        'unit_cost' => (float) $item->actual_unit_cost,
-                        'expired_date' => $item->expired_date?->toDateString(),
-                        'reference_type' => GoodsReceipt::class,
-                        'reference_id' => $receipt->id,
-                        'reference_number' => $receipt->receipt_number,
-                        'user_id' => Auth::id(),
-                        'notes' => "Pembatalan pengiriman {$receipt->receipt_number}",
-                    ]);
                 }
             }
 
-            $receipt->status = $newStatus;
+            $receipt->status = $targetStatus;
             $receipt->save();
+
+            try {
+                if ($targetStatus === 'APPROVED') {
+                    event(new StockUpdatedEvent([
+                        'location_id' => $receipt->to_location_id,
+                        'type' => 'goods_receipt_verified',
+                        'receipt_number' => $receipt->receipt_number,
+                    ]));
+
+                    NotificationController::notify(
+                        role: 'MANAGER',
+                        title: "Barang Masuk Approved: {$receipt->receipt_number}",
+                        message: "Surat jalan {$receipt->receipt_number} telah di-Approve oleh kasir di {$receipt->destination_store}. Stok toko bertambah.",
+                        category: 'TRANSFER',
+                        link: '/manager/kirim-barang',
+                        icon: 'verified',
+                        color: 'emerald',
+                        referenceId: $receipt->receipt_number
+                    );
+                }
+            } catch (\Throwable $e) {}
 
             return response()->json([
                 'success' => true,
-                'message' => 'Status surat jalan ' . $receipt->receipt_number . ' berhasil diperbarui menjadi ' . $receipt->status,
-                'data' => $this->formatReceipt($receipt->fresh(['items.product', 'receiver', 'fromLocation', 'toLocation'])),
+                'message' => 'Status surat jalan ' . $receipt->receipt_number . ' berhasil diperbarui menjadi ' . $targetStatus,
+                'data' => $this->formatReceipt($receipt->fresh(['items.product.supplier', 'receiver', 'sender', 'fromLocation', 'toLocation'])),
             ]);
         });
     }
@@ -370,8 +433,8 @@ class GoodsReceiptController extends Controller
             'items.*.note' => 'nullable|string',
         ]);
 
-        return DB::transaction(function () use ($id, $validated) {
-            $receipt = GoodsReceipt::with(['items.product', 'toLocation'])
+        return DB::transaction(function () use ($id, $validated, $request) {
+            $receipt = GoodsReceipt::with(['items.product.supplier', 'toLocation'])
                 ->lockForUpdate()
                 ->findOrFail($id);
 
@@ -391,13 +454,25 @@ class GoodsReceiptController extends Controller
                 ], 422);
             }
 
-            $toLoc = $receipt->toLocation ?? $this->stockService->resolveLocation(
-                $validated['location_id'] ?? null,
-                $validated['branch'] ?? ($receipt->destination_store !== '-' ? $receipt->destination_store : null),
-                null,
-                Auth::user(),
-                'STORE'
-            );
+            $destLoc = $this->resolveDestinationLocation($receipt);
+            $actingLoc = $this->resolveActorStoreLocation($request);
+
+            // Validasi otorisasi gerai: kasir cabang lain dilarang memverifikasi dokumen gerai ini!
+            if ($actingLoc && $destLoc && $actingLoc->id !== $destLoc->id) {
+                return response()->json([
+                    'success' => false,
+                    'error_code' => 'FORBIDDEN_BRANCH',
+                    'message' => "Pengiriman ini ditujukan khusus untuk gerai {$receipt->destination_store}. Kasir di {$actingLoc->name} tidak berwenang untuk memverifikasi dokumen ini.",
+                ], 403);
+            }
+
+            $toLoc = $destLoc;
+            if (!$toLoc) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Lokasi gerai tujuan ({$receipt->destination_store}) tidak ditemukan dalam sistem.",
+                ], 422);
+            }
 
             $hasDiscrepancy = false;
             $itemsMap = [];
@@ -424,14 +499,7 @@ class GoodsReceiptController extends Controller
                 }
 
                 if ($qtyRec > 0) {
-                    if ($toLoc) {
-                        $this->creditStoreBatchesFromReceiptItem($item, $toLoc->id, $qtyRec, $receipt);
-                    } else {
-                        $product = Product::lockForUpdate()->find($item->product_id);
-                        if ($product) {
-                            $product->increment('stock', $qtyRec);
-                        }
-                    }
+                    $this->creditStoreBatchesFromReceiptItem($item, $toLoc->id, $qtyRec, $receipt);
                 }
             }
 
@@ -439,7 +507,7 @@ class GoodsReceiptController extends Controller
                 ?? (!empty($validated['receiver_name']) ? User::where('name', $validated['receiver_name'])->first() : null);
 
             $now = now();
-            $receipt->to_location_id = $toLoc?->id ?? $receipt->to_location_id;
+            $receipt->to_location_id = $toLoc->id;
             $receipt->status = $hasDiscrepancy ? 'DITERIMA_SELISIH' : 'DITERIMA_LENGKAP';
             $receipt->received_at = $now;
             $receipt->verified_at = $now;
@@ -486,9 +554,63 @@ class GoodsReceiptController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Surat jalan ' . $receipt->receipt_number . ' berhasil diverifikasi dan stok toko telah ditambahkan.',
-                'data' => $this->formatReceipt($receipt->fresh(['items.product', 'receiver', 'fromLocation', 'toLocation'])),
+                'data' => $this->formatReceipt($receipt->fresh(['items.product.supplier', 'receiver', 'fromLocation', 'toLocation'])),
             ]);
         });
+    }
+
+    /**
+     * Resolve the strict, immutable destination STORE location of a goods receipt.
+     * Prevents cross-branch credit misdirection.
+     */
+    protected function resolveDestinationLocation(GoodsReceipt $receipt): ?Location
+    {
+        if ($receipt->to_location_id) {
+            $loc = Location::find($receipt->to_location_id);
+            if ($loc && $loc->type !== 'WAREHOUSE') {
+                return $loc;
+            }
+        }
+
+        $destStr = trim((string) $receipt->destination_store);
+        if ($destStr !== '' && $destStr !== '-') {
+            return $this->stockService->resolveLocation(null, $destStr, null, null, 'STORE');
+        }
+
+        return null;
+    }
+
+    /**
+     * Determine which physical store location the acting user/cashier is operating from.
+     */
+    protected function resolveActorStoreLocation(Request $request): ?Location
+    {
+        $branch = $request->input('branch') ?: $request->header('X-Cashier-Branch');
+        $locationId = $request->integer('location_id') ?: null;
+        $terminalCode = $request->input('terminal_code');
+        $user = Auth::user();
+
+        if ($locationId || $branch || $terminalCode) {
+            return $this->stockService->resolveLocation(
+                $locationId,
+                $branch,
+                $terminalCode,
+                null,
+                'STORE'
+            );
+        }
+
+        if ($user && $user->isKasir()) {
+            return $this->stockService->resolveLocation(
+                null,
+                $user->branch,
+                null,
+                $user,
+                'STORE'
+            );
+        }
+
+        return null;
     }
 
     /**
@@ -496,12 +618,19 @@ class GoodsReceiptController extends Controller
      */
     private function creditStoreBatchesFromReceiptItem(GoodsReceiptItem $item, int $storeLocationId, int $qtyReceived, GoodsReceipt $receipt): void
     {
+        $product = $item->product ?: Product::with('supplier')->find($item->product_id);
+        $isConsignment = (bool) ($product?->is_consignment);
+        $supplierId = $product?->supplier_id;
+        $ownershipType = $isConsignment ? 'CONSIGNMENT' : 'INTERNAL';
+
         $allocations = is_array($item->batch_allocations) ? $item->batch_allocations : [];
         if (empty($allocations)) {
             $this->stockService->addStock($item->product_id, $storeLocationId, $qtyReceived, [
                 'movement_type' => 'TRANSFER_IN',
                 'goods_receipt_id' => $receipt->id,
                 'goods_receipt_item_id' => $item->id,
+                'supplier_id' => $supplierId,
+                'ownership_type' => $ownershipType,
                 'unit_cost' => (float) ($item->actual_unit_cost ?? $item->product?->cost_price ?? 0),
                 'expired_date' => $item->expired_date?->toDateString() ?? $item->product?->expired_date?->toDateString(),
                 'reference_type' => GoodsReceipt::class,
@@ -527,6 +656,8 @@ class GoodsReceiptController extends Controller
                 'movement_type' => 'TRANSFER_IN',
                 'goods_receipt_id' => $receipt->id,
                 'goods_receipt_item_id' => $item->id,
+                'supplier_id' => $supplierId,
+                'ownership_type' => $ownershipType,
                 'unit_cost' => (float) ($alloc['unit_cost'] ?? $item->actual_unit_cost ?? 0),
                 'expired_date' => $alloc['expired_date'] ?? $item->expired_date?->toDateString(),
                 'reference_type' => GoodsReceipt::class,
@@ -543,6 +674,8 @@ class GoodsReceiptController extends Controller
                 'movement_type' => 'TRANSFER_IN',
                 'goods_receipt_id' => $receipt->id,
                 'goods_receipt_item_id' => $item->id,
+                'supplier_id' => $supplierId,
+                'ownership_type' => $ownershipType,
                 'unit_cost' => (float) ($item->actual_unit_cost ?? 0),
                 'expired_date' => $item->expired_date?->toDateString(),
                 'reference_type' => GoodsReceipt::class,
@@ -560,6 +693,17 @@ class GoodsReceiptController extends Controller
             ? $r->received_at->translatedFormat('d F Y • H:i') . ' WIB'
             : ($r->created_at ? $r->created_at->translatedFormat('d F Y • H:i') . ' WIB' : now()->translatedFormat('d F Y • H:i') . ' WIB');
 
+        $senderName = $r->sender?->name ?? 'Manager Gudang DC';
+        $senderUsername = $r->sender?->username ?? ($r->sender?->nik ?? 'manager');
+
+        $rawStatus = strtoupper($r->status ?? 'BELUM_SAMPAI');
+        $statusLabel = match ($rawStatus) {
+            'APPROVED', 'DITERIMA_LENGKAP' => 'Approved',
+            'SUDAH_SAMPAI' => 'Sudah sampai',
+            'TIDAK_SAMPAI', 'DIBATALKAN' => 'Tidak sampai',
+            default => 'Belum sampai',
+        };
+
         return [
             'id' => $r->id,
             'docNo' => $r->receipt_number,
@@ -571,25 +715,40 @@ class GoodsReceiptController extends Controller
             'destinationStore' => $r->toLocation?->name ?? ($r->destination_store ?: '-'),
             'driverName' => $r->driver_name ?: '-',
             'plateNumber' => $r->plate_number ?: '-',
-            'status' => $r->status,
+            'sent_by' => $r->sent_by,
+            'senderName' => $senderName,
+            'senderUsername' => $senderUsername,
+            'status' => $rawStatus,
+            'statusLabel' => $statusLabel,
             'createdAt' => $r->created_at ? $r->created_at->toIso8601String() : now()->toIso8601String(),
             'sentAt' => $r->status !== 'DRAFT' ? ($r->created_at ? $r->created_at->format('d M Y • H:i') . ' WIB' : now()->format('d M Y • H:i') . ' WIB') : null,
-            'receivedAt' => $r->verified_at ? $r->verified_at->format('d M Y • H:i') . ' WIB' : ($r->status !== 'MENUNGGU_VERIFIKASI' && $r->status !== 'DRAFT' && $r->received_at ? $r->received_at->format('d M Y • H:i') . ' WIB' : null),
+            'receivedAt' => $r->verified_at ? $r->verified_at->format('d M Y • H:i') . ' WIB' : ($r->status !== 'MENUNGGU_VERIFIKASI' && $r->status !== 'BELUM_SAMPAI' && $r->status !== 'DRAFT' && $r->received_at ? $r->received_at->format('d M Y • H:i') . ' WIB' : null),
             'receiverName' => $r->receiver?->name ?: null,
             'generalNotes' => $r->notes ?: '',
             'items' => $r->items->map(function ($it) {
+                $isConsignment = (bool) ($it->product?->is_consignment);
+                $partnerName = $it->product?->supplier?->name ?? ($isConsignment ? 'Mitra UMKM' : null);
+
                 return [
                     'id' => $it->id,
                     'product_id' => $it->product_id,
                     'sku' => $it->product?->sku ?: 'SKU-' . $it->product_id,
+                    'barcode' => $it->product?->barcode ?: ($it->product?->sku ?: '-'),
                     'name' => $it->product?->name ?: 'Produk',
-                    'category' => $it->product?->category ?: 'Umum',
+                    'brand' => $it->product?->brand ?: ($partnerName ?: 'ILP'),
+                    'category' => $it->product?->category ?: ($isConsignment ? 'Produk UMKM' : 'Umum'),
                     'unit' => $it->product?->unit ?: 'Pcs',
                     'qtySent' => (float) $it->qty_sent,
                     'qtyReceived' => (float) $it->qty_received,
+                    'price' => (float) ($it->product?->price ?? 0),
+                    'memberPrice' => (float) ($it->product?->member_price ?? $it->product?->price ?? 0),
                     'condition' => $it->condition ?: 'BAIK',
                     'expired_date' => $it->expired_date ? $it->expired_date->toDateString() : null,
                     'note' => $it->notes ?: '',
+                    'is_consignment' => $isConsignment,
+                    'product_type' => $isConsignment ? 'UMKM' : 'UMUM',
+                    'product_type_label' => $isConsignment ? 'Produk UMKM' : 'Produk Umum',
+                    'supplier_name' => $partnerName,
                 ];
             })->values()->all(),
         ];

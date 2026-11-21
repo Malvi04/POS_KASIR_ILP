@@ -113,15 +113,13 @@
     },
 
     updateInventoryStock(items, docType) {
-        // Only add stock if it is replacement or returned to store for sale
-        if (docType === 'RETUR_DITOLAK') return; // Rejected items are defective
         const rawProd = localStorage.getItem('pos_ilp_inventory_products_v1');
         if (!rawProd) return;
         try {
             let prods = JSON.parse(rawProd);
             items.forEach(it => {
                 const receivedQty = parseInt(it.qtyReceived, 10) || 0;
-                if (receivedQty > 0 && it.condition === 'BAIK') {
+                if (receivedQty > 0) {
                     const p = prods.find(pr => pr.sku === it.sku || pr.barcode === it.sku || ((pr.name || pr.nama) && (pr.name || pr.nama).toLowerCase().includes(it.name.toLowerCase())));
                     if (p) {
                         const cur = parseInt(p.stock !== undefined ? p.stock : (p.stok || 0), 10) || 0;
@@ -131,6 +129,7 @@
                 }
             });
             localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(prods));
+            window.dispatchEvent(new CustomEvent('pos-inventory-synced'));
         } catch(e) {
             console.error('Error updating stock', e);
         }

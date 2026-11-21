@@ -67,36 +67,28 @@ class="flex h-screen w-full bg-[#f4f7fb] font-sans text-gray-800 overflow-hidden
     <main class="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto relative">
         
         <!-- Top Navigation -->
-        <header class="h-20 bg-[#f4f7fb] flex items-center justify-between px-8 shrink-0 sticky top-0 z-10">
+        <header class="h-20 bg-[#f8f9fa] border-b border-gray-200 flex items-center justify-between px-8 shrink-0 sticky top-0 z-10">
             <!-- Title & Info -->
             <div class="flex items-center gap-3">
-                <h1 class="text-xl font-black text-gray-900 tracking-tight"
-                    x-text="isOwner() ? 'Dashboard Eksekutif & Konsolidasi Pemilik' : 'Dashboard Ringkasan Operasional'">
+                <h1 class="text-[20px] font-bold text-gray-900 tracking-tight"
+                    x-text="isOwner() ? 'Dashboard Eksekutif & Konsolidasi' : 'Dashboard Ringkasan Operasional'">
                     Dashboard Ringkasan Operasional
                 </h1>
-                <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold"
-                      :class="isOwner() ? 'bg-purple-100 text-purple-900 border border-purple-300' : 'bg-blue-50 text-[#0052cc] border border-blue-200'"
-                      x-text="isOwner() ? 'Akses Owner • Konsolidasi 3 Cabang' : 'Gerai Utama'">
-                    Gerai Utama
+                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1.5"
+                      :class="isOwner() ? 'bg-purple-100 text-purple-900 border border-purple-300' : 'bg-blue-50 text-[#0052cc] border border-blue-200'">
+                    <span class="material-symbols-rounded text-[14px]">grid_view</span>
+                    <span x-text="isOwner() ? 'Konsolidasi 3 Cabang' : 'Gerai Utama'">Gerai Utama</span>
                 </span>
             </div>
 
             <!-- Right Actions -->
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-4 text-gray-500">
                 <x-notification-bell role="MANAGER" />
-                <button type="button" @click="window.PosRealtime?.syncNow?.(); initDashboard();" class="p-2 rounded-xl bg-white hover:bg-gray-50 text-gray-600 transition-colors shadow-2xs border border-gray-200 cursor-pointer" title="Refresh Data Realtime">
-                    <span class="material-symbols-rounded text-[20px]" :class="$store.network?.isChecking ? 'animate-spin text-[#0052cc]' : ''">sync</span>
+                <button type="button" @click="window.PosRealtime?.syncNow?.(); initDashboard();" class="hover:text-gray-900 transition-colors cursor-pointer" title="Sinkronkan Data">
+                    <span class="material-symbols-rounded text-[24px]" :class="$store.network?.isChecking ? 'animate-spin text-[#0052cc]' : ''">autorenew</span>
                 </button>
-                <x-realtime-network-badge />
                 <div class="h-6 w-px bg-gray-300"></div>
-                <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-full pl-3.5 pr-1.5 py-1 shadow-2xs">
-                    <span class="text-xs font-bold text-gray-800" x-text="isOwner() ? (userName + ' (Owner)') : userName">Manager Gerai</span>
-                    <div class="w-6 h-6 rounded-full text-white flex items-center justify-center text-xs font-bold shadow-2xs"
-                         :class="isOwner() ? 'bg-purple-900 ring-2 ring-purple-300' : 'bg-[#0052cc]'"
-                         x-text="(userName || 'M').split(' ').filter(Boolean).map(w => w[0]).join('').substring(0, 2).toUpperCase()">
-                        M
-                    </div>
-                </div>
+                <x-realtime-network-badge />
             </div>
         </header>
 

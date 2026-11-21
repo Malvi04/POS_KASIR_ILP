@@ -15,6 +15,9 @@
     refundNotes: '',
     supervisorPin: '',
     pinError: '',
+    showManagerPinModal: false,
+    showPin: false,
+    isSubmitting: false,
     showReceiptModal: false,
     selectedRefundDoc: null,
     toastMessage: '',
@@ -135,12 +138,12 @@
     },
 
     get needsSupervisorAuth() {
-        return this.totalRefundCalculated > 50000;
+        return true;
     },
 
     async processRefundSubmission() {
         this.pinError = '';
-        const activeRefundItems = this.selectedItems.filter(it => it.checked && it.refundQty > 0);
+        const activeRefundItems = (this.selectedItems || []).filter(it => it.checked && it.refundQty > 0);
         if (activeRefundItems.length === 0) {
             this.pinError = 'Pilih minimal satu item belanja yang akan direfund.';
             return;
@@ -154,15 +157,19 @@
             }
         }
 
-        // Supervisor PIN validation if > 50k
-        if (this.needsSupervisorAuth) {
-            if (!this.supervisorPin || this.supervisorPin.trim().length < 4) {
-                this.pinError = 'Nominal refund di atas Rp 50.000 wajib otorisasi PIN Supervisor.';
-                return;
-            }
+        // If supervisor PIN is empty, trigger the Manager PIN modal
+        if (!this.supervisorPin || !this.supervisorPin.trim()) {
+            this.pinError = 'Silakan masukkan PIN Otorisasi Manager terlebih dahulu.';
+            this.showManagerPinModal = true;
+            this.$nextTick(() => {
+                if (this.$refs.managerPinInput) this.$refs.managerPinInput.focus();
+            });
+            return;
         }
 
-        // Call API void transaction
+        this.isSubmitting = true;
+
+        // Call API void transaction with manager/supervisor PIN
         try {
             const voidRes = await fetch('/api/pos/void/transaction', {
                 method: 'POST',
@@ -176,64 +183,81 @@
             const voidJson = await voidRes.json();
             if (!voidRes.ok || !voidJson.success) {
                 this.pinError = voidJson.message || 'Otorisasi atau proses refund ditolak sistem.';
+                this.isSubmitting = false;
                 return;
             }
+
+            const approvedBy = voidJson.data?.supervisor_name || 'Manager';
+            const approvedRole = voidJson.data?.supervisor_role || 'Manager';
+
+            const todayCode = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            const newRefundNo = '#RFD-' + todayCode + '-' + String(this.refundHistory.length + 1).padStart(3, '0');
+            const nowStr = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) + ' • ' +
+                           new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':') + ' WIB';
+            const activeCashier = this.activeSession?.cashierName || localStorage.getItem('pos_user_name') || 'Kasir';
+
+            const refundDoc = {
+                refundNo: newRefundNo,
+                date: nowStr,
+                originFaktur: this.foundFaktur.id,
+                cashier: activeCashier,
+                reason: this.refundReason,
+                condition: this.itemCondition,
+                itemCount: activeRefundItems.length,
+                refundAmount: this.totalRefundCalculated,
+                status: 'SELESAI_DIREFUND',
+                spvApproval: `Disetujui ${approvedRole} (${approvedBy})`,
+                supervisorName: approvedBy,
+                supervisorRole: approvedRole,
+                items: activeRefundItems.map(it => ({
+                    name: it.name,
+                    qty: it.refundQty,
+                    price: it.price,
+                    unit: it.unit
+                }))
+            };
+
+            // Record to cash movements as RETUR_TUNAI if cash method
+            if ((this.foundFaktur.method === 'TUNAI' || this.foundFaktur.method === 'CAMPURAN') && this.activeSession) {
+                if (voidJson.data?.shift) {
+                    this.activeSession.cashSalesNet = Number(voidJson.data.shift.cash_sales_total || 0);
+                    this.activeSession.expectedClosingCash = Number(voidJson.data.shift.expected_cash || 0);
+                } else {
+                    this.activeSession.cashReturn = (Number(this.activeSession.cashReturn) || 0) + this.totalRefundCalculated;
+                }
+                this.cashMovements.unshift({
+                    id: 'CM-' + Math.floor(100 + Math.random() * 900),
+                    time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':'),
+                    type: 'RETUR_TUNAI',
+                    label: `Refund Pelanggan ${this.foundFaktur.id} (${newRefundNo})`,
+                    amount: this.totalRefundCalculated,
+                    direction: 'out',
+                    actor: activeCashier
+                });
+                if (typeof this.recalcClosingFigures === 'function') this.recalcClosingFigures();
+                this.persistAllState();
+                window.dispatchEvent(new CustomEvent('pos-session-sync'));
+                window.dispatchEvent(new CustomEvent('pos:session_updated'));
+            }
+
+            this.refundHistory.unshift(refundDoc);
+            this.saveRefundHistory();
+            this.selectedRefundDoc = refundDoc;
+            this.showManagerPinModal = false;
+            this.showReceiptModal = true;
+            this.showToastNotice(`Refund ${newRefundNo} berhasil disetujui ${approvedBy} dan diproses!`);
+
+            // Reset form
+            this.foundFaktur = null;
+            this.searchFakturInput = '';
+            this.selectedItems = [];
+            this.supervisorPin = '';
+            this.refundNotes = '';
         } catch (e) {
             this.pinError = 'Gagal menghubungi server otorisasi refund: ' + e.message;
-            return;
+        } finally {
+            this.isSubmitting = false;
         }
-
-        const todayCode = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-        const newRefundNo = '#RFD-' + todayCode + '-' + String(this.refundHistory.length + 1).padStart(3, '0');
-        const nowStr = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) + ' • ' +
-                       new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':') + ' WIB';
-        const activeCashier = this.activeSession?.cashierName || localStorage.getItem('pos_user_name') || '-';
-
-        const refundDoc = {
-            refundNo: newRefundNo,
-            date: nowStr,
-            originFaktur: this.foundFaktur.id,
-            cashier: activeCashier,
-            reason: this.refundReason,
-            condition: this.itemCondition,
-            itemCount: activeRefundItems.length,
-            refundAmount: this.totalRefundCalculated,
-            status: 'SELESAI_DIREFUND',
-            spvApproval: this.needsSupervisorAuth ? 'Disetujui Supervisor' : 'Otorisasi Kasir Langsung',
-            items: activeRefundItems.map(it => ({
-                name: it.name,
-                qty: it.refundQty,
-                price: it.price,
-                unit: it.unit
-            }))
-        };
-
-        // Record to cash movements as RETUR_TUNAI if cash method
-        if ((this.foundFaktur.method === 'TUNAI' || this.foundFaktur.method === 'CAMPURAN') && this.activeSession) {
-            this.activeSession.cashReturn = (Number(this.activeSession.cashReturn) || 0) + this.totalRefundCalculated;
-            this.cashMovements.unshift({
-                id: 'CM-' + Math.floor(100 + Math.random() * 900),
-                time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':'),
-                type: 'RETUR_TUNAI',
-                label: `Refund Pelanggan ${this.foundFaktur.id} (${newRefundNo})`,
-                amount: this.totalRefundCalculated,
-                direction: 'out',
-                actor: activeCashier
-            });
-            this.persistAllState();
-        }
-
-        this.refundHistory.unshift(refundDoc);
-        this.saveRefundHistory();
-        this.selectedRefundDoc = refundDoc;
-        this.showReceiptModal = true;
-        this.showToastNotice(`Refund ${newRefundNo} sebesar ${this.formatRupiah(this.totalRefundCalculated)} berhasil diproses!`);
-
-        // Reset form
-        this.foundFaktur = null;
-        this.searchFakturInput = '';
-        this.selectedItems = [];
-        this.supervisorPin = '';
     },
 
     openHistoryDetail(doc) {
@@ -328,13 +352,13 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         </div>
                     </div>
 
-                    <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs flex items-center justify-between">
+                    <div class="bg-white rounded-2xl border border-blue-200 p-5 shadow-xs flex items-center justify-between border-l-4 border-l-[#0052cc]">
                         <div>
-                            <span class="text-[10px] font-bold text-gray-400 tracking-wider uppercase">BATAS PLAFON OTORISASI KASIR</span>
-                            <h3 class="text-xl font-black text-gray-900 font-mono mt-1">Rp 50.000</h3>
-                            <span class="text-[10px] text-amber-600 font-bold mt-0.5 block">&gt; Rp 50.000 Perlu SPV PIN</span>
+                            <span class="text-[10px] font-bold text-[#0052cc] tracking-wider uppercase">OTORITAS APPROVAL REFUND</span>
+                            <h3 class="text-xl font-black text-gray-900 font-mono mt-1">Wajib PIN Manager</h3>
+                            <span class="text-[10px] text-gray-500 font-medium mt-0.5 block">Supervisor / Manager / Owner</span>
                         </div>
-                        <div class="w-12 h-12 rounded-xl bg-slate-100 text-gray-700 flex items-center justify-center shrink-0">
+                        <div class="w-12 h-12 rounded-xl bg-blue-50 text-[#0052cc] flex items-center justify-center shrink-0">
                             <span class="material-symbols-rounded text-[24px]">verified_user</span>
                         </div>
                     </div>
@@ -522,25 +546,45 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <span class="font-mono text-2xl font-black text-rose-600" x-text="formatRupiah(totalRefundCalculated)">Rp 0</span>
                             </div>
 
-                            <!-- Supervisor PIN Input if > 50k -->
-                            <template x-if="needsSupervisorAuth">
-                                <div class="p-4 bg-amber-50/80 border border-amber-300 rounded-xl space-y-2">
+                            <!-- Otorisasi PIN Manager/Supervisor Card -->
+                            <div class="p-4 bg-amber-50/80 border border-amber-300 rounded-xl space-y-2.5" x-show="foundFaktur && totalRefundCalculated > 0">
+                                <div class="flex items-center justify-between">
                                     <div class="flex items-center gap-2 text-amber-900 text-xs font-bold">
-                                        <span class="material-symbols-rounded text-[18px] text-amber-600">lock</span>
-                                        <span>Otorisasi Supervisor Diperlukan (Nominal &gt; Rp 50.000):</span>
+                                        <span class="material-symbols-rounded text-[18px] text-amber-600">lock_person</span>
+                                        <span>Otorisasi Manager / Supervisor (Wajib)</span>
                                     </div>
-                                    <div class="flex items-center gap-3">
-                                        <input type="password"
-                                               x-model="supervisorPin"
-                                               maxlength="6"
-                                               placeholder="Ketik PIN Supervisor resmi..."
-                                               class="w-64 px-4 py-2 bg-white border border-amber-300 rounded-xl text-xs font-mono font-bold focus:outline-none focus:border-[#0052cc]">
-                                        <span class="text-[11px] text-gray-500">PIN Supervisor Toko</span>
-                                    </div>
+                                    <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-200/70 text-amber-900">PIN Otoritas</span>
                                 </div>
-                            </template>
+                                <p class="text-[11px] text-amber-800 leading-tight">
+                                    Kasir wajib memasukkan PIN otorisasi Manager/Supervisor yang berwenang untuk menyetujui pengembalian dana ini.
+                                </p>
+                                <div class="flex items-center gap-2 pt-1">
+                                    <div class="relative flex-1 max-w-xs">
+                                        <input :type="showPin ? 'text' : 'password'"
+                                               x-model="supervisorPin"
+                                               maxlength="20"
+                                               placeholder="Ketik PIN / Password Manager..."
+                                               @keydown.enter.prevent="processRefundSubmission()"
+                                               class="w-full pl-3.5 pr-10 py-2 bg-white border border-amber-300 rounded-xl text-xs font-mono font-bold text-gray-900 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20">
+                                        <button type="button"
+                                                @click="showPin = !showPin"
+                                                class="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none">
+                                            <span class="material-symbols-rounded text-[18px]" x-text="showPin ? 'visibility_off' : 'visibility'"></span>
+                                        </button>
+                                    </div>
+                                    <button type="button"
+                                            @click="showManagerPinModal = true; $nextTick(() => { if ($refs.managerPinInput) $refs.managerPinInput.focus(); });"
+                                            class="px-3 py-2 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer">
+                                        <span class="material-symbols-rounded text-[16px]">key</span>
+                                        <span>Buka Dialog PIN</span>
+                                    </button>
+                                </div>
+                            </div>
 
-                            <span x-show="pinError" class="text-xs font-bold text-rose-600" x-text="pinError"></span>
+                            <div x-show="pinError" class="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-bold text-rose-700 flex items-center gap-2">
+                                <span class="material-symbols-rounded text-[18px] text-rose-600 shrink-0">error</span>
+                                <span x-text="pinError"></span>
+                            </div>
 
                             <!-- Strict Stock Policy Alert -->
                             <div class="p-3.5 bg-slate-50 border border-gray-200 rounded-xl text-xs text-gray-700 flex items-start gap-3">
@@ -556,12 +600,17 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             <!-- Submit Button -->
                             <div class="flex justify-end pt-2">
                                 <button type="button"
-                                        @click="processRefundSubmission()"
-                                        :disabled="totalRefundCalculated === 0"
-                                        :class="totalRefundCalculated === 0 ? 'opacity-50 cursor-not-allowed bg-gray-400' : 'bg-rose-600 hover:bg-rose-700 cursor-pointer shadow-sm'"
+                                        @click="if (!supervisorPin || !supervisorPin.trim()) { showManagerPinModal = true; pinError = ''; $nextTick(() => { if ($refs.managerPinInput) $refs.managerPinInput.focus(); }); } else { processRefundSubmission(); }"
+                                        :disabled="totalRefundCalculated === 0 || isSubmitting"
+                                        :class="(totalRefundCalculated === 0 || isSubmitting) ? 'opacity-50 cursor-not-allowed bg-gray-400' : 'bg-rose-600 hover:bg-rose-700 cursor-pointer shadow-sm'"
                                         class="px-6 py-3 rounded-xl text-white font-bold text-xs flex items-center gap-2 transition-all">
-                                    <span class="material-symbols-rounded text-[18px]">payments</span>
-                                    <span>Proses Pengembalian Dana (Refund)</span>
+                                    <template x-if="isSubmitting">
+                                        <span class="material-symbols-rounded animate-spin text-[18px]">progress_activity</span>
+                                    </template>
+                                    <template x-if="!isSubmitting">
+                                        <span class="material-symbols-rounded text-[18px]">payments</span>
+                                    </template>
+                                    <span x-text="isSubmitting ? 'Memproses Otorisasi...' : 'Proses Pengembalian Dana (Refund)'"></span>
                                 </button>
                             </div>
                         </div>
@@ -637,6 +686,112 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
         </div>
     </main>
 
+    <!-- MODAL OTORISASI PIN MANAGER -->
+    <template x-teleport="body">
+        <div x-show="showManagerPinModal"
+             x-transition.opacity
+             style="display: none;"
+             class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+
+            <div x-show="showManagerPinModal"
+                 @click.away="if (!isSubmitting) showManagerPinModal = false"
+                 x-transition.scale.origin.center
+                 class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200 flex flex-col">
+
+                <!-- Header Modal -->
+                <div class="px-6 py-5 border-b border-gray-100 flex items-center justify-between bg-amber-50/60">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
+                            <span class="material-symbols-rounded text-[22px]">admin_panel_settings</span>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-gray-900 text-sm">Otorisasi Manager / Supervisor</h3>
+                            <p class="text-[11px] text-gray-500">Persetujuan pengembalian dana (refund) transaksi</p>
+                        </div>
+                    </div>
+                    <button type="button"
+                            @click="if (!isSubmitting) showManagerPinModal = false"
+                            class="text-gray-400 hover:text-gray-600 cursor-pointer">
+                        <span class="material-symbols-rounded text-[20px]">close</span>
+                    </button>
+                </div>
+
+                <!-- Body Modal -->
+                <div class="p-6 space-y-4 text-xs">
+                    <!-- Ringkasan Refund -->
+                    <div class="p-4 bg-slate-50 rounded-xl border border-gray-200 space-y-2">
+                        <div class="flex justify-between items-center text-gray-500 text-[11px]">
+                            <span>Nomor Faktur:</span>
+                            <span class="font-mono font-bold text-gray-900" x-text="foundFaktur?.id"></span>
+                        </div>
+                        <div class="flex justify-between items-center text-gray-500 text-[11px]">
+                            <span>Metode Pembayaran:</span>
+                            <span class="font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded" x-text="foundFaktur?.method"></span>
+                        </div>
+                        <div class="flex justify-between items-baseline pt-2 border-t border-gray-200">
+                            <span class="font-bold text-gray-700">Total Refund:</span>
+                            <span class="font-mono font-black text-rose-600 text-base" x-text="formatRupiah(totalRefundCalculated)"></span>
+                        </div>
+                    </div>
+
+                    <!-- Input PIN Field -->
+                    <div class="space-y-1.5">
+                        <label class="text-[11px] font-bold text-gray-700 tracking-wider block">
+                            PIN / PASSWORD OTORISASI MANAGER <span class="text-rose-500">*</span>
+                        </label>
+                        <div class="relative">
+                            <input :type="showPin ? 'text' : 'password'"
+                                   x-model="supervisorPin"
+                                   x-ref="managerPinInput"
+                                   maxlength="20"
+                                   placeholder="Ketik PIN Otorisasi (cth: 654321)..."
+                                   @keydown.enter.prevent="processRefundSubmission()"
+                                   class="w-full pl-4 pr-11 py-3 bg-slate-50 border border-gray-300 rounded-xl text-sm font-mono font-bold text-gray-900 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20">
+                            <button type="button"
+                                    @click="showPin = !showPin"
+                                    class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none">
+                                <span class="material-symbols-rounded text-[20px]" x-text="showPin ? 'visibility_off' : 'visibility'"></span>
+                            </button>
+                        </div>
+                        <p class="text-[10px] text-gray-500">
+                            Masukkan PIN Manager/Supervisor yang bertugas atau minta Manager mengisi PIN.
+                        </p>
+                    </div>
+
+                    <!-- Error Alert in Modal -->
+                    <div x-show="pinError" class="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-bold text-rose-700 flex items-start gap-2">
+                        <span class="material-symbols-rounded text-[18px] text-rose-600 shrink-0 mt-0.5">error</span>
+                        <span x-text="pinError" class="leading-tight"></span>
+                    </div>
+                </div>
+
+                <!-- Footer Modal -->
+                <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-2 bg-slate-50">
+                    <button type="button"
+                            @click="showManagerPinModal = false"
+                            :disabled="isSubmitting"
+                            class="px-4 py-2.5 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 rounded-xl font-bold text-xs transition-colors cursor-pointer">
+                        Batal
+                    </button>
+                    <button type="button"
+                            @click="processRefundSubmission()"
+                            :disabled="!supervisorPin || !supervisorPin.trim() || isSubmitting"
+                            :class="(!supervisorPin || !supervisorPin.trim() || isSubmitting) ? 'opacity-50 cursor-not-allowed bg-gray-400' : 'bg-rose-600 hover:bg-rose-700 cursor-pointer shadow-sm'"
+                            class="px-5 py-2.5 text-white rounded-xl font-bold text-xs flex items-center gap-2 transition-colors">
+                        <template x-if="isSubmitting">
+                            <span class="material-symbols-rounded animate-spin text-[16px]">progress_activity</span>
+                        </template>
+                        <template x-if="!isSubmitting">
+                            <span class="material-symbols-rounded text-[16px]">check_circle</span>
+                        </template>
+                        <span x-text="isSubmitting ? 'Memverifikasi...' : 'Verifikasi & Setujui Refund'"></span>
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </template>
+
     <!-- MODAL BUKTI NOTA REFUND -->
     <template x-teleport="body">
         <div x-show="showReceiptModal"
@@ -677,6 +832,10 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <div class="flex justify-between">
                             <span class="text-gray-500">Kasir Petugas:</span>
                             <span class="text-gray-800" x-text="selectedRefundDoc?.cashier"></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-500">Otorisasi Manager:</span>
+                            <span class="font-bold text-emerald-700" x-text="selectedRefundDoc?.spvApproval || 'Disetujui Manager'"></span>
                         </div>
                         <div class="flex justify-between">
                             <span class="text-gray-500">Alasan:</span>

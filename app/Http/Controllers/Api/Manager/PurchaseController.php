@@ -325,10 +325,15 @@ class PurchaseController extends Controller
         $validated = $request->validate([
             'purchase_number' => 'nullable|string|max:100',
             'purchase_date' => 'required|date',
+            'arrival_status' => 'nullable|string|in:SUDAH_SAMPAI,BELUM_SAMPAI',
+            'arrival_time' => 'nullable|string|max:10',
+            'arrived_at' => 'nullable|string',
+            'is_arrived' => 'nullable|boolean',
             'supplier_id' => 'required|exists:suppliers,id',
             'supplier_invoice_number' => 'nullable|string|max:100',
             'notes' => 'nullable|string|max:1000',
-            'status' => 'nullable|in:DRAFT,MENUNGGU_PENERIMAAN',
+            'status' => 'nullable|in:DRAFT,MENUNGGU_PENERIMAAN,SELESAI',
+            'auto_receive' => 'nullable|boolean',
             'items' => 'required|array|min:1',
             'items.*.product_id' => 'required|exists:products,id',
             'items.*.unit' => 'nullable|string|max:50',
@@ -368,14 +373,49 @@ class PurchaseController extends Controller
             }
         }
 
-        return DB::transaction(function () use ($validated, $products) {
+        return DB::transaction(function () use ($validated, $products, $request) {
             $poNumber = trim((string) ($validated['purchase_number'] ?? ''));
             if ($poNumber === '' || Purchase::where('purchase_number', $poNumber)->exists()) {
                 $poNumber = $this->generatePurchaseNumber();
             }
 
             $warehouse = Location::where('type', 'WAREHOUSE')->where('is_active', true)->first();
-            $status = $validated['status'] ?? Purchase::STATUS_MENUNGGU;
+
+            $isExplicitlyBelumSampai = ($validated['arrival_status'] ?? '') === 'BELUM_SAMPAI'
+                || $request->input('status') === Purchase::STATUS_MENUNGGU
+                || ($request->has('is_arrived') && !$request->boolean('is_arrived'));
+
+            $isArrived = !$isExplicitlyBelumSampai && (
+                ($validated['arrival_status'] ?? '') === 'SUDAH_SAMPAI'
+                || $request->boolean('is_arrived', false)
+                || $request->boolean('auto_receive', false)
+                || ($validated['status'] ?? null) === Purchase::STATUS_SELESAI
+            );
+
+            $autoReceive = $isArrived && ($validated['status'] ?? null) !== Purchase::STATUS_DRAFT;
+            $status = ($validated['status'] ?? null) === Purchase::STATUS_DRAFT
+                ? Purchase::STATUS_DRAFT
+                : ($isArrived ? Purchase::STATUS_SELESAI : Purchase::STATUS_MENUNGGU);
+
+            $arrivedAt = null;
+            if ($isArrived) {
+                $timePart = trim((string) ($request->input('arrival_time') ?: ''));
+                if ($timePart !== '') {
+                    try {
+                        $arrivedAt = Carbon::parse($validated['purchase_date'] . ' ' . $timePart);
+                    } catch (\Throwable $e) {
+                        $arrivedAt = now();
+                    }
+                } elseif (!empty($validated['arrived_at'])) {
+                    try {
+                        $arrivedAt = Carbon::parse($validated['arrived_at']);
+                    } catch (\Throwable $e) {
+                        $arrivedAt = now();
+                    }
+                } else {
+                    $arrivedAt = now();
+                }
+            }
 
             $purchase = Purchase::create([
                 'purchase_number' => $poNumber,
@@ -385,12 +425,14 @@ class PurchaseController extends Controller
                 'warehouse_name' => $warehouse?->name ?? 'Gudang Pusat (DC)',
                 'created_by' => Auth::id(),
                 'purchase_date' => $validated['purchase_date'],
+                'arrived_at' => $arrivedAt,
                 'status' => $status,
                 'total_amount' => 0,
                 'notes' => $validated['notes'] ?? null,
             ]);
 
             $grandTotal = 0.0;
+            $createdItems = [];
             foreach ($validated['items'] as $it) {
                 $prod = $products->get((int) $it['product_id']);
                 $unitName = trim((string) ($it['unit'] ?? $prod->unit ?? 'Pcs'));
@@ -407,7 +449,7 @@ class PurchaseController extends Controller
                 $subtotal = max(0.0, round(($qty * $price) - $discount, 2));
                 $grandTotal += $subtotal;
 
-                PurchaseItem::create([
+                $createdItems[] = PurchaseItem::create([
                     'purchase_id' => $purchase->id,
                     'product_id' => $prod->id,
                     'unit' => $unitName,
@@ -424,19 +466,40 @@ class PurchaseController extends Controller
             $purchase->total_amount = round($grandTotal, 2);
             $purchase->save();
 
+            if ($autoReceive) {
+                $receiptItems = [];
+                foreach ($createdItems as $idx => $pItem) {
+                    $reqItem = $validated['items'][$idx] ?? [];
+                    $receiptItems[] = [
+                        'purchase_item_id' => $pItem->id,
+                        'qty_received_now' => (float) $pItem->qty,
+                        'actual_unit_price' => (float) $pItem->purchase_price,
+                        'condition' => 'BAIK',
+                        'expired_date' => $reqItem['expired_date'] ?? null,
+                        'batch_number' => $reqItem['batch_number'] ?? null,
+                        'note' => 'Otomatis masuk Stok Master saat pembelian disimpan',
+                    ];
+                }
+                $this->executeReceipt($purchase, $receiptItems, $arrivedAt ?: Carbon::parse($validated['purchase_date']), $validated['notes'] ?? null);
+            }
+
             $this->recordAudit(
-                'CREATE_PURCHASE',
+                $autoReceive ? 'CREATE_AND_RECEIVE_PURCHASE' : 'CREATE_PURCHASE',
                 $purchase->purchase_number,
-                "Membuat transaksi pembelian {$purchase->purchase_number} ({$status}) senilai Rp " . number_format($grandTotal, 0, ',', '.')
+                $autoReceive
+                    ? "Membuat transaksi pembelian {$purchase->purchase_number} dan langsung memasukkan seluruh produk ke Stok Master senilai Rp " . number_format($grandTotal, 0, ',', '.')
+                    : "Membuat transaksi pembelian {$purchase->purchase_number} ({$status}) senilai Rp " . number_format($grandTotal, 0, ',', '.')
             );
 
             $purchase->load(['supplier', 'creator', 'items.product', 'goodsReceipts.receiver']);
 
             return response()->json([
                 'success' => true,
-                'message' => $status === Purchase::STATUS_DRAFT
-                    ? "Draft pembelian {$purchase->purchase_number} berhasil disimpan."
-                    : "Pembelian {$purchase->purchase_number} berhasil disimpan dan siap diterima di gudang.",
+                'message' => $autoReceive
+                    ? "Pembelian {$purchase->purchase_number} berhasil disimpan dan seluruh produk otomatis masuk ke Stok Master Gudang Pusat."
+                    : ($status === Purchase::STATUS_DRAFT
+                        ? "Draft pembelian {$purchase->purchase_number} berhasil disimpan."
+                        : "Pembelian {$purchase->purchase_number} berhasil disimpan dan siap diterima di gudang."),
                 'data' => $this->formatPurchase($purchase),
             ], 201);
         });
@@ -671,207 +734,16 @@ class PurchaseController extends Controller
                 ? Carbon::parse($validated['received_at'])
                 : now();
 
-            $receiptNo = $this->generateReceiptNumber();
-            $warehouse = Location::where('type', 'WAREHOUSE')->where('is_active', true)->first();
-            $warehouseName = $purchase->warehouse_name ?: ($warehouse?->name ?? 'Gudang Pusat (DC)');
+            $receipt = $this->executeReceipt($purchase, $validated['items'], $receivedAt, $validated['notes'] ?? null);
 
-            $receipt = GoodsReceipt::create([
-                'receipt_number' => $receiptNo,
-                'purchase_id' => $purchase->id,
-                'received_by' => Auth::id(),
-                'received_at' => $receivedAt,
-                'driver_name' => $purchase->supplier?->owner_name ?: ($purchase->supplier?->name ?? 'Supplier'),
-                'plate_number' => $purchase->supplier_invoice_number ?: '-',
-                'origin_source' => $purchase->supplier?->name ?? 'Supplier',
-                'destination_store' => $warehouseName,
-                'status' => $hasDiscrepancy ? 'DITERIMA_SELISIH' : 'DITERIMA_LENGKAP',
-                'notes' => $validated['notes'] ?? null,
-            ]);
-
-            foreach ($validated['items'] as $row) {
-                /** @var PurchaseItem $pItem */
-                $pItem = $itemsById->get((int) $row['purchase_item_id']);
-                $qtyNow = round((float) $row['qty_received_now'], 2);
-                $note = trim((string) ($row['note'] ?? ''));
-                $condition = strtoupper((string) ($row['condition'] ?? 'BAIK'));
-
-                // Record item on receipt only if received > 0 or manager logged a discrepancy note
-                if ($qtyNow <= 0 && $note === '') {
-                    continue;
-                }
-
-                $remainingBefore = $pItem->remaining_qty;
-                $factor = max(1, (int) ($pItem->conversion_factor ?: 1));
-
-                // Effective purchase price per unit (respecting explicit receipt override or purchase price net of unit discount)
-                $defaultUnitPrice = (float) $pItem->purchase_price;
-                if ((float) $pItem->qty > 0 && (float) $pItem->discount_amount > 0) {
-                    $defaultUnitPrice = max(0, round(((float) $pItem->subtotal) / (float) $pItem->qty, 2));
-                }
-                $actualUnitPrice = isset($row['actual_unit_price']) && $row['actual_unit_price'] !== null
-                    ? round((float) $row['actual_unit_price'], 2)
-                    : $defaultUnitPrice;
-
-                $newBaseUnitCost = round($actualUnitPrice / $factor, 2);
-
-                $grItem = GoodsReceiptItem::create([
-                    'goods_receipt_id' => $receipt->id,
-                    'purchase_item_id' => $pItem->id,
-                    'product_id' => $pItem->product_id,
-                    'qty_sent' => $remainingBefore,
-                    'qty_received' => $qtyNow,
-                    'actual_unit_cost' => $newBaseUnitCost,
-                    'condition' => $condition,
-                    'ownership_type' => 'OUTRIGHT',
-                    'notes' => $note !== '' ? $note : null,
-                ]);
-
-                if ($qtyNow > 0) {
-                    // 1. Update received quantity on purchase item
-                    $pItem->received_qty = round((float) $pItem->received_qty + $qtyNow, 2);
-                    $pItem->save();
-
-                    // 2. Lock and update Master Product (Stock + Last Cost Price ONLY; NEVER selling price)
-                    /** @var Product $product */
-                    $product = Product::where('id', $pItem->product_id)->lockForUpdate()->firstOrFail();
-
-                    $baseQtyAdded = (int) round($qtyNow * $factor);
-                    $previousPrice = $product->last_cost_price !== null
-                        ? (float) $product->last_cost_price
-                        : (float) $product->cost_price;
-
-                    $batchExpDate = !empty($row['expired_date']) ? Carbon::parse($row['expired_date'])->toDateString() : null;
-                    $batchNumber = trim((string) ($row['batch_number'] ?? ''));
-                    if ($batchNumber === '' || StockBatch::where('batch_number', $batchNumber)->exists()) {
-                        $batchNumber = $this->generateBatchNumber($product->sku);
-                    }
-
-                    // 3. Create StockBatch for FIFO & FEFO
-                    $warehouseLocId = $purchase->location_id ?: $warehouse?->id;
-                    $createdBatch = StockBatch::create([
-                        'batch_number' => $batchNumber,
-                        'product_id' => $product->id,
-                        'location_id' => $warehouseLocId,
-                        'supplier_id' => $purchase->supplier_id,
-                        'purchase_id' => $purchase->id,
-                        'goods_receipt_id' => $receipt->id,
-                        'goods_receipt_item_id' => $grItem->id,
-                        'ownership_type' => 'OUTRIGHT',
-                        'initial_qty' => $baseQtyAdded,
-                        'remaining_qty' => $baseQtyAdded,
-                        'unit_cost' => $newBaseUnitCost,
-                        'received_at' => $receivedAt,
-                        'expired_date' => $batchExpDate,
-                        'notes' => $note !== '' ? $note : "Penerimaan {$receiptNo} ({$purchase->purchase_number})",
-                    ]);
-
-                    // 3b. Sync Warehouse ProductStock (Gudang Pusat) without touching Store Stock
-                    if ($warehouseLocId) {
-                        app(\App\Services\LocationStockService::class)->addStock($product->id, $warehouseLocId, $baseQtyAdded, [
-                            'skip_batch' => true,
-                            'movement_type' => 'PURCHASE_IN',
-                            'reference_type' => Purchase::class,
-                            'reference_id' => $purchase->id,
-                            'reference_number' => $purchase->purchase_number,
-                            'user_id' => Auth::id(),
-                            'notes' => "Penerimaan pembelian {$receiptNo} (Batch {$createdBatch->batch_number})",
-                        ]);
-                        $product->refresh();
-                    }
-
-                    // 4. Increment warehouse stock & update global last_cost_price from latest valid receipt (keep price & member_price intact!)
-                    $syncService = app(SupplierProductSyncService::class);
-                    $latestGlobalCost = $syncService->resolveGlobalLatestCostPrice($product->id) ?? $newBaseUnitCost;
-
-                    if (!$warehouseLocId) {
-                        $product->stock = (int) $product->stock + $baseQtyAdded;
-                    }
-                    $product->last_cost_price = $latestGlobalCost;
-                    $product->cost_price = $latestGlobalCost;
-
-                    // FEFO: if new batch has expired_date and is earlier than current product expired_date (or product had none)
-                    if ($batchExpDate) {
-                        if (!$product->expired_date || Carbon::parse($batchExpDate)->lt(Carbon::parse($product->expired_date))) {
-                            $product->expired_date = $batchExpDate;
-                        }
-                    }
-
-                    $product->status = $product->stock <= 0
-                        ? 'HABIS'
-                        : ($product->stock <= (int) $product->min_stock ? 'STOK_RENDAH' : 'TERSEDIA');
-                    $product->save();
-
-                    // 4b. Auto-build / update supplier_products relationship & supplier-specific last purchase price
-                    $syncService->syncFromReceipt($purchase, $receipt, $product, $grItem, $receivedAt);
-
-                    // 5. Append immutable PurchasePriceHistory record
-                    $priceDiff = round($newBaseUnitCost - $previousPrice, 2);
-                    $changePct = $previousPrice > 0
-                        ? round(($priceDiff / $previousPrice) * 100, 2)
-                        : ($newBaseUnitCost > 0 ? 100.0 : 0.0);
-                    $changeType = $priceDiff > 0 ? 'NAIK' : ($priceDiff < 0 ? 'TURUN' : 'TETAP');
-
-                    PurchasePriceHistory::create([
-                        'product_id' => $product->id,
-                        'supplier_id' => $purchase->supplier_id,
-                        'purchase_id' => $purchase->id,
-                        'purchase_item_id' => $pItem->id,
-                        'goods_receipt_id' => $receipt->id,
-                        'recorded_by' => Auth::id(),
-                        'purchase_number' => $purchase->purchase_number,
-                        'unit' => $pItem->unit ?: ($product->unit ?: 'Pcs'),
-                        'conversion_factor' => $factor,
-                        'raw_unit_price' => $actualUnitPrice,
-                        'previous_price' => $previousPrice,
-                        'new_price' => $newBaseUnitCost,
-                        'price_diff' => $priceDiff,
-                        'change_percent' => $changePct,
-                        'change_type' => $changeType,
-                        'recorded_at' => $receivedAt,
-                        'notes' => $note !== '' ? $note : null,
-                    ]);
-                }
-            }
-
-            // Recompute Purchase status from all items
-            $purchase->load('items');
-            $allCompleted = $purchase->items->every(fn (PurchaseItem $i) => (float) $i->received_qty >= (float) $i->qty - 0.0001);
-            $anyReceived = $purchase->items->some(fn (PurchaseItem $i) => (float) $i->received_qty > 0);
-
-            $purchase->status = $allCompleted
-                ? Purchase::STATUS_SELESAI
-                : ($anyReceived ? Purchase::STATUS_SEBAGIAN : Purchase::STATUS_MENUNGGU);
+            $purchase->arrived_at = $receivedAt;
             $purchase->save();
-
-            // Clear cached inventory KPI summary
-            Cache::forget('products_kpi_summary_' . Carbon::today()->toDateString());
-
-            $this->recordAudit(
-                'RECEIVE_PURCHASE_GOODS',
-                $receiptNo,
-                "Konfirmasi penerimaan barang {$receiptNo} untuk PO {$purchase->purchase_number} (Status PO: {$purchase->status})."
-            );
-
-            try {
-                NotificationController::notify(
-                    role: 'MANAGER',
-                    title: "Penerimaan Pembelian {$receiptNo}",
-                    message: "Barang dari {$purchase->supplier?->name} ({$purchase->purchase_number}) diterima di gudang. Status: {$purchase->status}.",
-                    category: 'PURCHASE',
-                    link: '/pembelian-barang',
-                    icon: 'inventory',
-                    color: $allCompleted ? 'emerald' : 'amber',
-                    referenceId: $purchase->purchase_number
-                );
-            } catch (\Throwable $e) {
-                // Non-fatal notification failure
-            }
 
             $purchase->load(['supplier', 'creator', 'items.product', 'goodsReceipts.receiver']);
 
             return response()->json([
                 'success' => true,
-                'message' => "Penerimaan {$receiptNo} berhasil dikonfirmasi. Stok gudang & harga beli terakhir Master Produk telah diperbarui.",
+                'message' => "Penerimaan {$receipt->receipt_number} berhasil dikonfirmasi. Seluruh produk otomatis masuk ke Stok Master Gudang Pusat.",
                 'data' => [
                     'purchase' => $this->formatPurchase($purchase, true),
                     'receipt' => [
@@ -883,6 +755,213 @@ class PurchaseController extends Controller
                 ],
             ]);
         });
+    }
+
+    /**
+     * Execute goods receipt for a Purchase into Gudang Pusat (Stok Master).
+     */
+    protected function executeReceipt(Purchase $purchase, array $itemsData, ?Carbon $receivedAt = null, ?string $receiptNotes = null): GoodsReceipt
+    {
+        $itemsById = $purchase->items->keyBy('id');
+        $hasDiscrepancy = false;
+        foreach ($itemsData as $row) {
+            $pItem = $itemsById->get((int) ($row['purchase_item_id'] ?? 0));
+            $qtyNow = round((float) ($row['qty_received_now'] ?? 0), 2);
+            $remaining = $pItem ? $pItem->remaining_qty : 0;
+            if ($qtyNow < $remaining || (($row['condition'] ?? 'BAIK') !== 'BAIK') || !empty($row['note'])) {
+                $hasDiscrepancy = true;
+            }
+        }
+
+        $receivedAt = $receivedAt ?? now();
+        $receiptNo = $this->generateReceiptNumber();
+        $warehouse = Location::where('type', 'WAREHOUSE')->where('is_active', true)->first();
+        $warehouseName = $purchase->warehouse_name ?: ($warehouse?->name ?? 'Gudang Pusat (DC)');
+
+        $receipt = GoodsReceipt::create([
+            'receipt_number' => $receiptNo,
+            'purchase_id' => $purchase->id,
+            'received_by' => Auth::id(),
+            'received_at' => $receivedAt,
+            'driver_name' => $purchase->supplier?->owner_name ?: ($purchase->supplier?->name ?? 'Supplier'),
+            'plate_number' => $purchase->supplier_invoice_number ?: '-',
+            'origin_source' => $purchase->supplier?->name ?? 'Supplier',
+            'destination_store' => $warehouseName,
+            'status' => $hasDiscrepancy ? 'DITERIMA_SELISIH' : 'DITERIMA_LENGKAP',
+            'notes' => $receiptNotes,
+        ]);
+
+        foreach ($itemsData as $row) {
+            /** @var PurchaseItem|null $pItem */
+            $pItem = $itemsById->get((int) ($row['purchase_item_id'] ?? 0));
+            if (!$pItem) {
+                continue;
+            }
+            $qtyNow = round((float) ($row['qty_received_now'] ?? 0), 2);
+            $note = trim((string) ($row['note'] ?? ''));
+            $condition = strtoupper((string) ($row['condition'] ?? 'BAIK'));
+
+            if ($qtyNow <= 0 && $note === '') {
+                continue;
+            }
+
+            $remainingBefore = $pItem->remaining_qty;
+            $factor = max(1, (int) ($pItem->conversion_factor ?: 1));
+
+            $defaultUnitPrice = (float) $pItem->purchase_price;
+            if ((float) $pItem->qty > 0 && (float) $pItem->discount_amount > 0) {
+                $defaultUnitPrice = max(0, round(((float) $pItem->subtotal) / (float) $pItem->qty, 2));
+            }
+            $actualUnitPrice = isset($row['actual_unit_price']) && $row['actual_unit_price'] !== null
+                ? round((float) $row['actual_unit_price'], 2)
+                : $defaultUnitPrice;
+
+            $newBaseUnitCost = round($actualUnitPrice / $factor, 2);
+
+            $grItem = GoodsReceiptItem::create([
+                'goods_receipt_id' => $receipt->id,
+                'purchase_item_id' => $pItem->id,
+                'product_id' => $pItem->product_id,
+                'qty_sent' => $remainingBefore,
+                'qty_received' => $qtyNow,
+                'actual_unit_cost' => $newBaseUnitCost,
+                'condition' => $condition,
+                'ownership_type' => 'OUTRIGHT',
+                'notes' => $note !== '' ? $note : null,
+            ]);
+
+            if ($qtyNow > 0) {
+                $pItem->received_qty = round((float) $pItem->received_qty + $qtyNow, 2);
+                $pItem->save();
+
+                /** @var Product $product */
+                $product = Product::where('id', $pItem->product_id)->lockForUpdate()->firstOrFail();
+
+                $baseQtyAdded = (int) round($qtyNow * $factor);
+                $previousPrice = $product->last_cost_price !== null
+                    ? (float) $product->last_cost_price
+                    : (float) $product->cost_price;
+
+                $batchExpDate = !empty($row['expired_date']) ? Carbon::parse($row['expired_date'])->toDateString() : null;
+                $batchNumber = trim((string) ($row['batch_number'] ?? ''));
+                if ($batchNumber === '' || StockBatch::where('batch_number', $batchNumber)->exists()) {
+                    $batchNumber = $this->generateBatchNumber($product->sku);
+                }
+
+                $warehouseLocId = $purchase->location_id ?: $warehouse?->id;
+                $createdBatch = StockBatch::create([
+                    'batch_number' => $batchNumber,
+                    'product_id' => $product->id,
+                    'location_id' => $warehouseLocId,
+                    'supplier_id' => $purchase->supplier_id,
+                    'purchase_id' => $purchase->id,
+                    'goods_receipt_id' => $receipt->id,
+                    'goods_receipt_item_id' => $grItem->id,
+                    'ownership_type' => 'OUTRIGHT',
+                    'initial_qty' => $baseQtyAdded,
+                    'remaining_qty' => $baseQtyAdded,
+                    'unit_cost' => $newBaseUnitCost,
+                    'received_at' => $receivedAt,
+                    'expired_date' => $batchExpDate,
+                    'notes' => $note !== '' ? $note : "Penerimaan {$receiptNo} ({$purchase->purchase_number})",
+                ]);
+
+                if ($warehouseLocId) {
+                    app(\App\Services\LocationStockService::class)->addStock($product->id, $warehouseLocId, $baseQtyAdded, [
+                        'skip_batch' => true,
+                        'movement_type' => 'PURCHASE_IN',
+                        'reference_type' => Purchase::class,
+                        'reference_id' => $purchase->id,
+                        'reference_number' => $purchase->purchase_number,
+                        'user_id' => Auth::id(),
+                        'notes' => "Penerimaan pembelian {$receiptNo} (Batch {$createdBatch->batch_number})",
+                    ]);
+                    $product->refresh();
+                }
+
+                $syncService = app(SupplierProductSyncService::class);
+                $latestGlobalCost = $syncService->resolveGlobalLatestCostPrice($product->id) ?? $newBaseUnitCost;
+
+                if (!$warehouseLocId) {
+                    $product->stock = (int) $product->stock + $baseQtyAdded;
+                }
+                $product->last_cost_price = $latestGlobalCost;
+                $product->cost_price = $latestGlobalCost;
+
+                if ($batchExpDate) {
+                    if (!$product->expired_date || Carbon::parse($batchExpDate)->lt(Carbon::parse($product->expired_date))) {
+                        $product->expired_date = $batchExpDate;
+                    }
+                }
+
+                $product->status = $product->stock <= 0
+                    ? 'HABIS'
+                    : ($product->stock <= (int) $product->min_stock ? 'STOK_RENDAH' : 'TERSEDIA');
+                $product->save();
+
+                $syncService->syncFromReceipt($purchase, $receipt, $product, $grItem, $receivedAt);
+
+                $priceDiff = round($newBaseUnitCost - $previousPrice, 2);
+                $changePct = $previousPrice > 0
+                    ? round(($priceDiff / $previousPrice) * 100, 2)
+                    : ($newBaseUnitCost > 0 ? 100.0 : 0.0);
+                $changeType = $priceDiff > 0 ? 'NAIK' : ($priceDiff < 0 ? 'TURUN' : 'TETAP');
+
+                PurchasePriceHistory::create([
+                    'product_id' => $product->id,
+                    'supplier_id' => $purchase->supplier_id,
+                    'purchase_id' => $purchase->id,
+                    'purchase_item_id' => $pItem->id,
+                    'goods_receipt_id' => $receipt->id,
+                    'recorded_by' => Auth::id(),
+                    'purchase_number' => $purchase->purchase_number,
+                    'unit' => $pItem->unit ?: ($product->unit ?: 'Pcs'),
+                    'conversion_factor' => $factor,
+                    'raw_unit_price' => $actualUnitPrice,
+                    'previous_price' => $previousPrice,
+                    'new_price' => $newBaseUnitCost,
+                    'price_diff' => $priceDiff,
+                    'change_percent' => $changePct,
+                    'change_type' => $changeType,
+                    'recorded_at' => $receivedAt,
+                    'notes' => $note !== '' ? $note : null,
+                ]);
+            }
+        }
+
+        $purchase->load('items');
+        $allCompleted = $purchase->items->every(fn (PurchaseItem $i) => (float) $i->received_qty >= (float) $i->qty - 0.0001);
+        $anyReceived = $purchase->items->some(fn (PurchaseItem $i) => (float) $i->received_qty > 0);
+
+        $purchase->status = $allCompleted
+            ? Purchase::STATUS_SELESAI
+            : ($anyReceived ? Purchase::STATUS_SEBAGIAN : Purchase::STATUS_MENUNGGU);
+        $purchase->save();
+
+        Cache::forget('products_kpi_summary_' . Carbon::today()->toDateString());
+
+        $this->recordAudit(
+            'RECEIVE_PURCHASE_GOODS',
+            $receiptNo,
+            "Konfirmasi penerimaan barang {$receiptNo} untuk PO {$purchase->purchase_number} (Status PO: {$purchase->status})."
+        );
+
+        try {
+            NotificationController::notify(
+                role: 'MANAGER',
+                title: "Penerimaan Pembelian {$receiptNo}",
+                message: "Barang dari {$purchase->supplier?->name} ({$purchase->purchase_number}) diterima di gudang. Status: {$purchase->status}.",
+                category: 'PURCHASE',
+                link: '/pembelian-barang',
+                icon: 'inventory',
+                color: $allCompleted ? 'emerald' : 'amber',
+                referenceId: $purchase->purchase_number
+            );
+        } catch (\Throwable $e) {
+            // Non-fatal notification failure
+        }
+
+        return $receipt;
     }
 
     /**
@@ -1093,11 +1172,20 @@ class PurchaseController extends Controller
         $totalReceivedQty = round($items->sum('received_qty'), 2);
         $totalRemainingQty = round($items->sum('remaining_qty'), 2);
 
+        $arrivedAt = $purchase->arrived_at ?? $purchase->goodsReceipts->first()?->received_at;
+        $isArrived = !empty($arrivedAt) || in_array($purchase->normalized_status, [Purchase::STATUS_SELESAI, Purchase::STATUS_SEBAGIAN], true);
+
         $payload = [
             'id' => $purchase->id,
             'purchase_number' => $purchase->purchase_number,
             'purchase_date' => $purchase->purchase_date?->toDateString(),
             'purchase_date_label' => $purchase->purchase_date?->translatedFormat('d M Y'),
+            'arrived_at' => $arrivedAt?->toIso8601String(),
+            'arrival_time' => $arrivedAt ? $arrivedAt->format('H:i') : null,
+            'arrival_time_label' => $arrivedAt ? $arrivedAt->translatedFormat('d M Y, H:i') . ' WIB' : null,
+            'arrival_time_short' => $arrivedAt ? $arrivedAt->format('H:i') . ' WIB' : null,
+            'is_arrived' => $isArrived,
+            'arrival_status' => $isArrived ? 'SUDAH_SAMPAI' : 'BELUM_SAMPAI',
             'supplier_id' => $purchase->supplier_id,
             'supplier_name' => $purchase->supplier?->name ?? 'Supplier Umum',
             'supplier_code' => $purchase->supplier?->code ?? '-',

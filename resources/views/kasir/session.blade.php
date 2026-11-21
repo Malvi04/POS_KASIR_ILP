@@ -392,20 +392,33 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         </tr>
                                     </template>
 
-                                    <template x-for="sess in sessionHistory.filter(s => !activeSession || s.cashierId === activeSession.cashierId)" :key="sess.sessionId">
+                                    <template x-for="sess in sessionHistory" :key="sess.sessionId || sess.id">
                                         <tr class="hover:bg-blue-50/30 transition-colors">
-                                            <td class="py-3.5 px-4 font-mono font-bold text-[#0052cc] whitespace-nowrap" x-text="sess.sessionId"></td>
-                                            <td class="py-3.5 px-4 font-bold text-gray-800 whitespace-nowrap" x-text="sess.terminalLabel"></td>
-                                            <td class="py-3.5 px-4 font-mono text-gray-600 whitespace-nowrap" x-text="sess.startedAt + ' – ' + sess.endedAt"></td>
-                                            <td class="py-3.5 px-4 text-right font-mono text-gray-700 whitespace-nowrap" x-text="formatRupiah(sess.openingCash)"></td>
-                                            <td class="py-3.5 px-4 text-right font-mono text-gray-800 whitespace-nowrap" x-text="formatRupiah(sess.expectedClosingCash)"></td>
-                                            <td class="py-3.5 px-4 text-right font-mono font-bold text-gray-900 whitespace-nowrap" x-text="formatRupiah(sess.actualClosingCash)"></td>
-                                            <td class="py-3.5 px-4 text-right font-mono font-black whitespace-nowrap"
-                                                :class="sess.cashVariance === 0 ? 'text-emerald-600' : 'text-red-600'"
-                                                x-text="formatRupiah(sess.cashVariance)"></td>
+                                            <td class="py-3.5 px-4 font-mono font-bold text-[#0052cc] whitespace-nowrap" x-text="sess.sessionId || sess.shift_code"></td>
+                                            <td class="py-3.5 px-4 font-bold text-gray-800 whitespace-nowrap" x-text="sess.terminalLabel || sess.terminal_code"></td>
+                                            <td class="py-3.5 px-4 font-mono text-gray-600 whitespace-nowrap" x-text="(sess.startedAt || '-') + ' – ' + (sess.endedAt || '-')"></td>
+                                            <td class="py-3.5 px-4 text-right font-mono text-gray-700 whitespace-nowrap" x-text="formatRupiah(sess.openingCash ?? sess.opening_cash ?? 0)"></td>
+                                            <td class="py-3.5 px-4 text-right font-mono text-gray-800 whitespace-nowrap" x-text="formatRupiah(sess.expectedClosingCash ?? sess.expected_cash ?? 0)"></td>
+                                            <td class="py-3.5 px-4 text-right font-mono font-bold text-gray-900 whitespace-nowrap" x-text="formatRupiah(sess.actualClosingCash ?? sess.actual_cash ?? 0)"></td>
+                                            <td class="py-3.5 px-4 text-right font-mono font-black whitespace-nowrap">
+                                                <template x-if="(sess.cashVariance ?? sess.variance ?? 0) === 0">
+                                                    <span class="text-emerald-600 font-bold">Sesuai (Rp 0)</span>
+                                                </template>
+                                                <template x-if="(sess.cashVariance ?? sess.variance ?? 0) > 0">
+                                                    <span class="text-amber-600 font-bold">+<span x-text="formatRupiah(sess.cashVariance ?? sess.variance)"></span></span>
+                                                </template>
+                                                <template x-if="(sess.cashVariance ?? sess.variance ?? 0) < 0">
+                                                    <span class="text-red-600 font-bold" x-text="formatRupiah(sess.cashVariance ?? sess.variance)"></span>
+                                                </template>
+                                            </td>
                                             <td class="py-3.5 px-4 text-center whitespace-nowrap">
-                                                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase"
-                                                      x-text="sess.status"></span>
+                                                <template x-if="sess.isHandover || sess.is_handover || sess.handoverType === 'handover' || (sess.closeNote && sess.closeNote.includes('[SERAH TERIMA]')) || (sess.closing_notes && sess.closing_notes.includes('[SERAH TERIMA]'))">
+                                                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300 uppercase">SERAH TERIMA</span>
+                                                </template>
+                                                <template x-if="!(sess.isHandover || sess.is_handover || sess.handoverType === 'handover' || (sess.closeNote && sess.closeNote.includes('[SERAH TERIMA]')) || (sess.closing_notes && sess.closing_notes.includes('[SERAH TERIMA]')))">
+                                                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-gray-100 text-gray-700 border border-gray-300 uppercase"
+                                                          x-text="sess.status"></span>
+                                                </template>
                                             </td>
                                         </tr>
                                     </template>

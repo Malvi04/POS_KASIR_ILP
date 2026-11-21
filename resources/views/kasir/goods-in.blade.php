@@ -7,7 +7,6 @@
     ...cashierOpeningData(),
     searchQuery: '',
     statusFilter: 'all',
-    destinationFilter: 'all',
     showVerifyModal: false,
     showBastModal: false,
     selectedDoc: null,
@@ -17,9 +16,42 @@
 
     documents: [],
 
+    getActiveCashierBranch() {
+        if (this.activeSession && this.activeSession.storeLocation && this.activeSession.status === 'OPEN') {
+            return this.normalizeBranchName(this.activeSession.storeLocation);
+        }
+        if (this.selectedBranch) {
+            return this.normalizeBranchName(this.selectedBranch);
+        }
+        const stored = localStorage.getItem('pos_kasir_branch');
+        if (stored) {
+            return this.normalizeBranchName(stored);
+        }
+        const userBranch = '{{ auth()->user()?->branch ?? "" }}';
+        return this.normalizeBranchName(userBranch || 'Pusat');
+    },
+
+    isDocForCurrentBranch(doc, targetBranch) {
+        if (!doc) return false;
+        const b = (targetBranch || this.getActiveCashierBranch() || 'Pusat').toLowerCase();
+        const dest = (doc.destinationStore || '').toLowerCase();
+        if (b.includes('pusat')) {
+            return dest.includes('pusat') || dest.includes('minimarket');
+        }
+        if (b.includes('cabang a') || b.includes('sektor a') || b.includes('cabang 1')) {
+            return dest.includes('cabang a') || dest.includes('sektor a') || dest.includes('cabang 1');
+        }
+        if (b.includes('cabang b') || b.includes('sektor b') || b.includes('cabang 2')) {
+            return dest.includes('cabang b') || dest.includes('sektor b') || dest.includes('cabang 2');
+        }
+        return dest === b;
+    },
+
     async initGoodsIn() {
+        const branch = this.getActiveCashierBranch();
+        const storageKey = 'pos_ilp_goods_in_docs_v1_' + branch;
         let localDocs = [];
-        const stored = localStorage.getItem('pos_ilp_goods_in_docs_v1');
+        const stored = localStorage.getItem(storageKey);
         if (stored) {
             try {
                 localDocs = JSON.parse(stored);
@@ -28,43 +60,25 @@
                 localDocs = [];
             }
         }
-        this.documents = localDocs;
+        this.documents = localDocs.filter(d => this.isDocForCurrentBranch(d, branch));
 
-        try {
-            const branch = this.activeSession?.storeLocation || this.selectedBranch || localStorage.getItem('pos_kasir_branch') || '';
-            const q = branch ? ('?branch=' + encodeURIComponent(branch)) : '';
-            const res = await fetch('/api/goods-receipts' + q, { headers: { 'Accept': 'application/json' } });
-            if (res.ok) {
-                const json = await res.json();
-                if (json.success && Array.isArray(json.data)) {
-                    this.documents = json.data;
-                    this.saveDocs();
-                }
-            }
-        } catch(e) {
-            console.warn('API goods-receipts fetch error:', e);
-            this.documents = [];
-        }
+        await this.refreshDocsFromServer();
 
         // Sinkronisasi real-time antar tab & perangkat (Manager Kirim Barang <-> Kasir Barang Masuk)
-        const updateFromStorage = () => {
-            const stored = localStorage.getItem('pos_ilp_goods_in_docs_v1');
-            if (stored) {
-                try {
-                    const parsed = JSON.parse(stored);
-                    if (Array.isArray(parsed)) this.documents = parsed;
-                } catch(err) {}
-            }
-        };
-
         window.addEventListener('storage', (e) => {
-            if (e.key === 'pos_ilp_goods_in_docs_v1' && e.newValue) {
-                updateFromStorage();
+            const curBranch = this.getActiveCashierBranch();
+            if (e.key === ('pos_ilp_goods_in_docs_v1_' + curBranch) && e.newValue) {
+                try {
+                    const parsed = JSON.parse(e.newValue);
+                    if (Array.isArray(parsed)) {
+                        this.documents = parsed.filter(d => this.isDocForCurrentBranch(d, curBranch));
+                    }
+                } catch(err) {}
             }
         });
 
-        window.addEventListener('pos:goods_in_updated', (e) => {
-            updateFromStorage();
+        window.addEventListener('pos:goods_in_updated', () => {
+            this.refreshDocsFromServer();
         });
 
         window.addEventListener('pos:sync-all', () => {
@@ -74,29 +88,28 @@
 
     async refreshDocsFromServer() {
         try {
-            const branch = this.activeSession?.storeLocation || this.selectedBranch || localStorage.getItem('pos_kasir_branch') || '';
-            const q = branch ? ('?branch=' + encodeURIComponent(branch)) : '';
-            const res = await fetch('/api/goods-receipts' + q, { headers: { 'Accept': 'application/json' } });
+            const branch = this.getActiveCashierBranch();
+            const res = await fetch('/api/goods-receipts?branch=' + encodeURIComponent(branch), {
+                headers: { 'Accept': 'application/json' }
+            });
             if (res.ok) {
                 const json = await res.json();
                 if (json.success && Array.isArray(json.data)) {
-                    const apiDocs = json.data;
-                    const merged = [...apiDocs];
-                    for (const loc of this.documents) {
-                        const exists = merged.some(m => (m.id && m.id === loc.id) || (m.docNo && m.docNo === loc.docNo));
-                        if (!exists) merged.push(loc);
-                    }
-                    this.documents = merged;
+                    this.documents = json.data.filter(d => this.isDocForCurrentBranch(d, branch));
                     this.saveDocs();
                 }
             }
-        } catch(e) {}
+        } catch(e) {
+            console.warn('API goods-receipts fetch error:', e);
+        }
     },
 
     saveDocs() {
-        localStorage.setItem('pos_ilp_goods_in_docs_v1', JSON.stringify(this.documents));
+        const branch = this.getActiveCashierBranch();
+        const storageKey = 'pos_ilp_goods_in_docs_v1_' + branch;
+        localStorage.setItem(storageKey, JSON.stringify(this.documents));
         if (window.PosRealtime) {
-            window.PosRealtime.broadcast('goods_in_updated', { documents: this.documents });
+            window.PosRealtime.broadcast('goods_in_updated', { branch: branch, documents: this.documents });
         }
     },
 
@@ -105,26 +118,32 @@
     },
 
     get filteredDocuments() {
+        const branch = this.getActiveCashierBranch();
         let list = this.documents.filter(doc => {
-            if (this.statusFilter !== 'all' && doc.status !== this.statusFilter) return false;
-            if (this.destinationFilter !== 'all' && doc.destinationStore !== this.destinationFilter) return false;
+            // Isolasi gerai: Hanya tampilkan surat jalan yang ditujukan ke cabang kasir saat ini
+            if (!this.isDocForCurrentBranch(doc, branch)) return false;
+
+            if (this.statusFilter !== 'all') {
+                if (this.statusFilter === 'APPROVED' && doc.status !== 'APPROVED' && doc.status !== 'DITERIMA_LENGKAP') return false;
+                else if (this.statusFilter === 'BELUM_SAMPAI' && doc.status !== 'BELUM_SAMPAI' && doc.status !== 'MENUNGGU_VERIFIKASI') return false;
+                else if (this.statusFilter !== 'APPROVED' && this.statusFilter !== 'BELUM_SAMPAI' && doc.status !== this.statusFilter) return false;
+            }
             if (this.searchQuery.trim() !== '') {
                 const q = this.searchQuery.toLowerCase();
                 const matchNo = (doc.docNo || '').toLowerCase().includes(q);
                 const matchWh = (doc.warehouseOrigin || '').toLowerCase().includes(q);
                 const matchDest = (doc.destinationStore || '').toLowerCase().includes(q);
-                const matchDriver = (doc.driverName || '').toLowerCase().includes(q) || (doc.plateNumber || '').toLowerCase().includes(q);
-                const matchProd = Array.isArray(doc.items) && doc.items.some(it => (it.name || '').toLowerCase().includes(q) || (it.sku || '').toLowerCase().includes(q));
+                const matchDriver = (doc.senderName || doc.driverName || '').toLowerCase().includes(q) || (doc.plateNumber || '').toLowerCase().includes(q);
+                const matchProd = Array.isArray(doc.items) && doc.items.some(it => (it.name || '').toLowerCase().includes(q) || (it.sku || '').toLowerCase().includes(q) || (it.barcode || '').toLowerCase().includes(q) || (it.brand || '').toLowerCase().includes(q));
                 return matchNo || matchWh || matchDest || matchDriver || matchProd;
             }
             return true;
         });
 
-        // Urutkan: Dokumen MENUNGGU_VERIFIKASI (Perlu Verifikasi) prioritas paling atas,
-        // lalu diurutkan dari dokumen/ID terbaru ke terlama (descending)
+        // Urutkan: Dokumen yang belum selesai (Belum/Sudah Sampai/Menunggu) prioritas paling atas
         return list.sort((a, b) => {
-            const isPendingA = a.status === 'MENUNGGU_VERIFIKASI' ? 1 : 0;
-            const isPendingB = b.status === 'MENUNGGU_VERIFIKASI' ? 1 : 0;
+            const isPendingA = (a.status === 'BELUM_SAMPAI' || a.status === 'SUDAH_SAMPAI' || a.status === 'MENUNGGU_VERIFIKASI') ? 1 : 0;
+            const isPendingB = (b.status === 'BELUM_SAMPAI' || b.status === 'SUDAH_SAMPAI' || b.status === 'MENUNGGU_VERIFIKASI') ? 1 : 0;
             if (isPendingA !== isPendingB) {
                 return isPendingB - isPendingA;
             }
@@ -140,18 +159,35 @@
     },
 
     get pendingCount() {
-        return this.documents.filter(d => d.status === 'MENUNGGU_VERIFIKASI').length;
+        return this.documents.filter(d => d.status === 'BELUM_SAMPAI' || d.status === 'MENUNGGU_VERIFIKASI').length;
+    },
+
+    get arrivedCount() {
+        return this.documents.filter(d => d.status === 'SUDAH_SAMPAI').length;
+    },
+
+    get approvedCount() {
+        return this.documents.filter(d => d.status === 'APPROVED' || d.status === 'DITERIMA_LENGKAP').length;
     },
 
     get completedFullCount() {
-        return this.documents.filter(d => d.status === 'DITERIMA_LENGKAP').length;
+        return this.approvedCount;
     },
 
     get completedVarianceCount() {
-        return this.documents.filter(d => d.status === 'DITERIMA_SELISIH').length;
+        return this.documents.filter(d => d.status === 'DITERIMA_SELISIH' || d.status === 'TIDAK_SAMPAI').length;
+    },
+
+    formatRupiah(num) {
+        return 'Rp ' + Number(num || 0).toLocaleString('id-ID');
     },
 
     openVerification(doc) {
+        const branch = this.getActiveCashierBranch();
+        if (!this.isDocForCurrentBranch(doc, branch)) {
+            this.showToastNotice(`Akses Ditolak: Dokumen ${doc.docNo} ditujukan untuk ${doc.destinationStore}. Anda bertugas di ${branch}.`);
+            return;
+        }
         // Clone doc to avoid direct mutation before confirmation
         this.selectedDoc = JSON.parse(JSON.stringify(doc));
         if (this.selectedDoc && Array.isArray(this.selectedDoc.items)) {
@@ -201,6 +237,12 @@
 
     async confirmGoodsReceipt() {
         if (!this.selectedDoc) return;
+        const branch = this.getActiveCashierBranch();
+        if (!this.isDocForCurrentBranch(this.selectedDoc, branch)) {
+            this.showToastNotice(`Akses Ditolak: Dokumen ${this.selectedDoc.docNo} ditujukan untuk ${this.selectedDoc.destinationStore}. Anda bertugas di ${branch}.`);
+            this.showVerifyModal = false;
+            return;
+        }
 
         const nowStr = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) + ' • ' +
                        new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':') + ' WIB';
@@ -224,7 +266,6 @@
             // Update Stock Toko via API (wajib sukses sebelum memperbarui state lokal)
             if (original.id && typeof original.id === 'number') {
                 try {
-                    const branch = this.activeSession?.storeLocation || this.selectedBranch || localStorage.getItem('pos_kasir_branch') || '';
                     const res = await fetch('/api/goods-receipts/' + original.id + '/verify', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -256,14 +297,63 @@
                 }
             }
 
+            this.updateInventoryStock(original.items);
             this.saveDocs();
             window.dispatchEvent(new CustomEvent('pos-inventory-synced'));
             if (window.PosRealtime) {
-                window.PosRealtime.broadcast('inventory_updated', { source: 'goods_in_verified' });
+                window.PosRealtime.broadcast('inventory_updated', { source: 'goods_in_verified', branch: branch });
             }
 
             this.showVerifyModal = false;
-            this.showToastNotice(`Dokumen ${original.docNo} berhasil dikonfirmasi (${original.status === 'DITERIMA_LENGKAP' ? 'Lengkap Sesuai' : 'Ada Selisih Fisik'}) dan stok produk telah diperbarui!`);
+            this.showToastNotice(`Dokumen ${original.docNo} berhasil dikonfirmasi (${original.status === 'DITERIMA_LENGKAP' ? 'Lengkap Sesuai' : 'Ada Selisih Fisik'}) dan stok gerai ${original.destinationStore} telah diperbarui!`);
+        }
+    },
+
+    async updateReceiptStatus(doc, targetStatus) {
+        if (!doc || !doc.id) return;
+        const branch = this.getActiveCashierBranch();
+        if (!this.isDocForCurrentBranch(doc, branch)) {
+            this.showToastNotice(`Akses Ditolak: Dokumen ${doc.docNo} ditujukan untuk ${doc.destinationStore}. Anda bertugas di ${branch}.`);
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/goods-receipts/' + doc.id + '/status', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    status: targetStatus,
+                    branch: branch,
+                    location_id: this.activeSession?.locationId || null
+                })
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok || !json.success) {
+                this.showToastNotice(json.message || 'Gagal memperbarui status dokumen di server.');
+                return;
+            }
+            if (json.data) {
+                Object.assign(doc, json.data);
+            } else {
+                doc.status = targetStatus;
+            }
+            this.saveDocs();
+            this.showToastNotice(`Status surat jalan ${doc.docNo} berhasil diubah menjadi: ${doc.statusLabel || targetStatus}`);
+            if (targetStatus === 'APPROVED' || targetStatus === 'Approved') {
+                if (doc.items) {
+                    this.updateInventoryStock(doc.items);
+                }
+                window.dispatchEvent(new CustomEvent('pos-inventory-synced'));
+                if (window.PosRealtime) {
+                    window.PosRealtime.broadcast('inventory_updated', { source: 'goods_in_approved', branch: branch });
+                }
+            }
+        } catch (e) {
+            this.showToastNotice('Gagal menghubungi server: ' + e.message);
         }
     },
 
@@ -310,8 +400,18 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <p class="text-xs text-gray-500 mt-1 font-medium">Verifikasi surat jalan transfer dari gudang pusat dan pencatatan selisih barang.</p>
                     </div>
 
-                    <!-- Online Status Badge -->
+                    <!-- Branch & Online Status Badge -->
                     <div class="flex items-center gap-3">
+                        <div class="bg-white border border-gray-200 rounded-xl px-4 py-2 flex items-center gap-2.5 shadow-xs">
+                            <div class="w-8 h-8 rounded-lg bg-blue-50 text-[#0052cc] flex items-center justify-center shrink-0">
+                                <span class="material-symbols-rounded text-[18px]">storefront</span>
+                            </div>
+                            <div class="flex flex-col">
+                                <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">GERAI PENERIMA</span>
+                                <span class="text-xs font-black text-[#0052cc]" x-text="getActiveCashierBranch()">Pusat</span>
+                            </div>
+                        </div>
+
                         <div class="bg-white border border-gray-200 rounded-xl px-4 py-2.5 flex items-center gap-3 shadow-xs">
                             <div class="w-2.5 h-2.5 rounded-full transition-colors"
                                  :class="($store.network && $store.network.isOnline) ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'"></div>
@@ -345,16 +445,16 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
 
                     <!-- Stat 2 -->
-                    <div @click="statusFilter = (statusFilter === 'MENUNGGU_VERIFIKASI' ? 'all' : 'MENUNGGU_VERIFIKASI')"
+                    <div @click="statusFilter = (statusFilter === 'BELUM_SAMPAI' ? 'all' : 'BELUM_SAMPAI')"
                          class="bg-white rounded-2xl border p-5 shadow-xs flex items-center justify-between border-l-4 border-l-amber-500 cursor-pointer hover:shadow-md transition-all"
-                         :class="statusFilter === 'MENUNGGU_VERIFIKASI' ? 'border-amber-400 ring-2 ring-amber-400/30' : 'border-amber-200'">
+                         :class="statusFilter === 'BELUM_SAMPAI' ? 'border-amber-400 ring-2 ring-amber-400/30' : 'border-amber-200'">
                         <div>
-                            <span class="text-[11px] font-bold text-amber-700 tracking-wider uppercase">PERLU VERIFIKASI</span>
+                            <span class="text-[11px] font-bold text-amber-700 tracking-wider uppercase">BELUM SAMPAI</span>
                             <div class="flex items-baseline gap-2 mt-1">
                                 <h3 class="text-2xl font-black text-amber-600" x-text="pendingCount">0</h3>
-                                <span class="text-[11px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md">Tiba di Toko</span>
+                                <span class="text-[11px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md">Dalam Perjalanan</span>
                             </div>
-                            <span class="text-[11px] text-gray-500 font-medium mt-0.5 block">Harus dihitung kasir</span>
+                            <span class="text-[11px] text-gray-500 font-medium mt-0.5 block">Dari Gudang Pusat</span>
                         </div>
                         <div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
                             <span class="material-symbols-rounded text-[24px]">pending_actions</span>
@@ -362,30 +462,33 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
 
                     <!-- Stat 3 -->
-                    <div @click="statusFilter = (statusFilter === 'DITERIMA_LENGKAP' ? 'all' : 'DITERIMA_LENGKAP')"
-                         class="bg-white rounded-2xl border p-5 shadow-xs flex items-center justify-between border-l-4 border-l-emerald-500 cursor-pointer hover:shadow-md transition-all"
-                         :class="statusFilter === 'DITERIMA_LENGKAP' ? 'border-emerald-400 ring-2 ring-emerald-400/30' : 'border-emerald-200'">
+                    <div @click="statusFilter = (statusFilter === 'SUDAH_SAMPAI' ? 'all' : 'SUDAH_SAMPAI')"
+                         class="bg-white rounded-2xl border p-5 shadow-xs flex items-center justify-between border-l-4 border-l-blue-500 cursor-pointer hover:shadow-md transition-all"
+                         :class="statusFilter === 'SUDAH_SAMPAI' ? 'border-blue-400 ring-2 ring-blue-400/30' : 'border-blue-200'">
                         <div>
-                            <span class="text-[11px] font-bold text-emerald-700 tracking-wider uppercase">DITERIMA LENGKAP</span>
-                            <h3 class="text-2xl font-black text-emerald-600 mt-1" x-text="completedFullCount">0</h3>
-                            <span class="text-[11px] text-emerald-600 font-medium mt-0.5 block">Fisik 100% Sesuai</span>
+                            <span class="text-[11px] font-bold text-blue-700 tracking-wider uppercase">SUDAH SAMPAI</span>
+                            <div class="flex items-baseline gap-2 mt-1">
+                                <h3 class="text-2xl font-black text-[#0052cc]" x-text="arrivedCount">0</h3>
+                                <span class="text-[11px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">Tiba di Toko</span>
+                            </div>
+                            <span class="text-[11px] text-gray-500 font-medium mt-0.5 block">Perlu verifikasi fisik</span>
                         </div>
-                        <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                            <span class="material-symbols-rounded text-[24px]">verified</span>
+                        <div class="w-12 h-12 rounded-xl bg-blue-50 text-[#0052cc] flex items-center justify-center shrink-0">
+                            <span class="material-symbols-rounded text-[24px]">pin_drop</span>
                         </div>
                     </div>
 
                     <!-- Stat 4 -->
-                    <div @click="statusFilter = (statusFilter === 'DITERIMA_SELISIH' ? 'all' : 'DITERIMA_SELISIH')"
-                         class="bg-white rounded-2xl border p-5 shadow-xs flex items-center justify-between border-l-4 border-l-rose-500 cursor-pointer hover:shadow-md transition-all"
-                         :class="statusFilter === 'DITERIMA_SELISIH' ? 'border-rose-400 ring-2 ring-rose-400/30' : 'border-rose-200'">
+                    <div @click="statusFilter = (statusFilter === 'APPROVED' ? 'all' : 'APPROVED')"
+                         class="bg-white rounded-2xl border p-5 shadow-xs flex items-center justify-between border-l-4 border-l-emerald-500 cursor-pointer hover:shadow-md transition-all"
+                         :class="statusFilter === 'APPROVED' ? 'border-emerald-400 ring-2 ring-emerald-400/30' : 'border-emerald-200'">
                         <div>
-                            <span class="text-[11px] font-bold text-rose-700 tracking-wider uppercase">DITERIMA SELISIH</span>
-                            <h3 class="text-2xl font-black text-rose-600 mt-1" x-text="completedVarianceCount">0</h3>
-                            <span class="text-[11px] text-rose-600 font-medium mt-0.5 block">Catatan Deviasi/Rusak</span>
+                            <span class="text-[11px] font-bold text-emerald-700 tracking-wider uppercase">APPROVED</span>
+                            <h3 class="text-2xl font-black text-emerald-600 mt-1" x-text="approvedCount">0</h3>
+                            <span class="text-[11px] text-emerald-600 font-medium mt-0.5 block">Stok Masuk Toko</span>
                         </div>
-                        <div class="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-                            <span class="material-symbols-rounded text-[24px]">report_problem</span>
+                        <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                            <span class="material-symbols-rounded text-[24px]">verified</span>
                         </div>
                     </div>
                 </div>
@@ -401,26 +504,15 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
 
                     <div class="flex flex-wrap items-center gap-3 w-full md:w-auto">
-                        <!-- Filter Tujuan Toko -->
-                        <div class="relative">
-                            <select x-model="destinationFilter"
-                                    class="appearance-none bg-white border border-gray-200 rounded-xl px-4 py-2.5 pr-10 text-[13px] text-gray-700 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 shadow-xs font-semibold cursor-pointer">
-                                <option value="all">Semua Toko Tujuan</option>
-                                <option value="Cabang B">Cabang B</option>
-                                <option value="Cabang A">Cabang A</option>
-                                <option value="Minimarket ILP - Pusat">Minimarket ILP - Pusat</option>
-                            </select>
-                            <span class="material-symbols-rounded absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-[20px]">expand_more</span>
-                        </div>
-
                         <!-- Filter Status Dokumen -->
                         <div class="relative">
                             <select x-model="statusFilter"
                                     class="appearance-none bg-white border border-gray-200 rounded-xl px-4 py-2.5 pr-10 text-[13px] text-gray-700 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 shadow-xs font-semibold cursor-pointer">
                                 <option value="all">Semua Status Dokumen</option>
-                                <option value="MENUNGGU_VERIFIKASI">Menunggu Verifikasi (Tiba)</option>
-                                <option value="DITERIMA_LENGKAP">Diterima Lengkap (Sesuai)</option>
-                                <option value="DITERIMA_SELISIH">Diterima Selisih / Cacat</option>
+                                <option value="BELUM_SAMPAI">Belum sampai</option>
+                                <option value="SUDAH_SAMPAI">Sudah sampai</option>
+                                <option value="APPROVED">Approved</option>
+                                <option value="TIDAK_SAMPAI">Tidak sampai</option>
                             </select>
                             <span class="material-symbols-rounded absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-[20px]">expand_more</span>
                         </div>
@@ -438,119 +530,136 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
 
                     <div class="overflow-x-auto min-w-0 w-full">
-                        <table class="w-full text-left border-collapse text-xs min-w-[1050px]">
+                        <table class="w-full text-left border-collapse text-xs min-w-[1250px]">
                             <thead>
                                 <tr class="bg-gray-50/80 border-b border-gray-200 text-gray-600 font-bold tracking-wider uppercase text-[11px] whitespace-nowrap">
-                                    <th class="px-4 py-3.5 text-left">No. Surat Jalan</th>
-                                    <th class="px-4 py-3.5 text-left">Tanggal</th>
-                                    <th class="px-4 py-3.5 text-left">Gudang Asal</th>
-                                    <th class="px-4 py-3.5 text-left">Toko Tujuan</th>
-                                    <th class="px-4 py-3.5 text-left">SKU</th>
-                                    <th class="px-4 py-3.5 text-left">Nama Produk</th>
-                                    <th class="px-4 py-3.5 text-left">Kategori</th>
-                                    <th class="px-4 py-3.5 text-center">Qty Dikirim</th>
-                                    <th class="px-4 py-3.5 text-left">Pengirim</th>
-                                    <th class="px-4 py-3.5 text-left">Plat Nomor</th>
-                                    <th class="px-4 py-3.5 text-center">Status</th>
-                                    <th class="px-4 py-3.5 text-center">Aksi Verifikasi</th>
+                                    <th class="px-3.5 py-3.5 text-left">No. Surat Jalan</th>
+                                    <th class="px-3.5 py-3.5 text-left">Tanggal Dikirim</th>
+                                    <th class="px-3.5 py-3.5 text-left">SKU</th>
+                                    <th class="px-3.5 py-3.5 text-left">Barcode</th>
+                                    <th class="px-3.5 py-3.5 text-left">Nama Produk</th>
+                                    <th class="px-3.5 py-3.5 text-left">Brand</th>
+                                    <th class="px-3.5 py-3.5 text-left">Kategori</th>
+                                    <th class="px-3.5 py-3.5 text-center">Qty Dikirim</th>
+                                    <th class="px-3.5 py-3.5 text-right">Harga Umum</th>
+                                    <th class="px-3.5 py-3.5 text-right">Harga Member</th>
+                                    <th class="px-3.5 py-3.5 text-left">Pengirim</th>
+                                    <th class="px-3.5 py-3.5 text-left">Plat Nomor</th>
+                                    <th class="px-3.5 py-3.5 text-center">Status</th>
+                                    <th class="px-3.5 py-3.5 text-center">Aksi</th>
                                 </tr>
                             </thead>
                             <tbody class="text-slate-700">
                                 <template x-for="doc in filteredDocuments" :key="doc.id">
-                                    <template x-for="(it, iIdx) in ((doc.items && doc.items.length > 0) ? doc.items : [{ sku: '-', name: '-', category: '-', qtySent: 0, unit: 'Unit' }])" :key="iIdx">
+                                    <template x-for="(it, iIdx) in ((doc.items && doc.items.length > 0) ? doc.items : [{ sku: '-', barcode: '-', name: '-', brand: 'ILP', category: '-', qtySent: 0, unit: 'Unit', price: 0, memberPrice: 0 }])" :key="iIdx">
                                         <tr class="hover:bg-blue-50/30 transition-colors" :class="iIdx === 0 ? 'border-t border-gray-200' : 'border-t border-gray-100'">
-                                            <!-- Parent Col 1: No. Surat Jalan -->
+                                            <!-- 1. No. Surat Jalan -->
                                             <template x-if="iIdx === 0">
-                                                <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap bg-white font-mono font-bold text-gray-900 text-[13px]">
+                                                <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-3.5 py-3 align-middle whitespace-nowrap bg-white font-mono font-bold text-gray-900 text-xs">
                                                     <span x-text="doc.docNo"></span>
                                                 </td>
                                             </template>
 
-                                            <!-- Parent Col 2: Tanggal -->
+                                            <!-- 2. Tanggal Dikirim -->
                                             <template x-if="iIdx === 0">
-                                                <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap bg-white text-xs text-gray-500 font-medium" x-text="doc.date">
+                                                <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-3.5 py-3 align-middle whitespace-nowrap bg-white text-xs text-gray-500 font-medium" x-text="doc.date">
                                                 </td>
                                             </template>
 
-                                            <!-- Parent Col 3: Gudang Asal -->
-                                            <template x-if="iIdx === 0">
-                                                <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap bg-white font-bold text-gray-800 text-xs" x-text="doc.warehouseOrigin">
-                                                </td>
-                                            </template>
+                                            <!-- 3. SKU -->
+                                            <td class="px-3.5 py-3 align-middle whitespace-nowrap font-mono font-bold text-gray-700 text-xs" x-text="it.sku || '-'"></td>
 
-                                            <!-- Parent Col 4: Toko Tujuan -->
-                                            <template x-if="iIdx === 0">
-                                                <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap bg-white text-xs text-gray-600 font-medium" x-text="doc.destinationStore">
-                                                </td>
-                                            </template>
+                                            <!-- 4. Barcode -->
+                                            <td class="px-3.5 py-3 align-middle whitespace-nowrap font-mono text-gray-600 text-xs" x-text="it.barcode || it.sku || '-'"></td>
 
-                                            <!-- Child Col 5: SKU -->
-                                            <td class="px-4 py-3 align-middle whitespace-nowrap font-mono font-bold text-gray-700 text-xs" x-text="it.sku || '-'"></td>
+                                            <!-- 5. Nama Produk & Jenis -->
+                                            <td class="px-3.5 py-3 align-middle whitespace-nowrap text-xs">
+                                                <div class="flex flex-col">
+                                                    <span class="font-bold text-gray-900 max-w-[200px] truncate" :title="it.name" x-text="it.name"></span>
+                                                    <div class="flex items-center gap-1 mt-0.5">
+                                                        <template x-if="it.is_consignment || it.product_type === 'UMKM'">
+                                                            <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                                                <span class="material-symbols-rounded text-[11px]">storefront</span>
+                                                                <span>Produk UMKM</span>
+                                                                <span x-show="it.supplier_name" x-text="'• ' + it.supplier_name" class="truncate max-w-[120px]"></span>
+                                                            </span>
+                                                        </template>
+                                                        <template x-if="!it.is_consignment && it.product_type !== 'UMKM'">
+                                                            <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                                                                <span class="material-symbols-rounded text-[11px]">inventory_2</span>
+                                                                <span>Produk Umum</span>
+                                                            </span>
+                                                        </template>
+                                                    </div>
+                                                </div>
+                                            </td>
 
-                                            <!-- Child Col 6: Nama Produk -->
-                                            <td class="px-4 py-3 align-middle whitespace-nowrap font-bold text-gray-900 text-xs max-w-[200px] truncate" :title="it.name" x-text="it.name"></td>
+                                            <!-- 6. Brand -->
+                                            <td class="px-3.5 py-3 align-middle whitespace-nowrap text-xs text-gray-600 font-medium" x-text="it.brand || 'ILP'"></td>
 
-                                            <!-- Child Col 7: Kategori -->
-                                            <td class="px-4 py-3 align-middle whitespace-nowrap text-xs text-slate-500" x-text="it.category || '-'"></td>
+                                            <!-- 7. Kategori -->
+                                            <td class="px-3.5 py-3 align-middle whitespace-nowrap text-xs text-slate-500" x-text="it.category || '-'"></td>
 
-                                            <!-- Child Col 8: Qty Dikirim -->
-                                            <td class="px-4 py-3 align-middle whitespace-nowrap text-center font-mono font-bold text-xs bg-slate-50/50">
+                                            <!-- 8. Qty Dikirim -->
+                                            <td class="px-3.5 py-3 align-middle whitespace-nowrap text-center font-mono font-bold text-xs bg-slate-50/50">
                                                 <span class="inline-block bg-blue-50 text-[#0047b3] border border-blue-200 px-2.5 py-0.5 rounded font-black font-mono text-xs" x-text="it.qtySent + ' ' + (it.unit || 'Unit')"></span>
                                             </td>
 
-                                            <!-- Parent Col 9: Pengirim -->
+                                            <!-- 9. Harga Umum -->
+                                            <td class="px-3.5 py-3 align-middle whitespace-nowrap text-right font-mono font-semibold text-gray-800 text-xs" x-text="formatRupiah(it.price)"></td>
+
+                                            <!-- 10. Harga Member -->
+                                            <td class="px-3.5 py-3 align-middle whitespace-nowrap text-right font-mono font-bold text-emerald-600 text-xs" x-text="formatRupiah(it.memberPrice || it.price)"></td>
+
+                                            <!-- 11. Pengirim -->
                                             <template x-if="iIdx === 0">
-                                                <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap bg-white text-xs font-bold text-gray-800" x-text="doc.driverName || '-'">
+                                                <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-3.5 py-3 align-middle whitespace-nowrap bg-white text-xs font-bold text-gray-800" x-text="doc.senderName || doc.driverName || '-'">
                                                 </td>
                                             </template>
 
-                                            <!-- Parent Col 10: Plat Nomor -->
+                                            <!-- 12. Plat Nomor -->
                                             <template x-if="iIdx === 0">
-                                                <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap bg-white font-mono text-xs text-gray-500" x-text="doc.plateNumber || '-'">
+                                                <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-3.5 py-3 align-middle whitespace-nowrap bg-white font-mono text-xs text-gray-500" x-text="doc.plateNumber || '-'">
                                                 </td>
                                             </template>
 
-                                            <!-- Parent Col 11: Status -->
+                                            <!-- 13. Status (Dapat diubah oleh kasir) -->
                                             <template x-if="iIdx === 0">
-                                                <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap bg-white text-center">
-                                                    <template x-if="doc.status === 'MENUNGGU_VERIFIKASI'">
-                                                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap">
-                                                            <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                                                            <span>Menunggu Verifikasi</span>
-                                                        </span>
-                                                    </template>
-                                                    <template x-if="doc.status === 'DITERIMA_LENGKAP'">
-                                                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
-                                                            <span class="material-symbols-rounded text-[14px]">check_circle</span>
-                                                            <span>Diterima Lengkap</span>
-                                                        </span>
-                                                    </template>
-                                                    <template x-if="doc.status === 'DITERIMA_SELISIH'">
-                                                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">
-                                                            <span class="material-symbols-rounded text-[14px]">warning</span>
-                                                            <span>Diterima Selisih</span>
-                                                        </span>
-                                                    </template>
+                                                <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-3.5 py-3 align-middle whitespace-nowrap bg-white text-center">
+                                                    <select :value="doc.status" 
+                                                            @change="updateReceiptStatus(doc, $event.target.value)"
+                                                            class="text-[11px] font-bold rounded-lg border px-2 py-1 focus:outline-none cursor-pointer transition-colors shadow-xs"
+                                                            :class="{
+                                                                'bg-amber-50 text-amber-700 border-amber-300': doc.status === 'BELUM_SAMPAI' || doc.status === 'MENUNGGU_VERIFIKASI',
+                                                                'bg-blue-50 text-blue-700 border-blue-300': doc.status === 'SUDAH_SAMPAI',
+                                                                'bg-emerald-50 text-emerald-700 border-emerald-300': doc.status === 'APPROVED' || doc.status === 'DITERIMA_LENGKAP',
+                                                                'bg-rose-50 text-rose-700 border-rose-300': doc.status === 'TIDAK_SAMPAI'
+                                                            }">
+                                                        <option value="BELUM_SAMPAI">Belum sampai</option>
+                                                        <option value="SUDAH_SAMPAI">Sudah sampai</option>
+                                                        <option value="APPROVED">Approved</option>
+                                                        <option value="TIDAK_SAMPAI">Tidak sampai</option>
+                                                    </select>
                                                 </td>
                                             </template>
 
-                                            <!-- Parent Col 12: Aksi Verifikasi -->
+                                            <!-- 14. Aksi -->
                                             <template x-if="iIdx === 0">
-                                                <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap text-center bg-white">
+                                                <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-3.5 py-3 align-middle whitespace-nowrap text-center bg-white">
                                                     <div class="inline-flex items-center justify-center gap-1.5">
-                                                        <template x-if="doc.status === 'MENUNGGU_VERIFIKASI'">
+                                                        <template x-if="doc.status !== 'APPROVED' && doc.status !== 'DITERIMA_LENGKAP'">
                                                             <button type="button"
                                                                     @click="openVerification(doc)"
-                                                                    class="px-4 py-2 bg-[#0052cc] hover:bg-[#0043a8] text-white rounded-xl text-xs font-bold transition-all shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
-                                                                <span class="material-symbols-rounded text-[16px]">fact_check</span>
-                                                                <span>Periksa Dokumen</span>
+                                                                    class="px-3 py-1.5 bg-[#0052cc] hover:bg-[#0043a8] text-white rounded-xl text-xs font-bold transition-all shadow-xs inline-flex items-center gap-1 cursor-pointer">
+                                                                <span class="material-symbols-rounded text-[15px]">fact_check</span>
+                                                                <span>Periksa Fisik</span>
                                                             </button>
                                                         </template>
-                                                        <template x-if="doc.status !== 'MENUNGGU_VERIFIKASI'">
+                                                        <template x-if="doc.status === 'APPROVED' || doc.status === 'DITERIMA_LENGKAP'">
                                                             <button type="button"
                                                                     @click="openBastView(doc)"
-                                                                    class="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-gray-700 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer">
-                                                                <span class="material-symbols-rounded text-[16px]">receipt_long</span>
+                                                                    class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-gray-700 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer">
+                                                                <span class="material-symbols-rounded text-[15px]">receipt_long</span>
                                                                 <span>Lihat BAST</span>
                                                             </button>
                                                         </template>
@@ -561,7 +670,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     </template>
                                 </template>
                                 <tr x-show="!filteredDocuments || filteredDocuments.length === 0">
-                                    <td colspan="12" class="py-12 text-center text-slate-400 font-medium">
+                                    <td colspan="14" class="py-12 text-center text-slate-400 font-medium">
                                         Belum ada dokumen penerimaan barang.
                                     </td>
                                 </tr>
@@ -645,7 +754,22 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         <td class="px-4 py-3">
                                             <div class="flex flex-col">
                                                 <span class="font-bold text-gray-900" x-text="item.name"></span>
-                                                <span class="font-mono text-[11px] text-gray-400" x-text="'SKU: ' + item.sku + ' (' + item.unit + ')'"></span>
+                                                <div class="flex items-center gap-1.5 mt-0.5">
+                                                    <span class="font-mono text-[11px] text-gray-400" x-text="'SKU: ' + item.sku + ' (' + item.unit + ')'"></span>
+                                                    <template x-if="item.is_consignment || item.product_type === 'UMKM'">
+                                                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                                            <span class="material-symbols-rounded text-[11px]">storefront</span>
+                                                            <span>Produk UMKM</span>
+                                                            <span x-show="item.supplier_name" x-text="'• ' + item.supplier_name"></span>
+                                                        </span>
+                                                    </template>
+                                                    <template x-if="!item.is_consignment && item.product_type !== 'UMKM'">
+                                                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                                                            <span class="material-symbols-rounded text-[11px]">inventory_2</span>
+                                                            <span>Produk Umum</span>
+                                                        </span>
+                                                    </template>
+                                                </div>
                                             </div>
                                         </td>
 
@@ -791,7 +915,26 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             <tbody class="divide-y divide-gray-100">
                                 <template x-for="(it, idx) in selectedDoc?.items" :key="idx">
                                     <tr>
-                                        <td class="px-4 py-2.5 font-bold text-gray-800" x-text="it.name"></td>
+                                        <td class="px-4 py-2.5">
+                                            <div class="flex flex-col">
+                                                <span class="font-bold text-gray-800" x-text="it.name"></span>
+                                                <div class="flex items-center gap-1 mt-0.5">
+                                                    <template x-if="it.is_consignment || it.product_type === 'UMKM'">
+                                                        <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                                            <span class="material-symbols-rounded text-[11px]">storefront</span>
+                                                            <span>Produk UMKM</span>
+                                                            <span x-show="it.supplier_name" x-text="'• ' + it.supplier_name"></span>
+                                                        </span>
+                                                    </template>
+                                                    <template x-if="!it.is_consignment && it.product_type !== 'UMKM'">
+                                                        <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                                                            <span class="material-symbols-rounded text-[11px]">inventory_2</span>
+                                                            <span>Produk Umum</span>
+                                                        </span>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </td>
                                         <td class="px-3 py-2.5 text-center text-gray-600" x-text="it.qtySent + ' ' + it.unit"></td>
                                         <td class="px-3 py-2.5 text-center font-bold text-gray-900" x-text="it.qtyReceived + ' ' + it.unit"></td>
                                         <td class="px-3 py-2.5 text-center font-bold font-mono">
