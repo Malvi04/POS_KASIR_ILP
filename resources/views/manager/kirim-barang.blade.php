@@ -72,6 +72,20 @@
         });
     },
 
+    resolveProductType(p) {
+        if (!p) return { is_consignment: false, is_coupon: false, product_type: 'UMUM', product_type_label: 'Produk Umum' };
+        const cat = String(p.category || p.kategori || '').toLowerCase();
+        const isCoupon = Boolean(p.is_coupon) || cat.includes('kupon') || cat.includes('voucher');
+        const isConsignment = Boolean(p.is_consignment);
+        if (isCoupon) {
+            return { is_consignment: false, is_coupon: true, product_type: 'KUPON', product_type_label: 'Kupon / Voucher' };
+        }
+        if (isConsignment) {
+            return { is_consignment: true, is_coupon: false, product_type: 'UMKM', product_type_label: 'Produk UMKM' };
+        }
+        return { is_consignment: false, is_coupon: false, product_type: 'UMUM', product_type_label: 'Produk Umum' };
+    },
+
     async loadAvailableProducts() {
         try {
             const res = await fetch('/api/products?location_code=GDG-001&per_page=500', { headers: { 'Accept': 'application/json' } });
@@ -79,19 +93,23 @@
                 const json = await res.json();
                 const prods = json.data || json;
                 if (Array.isArray(prods)) {
-                    this.availableProducts = prods.map(p => ({
-                        id: p.id,
-                        sku: p.sku || p.barcode || '-',
-                        barcode: p.barcode || p.sku || '-',
-                        name: p.name || p.nama || '-',
-                        category: p.category || p.kategori || 'Umum',
-                        unit: p.unit || 'Pcs',
-                        stock: Math.max(0, Number(p.stock !== undefined ? p.stock : (p.stok || 0))),
-                        is_consignment: Boolean(p.is_consignment),
-                        product_type: p.is_consignment ? 'UMKM' : 'UMUM',
-                        product_type_label: p.is_consignment ? 'Produk UMKM' : 'Produk Umum',
-                        supplier_name: p.supplier_name || (p.supplier ? p.supplier.name : '') || ''
-                    }));
+                    this.availableProducts = prods.map(p => {
+                        const meta = this.resolveProductType(p);
+                        return {
+                            id: p.id,
+                            sku: p.sku || p.barcode || '-',
+                            barcode: p.barcode || p.sku || '-',
+                            name: p.name || p.nama || '-',
+                            category: p.category || p.kategori || 'Umum',
+                            unit: p.unit || 'Pcs',
+                            stock: Math.max(0, Number(p.stock !== undefined ? p.stock : (p.stok || 0))),
+                            is_consignment: meta.is_consignment,
+                            is_coupon: meta.is_coupon,
+                            product_type: meta.product_type,
+                            product_type_label: meta.product_type_label,
+                            supplier_name: p.supplier_name || (p.supplier ? p.supplier.name : '') || ''
+                        };
+                    });
                     return;
                 }
             }
@@ -134,6 +152,7 @@
         const firstWithStock = Array.isArray(this.availableProducts)
             ? this.availableProducts.find(p => p && Number(p.stock) > 0)
             : null;
+        const firstMeta = this.resolveProductType(firstWithStock);
 
         this.form = {
             destinationStore: 'Cabang A',
@@ -151,9 +170,10 @@
                     unit: firstWithStock ? firstWithStock.unit : 'Pcs',
                     availableStock: firstWithStock ? firstWithStock.stock : 0,
                     qtySent: firstWithStock && Number(firstWithStock.stock) > 0 ? 1 : 0,
-                    is_consignment: firstWithStock ? Boolean(firstWithStock.is_consignment) : false,
-                    product_type: firstWithStock && firstWithStock.is_consignment ? 'UMKM' : 'UMUM',
-                    product_type_label: firstWithStock && firstWithStock.is_consignment ? 'Produk UMKM' : 'Produk Umum',
+                    is_consignment: firstMeta.is_consignment,
+                    is_coupon: firstMeta.is_coupon,
+                    product_type: firstMeta.product_type,
+                    product_type_label: firstMeta.product_type_label,
                     supplier_name: firstWithStock ? (firstWithStock.supplier_name || '') : ''
                 }
             ]
@@ -165,6 +185,7 @@
         // Cari produk yang belum dipilih
         const selectedSkus = (this.form.items || []).map(i => i.sku);
         const nextProd = (this.availableProducts || []).find(p => p && !selectedSkus.includes(p.sku) && Number(p.stock) > 0) || (this.availableProducts || [])[0];
+        const nextMeta = this.resolveProductType(nextProd);
 
         this.form.items.push({
             product_id: nextProd ? nextProd.id : null,
@@ -174,9 +195,10 @@
             unit: nextProd ? nextProd.unit : 'Pcs',
             availableStock: nextProd ? nextProd.stock : 0,
             qtySent: nextProd && Number(nextProd.stock) > 0 ? 1 : 0,
-            is_consignment: nextProd ? Boolean(nextProd.is_consignment) : false,
-            product_type: nextProd && nextProd.is_consignment ? 'UMKM' : 'UMUM',
-            product_type_label: nextProd && nextProd.is_consignment ? 'Produk UMKM' : 'Produk Umum',
+            is_consignment: nextMeta.is_consignment,
+            is_coupon: nextMeta.is_coupon,
+            product_type: nextMeta.product_type,
+            product_type_label: nextMeta.product_type_label,
             supplier_name: nextProd ? (nextProd.supplier_name || '') : ''
         });
     },
@@ -192,14 +214,16 @@
     onProductChange(item) {
         const prod = (this.availableProducts || []).find(p => p && p.sku === item.sku);
         if (prod) {
+            const meta = this.resolveProductType(prod);
             item.product_id = prod.id;
             item.name = prod.name;
             item.category = prod.category;
             item.unit = prod.unit;
             item.availableStock = prod.stock;
-            item.is_consignment = Boolean(prod.is_consignment);
-            item.product_type = prod.is_consignment ? 'UMKM' : 'UMUM';
-            item.product_type_label = prod.is_consignment ? 'Produk UMKM' : 'Produk Umum';
+            item.is_consignment = meta.is_consignment;
+            item.is_coupon = meta.is_coupon;
+            item.product_type = meta.product_type;
+            item.product_type_label = meta.product_type_label;
             item.supplier_name = prod.supplier_name || '';
             if (item.qtySent > prod.stock || item.qtySent <= 0) {
                 item.qtySent = prod.stock > 0 ? 1 : 0;
@@ -212,6 +236,7 @@
             item.availableStock = 0;
             item.qtySent = 0;
             item.is_consignment = false;
+            item.is_coupon = false;
             item.product_type = 'UMUM';
             item.product_type_label = 'Produk Umum';
             item.supplier_name = '';
@@ -264,20 +289,28 @@
             const isDraft = (mode === 'draft');
             const status = isDraft ? 'DRAFT' : 'MENUNGGU_VERIFIKASI';
 
-            const preparedItems = this.form.items.map(it => ({
-                product_id: it.product_id,
-                sku: it.sku,
-                name: it.name,
-                category: it.category || 'Umum',
-                qtySent: Number(it.qtySent),
-                qtyReceived: 0,
-                unit: it.unit || 'Pcs',
-                condition: 'BAIK',
-                is_consignment: Boolean(it.is_consignment),
-                product_type: it.is_consignment ? 'UMKM' : 'UMUM',
-                product_type_label: it.is_consignment ? 'Produk UMKM' : 'Produk Umum',
-                supplier_name: it.supplier_name || ''
-            }));
+            const preparedItems = this.form.items.map(it => {
+                const isCoupon = Boolean(it.is_coupon) || (it.category && (it.category.toLowerCase().includes('kupon') || it.category.toLowerCase().includes('voucher')));
+                const isConsignment = Boolean(it.is_consignment);
+                const prodType = isCoupon ? 'KUPON' : (isConsignment ? 'UMKM' : 'UMUM');
+                const prodTypeLabel = isCoupon ? 'Kupon / Voucher' : (isConsignment ? 'Produk UMKM' : 'Produk Umum');
+
+                return {
+                    product_id: it.product_id,
+                    sku: it.sku,
+                    name: it.name,
+                    category: it.category || (isCoupon ? 'Kupon BBM' : 'Umum'),
+                    qtySent: Number(it.qtySent),
+                    qtyReceived: 0,
+                    unit: it.unit || 'Pcs',
+                    condition: 'BAIK',
+                    is_consignment: isConsignment,
+                    is_coupon: isCoupon,
+                    product_type: prodType,
+                    product_type_label: prodTypeLabel,
+                    supplier_name: it.supplier_name || ''
+                };
+            });
 
             let newDoc = {
                 id: 'trf_' + Date.now(),
@@ -689,14 +722,20 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                 <div class="flex flex-col">
                                                     <span class="font-bold text-gray-900 max-w-[220px] truncate" :title="it.name" x-text="it.name || '-'"></span>
                                                     <div class="flex items-center gap-1 mt-0.5">
-                                                        <template x-if="it.is_consignment || it.product_type === 'UMKM'">
+                                                        <template x-if="it.is_coupon || it.product_type === 'KUPON' || (it.category && (it.category.toLowerCase().includes('kupon') || it.category.toLowerCase().includes('voucher')))">
+                                                            <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                                                                <span class="material-symbols-rounded text-[11px]">local_activity</span>
+                                                                <span>Kupon / Voucher</span>
+                                                            </span>
+                                                        </template>
+                                                        <template x-if="(it.is_consignment || it.product_type === 'UMKM') && !(it.is_coupon || it.product_type === 'KUPON') && !(it.category && (it.category.toLowerCase().includes('kupon') || it.category.toLowerCase().includes('voucher')))">
                                                             <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
                                                                 <span class="material-symbols-rounded text-[11px]">storefront</span>
                                                                 <span>Produk UMKM</span>
                                                                 <span x-show="it.supplier_name" x-text="'• ' + it.supplier_name" class="truncate max-w-[120px]"></span>
                                                             </span>
                                                         </template>
-                                                        <template x-if="!it.is_consignment && it.product_type !== 'UMKM'">
+                                                        <template x-if="!it.is_consignment && it.product_type !== 'UMKM' && !it.is_coupon && it.product_type !== 'KUPON' && !(it.category && (it.category.toLowerCase().includes('kupon') || it.category.toLowerCase().includes('voucher')))">
                                                             <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
                                                                 <span class="material-symbols-rounded text-[11px]">inventory_2</span>
                                                                 <span>Produk Umum</span>
@@ -907,19 +946,25 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                 <template x-for="p in availableProducts" :key="p.sku">
                                                     <option :value="p.sku"
                                                             :disabled="p.stock <= 0"
-                                                            x-text="(p.is_consignment ? '[UMKM' + (p.supplier_name ? ' • ' + p.supplier_name : '') + '] ' : '[Umum] ') + p.name + ' (' + p.sku + ') - Stok: ' + p.stock + ' ' + p.unit + (p.stock <= 0 ? ' [HABIS]' : '')">
+                                                            x-text="(p.is_consignment ? '[UMKM' + (p.supplier_name ? ' • ' + p.supplier_name : '') + '] ' : ((p.is_coupon || p.product_type === 'KUPON' || (p.category && (p.category.toLowerCase().includes('kupon') || p.category.toLowerCase().includes('voucher')))) ? '[Kupon] ' : '[Umum] ')) + p.name + ' (' + p.sku + ') - Stok: ' + p.stock + ' ' + p.unit + (p.stock <= 0 ? ' [HABIS]' : '')">
                                                     </option>
                                                 </template>
                                             </select>
                                             <div class="mt-1 flex items-center gap-1.5" x-show="item.sku">
-                                                <template x-if="item.is_consignment || item.product_type === 'UMKM'">
+                                                <template x-if="item.is_coupon || item.product_type === 'KUPON' || (item.category && (item.category.toLowerCase().includes('kupon') || item.category.toLowerCase().includes('voucher')))">
+                                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-100 text-indigo-900 border border-indigo-300">
+                                                        <span class="material-symbols-rounded text-[12px]">local_activity</span>
+                                                        <span>Kupon / Voucher</span>
+                                                    </span>
+                                                </template>
+                                                <template x-if="(item.is_consignment || item.product_type === 'UMKM') && !(item.is_coupon || item.product_type === 'KUPON') && !(item.category && (item.category.toLowerCase().includes('kupon') || item.category.toLowerCase().includes('voucher')))">
                                                     <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
                                                         <span class="material-symbols-rounded text-[12px]">storefront</span>
                                                         <span>Produk UMKM</span>
                                                         <span x-show="item.supplier_name" x-text="'• Mitra: ' + item.supplier_name"></span>
                                                     </span>
                                                 </template>
-                                                <template x-if="!item.is_consignment && item.product_type !== 'UMKM'">
+                                                <template x-if="!item.is_consignment && item.product_type !== 'UMKM' && !item.is_coupon && item.product_type !== 'KUPON' && !(item.category && (item.category.toLowerCase().includes('kupon') || item.category.toLowerCase().includes('voucher')))">
                                                     <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 text-blue-900 border border-blue-300">
                                                         <span class="material-symbols-rounded text-[12px]">inventory_2</span>
                                                         <span>Produk Umum</span>
@@ -1094,13 +1139,19 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         <tr class="hover:bg-slate-50/50">
                                             <td class="px-3.5 py-2.5 text-gray-400 font-bold" x-text="idx + 1"></td>
                                             <td class="px-3.5 py-2.5 whitespace-nowrap">
-                                                <template x-if="it.is_consignment || it.product_type === 'UMKM'">
+                                                <template x-if="it.is_coupon || it.product_type === 'KUPON' || (it.category && (it.category.toLowerCase().includes('kupon') || it.category.toLowerCase().includes('voucher')))">
+                                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-bold bg-indigo-100 text-indigo-900 border border-indigo-300">
+                                                        <span class="material-symbols-rounded text-[13px]">local_activity</span>
+                                                        <span>Kupon / Voucher</span>
+                                                    </span>
+                                                </template>
+                                                <template x-if="(it.is_consignment || it.product_type === 'UMKM') && !(it.is_coupon || it.product_type === 'KUPON') && !(it.category && (it.category.toLowerCase().includes('kupon') || it.category.toLowerCase().includes('voucher')))">
                                                     <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
                                                         <span class="material-symbols-rounded text-[13px]">storefront</span>
                                                         <span>Produk UMKM</span>
                                                     </span>
                                                 </template>
-                                                <template x-if="!it.is_consignment && it.product_type !== 'UMKM'">
+                                                <template x-if="!it.is_consignment && it.product_type !== 'UMKM' && !it.is_coupon && it.product_type !== 'KUPON' && !(it.category && (it.category.toLowerCase().includes('kupon') || it.category.toLowerCase().includes('voucher')))">
                                                     <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-bold bg-blue-100 text-blue-900 border border-blue-300">
                                                         <span class="material-symbols-rounded text-[13px]">inventory_2</span>
                                                         <span>Produk Umum</span>

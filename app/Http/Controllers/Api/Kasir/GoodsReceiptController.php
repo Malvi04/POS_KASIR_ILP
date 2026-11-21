@@ -726,8 +726,13 @@ class GoodsReceiptController extends Controller
             'receiverName' => $r->receiver?->name ?: null,
             'generalNotes' => $r->notes ?: '',
             'items' => $r->items->map(function ($it) {
+                $category = $it->product?->category ?? '';
+                $isCoupon = !empty($category) && (str_contains(strtolower($category), 'kupon') || str_contains(strtolower($category), 'voucher'));
                 $isConsignment = (bool) ($it->product?->is_consignment);
                 $partnerName = $it->product?->supplier?->name ?? ($isConsignment ? 'Mitra UMKM' : null);
+
+                $productType = $isCoupon ? 'KUPON' : ($isConsignment ? 'UMKM' : 'UMUM');
+                $productTypeLabel = $isCoupon ? 'Kupon / Voucher' : ($isConsignment ? 'Produk UMKM' : 'Produk Umum');
 
                 return [
                     'id' => $it->id,
@@ -736,7 +741,7 @@ class GoodsReceiptController extends Controller
                     'barcode' => $it->product?->barcode ?: ($it->product?->sku ?: '-'),
                     'name' => $it->product?->name ?: 'Produk',
                     'brand' => $it->product?->brand ?: ($partnerName ?: 'ILP'),
-                    'category' => $it->product?->category ?: ($isConsignment ? 'Produk UMKM' : 'Umum'),
+                    'category' => $it->product?->category ?: ($isCoupon ? 'Kupon BBM' : ($isConsignment ? 'Produk UMKM' : 'Umum')),
                     'unit' => $it->product?->unit ?: 'Pcs',
                     'qtySent' => (float) $it->qty_sent,
                     'qtyReceived' => (float) $it->qty_received,
@@ -746,8 +751,9 @@ class GoodsReceiptController extends Controller
                     'expired_date' => $it->expired_date ? $it->expired_date->toDateString() : null,
                     'note' => $it->notes ?: '',
                     'is_consignment' => $isConsignment,
-                    'product_type' => $isConsignment ? 'UMKM' : 'UMUM',
-                    'product_type_label' => $isConsignment ? 'Produk UMKM' : 'Produk Umum',
+                    'is_coupon' => $isCoupon,
+                    'product_type' => $productType,
+                    'product_type_label' => $productTypeLabel,
                     'supplier_name' => $partnerName,
                 ];
             })->values()->all(),

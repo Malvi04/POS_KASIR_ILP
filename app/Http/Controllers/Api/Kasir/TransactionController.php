@@ -13,6 +13,7 @@ use App\Models\Transaction;
 use App\Models\TransactionItem;
 use App\Models\User;
 use App\Services\LocationStockService;
+use App\Services\PromotionEngine;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -50,6 +51,8 @@ class TransactionController extends Controller
             'items.*.member_price' => 'nullable|numeric|min:0',
             'items.*.unit' => 'nullable|string',
             'items.*.is_member' => 'nullable|boolean',
+            'items.*.promo_disabled' => 'nullable|boolean', // Kasir menonaktifkan promo untuk baris ini
+            'promo_enabled' => 'nullable|boolean', // Saklar promo per transaksi dari kasir
         ]);
 
         return DB::transaction(function () use ($validated, $request) {
@@ -256,20 +259,9 @@ class TransactionController extends Controller
                     $unitDiscount = $isExpiredClearance ? round($unitBasePrice * ($discountPercent / 100), 2) : 0;
                     $unitFinalPrice = max(0, $unitBasePrice - $unitDiscount);
 
-                    $lineSubtotal = round($unitFinalPrice * $qty, 2);
-                    $lineDiscount = round($unitDiscount * $qty, 2);
+                    $itemRate = ($product->tax_rate !== null && $product->tax_rate > 0) ? (float) $product->tax_rate : $globalTaxRate;
 
-                    // Tax calculation
-                    $lineTax = 0;
-                    if ($isGlobalTaxActive && $product->is_taxable) {
-                        $itemRate = ($product->tax_rate !== null && $product->tax_rate > 0) ? (float) $product->tax_rate : $globalTaxRate;
-                        $lineTax = round($lineSubtotal * ($itemRate / 100), 2);
-                    }
-
-                    $subtotal += $lineSubtotal;
-                    $discountTotal += $lineDiscount;
-                    $taxTotal += $lineTax;
-
+                    // Totals dihitung setelah Promo Engine berjalan (lihat langkah 3b)
                     $processedItems[] = [
                         'product_id' => $product->id,
                         'stock_batch_id' => $primaryBatchId,
@@ -281,20 +273,18 @@ class TransactionController extends Controller
                         'unit_price' => $unitFinalPrice,
                         'qty' => $qty,
                         'is_taxable' => (bool) $product->is_taxable,
-                        'tax_amount' => $lineTax,
+                        'tax_amount' => 0,
                         'is_expired_clearance' => $isExpiredClearance,
                         'clearance_discount_percent' => $discountPercent,
-                        'discount_amount' => $lineDiscount,
-                        'total_price' => $lineSubtotal,
+                        'discount_amount' => round($unitDiscount * $qty, 2),
+                        'total_price' => 0,
+                        '_category' => $product->category,
+                        '_tax_rate' => ($isGlobalTaxActive && $product->is_taxable) ? $itemRate : 0,
+                        '_promo_disabled' => (bool) ($rawItem['promo_disabled'] ?? false),
                     ];
                 } else {
                     // Fallback item if not in master db
                     $unitPrice = (float) $rawItem['price'];
-                    $lineSubtotal = round($unitPrice * $qty, 2);
-                    $lineTax = $isGlobalTaxActive ? round($lineSubtotal * ($globalTaxRate / 100), 2) : 0;
-
-                    $subtotal += $lineSubtotal;
-                    $taxTotal += $lineTax;
 
                     $processedItems[] = [
                         'product_id' => null,
@@ -305,14 +295,58 @@ class TransactionController extends Controller
                         'unit_price' => $unitPrice,
                         'qty' => $qty,
                         'is_taxable' => true,
-                        'tax_amount' => $lineTax,
+                        'tax_amount' => 0,
                         'is_expired_clearance' => false,
                         'clearance_discount_percent' => 0,
                         'discount_amount' => 0,
-                        'total_price' => $lineSubtotal,
+                        'total_price' => 0,
+                        '_category' => null,
+                        '_tax_rate' => $isGlobalTaxActive ? $globalTaxRate : 0,
+                        '_promo_disabled' => true,
                     ];
                 }
             }
+
+            // 3b. Promo Engine (ala Alfamart) — diatur penuh oleh Manager.
+            $promoSettings = PromotionEngine::settings();
+            $allowCashierToggle = (bool) $promoSettings['allowCashierToggle'];
+            $promoEnabled = $allowCashierToggle ? (bool) ($validated['promo_enabled'] ?? true) : true;
+
+            $promoLines = app(PromotionEngine::class)->apply(
+                array_map(fn ($it) => [
+                    'product_id' => $it['product_id'],
+                    'sku' => $it['sku'],
+                    'category' => $it['_category'],
+                    'unit_price' => $it['unit_price'],
+                    'qty' => $it['qty'],
+                    'is_clearance' => $it['is_expired_clearance'],
+                    'promo_disabled' => $allowCashierToggle ? $it['_promo_disabled'] : ($it['product_id'] === null),
+                ], $processedItems),
+                $member !== null || collect($validated['items'])->contains(fn ($r) => !empty($r['is_member'])),
+                $promoEnabled
+            );
+
+            $promoDiscountTotal = 0;
+            foreach ($processedItems as $idx => &$it) {
+                $promoDisc = (float) ($promoLines[$idx]['promo_discount'] ?? 0);
+                $lineSubtotal = max(0, round($it['unit_price'] * $it['qty'] - $promoDisc, 2));
+                $lineTax = $it['_tax_rate'] > 0 ? round($lineSubtotal * ($it['_tax_rate'] / 100), 2) : 0;
+
+                $it['promotion_id'] = $promoLines[$idx]['promotion_id'] ?? null;
+                $it['promo_name'] = $promoLines[$idx]['promo_name'] ?? null;
+                $it['promo_discount'] = $promoDisc;
+                $it['discount_amount'] = round($it['discount_amount'] + $promoDisc, 2);
+                $it['total_price'] = $lineSubtotal;
+                $it['tax_amount'] = $lineTax;
+
+                $subtotal += $lineSubtotal;
+                $discountTotal += $it['discount_amount'];
+                $taxTotal += $lineTax;
+                $promoDiscountTotal += $promoDisc;
+
+                unset($it['_category'], $it['_tax_rate'], $it['_promo_disabled']);
+            }
+            unset($it);
 
             $grandTotal = round($subtotal + $taxTotal, 2);
 
@@ -398,6 +432,8 @@ class TransactionController extends Controller
                 'payment_method' => $method,
                 'subtotal' => $subtotal,
                 'discount_total' => $discountTotal,
+                'promo_discount_total' => $promoDiscountTotal,
+                'promo_enabled' => $promoEnabled,
                 'tax_total' => $taxTotal,
                 'grand_total' => $grandTotal,
                 'cash_received' => $method === 'TUNAI' ? $cashReceived : 0,
@@ -499,6 +535,18 @@ class TransactionController extends Controller
                     'payment_reference' => $transaction->payment_reference,
                     'subtotal' => (float) $transaction->subtotal,
                     'discount_total' => (float) $transaction->discount_total,
+                    'promo_discount_total' => (float) $promoDiscountTotal,
+                    'promo_enabled' => (bool) $promoEnabled,
+                    'items' => array_map(fn ($it) => [
+                        'sku' => $it['sku'],
+                        'name' => $it['product_name'],
+                        'qty' => $it['qty'],
+                        'unit_price' => (float) $it['unit_price'],
+                        'total_price' => (float) $it['total_price'],
+                        'promotion_id' => $it['promotion_id'] ?? null,
+                        'promo_name' => $it['promo_name'] ?? null,
+                        'promo_discount' => (float) ($it['promo_discount'] ?? 0),
+                    ], $processedItems),
                     'tax_total' => (float) $transaction->tax_total,
                     'grand_total' => (float) $transaction->grand_total,
                     'cash_received' => (float) $transaction->cash_received,
@@ -1205,6 +1253,7 @@ class TransactionController extends Controller
                 'payment_reference' => $transaction->payment_reference,
                 'subtotal' => (float) $transaction->subtotal,
                 'discount_total' => (float) $transaction->discount_total,
+                'promo_discount_total' => (float) ($transaction->promo_discount_total ?? 0),
                 'tax_total' => (float) $transaction->tax_total,
                 'grand_total' => (float) $transaction->grand_total,
                 'cash_received' => (float) $transaction->cash_received,
@@ -1226,6 +1275,9 @@ class TransactionController extends Controller
                     'clearance_discount_percent' => (float) $it->clearance_discount_percent,
                     'discount_amount' => (float) $it->discount_amount,
                     'total_price' => (float) $it->total_price,
+                    'promotion_id' => $it->promotion_id,
+                    'promo_name' => $it->promo_name,
+                    'promo_discount' => (float) ($it->promo_discount ?? 0),
                 ]),
             ],
         ]);
@@ -1298,15 +1350,18 @@ class TransactionController extends Controller
         $paginated = $query->paginate($perPage);
 
         $transactions = collect($paginated->items())->map(function ($t) {
+            $createdWib = $t->created_at ? $t->created_at->setTimezone('Asia/Jakarta') : now('Asia/Jakarta');
             $statusNormalized = in_array($t->status, ['SUCCESS', 'COMPLETED']) ? 'SELESAI' : ($t->status === 'VOIDED' ? 'DIBATALKAN' : $t->status);
             return [
                 'id' => $t->invoice_number,
                 'rawId' => $t->id,
                 'invoice_number' => $t->invoice_number,
-                'time' => $t->created_at->format('H:i') . ' WIB',
-                'date' => $t->created_at->translatedFormat('d F Y'),
-                'date_iso' => $t->created_at->format('Y-m-d'),
-                'rawDate' => $t->created_at->format('Y-m-d'),
+                'time' => $createdWib->format('H:i') . ' WIB',
+                'date' => $createdWib->translatedFormat('d M Y'),
+                'date_full' => $createdWib->translatedFormat('d F Y'),
+                'datetime' => $createdWib->translatedFormat('d M Y') . ', ' . $createdWib->format('H:i') . ' WIB',
+                'date_iso' => $createdWib->format('Y-m-d'),
+                'rawDate' => $createdWib->format('Y-m-d'),
                 'terminal' => $t->terminal_code,
                 'cashier' => $t->cashier_name,
                 'cashierNik' => $t->shift?->cashier_nik ?? $t->member_nik,
@@ -1346,6 +1401,8 @@ class TransactionController extends Controller
                     'total' => (float) $it->total_price,
                     'is_expired_clearance' => (bool) $it->is_expired_clearance,
                     'clearance_discount_percent' => (float) $it->clearance_discount_percent,
+                    'promo_name' => $it->promo_name,
+                    'promo_discount' => (float) ($it->promo_discount ?? 0),
                 ]),
             ];
         });

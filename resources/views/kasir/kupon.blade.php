@@ -67,13 +67,19 @@
     get filteredCoupons() {
         return this.coupons.filter(k => {
             if (this.activeCategory !== 'all' && k.category !== this.activeCategory) return false;
-            if (this.statusFilter !== 'all' && k.status !== this.statusFilter) return false;
+            if (this.statusFilter !== 'all') {
+                if (this.statusFilter === 'TERVALIDASI' && !(k.status === 'TERVALIDASI' || k.status === 'AVAILABLE')) return false;
+                else if (this.statusFilter === 'SIAP_AMBIL' && !(k.status === 'SIAP_AMBIL' || k.status === 'ISSUED')) return false;
+                else if (this.statusFilter === 'SELESAI' && !(k.status === 'SELESAI' || k.status === 'REDEEMED')) return false;
+                else if (this.statusFilter !== 'TERVALIDASI' && this.statusFilter !== 'SIAP_AMBIL' && this.statusFilter !== 'SELESAI' && k.status !== this.statusFilter) return false;
+            }
             if (this.searchQuery) {
                 const q = this.searchQuery.toLowerCase();
                 return (k.id || '').toLowerCase().includes(q) ||
-                       (k.recipientName || '').toLowerCase().includes(q) ||
-                       (k.recipientNik || '').toLowerCase().includes(q) ||
-                       (k.itemDetail || '').toLowerCase().includes(q);
+                       (k.recipientName || k.recipient || '').toLowerCase().includes(q) ||
+                       (k.recipientNik || k.nik || '').toLowerCase().includes(q) ||
+                       (k.itemDetail || k.detail || '').toLowerCase().includes(q) ||
+                       (k.notes || '').toLowerCase().includes(q);
             }
             return true;
         });
@@ -87,7 +93,7 @@
         return this.coupons.filter(k => k.category === 'galon').length;
     },
     get pulsaTotalNominal() {
-        return this.coupons.filter(k => k.category === 'pulsa').reduce((sum, k) => sum + (Number(k.nominal) || 0), 0);
+        return this.coupons.filter(k => k.category === 'pulsa').reduce((sum, k) => sum + (Number(k.nominal || k.nominal_value) || 0), 0);
     },
     get berasCount() {
         return this.coupons.filter(k => k.category === 'beras').length;

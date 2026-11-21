@@ -54,12 +54,15 @@
             gross_sales: 0,
             regular_product_sales: 0,
             consignment_product_sales: 0,
+            coupon_sales: 0,
             total_discounts: 0,
             net_sales: 0,
             regular_cogs: 0,
+            coupon_cogs: 0,
             umkm_partner_share: 0,
             cooperative_commission_earned: 0,
             regular_gross_profit: 0,
+            coupon_gross_profit: 0,
             total_gross_profit: 0,
             collected_tax_ppn: 0,
             net_profit: 0,
@@ -520,15 +523,16 @@
             const rows = [
                 [1, 'Penjualan Produk Reguler Koperasi', Number(stmt.regular_product_sales || 0), pct(stmt.regular_product_sales), 'Pendapatan Pokok'],
                 [2, 'Penjualan Produk Titipan Konsinyasi UMKM', Number(stmt.consignment_product_sales || 0), pct(stmt.consignment_product_sales), 'Titipan Mitra UMKM'],
-                [3, 'TOTAL PENJUALAN KOTOR (GROSS SALES)', rev, '100%', 'Total Omzet Toko'],
-                [4, '(-) Potongan / Diskon Promosi', Number(stmt.total_discounts || 0), pct(stmt.total_discounts), 'Beban Promosi'],
-                [5, 'TOTAL PENJUALAN BERSIH (NET SALES)', Number(stmt.net_sales || 0), pct(stmt.net_sales), 'Penjualan Bersih Kasir'],
-                [6, '(-) Harga Pokok Penjualan (HPP Reguler)', Number(stmt.regular_cogs || 0), pct(stmt.regular_cogs), 'Biaya Pokok Barang'],
-                [7, '(-) Hak Setoran Hasil Penjualan ke Mitra UMKM', Number(stmt.umkm_partner_share || 0), pct(stmt.umkm_partner_share), 'Kewajiban Hutang UMKM'],
-                [8, '(+) Komisi Koperasi dari Konsinyasi UMKM', Number(stmt.cooperative_commission_earned || 0), pct(stmt.cooperative_commission_earned), 'Pendapatan Komisi Koperasi'],
-                [9, 'TOTAL LABA KOTOR (GROSS PROFIT)', Number(stmt.total_gross_profit || 0), pct(stmt.total_gross_profit), 'Laba Kotor Usaha'],
-                [10, 'Pajak Pertambahan Nilai (PPN 11%) Terkumpul', Number(stmt.collected_tax_ppn || 0), pct(stmt.collected_tax_ppn), 'Titipan Kas Negara'],
-                [11, 'LABA BERSIH OPERASIONAL (NET PROFIT)', Number(stmt.net_profit || 0), (stmt.profit_margin_percent || 0) + '%', 'Laba Bersih Akhir']
+                [3, 'Penjualan Kupon BBM & Voucher Operasional', Number(stmt.coupon_sales || 0), pct(stmt.coupon_sales), 'Kupon BBM / Voucher'],
+                [4, 'TOTAL PENJUALAN KOTOR (GROSS SALES)', rev, '100%', 'Total Omzet Toko'],
+                [5, '(-) Potongan / Diskon Promosi', Number(stmt.total_discounts || 0), pct(stmt.total_discounts), 'Beban Promosi'],
+                [6, 'TOTAL PENJUALAN BERSIH (NET SALES)', Number(stmt.net_sales || 0), pct(stmt.net_sales), 'Penjualan Bersih Kasir'],
+                [7, '(-) Harga Pokok Penjualan (HPP Reguler)', Number(stmt.regular_cogs || 0), pct(stmt.regular_cogs), 'Biaya Pokok Barang'],
+                [8, '(-) Hak Setoran Hasil Penjualan ke Mitra UMKM', Number(stmt.umkm_partner_share || 0), pct(stmt.umkm_partner_share), 'Kewajiban Hutang UMKM'],
+                [9, '(+) Komisi Koperasi dari Konsinyasi UMKM', Number(stmt.cooperative_commission_earned || 0), pct(stmt.cooperative_commission_earned), 'Pendapatan Komisi Koperasi'],
+                [10, 'TOTAL LABA KOTOR (GROSS PROFIT)', Number(stmt.total_gross_profit || 0), pct(stmt.total_gross_profit), 'Laba Kotor Usaha'],
+                [11, 'Pajak Pertambahan Nilai (PPN 11%) Terkumpul', Number(stmt.collected_tax_ppn || 0), pct(stmt.collected_tax_ppn), 'Titipan Kas Negara'],
+                [12, 'LABA BERSIH OPERASIONAL (NET PROFIT)', Number(stmt.net_profit || 0), (stmt.profit_margin_percent || 0) + '%', 'Laba Bersih Akhir']
             ];
 
             window.exportTableToExcel({
@@ -1157,6 +1161,10 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <div class="flex justify-between py-1 px-3">
                                     <span class="text-gray-600">Penjualan Produk Titipan Konsinyasi UMKM</span>
                                     <span class="font-mono font-bold text-gray-800" x-text="formatRupiah(plData?.statement?.consignment_product_sales || 0)"></span>
+                                </div>
+                                <div class="flex justify-between py-1 px-3">
+                                    <span class="text-gray-600">Penjualan Kupon BBM &amp; Voucher</span>
+                                    <span class="font-mono font-bold text-indigo-700" x-text="formatRupiah(plData?.statement?.coupon_sales || 0)"></span>
                                 </div>
                                 <div class="flex justify-between py-1 px-3 border-t">
                                     <span class="font-bold text-gray-800">Total Penjualan Kotor (Gross Sales)</span>
@@ -2039,6 +2047,11 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                             <td class="p-2 border border-gray-300 pl-4 text-gray-700">Penjualan Produk Titipan Konsinyasi UMKM</td>
                                             <td class="p-2 border border-gray-300 text-right font-mono font-bold text-gray-900" x-text="formatRupiah(plData?.statement?.consignment_product_sales || 0)"></td>
                                             <td class="p-2 border border-gray-300 text-center font-mono text-gray-600" x-text="getPlRatio(plData?.statement?.consignment_product_sales)"></td>
+                                        </tr>
+                                        <tr>
+                                            <td class="p-2 border border-gray-300 pl-4 text-gray-700">Penjualan Kupon BBM &amp; Voucher Operasional</td>
+                                            <td class="p-2 border border-gray-300 text-right font-mono font-bold text-indigo-700" x-text="formatRupiah(plData?.statement?.coupon_sales || 0)"></td>
+                                            <td class="p-2 border border-gray-300 text-center font-mono text-gray-600" x-text="getPlRatio(plData?.statement?.coupon_sales)"></td>
                                         </tr>
                                         <tr class="font-bold bg-gray-50">
                                             <td class="p-2 border border-gray-300 pl-4 text-gray-900">Total Penjualan Kotor (Gross Sales)</td>

@@ -27,6 +27,9 @@ class TransactionItem extends Model
         'clearance_discount_percent',
         'discount_amount',
         'total_price',
+        'promotion_id',
+        'promo_name',
+        'promo_discount',
     ];
 
     protected $casts = [

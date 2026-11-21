@@ -7,10 +7,104 @@
     ...cashierOpeningData(),
     activeTab: 'all', // all | barang_masuk | retur_keluar | retur_masuk | stock_opname
     searchQuery: '',
-    filterMineOnly: false,
-    periodFilter: 'all', // all | today | week | month | year
+    periodFilter: 'all', // all | today | week | month | year | custom
+    customDate: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date()),
 
     operationalLogs: [],
+
+    formatDateTimeWib(val) {
+        if (!val) return '-';
+        try {
+            const d = new Date(val);
+            if (isNaN(d.getTime())) return String(val);
+            const dateStr = d.toLocaleDateString('id-ID', {
+                timeZone: 'Asia/Jakarta',
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric'
+            });
+            const timeStr = d.toLocaleTimeString('id-ID', {
+                timeZone: 'Asia/Jakarta',
+                hour: '2-digit',
+                minute: '2-digit'
+            }).replace('.', ':') + ' WIB';
+            return dateStr + ', ' + timeStr;
+        } catch (e) {
+            return String(val);
+        }
+    },
+
+    getJakartaDateIso(val) {
+        try {
+            const d = val ? new Date(val) : new Date();
+            if (isNaN(d.getTime())) return '';
+            return new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Asia/Jakarta',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            }).format(d);
+        } catch (e) {
+            return '';
+        }
+    },
+
+    getJakartaDate(d = new Date()) {
+        return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+    },
+
+    getStartOfWeekWib() {
+        const d = new Date();
+        const day = d.getDay();
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+        const start = new Date(d.setDate(diff));
+        return this.getJakartaDate(start);
+    },
+
+    get activeBranchName() {
+        return localStorage.getItem('pos_active_branch_label') ||
+               localStorage.getItem('pos_user_branch') ||
+               (this.activeSession?.branchName || 'Cabang Utama');
+    },
+
+    get periodLabel() {
+        if (this.periodFilter === 'today') return 'Hari Ini (' + this.getJakartaDate() + ')';
+        if (this.periodFilter === 'custom') return 'Per Tanggal: ' + this.customDate;
+        if (this.periodFilter === 'week') return 'Minggu Ini';
+        if (this.periodFilter === 'month') return 'Bulan Ini';
+        if (this.periodFilter === 'year') return 'Tahun Ini';
+        return 'Semua Periode';
+    },
+
+    get periodFilteredAllLogs() {
+        const todayStr = this.getJakartaDate();
+        const startOfWeek = this.getStartOfWeekWib();
+        const monthPrefix = todayStr.substring(0, 7);
+        const yearPrefix = todayStr.substring(0, 4);
+
+        return this.operationalLogs.filter(log => {
+            if (this.periodFilter === 'today' && log.dateIso && log.dateIso !== todayStr) return false;
+            if (this.periodFilter === 'custom' && this.customDate && log.dateIso && log.dateIso !== this.customDate) return false;
+            if (this.periodFilter === 'week' && log.dateIso && log.dateIso < startOfWeek) return false;
+            if (this.periodFilter === 'month' && log.dateIso && !log.dateIso.startsWith(monthPrefix)) return false;
+            if (this.periodFilter === 'year' && log.dateIso && !log.dateIso.startsWith(yearPrefix)) return false;
+            return true;
+        });
+    },
+
+    get filteredLogs() {
+        return this.periodFilteredAllLogs.filter(log => {
+            if (this.activeTab !== 'all' && log.type !== this.activeTab) return false;
+            if (this.searchQuery) {
+                const q = this.searchQuery.toLowerCase();
+                return (log.refNo || '').toLowerCase().includes(q) ||
+                       (log.details || '').toLowerCase().includes(q) ||
+                       (log.operator || '').toLowerCase().includes(q) ||
+                       (log.bastNo && log.bastNo.toLowerCase().includes(q));
+            }
+            return true;
+        });
+    },
 
     async initOperationalLogs() {
         const logs = [];
@@ -25,6 +119,7 @@
                 const grJson = await grRes.value.json();
                 if (grJson.success && Array.isArray(grJson.data)) {
                     grJson.data.forEach(d => {
+                        const rawTime = d.createdAt || d.created_at || d.date;
                         logs.push({
                             id: 'GR-' + d.id,
                             type: 'barang_masuk',
@@ -34,8 +129,9 @@
                             refNo: d.docNo || '-',
                             bastNo: d.status !== 'MENUNGGU_VERIFIKASI' ? d.docNo : '-',
                             details: (d.warehouseOrigin || 'Gudang') + ' → ' + (d.destinationStore || 'Toko') + ' (' + (Array.isArray(d.items) ? d.items.length : 0) + ' SKU)',
-                            date: d.date || '-',
-                            createdTimestamp: d.createdAt ? new Date(d.createdAt).getTime() : Date.now(),
+                            date: this.formatDateTimeWib(rawTime),
+                            dateIso: this.getJakartaDateIso(rawTime),
+                            createdTimestamp: rawTime ? new Date(rawTime).getTime() : Date.now(),
                             operator: d.receiverName || d.senderName || d.driverName || '-',
                             status: d.status || 'MENUNGGU_VERIFIKASI'
                         });
@@ -48,6 +144,7 @@
                 if (retJson.success && Array.isArray(retJson.data)) {
                     retJson.data.forEach(r => {
                         const isInbound = r.direction === 'gudang_ke_toko';
+                        const rawTime = r.created_at || r.createdAt || r.date;
                         logs.push({
                             id: 'RET-' + r.id,
                             type: isInbound ? 'retur_masuk' : 'retur_keluar',
@@ -57,8 +154,9 @@
                             refNo: r.docNo || '-',
                             bastNo: '-',
                             details: r.conditionDesc || r.conditionLabel || 'Dokumen retur toko',
-                            date: r.date || '-',
-                            createdTimestamp: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+                            date: this.formatDateTimeWib(rawTime),
+                            dateIso: this.getJakartaDateIso(rawTime),
+                            createdTimestamp: rawTime ? new Date(rawTime).getTime() : Date.now(),
                             operator: r.submitted_by || r.driver || (isInbound ? r.receiverName : '-') || '-',
                             status: r.statusLabel || r.statusKey || '-'
                         });
@@ -70,6 +168,7 @@
                 const sopJson = await sopRes.value.json();
                 if (sopJson.success && Array.isArray(sopJson.data)) {
                     sopJson.data.forEach(s => {
+                        const rawTime = s.created_at || s.createdAt;
                         logs.push({
                             id: 'SOP-' + s.id,
                             type: 'stock_opname',
@@ -79,8 +178,9 @@
                             refNo: s.opname_code || ('SOP-' + s.id),
                             bastNo: '-',
                             details: (s.title || 'Audit Stock Opname') + (s.notes ? ' — ' + s.notes : ''),
-                            date: s.created_at ? new Date(s.created_at).toLocaleString('id-ID') : '-',
-                            createdTimestamp: s.created_at ? new Date(s.created_at).getTime() : Date.now(),
+                            date: this.formatDateTimeWib(rawTime),
+                            dateIso: this.getJakartaDateIso(rawTime),
+                            createdTimestamp: rawTime ? new Date(rawTime).getTime() : Date.now(),
                             operator: s.conducted_by || (this.activeOperator?.name || this.activeSession?.cashierName || '-'),
                             status: s.status || 'DRAFT'
                         });
@@ -91,51 +191,6 @@
             console.warn('Operational logs fetch error:', e);
         }
         this.operationalLogs = logs;
-    },
-
-    get currentCashierName() {
-        return (this.activeOperator ? this.activeOperator.name : (this.activeSession?.cashierName || localStorage.getItem('pos_user_name') || '')).toLowerCase();
-    },
-
-    get currentCashierNik() {
-        return (this.activeOperator ? this.activeOperator.nik : (this.activeSession?.cashierNik || localStorage.getItem('pos_portal_logged_in_nik') || '')).toLowerCase();
-    },
-
-    get filteredLogs() {
-        const now = new Date();
-        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-        const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay()).getTime();
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-        const startOfYear = new Date(now.getFullYear(), 0, 1).getTime();
-
-        return this.operationalLogs.filter(log => {
-            if (this.activeTab !== 'all' && log.type !== this.activeTab) return false;
-
-            // Period filter
-            if (this.periodFilter !== 'all' && log.createdTimestamp) {
-                if (this.periodFilter === 'today' && log.createdTimestamp < startOfToday) return false;
-                if (this.periodFilter === 'week' && log.createdTimestamp < startOfWeek) return false;
-                if (this.periodFilter === 'month' && log.createdTimestamp < startOfMonth) return false;
-                if (this.periodFilter === 'year' && log.createdTimestamp < startOfYear) return false;
-            }
-
-            // Filter kasir itu sendiri jika filterMineOnly aktif
-            if (this.filterMineOnly && (this.currentCashierName || this.currentCashierNik)) {
-                const op = (log.operator || '').toLowerCase();
-                const matchName = this.currentCashierName && op.includes(this.currentCashierName);
-                const matchNik = this.currentCashierNik && op.includes(this.currentCashierNik);
-                if (!matchName && !matchNik && op !== '-') return false;
-            }
-
-            if (this.searchQuery) {
-                const q = this.searchQuery.toLowerCase();
-                return (log.refNo || '').toLowerCase().includes(q) ||
-                       (log.details || '').toLowerCase().includes(q) ||
-                       (log.operator || '').toLowerCase().includes(q) ||
-                       (log.bastNo && log.bastNo.toLowerCase().includes(q));
-            }
-            return true;
-        });
     }
 }"
 x-init="initOpening(); initOperationalLogs();"
@@ -181,8 +236,8 @@ class="flex flex-col h-screen w-full font-sans">
                             <span class="text-[11px] font-extrabold text-emerald-800 uppercase tracking-wider">Barang Masuk DC</span>
                             <span class="material-symbols-rounded text-emerald-600 text-[20px]">inventory_2</span>
                         </div>
-                        <h2 class="text-2xl font-black text-emerald-700 mt-1.5 font-mono" x-text="(operationalLogs.filter(l => l.type === 'barang_masuk').length) + ' BAST'">0 BAST</h2>
-                        <span class="text-xs font-bold text-emerald-600 mt-1 block">100% Terverifikasi Lengkap</span>
+                        <h2 class="text-2xl font-black text-emerald-700 mt-1.5 font-mono" x-text="(periodFilteredAllLogs.filter(l => l.type === 'barang_masuk').length) + ' BAST'">0 BAST</h2>
+                        <span class="text-xs font-bold text-emerald-600 mt-1 block" x-text="periodLabel"></span>
                     </div>
 
                     <div class="bg-white rounded-xl p-5 border border-amber-200 shadow-xs">
@@ -190,8 +245,8 @@ class="flex flex-col h-screen w-full font-sans">
                             <span class="text-[11px] font-extrabold text-amber-800 uppercase tracking-wider">Retur Toko Diajukan</span>
                             <span class="material-symbols-rounded text-amber-600 text-[20px]">assignment_return</span>
                         </div>
-                        <h2 class="text-2xl font-black text-amber-700 mt-1.5 font-mono" x-text="(operationalLogs.filter(l => l.type === 'retur_keluar').length) + ' Pengajuan'">0 Pengajuan</h2>
-                        <span class="text-xs font-bold text-amber-600 mt-1 block">Menunggu Serah Terima Fisik</span>
+                        <h2 class="text-2xl font-black text-amber-700 mt-1.5 font-mono" x-text="(periodFilteredAllLogs.filter(l => l.type === 'retur_keluar').length) + ' Pengajuan'">0 Pengajuan</h2>
+                        <span class="text-xs font-bold text-amber-600 mt-1 block" x-text="periodLabel"></span>
                     </div>
 
                     <div class="bg-white rounded-xl p-5 border border-purple-200 shadow-xs">
@@ -199,8 +254,8 @@ class="flex flex-col h-screen w-full font-sans">
                             <span class="text-[11px] font-extrabold text-purple-800 uppercase tracking-wider">Klaim Garansi Diterima</span>
                             <span class="material-symbols-rounded text-purple-600 text-[20px]">assignment_returned</span>
                         </div>
-                        <h2 class="text-2xl font-black text-purple-700 mt-1.5 font-mono" x-text="(operationalLogs.filter(l => l.type === 'retur_masuk').length) + ' BAST'">0 BAST</h2>
-                        <span class="text-xs font-bold text-purple-600 mt-1 block">Barang Pengganti Layak</span>
+                        <h2 class="text-2xl font-black text-purple-700 mt-1.5 font-mono" x-text="(periodFilteredAllLogs.filter(l => l.type === 'retur_masuk').length) + ' BAST'">0 BAST</h2>
+                        <span class="text-xs font-bold text-purple-600 mt-1 block" x-text="periodLabel"></span>
                     </div>
 
                     <div class="bg-white rounded-xl p-5 border border-blue-200 shadow-xs">
@@ -208,67 +263,107 @@ class="flex flex-col h-screen w-full font-sans">
                             <span class="text-[11px] font-extrabold text-blue-800 uppercase tracking-wider">Stock Opname</span>
                             <span class="material-symbols-rounded text-blue-600 text-[20px]">fact_check</span>
                         </div>
-                        <h2 class="text-2xl font-black text-[#0052cc] mt-1.5 font-mono" x-text="(operationalLogs.filter(l => l.type === 'stock_opname').length) + ' Sesi'">0 Sesi</h2>
-                        <span class="text-xs font-bold text-blue-600 mt-1 block">Akurasi Fisik vs Buku</span>
+                        <h2 class="text-2xl font-black text-[#0052cc] mt-1.5 font-mono" x-text="(periodFilteredAllLogs.filter(l => l.type === 'stock_opname').length) + ' Sesi'">0 Sesi</h2>
+                        <span class="text-xs font-bold text-blue-600 mt-1 block" x-text="periodLabel"></span>
                     </div>
                 </div>
 
                 <!-- Tabs & Search -->
-                <div class="bg-white rounded-t-xl p-5 border border-gray-200 shadow-xs flex flex-col md:flex-row items-center justify-between gap-4 border-b-0">
-                    <div class="flex items-center gap-1.5 bg-gray-100 p-1 rounded-xl w-full md:w-auto overflow-x-auto">
-                        <button type="button"
-                                @click="activeTab = 'all'"
-                                :class="activeTab === 'all' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
-                                class="px-3 py-1.5 rounded-lg text-xs transition-all whitespace-nowrap cursor-pointer">
-                            Semua Aktivitas
-                        </button>
-                        <button type="button"
-                                @click="activeTab = 'barang_masuk'"
-                                :class="activeTab === 'barang_masuk' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
-                                class="px-3 py-1.5 rounded-lg text-xs transition-all whitespace-nowrap cursor-pointer">
-                            Barang Masuk
-                        </button>
-                        <button type="button"
-                                @click="activeTab = 'retur_keluar'"
-                                :class="activeTab === 'retur_keluar' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
-                                class="px-3 py-1.5 rounded-lg text-xs transition-all whitespace-nowrap cursor-pointer">
-                            Retur ke DC
-                        </button>
-                        <button type="button"
-                                @click="activeTab = 'retur_masuk'"
-                                :class="activeTab === 'retur_masuk' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
-                                class="px-3 py-1.5 rounded-lg text-xs transition-all whitespace-nowrap cursor-pointer">
-                            Retur Masuk
-                        </button>
-                        <button type="button"
-                                @click="activeTab = 'stock_opname'"
-                                :class="activeTab === 'stock_opname' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
-                                class="px-3 py-1.5 rounded-lg text-xs transition-all whitespace-nowrap cursor-pointer">
-                            Stock Opname
-                        </button>
+                <div class="bg-white rounded-t-xl p-5 border border-gray-200 shadow-xs flex flex-col gap-4 border-b-0">
+                    <div class="flex items-center justify-between flex-wrap gap-3">
+                        <div class="flex items-center gap-1.5 bg-gray-100 p-1 rounded-xl w-full md:w-auto overflow-x-auto">
+                            <button type="button"
+                                    @click="activeTab = 'all'"
+                                    :class="activeTab === 'all' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
+                                    class="px-3 py-1.5 rounded-lg text-xs transition-all whitespace-nowrap cursor-pointer">
+                                Semua Aktivitas
+                            </button>
+                            <button type="button"
+                                    @click="activeTab = 'barang_masuk'"
+                                    :class="activeTab === 'barang_masuk' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
+                                    class="px-3 py-1.5 rounded-lg text-xs transition-all whitespace-nowrap cursor-pointer">
+                                Barang Masuk
+                            </button>
+                            <button type="button"
+                                    @click="activeTab = 'retur_keluar'"
+                                    :class="activeTab === 'retur_keluar' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
+                                    class="px-3 py-1.5 rounded-lg text-xs transition-all whitespace-nowrap cursor-pointer">
+                                Retur ke DC
+                            </button>
+                            <button type="button"
+                                    @click="activeTab = 'retur_masuk'"
+                                    :class="activeTab === 'retur_masuk' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
+                                    class="px-3 py-1.5 rounded-lg text-xs transition-all whitespace-nowrap cursor-pointer">
+                                Retur Masuk
+                            </button>
+                            <button type="button"
+                                    @click="activeTab = 'stock_opname'"
+                                    :class="activeTab === 'stock_opname' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
+                                    class="px-3 py-1.5 rounded-lg text-xs transition-all whitespace-nowrap cursor-pointer">
+                                Stock Opname
+                            </button>
+                        </div>
+
+                        <!-- Operasional Cabang Indicator -->
+                        <div class="px-3.5 py-1.5 rounded-xl border border-blue-200 bg-blue-50/70 text-[#0052cc] text-xs font-bold flex items-center gap-1.5 shadow-2xs shrink-0">
+                            <span class="material-symbols-rounded text-[17px]">storefront</span>
+                            <span>Operasional Cabang: <strong class="text-blue-900" x-text="activeBranchName"></strong></span>
+                        </div>
                     </div>
 
-                    <div class="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
-                        <!-- Toggle Aktivitas Saya -->
-                        <button type="button"
-                                @click="filterMineOnly = !filterMineOnly"
-                                :class="filterMineOnly ? 'bg-blue-50 text-[#0052cc] border-[#0052cc]' : 'bg-white text-gray-600 border-gray-200'"
-                                class="px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer">
-                            <span class="material-symbols-rounded text-[16px]">account_circle</span>
-                            <span x-text="filterMineOnly ? 'Aktivitas Saya (Aktif)' : 'Semua Petugas'"></span>
-                        </button>
+                    <!-- Filter Periode (Hari Ini, Minggu Ini, Bulan Ini, Tahun Ini, Per Tanggal) & Search Bar -->
+                    <div class="flex items-center justify-between flex-wrap gap-3 pt-3 border-t border-gray-100">
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span class="text-[10px] font-black text-gray-400 uppercase tracking-wider mr-1">Filter Periode:</span>
+                            <div class="flex items-center gap-1 bg-gray-100 p-1 rounded-xl overflow-x-auto">
+                                <button type="button"
+                                        @click="periodFilter = 'today'"
+                                        :class="periodFilter === 'today' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
+                                        class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
+                                    Hari Ini
+                                </button>
+                                <button type="button"
+                                        @click="periodFilter = 'week'"
+                                        :class="periodFilter === 'week' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
+                                        class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
+                                    Minggu Ini
+                                </button>
+                                <button type="button"
+                                        @click="periodFilter = 'month'"
+                                        :class="periodFilter === 'month' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
+                                        class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
+                                    Bulan Ini
+                                </button>
+                                <button type="button"
+                                        @click="periodFilter = 'year'"
+                                        :class="periodFilter === 'year' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
+                                        class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
+                                    Tahun Ini
+                                </button>
+                                <button type="button"
+                                        @click="periodFilter = 'custom'"
+                                        :class="periodFilter === 'custom' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
+                                        class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
+                                    Per Tanggal
+                                </button>
+                                <button type="button"
+                                        @click="periodFilter = 'all'"
+                                        :class="periodFilter === 'all' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
+                                        class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
+                                    Semua
+                                </button>
+                            </div>
 
-                        <!-- Filter Periode: Harian, Mingguan, Bulanan, Tahunan -->
-                        <select x-model="periodFilter"
-                                class="bg-slate-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-gray-700 font-bold focus:outline-none focus:border-[#0052cc] cursor-pointer">
-                            <option value="all">Semua Periode</option>
-                            <option value="today">Harian (Hari Ini)</option>
-                            <option value="week">Mingguan (Minggu Ini)</option>
-                            <option value="month">Bulanan (Bulan Ini)</option>
-                            <option value="year">Tahunan (Tahun Ini)</option>
-                        </select>
+                            <!-- Date Picker for 'custom' (Per Tanggal) -->
+                            <div x-show="periodFilter === 'custom'" x-transition class="flex items-center gap-1.5 bg-slate-50 border border-gray-300 rounded-xl px-2.5 py-1">
+                                <span class="material-symbols-rounded text-[#0052cc] text-[16px]">calendar_today</span>
+                                <input type="date"
+                                       x-model="customDate"
+                                       class="text-xs font-bold text-gray-800 bg-transparent focus:outline-none cursor-pointer" />
+                            </div>
+                        </div>
 
-                        <div class="relative flex-1 sm:w-48">
+                        <div class="relative flex-1 sm:w-56 max-w-xs">
                             <span class="material-symbols-rounded absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-[18px]">search</span>
                             <input type="text"
                                    x-model="searchQuery"

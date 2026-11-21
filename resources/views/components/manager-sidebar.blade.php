@@ -147,6 +147,12 @@
                 <span>Promosi &amp; Diskon</span>
             </a>
 
+            <!-- 6b. Kupon Produk -->
+            <a :href="getNavUrl('{{ url('/manager/kupon') }}')" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-colors text-[13px] {{ $active === 'kupon' ? 'bg-[#eef2ff] text-[#0052cc] font-bold border-r-4 border-[#0052cc]' : 'text-gray-600 hover:bg-gray-200 font-semibold' }}">
+                <span class="material-symbols-rounded text-[20px] {{ $active === 'kupon' ? 'filled' : '' }}">confirmation_number</span>
+                <span>Kupon Produk</span>
+            </a>
+
             <!-- 7. Absensi Karyawan -->
             <a :href="getNavUrl('{{ url('/absensi') }}')" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-colors text-[13px] {{ $active === 'absensi' ? 'bg-[#eef2ff] text-[#0052cc] font-bold border-r-4 border-[#0052cc]' : 'text-gray-600 hover:bg-gray-200 font-semibold' }}">
                 <span class="material-symbols-rounded text-[20px] {{ $active === 'absensi' ? 'filled' : '' }}">badge</span>

@@ -13,10 +13,49 @@
         role: localStorage.getItem('pos_user_role') || 'Kasir Operasional',
         terminal: localStorage.getItem('pos_active_terminal_label') || 'Terminal Kasir',
         shift: 'Shift Aktif',
-        activeSince: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':') + ' WIB'
+        activeSince: new Date().toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit' }).replace('.', ':') + ' WIB'
     },
 
+    periodFilter: 'today',
+    customDate: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date()),
     myTransactions: [],
+
+    getJakartaDate(d = new Date()) {
+        return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+    },
+
+    getStartOfWeekWib() {
+        const d = new Date();
+        const day = d.getDay();
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+        const start = new Date(d.setDate(diff));
+        return this.getJakartaDate(start);
+    },
+
+    get periodLabel() {
+        if (this.periodFilter === 'today') return 'Hari Ini (' + this.getJakartaDate() + ')';
+        if (this.periodFilter === 'custom') return 'Per Tanggal: ' + this.customDate;
+        if (this.periodFilter === 'week') return 'Minggu Ini';
+        if (this.periodFilter === 'month') return 'Bulan Ini';
+        if (this.periodFilter === 'year') return 'Tahun Ini';
+        return 'Semua Periode';
+    },
+
+    get filteredMyTransactions() {
+        const todayStr = this.getJakartaDate();
+        const startOfWeek = this.getStartOfWeekWib();
+        const monthPrefix = todayStr.substring(0, 7);
+        const yearPrefix = todayStr.substring(0, 4);
+
+        return this.myTransactions.filter(t => {
+            if (this.periodFilter === 'today' && t.date && t.date !== todayStr) return false;
+            if (this.periodFilter === 'custom' && this.customDate && t.date && t.date !== this.customDate) return false;
+            if (this.periodFilter === 'week' && t.date && t.date < startOfWeek) return false;
+            if (this.periodFilter === 'month' && t.date && !t.date.startsWith(monthPrefix)) return false;
+            if (this.periodFilter === 'year' && t.date && !t.date.startsWith(yearPrefix)) return false;
+            return true;
+        });
+    },
 
     async initMyReport() {
         if (this.activeOperator) {
@@ -41,7 +80,9 @@
                     }) : json.data;
                     this.myTransactions = filtered.map(t => ({
                         id: t.id,
-                        time: t.time,
+                        time: t.time || '-',
+                        date: t.date_iso || t.rawDate || '',
+                        displayDate: t.date || '-',
                         method: t.method,
                         cashPortion: Number(t.cashPortion || 0),
                         nonCashPortion: Number(t.nonCashPortion || 0),
@@ -86,7 +127,7 @@
     },
 
     getMethodStats(methodKey) {
-        const completed = this.myTransactions.filter(t => t.status === 'SELESAI' || t.status === 'SUCCESS' || t.statusCode === 'SUCCESS');
+        const completed = this.filteredMyTransactions.filter(t => t.status === 'SELESAI' || t.status === 'SUCCESS' || t.statusCode === 'SUCCESS');
         let matched = [];
         if (methodKey === 'TUNAI') {
             matched = completed.filter(t => t.method === 'TUNAI');
@@ -104,7 +145,7 @@
     },
 
     get expectedCashLiability() {
-        const cashFromTrx = this.myTransactions
+        const cashFromTrx = this.filteredMyTransactions
             .filter(t => t.status === 'SELESAI' || t.status === 'SUCCESS' || t.statusCode === 'SUCCESS')
             .reduce((sum, t) => sum + Number(t.cashPortion || (t.method === 'TUNAI' ? t.total : 0)), 0);
         const opening = Number(this.activeSession?.openingCash || 0);
@@ -112,11 +153,11 @@
     },
 
     get totalMySales() {
-        return this.myTransactions.filter(t => t.status === 'SELESAI' || t.status === 'SUCCESS' || t.statusCode === 'SUCCESS').reduce((sum, t) => sum + t.total, 0);
+        return this.filteredMyTransactions.filter(t => t.status === 'SELESAI' || t.status === 'SUCCESS' || t.statusCode === 'SUCCESS').reduce((sum, t) => sum + t.total, 0);
     },
 
     get totalMyTrxCount() {
-        return this.myTransactions.filter(t => t.status === 'SELESAI' || t.status === 'SUCCESS' || t.statusCode === 'SUCCESS').length;
+        return this.filteredMyTransactions.filter(t => t.status === 'SELESAI' || t.status === 'SUCCESS' || t.statusCode === 'SUCCESS').length;
     },
 
     get avgBasketSize() {
@@ -124,7 +165,7 @@
     },
 
     get totalDiscountGiven() {
-        return this.myTransactions.reduce((sum, t) => sum + (t.discount || 0), 0);
+        return this.filteredMyTransactions.reduce((sum, t) => sum + (t.discount || 0), 0);
     },
 
     get totalRefundAmount() {
@@ -163,7 +204,7 @@ class="flex flex-col h-screen w-full font-sans">
                 </div>
 
                 <!-- Info Banner: Permission Kasir Login Only -->
-                <div class="bg-blue-50/70 border border-blue-200/80 rounded-2xl p-4 mb-6 flex items-start sm:items-center justify-between gap-4">
+                <div class="bg-blue-50/70 border border-blue-200/80 rounded-2xl p-4 mb-5 flex items-start sm:items-center justify-between gap-4">
                     <div class="flex items-center gap-3.5">
                         <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-xs" x-text="cashierInitials">
                             -
@@ -185,12 +226,69 @@ class="flex flex-col h-screen w-full font-sans">
                     </div>
                 </div>
 
+                <!-- Quick Period Switcher (Hari Ini, Minggu Ini, Bulan Ini, Tahun Ini, Per Tanggal) -->
+                <div class="bg-white rounded-2xl border border-gray-200 p-3.5 mb-6 shadow-xs flex items-center justify-between flex-wrap gap-3">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <span class="text-[10px] font-black text-gray-400 uppercase tracking-wider mr-1">Filter Periode:</span>
+                        <div class="flex items-center gap-1 bg-gray-100 p-1 rounded-xl overflow-x-auto">
+                            <button type="button"
+                                    @click="periodFilter = 'today'"
+                                    :class="periodFilter === 'today' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
+                                    class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
+                                Hari Ini
+                            </button>
+                            <button type="button"
+                                    @click="periodFilter = 'week'"
+                                    :class="periodFilter === 'week' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
+                                    class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
+                                Minggu Ini
+                            </button>
+                            <button type="button"
+                                    @click="periodFilter = 'month'"
+                                    :class="periodFilter === 'month' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
+                                    class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
+                                Bulan Ini
+                            </button>
+                            <button type="button"
+                                    @click="periodFilter = 'year'"
+                                    :class="periodFilter === 'year' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
+                                    class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
+                                Tahun Ini
+                            </button>
+                            <button type="button"
+                                    @click="periodFilter = 'custom'"
+                                    :class="periodFilter === 'custom' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
+                                    class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
+                                Per Tanggal
+                            </button>
+                            <button type="button"
+                                    @click="periodFilter = 'all'"
+                                    :class="periodFilter === 'all' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
+                                    class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
+                                Semua
+                            </button>
+                        </div>
+
+                        <!-- Date Picker for 'custom' (Per Tanggal) -->
+                        <div x-show="periodFilter === 'custom'" x-transition class="flex items-center gap-1.5 bg-slate-50 border border-gray-300 rounded-xl px-2.5 py-1">
+                            <span class="material-symbols-rounded text-[#0052cc] text-[16px]">calendar_today</span>
+                            <input type="date"
+                                   x-model="customDate"
+                                   class="text-xs font-bold text-gray-800 bg-transparent focus:outline-none cursor-pointer" />
+                        </div>
+                    </div>
+
+                    <div class="text-[11px] font-medium text-gray-500">
+                        Menampilkan data: <strong class="text-gray-800 font-bold" x-text="periodLabel"></strong>
+                    </div>
+                </div>
+
                 <!-- KPI Cards for Current Cashier -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
                     <div class="bg-white rounded-xl p-5 border border-gray-200 shadow-xs">
                         <span class="text-[11px] font-extrabold text-gray-500 uppercase tracking-wider">Omzet Pribadi</span>
                         <h2 class="text-2xl font-black text-[#0052cc] mt-1.5 font-mono" x-text="formatRupiah(totalMySales)">Rp 0</h2>
-                        <span class="text-xs font-bold text-emerald-600 mt-1 block">Hari Ini</span>
+                        <span class="text-xs font-bold text-emerald-600 mt-1 block" x-text="periodLabel"></span>
                     </div>
 
                     <div class="bg-white rounded-xl p-5 border border-gray-200 shadow-xs">
@@ -315,8 +413,8 @@ class="flex flex-col h-screen w-full font-sans">
                 <div class="bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden">
                     <div class="p-4 border-b border-gray-100 flex items-center justify-between">
                         <div class="flex items-center gap-2">
-                            <h3 class="text-xs font-black text-gray-900 uppercase tracking-wider" x-text="'Log Transaksi Kasir ' + (activeCashierProfile.name || '-') + ' (Hari Ini)'">Log Transaksi Kasir (Hari Ini)</h3>
-                            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-[#0052cc]" x-text="myTransactions.length + ' Transaksi'"></span>
+                            <h3 class="text-xs font-black text-gray-900 uppercase tracking-wider" x-text="'Log Transaksi Kasir ' + (activeCashierProfile.name || '-') + ' (' + periodLabel + ')'">Log Transaksi Kasir</h3>
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-[#0052cc]" x-text="filteredMyTransactions.length + ' Transaksi'"></span>
                         </div>
                         <a href="{{ url('/kasir/transaksi/riwayat') }}" class="text-xs font-bold text-[#0052cc] hover:underline flex items-center gap-1">
                             <span>Lihat di Riwayat Transaksi</span>
@@ -328,7 +426,8 @@ class="flex flex-col h-screen w-full font-sans">
                             <thead>
                                 <tr class="bg-gray-50/80 border-b border-gray-200 text-gray-600 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
                                     <th class="px-5 py-3 text-left w-[140px]">No. Faktur</th>
-                                    <th class="px-5 py-3 text-left w-[130px]">Waktu</th>
+                                    <th class="px-5 py-3 text-left w-[130px]">Tanggal</th>
+                                    <th class="px-5 py-3 text-left w-[110px]">Waktu</th>
                                     <th class="px-5 py-3 text-left w-[140px]">Metode Bayar</th>
                                     <th class="px-5 py-3 text-center w-[120px]">Jumlah Item</th>
                                     <th class="px-5 py-3 text-right w-[110px]">Diskon</th>
@@ -338,9 +437,10 @@ class="flex flex-col h-screen w-full font-sans">
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100">
-                                <template x-for="trx in myTransactions" :key="trx.id">
+                                <template x-for="trx in filteredMyTransactions" :key="trx.id">
                                     <tr class="hover:bg-blue-50/30 transition-colors">
                                         <td class="px-5 py-3 font-mono font-bold text-[#0052cc] whitespace-nowrap" x-text="trx.id"></td>
+                                        <td class="px-5 py-3 font-medium text-gray-800 whitespace-nowrap" x-text="trx.displayDate"></td>
                                         <td class="px-5 py-3 text-gray-600 font-mono whitespace-nowrap" x-text="trx.time"></td>
                                         <td class="px-5 py-3 whitespace-nowrap">
                                             <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold"
@@ -367,6 +467,12 @@ class="flex flex-col h-screen w-full font-sans">
                                         </td>
                                     </tr>
                                 </template>
+                                <tr x-show="filteredMyTransactions.length === 0">
+                                    <td colspan="9" class="text-center py-10 text-gray-400">
+                                        <span class="material-symbols-rounded text-3xl mb-1 text-gray-300">receipt_long</span>
+                                        <p class="font-bold text-gray-600">Tidak ada transaksi kasir pada periode ini.</p>
+                                    </td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>

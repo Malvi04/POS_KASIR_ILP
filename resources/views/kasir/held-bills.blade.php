@@ -22,30 +22,38 @@
             if (res.ok) {
                 const json = await res.json();
                 if (json.success && Array.isArray(json.data)) {
-                    this.heldBills = json.data.map(b => ({
-                        id: b.hold_code,
-                        rawId: b.id,
-                        customerName: b.customer_name,
-                        customerType: b.member_nik ? 'Anggota Koperasi' : 'Pelanggan Umum',
-                        holdTime: b.hold_time_label,
-                        elapsedMinutes: 5,
-                        sessionLabel: b.terminal_code || '-',
-                        isHandover: false,
-                        handoverFrom: null,
-                        note: b.note || '-',
-                        totalAmount: b.grand_total,
-                        itemCount: b.total_items,
-                        items: (b.items || []).map(it => ({
-                            sku: it.sku,
-                            barcode: it.barcode,
-                            name: it.name,
-                            qty: it.qty,
-                            price: it.price,
-                            memberPrice: it.member_price || it.price,
-                            total: it.price * it.qty,
-                            unit: it.unit || 'Pcs'
-                        }))
-                    }));
+                    this.heldBills = json.data.map(b => {
+                        const heldDateObj = b.held_at ? new Date(b.held_at) : new Date();
+                        const dateFormatted = b.hold_date_label || heldDateObj.toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', day: 'numeric', month: 'short', year: 'numeric' });
+                        const timeFormatted = b.hold_time_label || (heldDateObj.toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit' }).replace('.', ':') + ' WIB');
+                        const diffMins = Math.max(1, Math.round((Date.now() - heldDateObj.getTime()) / 60000));
+                        return {
+                            id: b.hold_code,
+                            rawId: b.id,
+                            customerName: b.customer_name,
+                            customerType: b.member_nik ? 'Anggota Koperasi' : 'Pelanggan Umum',
+                            holdDate: dateFormatted,
+                            holdTime: timeFormatted,
+                            holdDateTime: dateFormatted + ', ' + timeFormatted,
+                            elapsedMinutes: isNaN(diffMins) ? 5 : diffMins,
+                            sessionLabel: b.terminal_code || '-',
+                            isHandover: false,
+                            handoverFrom: null,
+                            note: b.note || '-',
+                            totalAmount: b.grand_total,
+                            itemCount: b.total_items,
+                            items: (b.items || []).map(it => ({
+                                sku: it.sku,
+                                barcode: it.barcode,
+                                name: it.name,
+                                qty: it.qty,
+                                price: it.price,
+                                memberPrice: it.member_price || it.price,
+                                total: it.price * it.qty,
+                                unit: it.unit || 'Pcs'
+                            }))
+                        };
+                    });
                     if (this.activeSession) this.activeSession.heldBillsCount = this.heldBills.length;
                     this.saveHeldBillsToStorage();
                     return;
@@ -191,6 +199,12 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
 
                     <div class="flex items-center gap-2">
+                        <button type="button"
+                                @click="window.print()"
+                                class="px-4 py-2.5 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer">
+                            <span class="material-symbols-rounded text-[18px]">print</span>
+                            <span>Cetak Laporan Bill</span>
+                        </button>
                         <a href="{{ url('/pos') }}" class="px-4 py-2.5 bg-[#0052cc] hover:bg-[#0043a8] text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-2">
                             <span class="material-symbols-rounded text-[18px]">point_of_sale</span>
                             <span>Kembali ke POS</span>
@@ -270,9 +284,13 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         </div>
                                         <div>
                                             <span class="font-mono font-bold text-gray-900 text-sm" x-text="bill.id"></span>
-                                            <div class="flex items-center gap-1 text-[10px] text-gray-400 mt-0.5">
-                                                <span class="material-symbols-rounded text-[12px]">schedule</span>
-                                                <span x-text="bill.holdTime + ' (' + bill.elapsedMinutes + ' mnt lalu)'"></span>
+                                            <div class="flex items-center gap-1.5 text-[10.5px] text-gray-500 mt-0.5">
+                                                <span class="material-symbols-rounded text-[13px] text-gray-400">calendar_today</span>
+                                                <span class="font-medium" x-text="bill.holdDate || 'Hari Ini'"></span>
+                                                <span class="text-gray-300">•</span>
+                                                <span class="material-symbols-rounded text-[13px] text-gray-400">schedule</span>
+                                                <span class="font-bold text-gray-700" x-text="bill.holdTime"></span>
+                                                <span class="text-gray-400" x-text="'(' + bill.elapsedMinutes + ' mnt lalu)'"></span>
                                             </div>
                                         </div>
                                     </div>
@@ -449,6 +467,77 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
             </div>
         </div>
     </template>
+
+    <!-- PRINTABLE REPORT (HANYA MUNCUL SAAT CETAK LAPORAN) -->
+    <div class="hidden print:block fixed inset-0 bg-white z-[9999] p-8 text-black">
+        <div class="text-center pb-4 border-b-2 border-black mb-4">
+            <h2 class="text-lg font-black uppercase tracking-wider">KOPERASI KONSUMEN ILP (KOPKAR ILP)</h2>
+            <h3 class="text-sm font-bold uppercase tracking-wide">LAPORAN REKAPITULASI TRANSAKSI DITAHAN (HELD BILLS)</h3>
+            <p class="text-xs mt-1">
+                Waktu Cetak: <span x-text="new Date().toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', day: 'numeric', month: 'long', year: 'numeric' }) + ' ' + new Date().toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', second: '2-digit' }).replace(/\./g, ':') + ' WIB'"></span>
+                • Petugas Kasir: <span x-text="activeSession?.cashierName || localStorage.getItem('pos_user_name') || '-'"></span>
+                • Terminal: <span x-text="activeSession?.terminalCode || localStorage.getItem('pos_active_terminal_label') || '-'"></span>
+            </p>
+        </div>
+
+        <div class="mb-4 flex justify-between text-xs">
+            <span>Total Antrean Tertahan: <strong x-text="heldBills.length + ' Bill'"></strong></span>
+            <span>Total Estimasi Nilai: <strong class="font-mono" x-text="formatRupiah(totalHeldAmount)"></strong></span>
+        </div>
+
+        <table class="w-full text-left border-collapse text-xs border border-gray-400">
+            <thead>
+                <tr class="bg-gray-100 border-b border-gray-400 font-bold">
+                    <th class="p-2 border-r border-gray-400 text-center w-8">No</th>
+                    <th class="p-2 border-r border-gray-400 w-28">No. Hold</th>
+                    <th class="p-2 border-r border-gray-400 w-36">Tanggal & Jam (WIB)</th>
+                    <th class="p-2 border-r border-gray-400">Nama Pelanggan</th>
+                    <th class="p-2 border-r border-gray-400 text-center w-20">Jml Item</th>
+                    <th class="p-2 border-r border-gray-400 text-right w-28">Nilai Total</th>
+                    <th class="p-2">Keterangan / Catatan</th>
+                </tr>
+            </thead>
+            <tbody>
+                <template x-for="(b, idx) in heldBills" :key="b.id">
+                    <tr class="border-b border-gray-300">
+                        <td class="p-2 border-r border-gray-300 text-center" x-text="idx + 1"></td>
+                        <td class="p-2 border-r border-gray-300 font-mono font-bold" x-text="b.id"></td>
+                        <td class="p-2 border-r border-gray-300 font-mono" x-text="b.holdDateTime"></td>
+                        <td class="p-2 border-r border-gray-300">
+                            <span class="font-bold" x-text="b.customerName"></span>
+                            <span class="text-[10px] block text-gray-600" x-text="b.customerType"></span>
+                        </td>
+                        <td class="p-2 border-r border-gray-300 text-center font-bold" x-text="b.itemCount + ' item'"></td>
+                        <td class="p-2 border-r border-gray-300 text-right font-mono font-bold" x-text="formatRupiah(b.totalAmount)"></td>
+                        <td class="p-2 text-[11px] text-gray-700 italic" x-text="b.note"></td>
+                    </tr>
+                </template>
+                <tr x-show="heldBills.length === 0">
+                    <td colspan="7" class="p-4 text-center text-gray-500 italic">Tidak ada transaksi tertahan saat laporan dicetak.</td>
+                </tr>
+            </tbody>
+            <tfoot>
+                <tr class="font-bold bg-gray-50 border-t-2 border-gray-400">
+                    <td colspan="5" class="p-2 text-right">TOTAL NILAI TERTANGGUH:</td>
+                    <td class="p-2 text-right font-mono" x-text="formatRupiah(totalHeldAmount)"></td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+
+        <div class="mt-8 flex justify-between text-xs text-center">
+            <div class="w-48">
+                <p>Petugas Kasir,</p>
+                <div class="h-16"></div>
+                <p class="font-bold underline" x-text="activeSession?.cashierName || localStorage.getItem('pos_user_name') || 'Kasir'"></p>
+            </div>
+            <div class="w-48">
+                <p>Supervisor / Manager,</p>
+                <div class="h-16"></div>
+                <p class="font-bold underline">(.......................................)</p>
+            </div>
+        </div>
+    </div>
 
     <!-- TOAST -->
     <div x-show="showToast"

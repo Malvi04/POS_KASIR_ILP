@@ -55,7 +55,7 @@ class CouponController extends Controller
         $allMatching = (clone $query)->get();
         $totalCount = $allMatching->count();
         $activeCount = $allMatching->whereIn('status', ['AVAILABLE', 'ISSUED', 'TERVALIDASI', 'SIAP_AMBIL'])->count();
-        $redeemedCount = $allMatching->where('status', 'REDEEMED')->count();
+        $redeemedCount = $allMatching->whereIn('status', ['REDEEMED', 'SELESAI'])->count();
         $totalNominal = (float) $allMatching->sum('nominal_value');
 
         $paginated = $query->paginate($perPage);
@@ -81,9 +81,9 @@ class CouponController extends Controller
                     'defaultDetail' => 'Tukar Galon Aqua 19L'
                 ],
                 'pulsa' => [
-                    'label' => 'Pulsa Operasional',
-                    'badgeClass' => 'bg-purple-50 text-purple-700 border-purple-200',
-                    'dotClass' => 'bg-purple-500',
+                    'label' => 'Kuota & Pulsa',
+                    'badgeClass' => 'bg-orange-50 text-orange-700 border-orange-200',
+                    'dotClass' => 'bg-orange-500',
                     'defaultDetail' => 'Paket Data Driver & Operasional'
                 ],
                 'produk' => [
@@ -103,33 +103,47 @@ class CouponController extends Controller
             $statusLabel = match($c->status) {
                 'AVAILABLE', 'TERVALIDASI' => 'Tervalidasi (Siap Pakai)',
                 'ISSUED', 'SIAP_AMBIL' => 'Siap Ambil di Kasir',
-                'REDEEMED' => 'Sudah Digunakan',
+                'REDEEMED', 'SELESAI' => 'Selesai Ditukar',
                 'EXPIRED' => 'Kedaluwarsa',
                 default => $c->status
             };
 
+            $detailText = $c->product?->name ?: ($c->notes ?: $categoryInfo['defaultDetail']);
+
             return [
                 'id' => $c->serial_number,
+                'serial_number' => $c->serial_number,
                 'raw_id' => $c->id,
                 'category' => $c->category,
                 'categoryLabel' => $categoryInfo['label'],
-                'detail' => $c->product?->name ?: ($c->notes ?: $categoryInfo['defaultDetail']),
+                'detail' => $detailText,
+                'itemDetail' => $detailText,
+                'product_id' => $c->product_id,
                 'product_name' => $c->product?->name ?? null,
                 'product_sku' => $c->product?->sku ?? null,
+                'product_price' => (float) ($c->product?->price ?? 0),
                 'branch' => $c->branch ?? ($c->location?->name ?? 'Semua Cabang'),
                 'quota' => (int) ($c->quota ?? 1),
-                'recipient' => $c->recipient_name,
-                'nik' => $c->recipient_nik ?? '-',
-                'dept' => $c->recipient_dept ?? 'Operasional Toko',
-                'vehicleNo' => $c->vehicle_no ?? '-',
+                'qty' => $c->volume ?? '1 Unit',
                 'volume' => $c->volume ?? '1 Unit',
+                'recipient' => $c->recipient_name,
+                'recipientName' => $c->recipient_name,
+                'recipient_name' => $c->recipient_name,
+                'nik' => $c->recipient_nik ?? '-',
+                'recipientNik' => $c->recipient_nik ?? '-',
+                'dept' => $c->recipient_dept ?? 'Operasional Toko',
+                'recipientRole' => $c->recipient_dept ?? 'Operasional Toko',
+                'vehicleNo' => $c->vehicle_no ?? '-',
+                'vehicle_no' => $c->vehicle_no ?? '-',
                 'nominal' => (float) $c->nominal_value,
+                'nominal_value' => (float) $c->nominal_value,
                 'status' => $c->status,
                 'statusLabel' => $statusLabel,
                 'badgeClass' => $categoryInfo['badgeClass'],
                 'dotClass' => $categoryInfo['dotClass'],
                 'notes' => $c->notes,
-                'created_at' => $c->created_at ? $c->created_at->format('d M Y H:i') : '-',
+                'date' => $c->created_at ? $c->created_at->setTimezone('Asia/Jakarta')->format('d M Y • H:i') . ' WIB' : '-',
+                'created_at' => $c->created_at ? $c->created_at->setTimezone('Asia/Jakarta')->format('d M Y H:i') . ' WIB' : '-',
             ];
         });
 
@@ -152,6 +166,43 @@ class CouponController extends Controller
     }
 
     /**
+     * Get available products and branches for issuing coupons.
+     */
+    public function options(Request $request): JsonResponse
+    {
+        $products = \App\Models\Product::select('id', 'name', 'sku', 'barcode', 'price', 'unit', 'category', 'status')
+            ->orderBy('name', 'asc')
+            ->get();
+
+        $locations = \App\Models\Location::where('is_active', true)
+            ->select('id', 'code', 'name', 'type')
+            ->orderBy('name', 'asc')
+            ->get();
+
+        $branches = ['Pusat', 'Cabang A', 'Cabang B'];
+        foreach ($locations as $loc) {
+            if (!in_array($loc->name, $branches)) {
+                $branches[] = $loc->name;
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'products' => $products,
+                'locations' => $locations,
+                'branches' => array_values(array_unique($branches)),
+                'categories' => [
+                    ['id' => 'bbm', 'label' => 'BBM & Armada Toko'],
+                    ['id' => 'beras', 'label' => 'Beras Subsidi'],
+                    ['id' => 'galon', 'label' => 'Galon Air Mineral'],
+                    ['id' => 'pulsa', 'label' => 'Pulsa Operasional'],
+                ],
+            ],
+        ]);
+    }
+
+    /**
      * Store new coupon.
      */
     public function store(Request $request): JsonResponse
@@ -167,12 +218,15 @@ class CouponController extends Controller
             'recipient_dept' => 'nullable|string|max:100',
             'vehicle_no' => 'nullable|string|max:50',
             'volume' => 'nullable|string|max:50',
-            'nominal_value' => 'required|numeric|min:0',
+            'nominal_value' => 'nullable|numeric|min:0',
             'notes' => 'nullable|string',
             'status' => 'nullable|string|max:50',
         ]);
 
-        $prefix = match(strtolower($validated['category'])) {
+        $product = !empty($validated['product_id']) ? \App\Models\Product::find($validated['product_id']) : null;
+
+        $catKey = strtolower($validated['category']);
+        $prefix = match($catKey) {
             'bbm' => '#KPN-BBM-',
             'beras' => '#KPN-BRS-',
             'galon' => '#KPN-GLN-',
@@ -185,27 +239,97 @@ class CouponController extends Controller
             ? $validated['serial_number']
             : $prefix . mt_rand(1000, 9999);
 
+        $nominal = isset($validated['nominal_value']) && (float) $validated['nominal_value'] > 0
+            ? (float) $validated['nominal_value']
+            : ($product ? (float) $product->price : 50000.0);
+
+        $categoryName = match($catKey) {
+            'bbm' => 'Kupon BBM',
+            'beras' => 'Kupon Beras',
+            'galon' => 'Kupon Galon',
+            'pulsa' => 'Kupon Pulsa',
+            default => 'Kupon / Voucher',
+        };
+
+        if (!$product) {
+            $productName = !empty($validated['notes'])
+                ? (Str::startsWith($validated['notes'], 'Kupon') ? $validated['notes'] : 'Kupon ' . $validated['notes'])
+                : ('Kupon ' . strtoupper($catKey) . ' ' . ($validated['volume'] ?? '1 Unit'));
+
+            $cleanBarcode = preg_replace('/[^A-Za-z0-9\-]/', '', $serial);
+            if (empty($cleanBarcode)) {
+                $cleanBarcode = 'KPN-' . strtoupper($catKey) . '-' . mt_rand(10000, 99999);
+            }
+
+            $candidateSku = $cleanBarcode;
+            $existingProd = \App\Models\Product::where('barcode', $candidateSku)->orWhere('sku', $candidateSku)->first();
+            if ($existingProd) {
+                $product = $existingProd;
+            } else {
+                $product = \App\Models\Product::create([
+                    'sku' => $candidateSku,
+                    'barcode' => $candidateSku,
+                    'name' => $productName,
+                    'category' => $categoryName,
+                    'unit' => 'Lembar',
+                    'cost_price' => $nominal > 0 ? $nominal : 50000.0,
+                    'price' => $nominal > 0 ? $nominal : 50000.0,
+                    'member_price' => $nominal > 0 ? $nominal : 50000.0,
+                    'stock' => 0,
+                    'min_stock' => 5,
+                    'is_taxable' => false,
+                    'tax_rate' => 0,
+                    'status' => 'AKTIF',
+                    'is_consignment' => false,
+                ]);
+            }
+        }
+
+        // Add/ensure warehouse stock in Gudang Pusat (GDG-001) for "Kirim Barang"
+        $quota = max(1, (int) ($validated['quota'] ?? 10));
+        /** @var \App\Services\LocationStockService $stockService */
+        $stockService = app(\App\Services\LocationStockService::class);
+        $stockService->ensureDefaultLocations();
+        $warehouseLoc = $stockService->getWarehouseLocation();
+
+        if ($warehouseLoc && $product) {
+            $stockService->addStock(
+                $product->id,
+                $warehouseLoc->id,
+                $quota,
+                [
+                    'reference_type' => 'COUPON_INIT',
+                    'reference_id' => $product->id,
+                    'reference_number' => $serial,
+                    'notes' => "Stok awal kupon {$serial} di gudang pusat untuk pengiriman ke cabang",
+                ]
+            );
+        }
+
+        $notes = $validated['notes'] ?? ($product ? "Kupon penukaran produk: {$product->name}" : null);
+
         $coupon = CouponUnit::create([
-            'product_id' => $validated['product_id'] ?? null,
-            'branch' => $validated['branch'] ?? null,
-            'quota' => $validated['quota'] ?? 1,
-            'allocated_by' => Auth::id(),
-            'category' => strtolower($validated['category']),
+            'product_id' => $product ? $product->id : null,
+            'location_id' => $warehouseLoc?->id,
+            'branch' => $validated['branch'] ?? ($warehouseLoc?->name ?? 'Pusat'),
+            'quota' => $quota,
+            'allocated_by' => \Illuminate\Support\Facades\Auth::id(),
+            'category' => $catKey,
             'serial_number' => $serial,
             'recipient_name' => $validated['recipient_name'],
             'recipient_nik' => $validated['recipient_nik'] ?? null,
             'recipient_dept' => $validated['recipient_dept'] ?? 'Operasional Toko',
             'vehicle_no' => $validated['vehicle_no'] ?? null,
-            'volume' => $validated['volume'] ?? '1 Unit',
-            'nominal_value' => $validated['nominal_value'],
-            'notes' => $validated['notes'] ?? null,
+            'volume' => $validated['volume'] ?? ($product ? '1 ' . ($product->unit ?: 'Lembar') : '1 Unit'),
+            'nominal_value' => $nominal,
+            'notes' => $notes,
             'status' => $validated['status'] ?? 'TERVALIDASI',
         ]);
 
         return response()->json([
             'success' => true,
-            'message' => "Kupon [{$coupon->serial_number}] berhasil diterbitkan.",
-            'data' => $coupon,
+            'message' => "Kupon [{$coupon->serial_number}] berhasil diterbitkan dan stok masuk ke Gudang Pusat.",
+            'data' => $coupon->load(['product', 'location']),
         ], 201);
     }
 
@@ -217,6 +341,9 @@ class CouponController extends Controller
         $coupon = CouponUnit::findOrFail($id);
 
         $validated = $request->validate([
+            'product_id' => 'nullable|integer|exists:products,id',
+            'branch' => 'nullable|string|max:100',
+            'quota' => 'nullable|integer|min:1',
             'category' => 'sometimes|string|max:50',
             'recipient_name' => 'sometimes|string|max:150',
             'recipient_nik' => 'nullable|string|max:50',
@@ -228,12 +355,19 @@ class CouponController extends Controller
             'status' => 'sometimes|string|max:50',
         ]);
 
+        if (array_key_exists('product_id', $validated) && $validated['product_id'] && (!isset($validated['nominal_value']) || (float) $validated['nominal_value'] <= 0)) {
+            $product = \App\Models\Product::find($validated['product_id']);
+            if ($product && (float) $coupon->nominal_value <= 0) {
+                $validated['nominal_value'] = (float) $product->price;
+            }
+        }
+
         $coupon->update($validated);
 
         return response()->json([
             'success' => true,
             'message' => "Kupon [{$coupon->serial_number}] berhasil diperbarui.",
-            'data' => $coupon,
+            'data' => $coupon->fresh(['product', 'location']),
         ]);
     }
 
@@ -266,7 +400,7 @@ class CouponController extends Controller
                 ], 404);
             }
 
-            if ($coupon->status === 'REDEEMED') {
+            if ($coupon->status === 'REDEEMED' || $coupon->status === 'SELESAI') {
                 return response()->json([
                     'success' => false,
                     'message' => "Kupon [{$coupon->serial_number}] sudah pernah ditukarkan sebelumnya.",
@@ -279,7 +413,7 @@ class CouponController extends Controller
                 'coupon_unit_id' => $coupon->id,
                 'transaction_id' => $request->input('transaction_id'),
                 'redeemed_at' => now(),
-                'redeemed_by' => $request->input('user_id'),
+                'redeemed_by' => $request->input('user_id') ?: \Illuminate\Support\Facades\Auth::id(),
                 'status' => 'COMPLETED',
             ]);
 

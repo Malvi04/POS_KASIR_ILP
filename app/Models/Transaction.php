@@ -26,6 +26,8 @@ class Transaction extends Model
         'payment_method',
         'subtotal',
         'discount_total',
+        'promo_discount_total',
+        'promo_enabled',
         'tax_total',
         'grand_total',
         'cash_received',

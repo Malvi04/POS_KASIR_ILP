@@ -138,6 +138,10 @@ Route::middleware(['auth.web:owner'])->group(function () {
         return view('owner.profile');
     })->name('owner.profile');
 
+    Route::get('/owner/kupon', function () {
+        return view('manager.kupon');
+    })->name('owner.kupon');
+
     Route::get('/cabang', function () {
         return view('owner.cabang');
     })->name('admin.cabang');
@@ -217,6 +221,10 @@ Route::middleware(['auth.web:manager'])->group(function () {
     Route::get('/manager/promosi', function () {
         return view('manager.promosi');
     })->name('manager.promosi');
+
+    Route::get('/manager/kupon', function () {
+        return view('manager.kupon');
+    })->name('manager.kupon');
 
     Route::get('/manager/absensi', function () {
         return view('manager.absensi');

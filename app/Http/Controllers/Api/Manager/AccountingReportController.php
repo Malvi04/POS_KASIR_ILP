@@ -244,10 +244,12 @@ class AccountingReportController extends Controller
         $netSales = round($grossSales - $totalDiscounts, 2);
         $totalTax = round((float) $transactions->sum('tax_total'), 2);
 
-        // Detailed COGS & UMKM Consignment Calculation
+        // Detailed COGS, Kupon & UMKM Consignment Calculation
         $regularCogs = 0.0;
         $regularSales = 0.0;
         $consignmentSales = 0.0;
+        $couponSales = 0.0;
+        $couponCogs = 0.0;
         $umkmPartnerShare = 0.0;
         $cooperativeCommission = 0.0;
 
@@ -258,8 +260,15 @@ class AccountingReportController extends Controller
                 $prod = $item->product_id ? ($allProducts[$item->product_id] ?? null) : null;
                 $lineTotal = (float) $item->total_price;
                 $qty = (int) $item->qty;
+                $cost = $prod ? (float) $prod->cost_price : 0.0;
 
-                if ($prod && $prod->is_consignment) {
+                $isConsignment = $prod && $prod->is_consignment;
+                $isCoupon = $prod && !empty($prod->category) && (str_contains(strtolower($prod->category), 'kupon') || str_contains(strtolower($prod->category), 'voucher'));
+
+                if ($isCoupon) {
+                    $couponSales += $lineTotal;
+                    $couponCogs += ($cost * $qty);
+                } elseif ($isConsignment) {
                     $consignmentSales += $lineTotal;
                     $commPercent = (float) ($prod->commission_percent ?? 10.0);
                     $commAmount = round($lineTotal * ($commPercent / 100), 2);
@@ -269,14 +278,14 @@ class AccountingReportController extends Controller
                     $umkmPartnerShare += $partnerShare;
                 } else {
                     $regularSales += $lineTotal;
-                    $cost = $prod ? (float) $prod->cost_price : 0.0;
                     $regularCogs += ($cost * $qty);
                 }
             }
         }
 
         $regularGrossProfit = max(0, $regularSales - $regularCogs);
-        $totalGrossProfit = $regularGrossProfit + $cooperativeCommission;
+        $couponGrossProfit = max(0, $couponSales - $couponCogs);
+        $totalGrossProfit = $regularGrossProfit + $couponGrossProfit + $cooperativeCommission;
         $netProfit = max(0, $totalGrossProfit - $totalDiscounts);
         $profitMarginPercent = ($grossSales > 0) ? round(($netProfit / $grossSales) * 100, 2) : 0;
 
@@ -295,16 +304,19 @@ class AccountingReportController extends Controller
                 'gross_sales' => $grossSales,
                 'regular_product_sales' => $regularSales,
                 'consignment_product_sales' => $consignmentSales,
+                'coupon_sales' => $couponSales,
                 'total_discounts' => $totalDiscounts,
                 'net_sales' => $netSales,
 
                 // 2. Cost of Goods Sold & UMKM Sharing
                 'regular_cogs' => $regularCogs,
+                'coupon_cogs' => $couponCogs,
                 'umkm_partner_share' => $umkmPartnerShare,
                 'cooperative_commission_earned' => $cooperativeCommission,
 
                 // 3. Profitability
                 'regular_gross_profit' => $regularGrossProfit,
+                'coupon_gross_profit' => $couponGrossProfit,
                 'total_gross_profit' => $totalGrossProfit,
                 'collected_tax_ppn' => $totalTax,
                 'net_profit' => $netProfit,

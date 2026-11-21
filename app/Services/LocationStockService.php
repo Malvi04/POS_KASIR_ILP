@@ -167,7 +167,8 @@ class LocationStockService
         }
 
         if ($user && !empty($user->branch)) {
-            return $this->resolveLocation(null, $user->branch, null, null, $expectedType);
+            $firstBranch = trim(explode(',', $user->branch)[0]);
+            return $this->resolveLocation(null, $firstBranch, null, null, $expectedType);
         }
 
         return null;
@@ -221,8 +222,16 @@ class LocationStockService
             return true;
         }
 
-        $userLoc = $this->resolveLocation(null, $user->branch, null, null, 'STORE');
-        return !$userLoc || $userLoc->id === $location->id;
+        $branches = array_map('trim', explode(',', $user->branch));
+        foreach ($branches as $b) {
+            if ($b === '') continue;
+            $userLoc = $this->resolveLocation(null, $b, null, null, 'STORE');
+            if ($userLoc && $userLoc->id === $location->id) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

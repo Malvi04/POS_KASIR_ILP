@@ -33,22 +33,27 @@ class HeldBillController extends Controller
         return response()->json([
             'success' => true,
             'count' => $heldBills->count(),
-            'data' => $heldBills->map(fn($b) => [
-                'id' => $b->id,
-                'hold_code' => $b->hold_code,
-                'terminal_code' => $b->terminal_code,
-                'customer_name' => $b->customer_name,
-                'member_id' => $b->member_id,
-                'member_nik' => $b->member_nik,
-                'total_items' => (int) $b->total_items,
-                'subtotal' => (float) $b->subtotal,
-                'tax_total' => (float) $b->tax_total,
-                'grand_total' => (float) $b->grand_total,
-                'note' => $b->note,
-                'held_at' => $b->held_at->toIso8601String(),
-                'hold_time_label' => $b->held_at->format('H:i') . ' WIB',
-                'items' => $b->items_payload,
-            ]),
+            'data' => $heldBills->map(function ($b) {
+                $heldAt = $b->held_at ? $b->held_at->setTimezone('Asia/Jakarta') : now('Asia/Jakarta');
+                return [
+                    'id' => $b->id,
+                    'hold_code' => $b->hold_code,
+                    'terminal_code' => $b->terminal_code,
+                    'customer_name' => $b->customer_name,
+                    'member_id' => $b->member_id,
+                    'member_nik' => $b->member_nik,
+                    'total_items' => (int) $b->total_items,
+                    'subtotal' => (float) $b->subtotal,
+                    'tax_total' => (float) $b->tax_total,
+                    'grand_total' => (float) $b->grand_total,
+                    'note' => $b->note,
+                    'held_at' => $heldAt->toIso8601String(),
+                    'hold_date_label' => $heldAt->translatedFormat('d M Y'),
+                    'hold_time_label' => $heldAt->format('H:i') . ' WIB',
+                    'hold_datetime_label' => $heldAt->translatedFormat('d M Y') . ', ' . $heldAt->format('H:i') . ' WIB',
+                    'items' => $b->items_payload,
+                ];
+            }),
         ]);
     }
 

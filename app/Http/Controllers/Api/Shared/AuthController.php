@@ -39,6 +39,7 @@ class AuthController extends Controller
         $existingSlots["pos_auth_uid_{$normalizedSlot}"] = (int) $user->id;
 
         Auth::login($user, true);
+        $user->syncLocationAccess();
 
         if ($request->hasSession()) {
             // Only rotate session ID if no other role slot was active, using migrate(false)

@@ -146,4 +146,64 @@ class CouponAndReceiptTest extends TestCase
             ->assertJsonPath('data.invoice_number', $invoice)
             ->assertJsonPath('data.payment_method', 'TUNAI');
     }
+
+    public function test_manager_product_coupon_flow(): void
+    {
+        // 1. Check Manager kupon page renders successfully
+        $pageRes = $this->get('/manager/kupon');
+        $pageRes->assertStatus(200);
+
+        // 2. Options endpoint
+        $optionsRes = $this->getJson('/api/coupons/options');
+        $optionsRes->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonStructure([
+                'success',
+                'data' => [
+                    'products',
+                    'branches',
+                    'categories',
+                ],
+            ]);
+
+        $categoryIds = collect($optionsRes->json('data.categories'))->pluck('id')->all();
+        $this->assertNotContains('produk', $categoryIds);
+        $this->assertNotContains('voucher', $categoryIds);
+        $this->assertContains('bbm', $categoryIds);
+        $this->assertContains('beras', $categoryIds);
+
+        // 3. Create coupon for a specific product under 'beras'
+        $product = Product::first();
+        $this->assertNotNull($product);
+
+        $createRes = $this->postJson('/api/coupons', [
+            'category' => 'beras',
+            'product_id' => $product->id,
+            'branch' => 'Pusat',
+            'quota' => 2,
+            'recipient_name' => 'Siti Aisyah',
+            'recipient_nik' => 'EMP-2026-008',
+            'recipient_dept' => 'Staff Keuangan',
+            'volume' => '2 ' . ($product->unit ?: 'Pcs'),
+            'nominal_value' => (float) $product->price * 2,
+            'notes' => 'Kupon reward bulanan produk: ' . $product->name,
+            'status' => 'TERVALIDASI',
+        ]);
+
+        $createRes->assertStatus(201)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.category', 'beras')
+            ->assertJsonPath('data.product_id', $product->id);
+
+        $couponId = $createRes->json('data.id');
+
+        // 4. Verify in list with product details
+        $listRes = $this->getJson('/api/coupons?category=beras');
+        $listRes->assertStatus(200);
+        $item = collect($listRes->json('data'))->firstWhere('raw_id', $couponId);
+        $this->assertNotNull($item);
+        $this->assertEquals($product->name, $item['product_name']);
+        $this->assertEquals($product->id, $item['product_id']);
+        $this->assertEquals('Siti Aisyah', $item['recipient']);
+    }
 }

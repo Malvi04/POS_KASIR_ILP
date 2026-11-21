@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Hash;
@@ -42,6 +43,13 @@ class User extends Authenticatable
             'is_active' => 'boolean',
             'assigned_branches' => 'array',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::saved(function (User $user) {
+            $user->syncLocationAccess();
+        });
     }
 
     public function isSupervisorOrAdmin(): bool
@@ -142,6 +150,11 @@ class User extends Authenticatable
         return !empty($actives) ? array_values(array_unique($actives)) : [trim($this->branch ?? 'Pusat')];
     }
 
+    public function locations(): BelongsToMany
+    {
+        return $this->belongsToMany(Location::class, 'user_location_access');
+    }
+
     /**
      * Sinkronkan relasi hak akses ke tabel user_location_access di database PostgreSQL.
      */
@@ -150,19 +163,14 @@ class User extends Authenticatable
         try {
             $activeBranches = $this->getActiveAssignedBranches();
             $locationIds = [];
+            $stockService = app(\App\Services\LocationStockService::class);
+
             foreach ($activeBranches as $branch) {
-                $bLower = strtolower($branch);
-                $loc = Location::where(function ($q) use ($bLower) {
-                    if (str_contains($bLower, 'pusat')) {
-                        $q->where('code', 'CAB-001')->orWhereRaw('LOWER(name) LIKE ?', ['%pusat%']);
-                    } elseif (str_contains($bLower, 'cabang a') || str_contains($bLower, 'sektor a') || str_contains($bLower, 'cabang 1')) {
-                        $q->where('code', 'CAB-002')->orWhereRaw('LOWER(name) LIKE ?', ['%cabang a%']);
-                    } elseif (str_contains($bLower, 'cabang b') || str_contains($bLower, 'sektor b') || str_contains($bLower, 'cabang 2')) {
-                        $q->where('code', 'CAB-003')->orWhereRaw('LOWER(name) LIKE ?', ['%cabang b%']);
-                    } else {
-                        $q->whereRaw('LOWER(name) = ?', [$bLower]);
-                    }
-                })->first();
+                // Resolusi lokasi fisik toko ritel
+                $loc = $stockService->resolveLocation(null, $branch, null, null, 'STORE');
+                if (!$loc) {
+                    $loc = $stockService->resolveLocation(null, $branch);
+                }
 
                 if ($loc) {
                     $locationIds[] = $loc->id;

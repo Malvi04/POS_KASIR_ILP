@@ -21,20 +21,52 @@
     formPromo: {
         name: '',
         condition: '',
-        type: 'PERCENTAGE', // PERCENTAGE | FIXED | BOGO
+        type: 'PERCENTAGE', // PERCENTAGE | FIXED | SPECIAL_PRICE | BOGO | TIERED | BUNDLE | PWP
         value: 10,
         periodStart: '{{ date('Y-m-d') }}',
         periodEnd: '{{ date('Y-m-d', strtotime('+7 days')) }}',
-        status: 'AKTIF'
+        status: 'AKTIF',
+        scope: 'ALL', // ALL | CATEGORY | PRODUCTS
+        product_ids: [],
+        categories: [],
+        buy_qty: 2,
+        get_qty: 1,
+        min_qty: 3,
+        min_purchase: 50000,
+        max_qty_per_trx: null,
+        reward_product_id: null,
+        days_of_week: [],
+        time_start: '',
+        time_end: '',
+        member_only: false
     },
+
+    availableProducts: [],
+    availableCategories: [],
 
     expirySettings: {
         h7Percent: 40,
         h3Percent: 70,
-        autoPrint: true
+        autoPrint: true,
+        promoEngineEnabled: true,
+        allowCashierToggle: true
     },
 
     activities: [],
+
+    formatTypeLabel(p) {
+        const val = Number(p.value) || 0;
+        switch (p.type) {
+            case 'PERCENTAGE': return `Persentase (${val}%)`;
+            case 'FIXED': return `Diskon Rp ${val.toLocaleString('id-ID')}`;
+            case 'SPECIAL_PRICE': return `Harga Coret Rp ${val.toLocaleString('id-ID')}`;
+            case 'BOGO': return `Beli ${p.buy_qty || 1} Gratis ${p.get_qty || 1}`;
+            case 'TIERED': return `Beli ≥${p.min_qty || 2} @ Rp ${val.toLocaleString('id-ID')}`;
+            case 'BUNDLE': return `Paket Rp ${val.toLocaleString('id-ID')}`;
+            case 'PWP': return `Tebus Rp ${val.toLocaleString('id-ID')}`;
+            default: return p.type;
+        }
+    },
 
     async initPromotions() {
         try {
@@ -50,14 +82,27 @@
                         name: p.name,
                         condition: p.condition || '-',
                         type: p.type,
-                        typeLabel: p.type === 'PERCENTAGE' ? `Persentase (${p.value}%)` : (p.type === 'FIXED' ? `Diskon Rp ${Number(p.value).toLocaleString('id-ID')}` : 'Bundle / BOGO'),
+                        typeLabel: this.formatTypeLabel(p),
                         value: Number(p.value) || 0,
                         badgeClass: p.badge_class || 'bg-[#dbeafe] text-[#1e40af]',
                         period: (p.period_start || '') + ' s/d ' + (p.period_end || ''),
                         periodStart: p.period_start,
                         periodEnd: p.period_end,
                         status: p.status,
-                        statusColor: p.status_color || (p.status === 'AKTIF' ? 'green' : (p.status === 'MENDATANG' ? 'blue' : 'gray'))
+                        statusColor: p.status_color || (p.status === 'AKTIF' ? 'green' : (p.status === 'MENDATANG' ? 'blue' : 'gray')),
+                        scope: p.scope || 'ALL',
+                        product_ids: Array.isArray(p.product_ids) ? p.product_ids : [],
+                        categories: Array.isArray(p.categories) ? p.categories : [],
+                        buy_qty: p.buy_qty,
+                        get_qty: p.get_qty,
+                        min_qty: p.min_qty,
+                        min_purchase: p.min_purchase,
+                        max_qty_per_trx: p.max_qty_per_trx,
+                        reward_product_id: p.reward_product_id,
+                        days_of_week: Array.isArray(p.days_of_week) ? p.days_of_week : [],
+                        time_start: p.time_start,
+                        time_end: p.time_end,
+                        member_only: Boolean(p.member_only)
                     }));
                 }
             }
@@ -68,7 +113,18 @@
             if (setRes.ok) {
                 const setJson = await setRes.json();
                 if (setJson.success && setJson.data) {
-                    this.expirySettings = setJson.data;
+                    this.expirySettings = Object.assign(this.expirySettings, setJson.data);
+                }
+            }
+
+            const optRes = await fetch('/api/promotions/product-options', {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (optRes.ok) {
+                const optJson = await optRes.json();
+                if (optJson.success && optJson.data) {
+                    this.availableProducts = optJson.data.products || [];
+                    this.availableCategories = optJson.data.categories || [];
                 }
             }
         } catch(e) {
@@ -128,6 +184,23 @@
         return this.promotions.filter(p => p.status === 'BERAKHIR').length;
     },
 
+    toggleDay(arr, day) {
+        const idx = arr.indexOf(day);
+        if (idx === -1) arr.push(day);
+        else arr.splice(idx, 1);
+        arr.sort((a,b) => a - b);
+    },
+
+    setJsm(target) {
+        target.days_of_week = [5, 6, 7];
+    },
+
+    toggleProductId(arr, id) {
+        const idx = arr.indexOf(id);
+        if (idx === -1) arr.push(id);
+        else arr.splice(idx, 1);
+    },
+
     async saveNewPromo() {
         if (this.isSavingPromo) return;
         if (!this.formPromo.name) {
@@ -138,6 +211,29 @@
         this.isSavingPromo = true;
         const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('prm-' + Date.now());
         try {
+            const payload = {
+                name: this.formPromo.name,
+                condition: this.formPromo.condition || 'Tanpa syarat',
+                type: this.formPromo.type,
+                value: Number(this.formPromo.value) || 0,
+                period_start: this.formPromo.periodStart,
+                period_end: this.formPromo.periodEnd,
+                status: this.formPromo.status || 'AKTIF',
+                scope: this.formPromo.scope || 'ALL',
+                product_ids: (this.formPromo.product_ids || []).map(Number),
+                categories: this.formPromo.categories || [],
+                buy_qty: this.formPromo.buy_qty ? Number(this.formPromo.buy_qty) : null,
+                get_qty: this.formPromo.get_qty ? Number(this.formPromo.get_qty) : null,
+                min_qty: this.formPromo.min_qty ? Number(this.formPromo.min_qty) : null,
+                min_purchase: this.formPromo.min_purchase ? Number(this.formPromo.min_purchase) : null,
+                max_qty_per_trx: this.formPromo.max_qty_per_trx ? Number(this.formPromo.max_qty_per_trx) : null,
+                reward_product_id: this.formPromo.reward_product_id ? Number(this.formPromo.reward_product_id) : null,
+                days_of_week: (this.formPromo.days_of_week || []).map(Number),
+                time_start: this.formPromo.time_start || null,
+                time_end: this.formPromo.time_end || null,
+                member_only: Boolean(this.formPromo.member_only)
+            };
+
             const res = await fetch('/api/promotions', {
                 method: 'POST',
                 headers: {
@@ -146,15 +242,7 @@
                     'X-CSRF-TOKEN': '{{ csrf_token() }}',
                     'X-Idempotency-Key': idemKey
                 },
-                body: JSON.stringify({
-                    name: this.formPromo.name,
-                    condition: this.formPromo.condition || 'Tanpa syarat',
-                    type: this.formPromo.type,
-                    value: this.formPromo.value || 0,
-                    period_start: this.formPromo.periodStart,
-                    period_end: this.formPromo.periodEnd,
-                    status: this.formPromo.status || 'AKTIF'
-                })
+                body: JSON.stringify(payload)
             });
 
             const json = await res.json().catch(() => ({}));
@@ -166,14 +254,27 @@
                     name: p.name,
                     condition: p.condition || '-',
                     type: p.type,
-                    typeLabel: p.type === 'PERCENTAGE' ? `Persentase (${p.value}%)` : (p.type === 'FIXED' ? `Diskon Rp ${Number(p.value).toLocaleString('id-ID')}` : 'Bundle / BOGO'),
+                    typeLabel: this.formatTypeLabel(p),
                     value: Number(p.value) || 0,
                     badgeClass: p.badge_class || 'bg-[#dbeafe] text-[#1e40af]',
                     period: (p.period_start || '') + ' s/d ' + (p.period_end || ''),
                     periodStart: p.period_start,
                     periodEnd: p.period_end,
                     status: p.status,
-                    statusColor: p.status_color || 'green'
+                    statusColor: p.status_color || 'green',
+                    scope: p.scope || 'ALL',
+                    product_ids: Array.isArray(p.product_ids) ? p.product_ids : [],
+                    categories: Array.isArray(p.categories) ? p.categories : [],
+                    buy_qty: p.buy_qty,
+                    get_qty: p.get_qty,
+                    min_qty: p.min_qty,
+                    min_purchase: p.min_purchase,
+                    max_qty_per_trx: p.max_qty_per_trx,
+                    reward_product_id: p.reward_product_id,
+                    days_of_week: Array.isArray(p.days_of_week) ? p.days_of_week : [],
+                    time_start: p.time_start,
+                    time_end: p.time_end,
+                    member_only: Boolean(p.member_only)
                 });
 
                 this.activities.unshift({
@@ -186,10 +287,29 @@
                 this.showAddModal = false;
                 this.triggerToast('Promo baru berhasil disimpan ke Database!');
 
-                // Reset
-                this.formPromo.name = '';
-                this.formPromo.condition = '';
-                this.formPromo.value = 10;
+                // Reset Form
+                this.formPromo = {
+                    name: '',
+                    condition: '',
+                    type: 'PERCENTAGE',
+                    value: 10,
+                    periodStart: '{{ date('Y-m-d') }}',
+                    periodEnd: '{{ date('Y-m-d', strtotime('+7 days')) }}',
+                    status: 'AKTIF',
+                    scope: 'ALL',
+                    product_ids: [],
+                    categories: [],
+                    buy_qty: 2,
+                    get_qty: 1,
+                    min_qty: 3,
+                    min_purchase: 50000,
+                    max_qty_per_trx: null,
+                    reward_product_id: null,
+                    days_of_week: [],
+                    time_start: '',
+                    time_end: '',
+                    member_only: false
+                };
             } else {
                 alert(json.message || 'Gagal menyimpan promo baru ke server.');
             }
@@ -202,7 +322,30 @@
     },
 
     openEditPromo(p) {
-        this.editingPromo = JSON.parse(JSON.stringify(p));
+        this.editingPromo = {
+            id: p.id,
+            code: p.code,
+            name: p.name,
+            condition: p.condition || '',
+            type: p.type || 'PERCENTAGE',
+            value: p.value || 0,
+            periodStart: p.periodStart || '{{ date('Y-m-d') }}',
+            periodEnd: p.periodEnd || '{{ date('Y-m-d', strtotime('+7 days')) }}',
+            status: p.status || 'AKTIF',
+            scope: p.scope || 'ALL',
+            product_ids: Array.isArray(p.product_ids) ? [...p.product_ids] : [],
+            categories: Array.isArray(p.categories) ? [...p.categories] : [],
+            buy_qty: p.buy_qty || 1,
+            get_qty: p.get_qty || 1,
+            min_qty: p.min_qty || 2,
+            min_purchase: p.min_purchase || 0,
+            max_qty_per_trx: p.max_qty_per_trx || null,
+            reward_product_id: p.reward_product_id || null,
+            days_of_week: Array.isArray(p.days_of_week) ? [...p.days_of_week] : [],
+            time_start: p.time_start || '',
+            time_end: p.time_end || '',
+            member_only: Boolean(p.member_only)
+        };
         this.showEditModal = true;
     },
 
@@ -210,6 +353,29 @@
         if (!this.editingPromo) return;
 
         try {
+            const payload = {
+                name: this.editingPromo.name,
+                condition: this.editingPromo.condition,
+                type: this.editingPromo.type,
+                value: Number(this.editingPromo.value) || 0,
+                period_start: this.editingPromo.periodStart,
+                period_end: this.editingPromo.periodEnd,
+                status: this.editingPromo.status,
+                scope: this.editingPromo.scope || 'ALL',
+                product_ids: (this.editingPromo.product_ids || []).map(Number),
+                categories: this.editingPromo.categories || [],
+                buy_qty: this.editingPromo.buy_qty ? Number(this.editingPromo.buy_qty) : null,
+                get_qty: this.editingPromo.get_qty ? Number(this.editingPromo.get_qty) : null,
+                min_qty: this.editingPromo.min_qty ? Number(this.editingPromo.min_qty) : null,
+                min_purchase: this.editingPromo.min_purchase ? Number(this.editingPromo.min_purchase) : null,
+                max_qty_per_trx: this.editingPromo.max_qty_per_trx ? Number(this.editingPromo.max_qty_per_trx) : null,
+                reward_product_id: this.editingPromo.reward_product_id ? Number(this.editingPromo.reward_product_id) : null,
+                days_of_week: (this.editingPromo.days_of_week || []).map(Number),
+                time_start: this.editingPromo.time_start || null,
+                time_end: this.editingPromo.time_end || null,
+                member_only: Boolean(this.editingPromo.member_only)
+            };
+
             const res = await fetch(`/api/promotions/${this.editingPromo.id}`, {
                 method: 'PUT',
                 headers: {
@@ -217,34 +383,53 @@
                     'Accept': 'application/json',
                     'X-CSRF-TOKEN': '{{ csrf_token() }}'
                 },
-                body: JSON.stringify({
-                    name: this.editingPromo.name,
-                    condition: this.editingPromo.condition,
-                    type: this.editingPromo.type,
-                    value: this.editingPromo.value,
-                    period_start: this.editingPromo.periodStart,
-                    period_end: this.editingPromo.periodEnd,
-                    status: this.editingPromo.status
-                })
+                body: JSON.stringify(payload)
             });
 
-            if (res.ok) {
-                const idx = this.promotions.findIndex(p => p.id === this.editingPromo.id);
+            const json = await res.json().catch(() => ({}));
+            if (res.ok && json.success && json.data) {
+                const updated = json.data;
+                const idx = this.promotions.findIndex(p => p.id === updated.id);
                 if (idx !== -1) {
-                    this.editingPromo.statusColor = this.editingPromo.status === 'AKTIF' ? 'green' : (this.editingPromo.status === 'MENDATANG' ? 'blue' : 'gray');
-                    this.promotions[idx] = this.editingPromo;
+                    this.promotions[idx] = {
+                        id: updated.id,
+                        code: updated.code,
+                        name: updated.name,
+                        condition: updated.condition || '-',
+                        type: updated.type,
+                        typeLabel: this.formatTypeLabel(updated),
+                        value: Number(updated.value) || 0,
+                        badgeClass: updated.badge_class,
+                        period: (updated.period_start || '') + ' s/d ' + (updated.period_end || ''),
+                        periodStart: updated.period_start,
+                        periodEnd: updated.period_end,
+                        status: updated.status,
+                        statusColor: updated.status_color || (updated.status === 'AKTIF' ? 'green' : 'gray'),
+                        scope: updated.scope || 'ALL',
+                        product_ids: Array.isArray(updated.product_ids) ? updated.product_ids : [],
+                        categories: Array.isArray(updated.categories) ? updated.categories : [],
+                        buy_qty: updated.buy_qty,
+                        get_qty: updated.get_qty,
+                        min_qty: updated.min_qty,
+                        min_purchase: updated.min_purchase,
+                        max_qty_per_trx: updated.max_qty_per_trx,
+                        reward_product_id: updated.reward_product_id,
+                        days_of_week: Array.isArray(updated.days_of_week) ? updated.days_of_week : [],
+                        time_start: updated.time_start,
+                        time_end: updated.time_end,
+                        member_only: Boolean(updated.member_only)
+                    };
                     this.activities.unshift({
-                        text: 'Promo ' + this.editingPromo.name + ' diperbarui di sistem.',
+                        text: 'Promo ' + updated.name + ' diperbarui di sistem.',
                         time: 'Baru saja',
                         icon: 'history',
                         color: 'amber'
                     });
-                    this.triggerToast('Promo ' + this.editingPromo.name + ' berhasil diperbarui!');
+                    this.triggerToast('Promo ' + updated.name + ' berhasil diperbarui!');
                 }
                 this.showEditModal = false;
                 this.editingPromo = null;
             } else {
-                const json = await res.json().catch(() => ({}));
                 alert(json.message || 'Gagal memperbarui promo di server.');
             }
         } catch(e) {
@@ -435,19 +620,24 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         </div>
                     </div>
 
-                    <!-- Card 4: AUTO-DISCOUNT -->
-                    <div class="bg-[#e0eaff] rounded-2xl border border-blue-200 p-5 shadow-sm flex flex-col justify-between min-h-[132px] relative overflow-hidden cursor-pointer"
+                    <!-- Card 4: AUTO-DISCOUNT & ATURAN TOKO -->
+                    <div class="bg-[#e0eaff] rounded-2xl border border-blue-200 p-5 shadow-sm flex flex-col justify-between min-h-[132px] relative overflow-hidden cursor-pointer hover:border-blue-400 transition-colors"
                          @click="showRuleModal = true">
                         <div class="flex items-center justify-between relative z-10">
-                            <span class="text-[11px] font-bold text-gray-700 tracking-wider uppercase">AUTO-DISCOUNT</span>
-                            <span class="material-symbols-rounded text-[#0052cc] text-[20px]">verified</span>
+                            <span class="text-[11px] font-bold text-gray-700 tracking-wider uppercase">KONTROL PROMO &amp; EXPIRED</span>
+                            <span class="material-symbols-rounded text-[#0052cc] text-[20px]">tune</span>
                         </div>
-                        <div class="text-[30px] font-black text-[#002b6b] font-mono leading-none my-2 relative z-10" x-text="expirySettings.h7Percent + '% & ' + expirySettings.h3Percent + '%'"></div>
+                        <div class="my-2 relative z-10 flex items-center gap-2 flex-wrap">
+                            <span class="px-2.5 py-1 rounded-lg text-xs font-black tracking-wide"
+                                  :class="expirySettings.promoEngineEnabled ? 'bg-emerald-600 text-white' : 'bg-gray-500 text-white'"
+                                  x-text="expirySettings.promoEngineEnabled ? 'PROMO AKTIF' : 'PROMO OFF'"></span>
+                            <span class="text-xs font-mono font-bold text-[#002b6b]" x-text="'H-7 (' + expirySettings.h7Percent + '%) • H-3 (' + expirySettings.h3Percent + '%)'"></span>
+                        </div>
                         <div class="text-[12px] font-semibold text-[#0052cc] relative z-10 flex items-center gap-1">
-                            <span>Aturan Near-Expiry</span>
+                            <span>Aturan Saklar &amp; Near-Expiry</span>
                             <span class="material-symbols-rounded text-[14px]">tune</span>
                         </div>
-                        <span class="material-symbols-rounded text-[#0052cc]/15 text-[110px] absolute -right-4 -bottom-6 pointer-events-none select-none">timer</span>
+                        <span class="material-symbols-rounded text-[#0052cc]/15 text-[110px] absolute -right-4 -bottom-6 pointer-events-none select-none">tune</span>
                     </div>
                 </div>
 
@@ -665,87 +855,260 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
              style="display: none;"
              class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
             <div @click.away="showAddModal = false"
-                 class="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-lg overflow-hidden animate-scale-up">
+                 class="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden animate-scale-up">
 
-                <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-slate-50">
+                <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-slate-50 shrink-0">
                     <div class="flex items-center gap-2.5">
                         <span class="material-symbols-rounded text-[#0052cc] text-[22px]">local_offer</span>
-                        <h3 class="font-bold text-gray-900 text-sm">Buat Promosi / Diskon Baru</h3>
+                        <div>
+                            <h3 class="font-bold text-gray-900 text-sm">Buat Promosi / Diskon Baru (Retail Engine)</h3>
+                            <p class="text-[11px] text-gray-500">Mendukung Promo JSM, Beli X Gratis Y, Tebus Murah, dan Paket Bundling.</p>
+                        </div>
                     </div>
                     <button @click="showAddModal = false" class="text-gray-400 hover:text-gray-600 cursor-pointer">
                         <span class="material-symbols-rounded text-[20px]">close</span>
                     </button>
                 </div>
 
-                <form @submit.prevent="saveNewPromo()" class="p-6 space-y-4 text-xs font-sans">
-                    <div>
-                        <label class="font-bold text-gray-700 block mb-1">Nama Promo <span class="text-red-500">*</span></label>
-                        <input type="text"
-                               x-model="formPromo.name"
-                               placeholder="Contoh: Diskon Gajian Seru"
-                               required
-                               class="w-full px-3.5 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-[#0052cc]" />
-                    </div>
-
-                    <div>
-                        <label class="font-bold text-gray-700 block mb-1">Keterangan / Syarat Ketentuan</label>
-                        <input type="text"
-                               x-model="formPromo.condition"
-                               placeholder="Contoh: Min. belanja Rp 200.000"
-                               class="w-full px-3.5 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-[#0052cc]" />
-                    </div>
-
+                <form @submit.prevent="saveNewPromo()" class="p-6 space-y-4 text-xs font-sans overflow-y-auto flex-1">
                     <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="font-bold text-gray-700 block mb-1">Tipe Promosi</label>
-                            <select x-model="formPromo.type" class="w-full px-3 py-2 border border-gray-300 rounded-xl">
-                                <option value="PERCENTAGE">Persentase (%)</option>
-                                <option value="FIXED">Potongan Tetap (Rp)</option>
-                                <option value="BOGO">Bundle / BOGO</option>
-                            </select>
+                        <div class="col-span-2">
+                            <label class="font-bold text-gray-700 block mb-1">Nama Promo <span class="text-red-500">*</span></label>
+                            <input type="text"
+                                   x-model="formPromo.name"
+                                   placeholder="Contoh: Promo JSM Minyak Goreng / Beli 2 Gratis 1"
+                                   required
+                                   class="w-full px-3.5 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-[#0052cc]" />
                         </div>
-                        <div>
-                            <label class="font-bold text-gray-700 block mb-1">Besaran Nilai (% / Rp)</label>
-                            <input type="number"
-                                   x-model="formPromo.value"
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono focus:outline-none focus:border-[#0052cc]" />
+                        <div class="col-span-2">
+                            <label class="font-bold text-gray-700 block mb-1">Keterangan / Slogan Promo</label>
+                            <input type="text"
+                                   x-model="formPromo.condition"
+                                   placeholder="Contoh: Belanja min. Rp 50.000 berhak tebus murah gula"
+                                   class="w-full px-3.5 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-[#0052cc]" />
                         </div>
                     </div>
 
+                    <!-- Promo Type & Scope -->
+                    <div class="p-3.5 bg-slate-50 rounded-xl border border-gray-200 space-y-3">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="font-bold text-gray-700 block mb-1">Tipe Promosi</label>
+                                <select x-model="formPromo.type" class="w-full px-3 py-2 border border-gray-300 rounded-xl font-medium bg-white focus:outline-none focus:border-[#0052cc]">
+                                    <option value="PERCENTAGE">Diskon Persentase (%)</option>
+                                    <option value="FIXED">Potongan Tetap Nominal (Rp)</option>
+                                    <option value="SPECIAL_PRICE">Harga Coret / Promo JSM (Rp Promo)</option>
+                                    <option value="BOGO">Beli X Gratis Y (Buy One Get One)</option>
+                                    <option value="TIERED">Beli Banyak Lebih Murah (Grosir Bertingkat)</option>
+                                    <option value="BUNDLE">Paket Bundling (Beli Bareng Lebih Hemat)</option>
+                                    <option value="PWP">Tebus Murah (Min. Belanja Transaksi)</option>
+                                </select>
+                            </div>
+
+                            <!-- Scope (hidden for BUNDLE & PWP) -->
+                            <div x-show="formPromo.type !== 'BUNDLE' && formPromo.type !== 'PWP'">
+                                <label class="font-bold text-gray-700 block mb-1">Target Produk</label>
+                                <select x-model="formPromo.scope" class="w-full px-3 py-2 border border-gray-300 rounded-xl font-medium bg-white focus:outline-none focus:border-[#0052cc]">
+                                    <option value="ALL">Semua Produk Toko</option>
+                                    <option value="CATEGORY">Kategori Tertentu</option>
+                                    <option value="PRODUCTS">Produk Tertentu (Pilihan)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Category Selector -->
+                        <div x-show="formPromo.scope === 'CATEGORY' && formPromo.type !== 'BUNDLE' && formPromo.type !== 'PWP'">
+                            <label class="font-bold text-gray-700 block mb-1">Pilih Kategori Produk</label>
+                            <div class="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-2 bg-white rounded-xl border border-gray-200">
+                                <template x-for="cat in availableCategories" :key="cat">
+                                    <button type="button"
+                                            @click="toggleDay(formPromo.categories, cat)"
+                                            :class="formPromo.categories.includes(cat) ? 'bg-[#0052cc] text-white font-bold' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                                            class="px-2.5 py-1 rounded-lg text-xs cursor-pointer transition-colors"
+                                            x-text="cat"></button>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Product Selector (for PRODUCTS or BUNDLE) -->
+                        <div x-show="(formPromo.scope === 'PRODUCTS' || formPromo.type === 'BUNDLE') && formPromo.type !== 'PWP'">
+                            <label class="font-bold text-gray-700 block mb-1" x-text="formPromo.type === 'BUNDLE' ? 'Pilih Produk Paket Bundling (Min. 2 Produk)' : 'Pilih Produk Target'"></label>
+                            <div class="max-h-36 overflow-y-auto p-2 bg-white rounded-xl border border-gray-200 space-y-1">
+                                <template x-for="p in availableProducts" :key="p.id">
+                                    <label class="flex items-center justify-between p-1.5 hover:bg-slate-50 rounded-lg cursor-pointer text-xs">
+                                        <div class="flex items-center gap-2">
+                                            <input type="checkbox"
+                                                   :checked="formPromo.product_ids.includes(p.id)"
+                                                   @change="toggleProductId(formPromo.product_ids, p.id)"
+                                                   class="rounded text-[#0052cc] border-gray-300">
+                                            <div>
+                                                <span class="font-bold text-gray-900" x-text="p.name"></span>
+                                                <span class="text-[10px] text-gray-400 font-mono ml-1" x-text="'[' + p.sku + ']'"></span>
+                                            </div>
+                                        </div>
+                                        <span class="font-mono text-gray-600 font-bold" x-text="'Rp ' + Number(p.price).toLocaleString('id-ID')"></span>
+                                    </label>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Specific Type Fields -->
+                        <!-- 1. PERCENTAGE / FIXED / SPECIAL_PRICE -->
+                        <div class="grid grid-cols-2 gap-3" x-show="['PERCENTAGE', 'FIXED', 'SPECIAL_PRICE'].includes(formPromo.type)">
+                            <div>
+                                <label class="font-bold text-gray-700 block mb-1">
+                                    <span x-show="formPromo.type === 'PERCENTAGE'">Besaran Diskon (%)</span>
+                                    <span x-show="formPromo.type === 'FIXED'">Nominal Potongan (Rp)</span>
+                                    <span x-show="formPromo.type === 'SPECIAL_PRICE'">Harga Promo Coret Baru (Rp)</span>
+                                </label>
+                                <input type="number"
+                                       x-model="formPromo.value"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono focus:outline-none focus:border-[#0052cc]" />
+                            </div>
+                            <div>
+                                <label class="font-bold text-gray-700 block mb-1">Maksimal Qty per Struk <span class="text-gray-400 font-normal">(opsional)</span></label>
+                                <input type="number"
+                                       x-model="formPromo.max_qty_per_trx"
+                                       placeholder="Kosong = Tidak dibatasi"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono focus:outline-none focus:border-[#0052cc]" />
+                            </div>
+                        </div>
+
+                        <!-- 2. BOGO -->
+                        <div class="grid grid-cols-3 gap-3" x-show="formPromo.type === 'BOGO'">
+                            <div>
+                                <label class="font-bold text-gray-700 block mb-1">Beli (X)</label>
+                                <input type="number" x-model="formPromo.buy_qty" class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono text-center font-bold" placeholder="2" />
+                            </div>
+                            <div>
+                                <label class="font-bold text-gray-700 block mb-1">Gratis (Y)</label>
+                                <input type="number" x-model="formPromo.get_qty" class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono text-center font-bold text-emerald-600" placeholder="1" />
+                            </div>
+                            <div>
+                                <label class="font-bold text-gray-700 block mb-1">Max Gratis per Struk</label>
+                                <input type="number" x-model="formPromo.max_qty_per_trx" class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono text-center" placeholder="1" />
+                            </div>
+                        </div>
+
+                        <!-- 3. TIERED -->
+                        <div class="grid grid-cols-2 gap-3" x-show="formPromo.type === 'TIERED'">
+                            <div>
+                                <label class="font-bold text-gray-700 block mb-1">Minimal Beli Qty (≥)</label>
+                                <input type="number" x-model="formPromo.min_qty" class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono font-bold" placeholder="3" />
+                            </div>
+                            <div>
+                                <label class="font-bold text-gray-700 block mb-1">Harga Satuan Grosir @ (Rp)</label>
+                                <input type="number" x-model="formPromo.value" class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono font-bold text-[#0052cc]" />
+                            </div>
+                        </div>
+
+                        <!-- 4. BUNDLE -->
+                        <div class="grid grid-cols-2 gap-3" x-show="formPromo.type === 'BUNDLE'">
+                            <div>
+                                <label class="font-bold text-gray-700 block mb-1">Harga Paket Bundling (Rp)</label>
+                                <input type="number" x-model="formPromo.value" class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono font-bold text-[#0052cc]" />
+                            </div>
+                            <div>
+                                <label class="font-bold text-gray-700 block mb-1">Max Paket per Struk</label>
+                                <input type="number" x-model="formPromo.max_qty_per_trx" class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono" placeholder="Kosong = Bebas" />
+                            </div>
+                        </div>
+
+                        <!-- 5. PWP (Tebus Murah) -->
+                        <div class="space-y-2.5" x-show="formPromo.type === 'PWP'">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="font-bold text-gray-700 block mb-1">Min. Belanja Keranjang (Rp)</label>
+                                    <input type="number" x-model="formPromo.min_purchase" placeholder="50000" class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono font-bold" />
+                                </div>
+                                <div>
+                                    <label class="font-bold text-gray-700 block mb-1">Harga Tebus Murah (Rp)</label>
+                                    <input type="number" x-model="formPromo.value" placeholder="10000" class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono font-bold text-rose-600" />
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="font-bold text-gray-700 block mb-1">Produk yang Ditebus</label>
+                                    <select x-model="formPromo.reward_product_id" class="w-full px-3 py-2 border border-gray-300 rounded-xl bg-white font-medium">
+                                        <option value="">-- Pilih Produk Tebusan --</option>
+                                        <template x-for="p in availableProducts" :key="p.id">
+                                            <option :value="p.id" x-text="p.name + ' (' + p.sku + ')'"></option>
+                                        </template>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="font-bold text-gray-700 block mb-1">Max Tebus per Struk</label>
+                                    <input type="number" x-model="formPromo.max_qty_per_trx" placeholder="1" class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Period & Schedule -->
                     <div class="grid grid-cols-2 gap-3">
                         <div>
                             <label class="font-bold text-gray-700 block mb-1">Tanggal Mulai</label>
                             <input type="date"
                                    x-model="formPromo.periodStart"
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-xl" />
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono" />
                         </div>
                         <div>
                             <label class="font-bold text-gray-700 block mb-1">Tanggal Selesai</label>
                             <input type="date"
                                    x-model="formPromo.periodEnd"
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-xl" />
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono" />
                         </div>
                     </div>
 
+                    <!-- Days of Week (JSM Quick Select) -->
                     <div>
-                        <label class="font-bold text-gray-700 block mb-1">Status Awal</label>
-                        <select x-model="formPromo.status" class="w-full px-3 py-2 border border-gray-300 rounded-xl">
-                            <option value="AKTIF">AKTIF (Langsung Berjalan)</option>
-                            <option value="MENDATANG">MENDATANG (Terjadwal)</option>
-                            <option value="BERAKHIR">BERAKHIR (Draft / Arsip)</option>
-                        </select>
+                        <div class="flex items-center justify-between mb-1.5">
+                            <label class="font-bold text-gray-700 block">Berlaku Hari Tertentu <span class="text-gray-400 font-normal">(kosong = setiap hari)</span></label>
+                            <button type="button" @click="setJsm(formPromo)" class="text-[11px] font-bold text-[#0052cc] hover:underline cursor-pointer">+ Pilih JSM (Jum-Sab-Min)</button>
+                        </div>
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <template x-for="(dName, dIdx) in ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min']" :key="dIdx + 1">
+                                <button type="button"
+                                        @click="toggleDay(formPromo.days_of_week, dIdx + 1)"
+                                        :class="formPromo.days_of_week.includes(dIdx + 1) ? 'bg-[#0052cc] text-white font-bold' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                                        class="px-2.5 py-1 rounded-lg text-xs cursor-pointer transition-colors"
+                                        x-text="dName"></button>
+                            </template>
+                            <button type="button" x-show="formPromo.days_of_week.length > 0" @click="formPromo.days_of_week = []" class="text-[11px] text-gray-400 hover:text-gray-600 px-1.5 cursor-pointer">Reset</button>
+                        </div>
                     </div>
 
-                    <div class="pt-2 flex justify-end gap-2">
+                    <!-- Segmentation & Initial Status -->
+                    <div class="grid grid-cols-2 gap-3 pt-1 border-t border-gray-100 items-center">
+                        <label class="flex items-center gap-2 cursor-pointer select-none">
+                            <input type="checkbox"
+                                   x-model="formPromo.member_only"
+                                   class="w-4 h-4 rounded text-[#0052cc] border-gray-300">
+                            <div>
+                                <span class="font-bold text-gray-800 block">Khusus Anggota Koperasi</span>
+                                <span class="text-[10px] text-gray-500">Hanya berlaku jika kasir mengaktifkan mode Member</span>
+                            </div>
+                        </label>
+                        <div>
+                            <label class="font-bold text-gray-700 block mb-1">Status Awal</label>
+                            <select x-model="formPromo.status" class="w-full px-3 py-2 border border-gray-300 rounded-xl bg-white">
+                                <option value="AKTIF">AKTIF (Langsung Berjalan)</option>
+                                <option value="MENDATANG">MENDATANG (Terjadwal)</option>
+                                <option value="BERAKHIR">BERAKHIR (Draft / Arsip)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="pt-3 flex justify-end gap-2 border-t border-gray-100 shrink-0">
                         <button type="button"
                                 :disabled="isSavingPromo"
                                 @click="showAddModal = false"
-                                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold cursor-pointer disabled:opacity-50">
                             Batal
                         </button>
                         <button type="submit"
                                 :disabled="isSavingPromo"
-                                class="px-5 py-2 bg-[#0052cc] hover:bg-blue-700 text-white rounded-xl font-bold cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+                                class="px-5 py-2 bg-[#0052cc] hover:bg-blue-700 text-white rounded-xl font-bold cursor-pointer flex items-center gap-1.5 disabled:opacity-50">
                             <span x-show="isSavingPromo" class="material-symbols-rounded text-[15px] animate-spin">progress_activity</span>
                             <span x-text="isSavingPromo ? 'Menyimpan...' : 'Simpan Promo'"></span>
                         </button>
@@ -763,12 +1126,15 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
              style="display: none;"
              class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
             <div @click.away="showEditModal = false"
-                 class="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-lg overflow-hidden animate-scale-up">
+                 class="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden animate-scale-up">
 
-                <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-slate-50">
+                <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-slate-50 shrink-0">
                     <div class="flex items-center gap-2.5">
                         <span class="material-symbols-rounded text-amber-600 text-[22px]">edit</span>
-                        <h3 class="font-bold text-gray-900 text-sm">Edit Data Promosi</h3>
+                        <div>
+                            <h3 class="font-bold text-gray-900 text-sm">Edit Data Promosi</h3>
+                            <p class="text-[11px] text-gray-500" x-text="editingPromo ? ('Kode: ' + editingPromo.code) : ''"></p>
+                        </div>
                     </div>
                     <button @click="showEditModal = false" class="text-gray-400 hover:text-gray-600 cursor-pointer">
                         <span class="material-symbols-rounded text-[20px]">close</span>
@@ -776,58 +1142,244 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                 </div>
 
                 <template x-if="editingPromo">
-                    <form @submit.prevent="saveEditPromo()" class="p-6 space-y-4 text-xs font-sans">
-                    <div>
-                        <label class="font-bold text-gray-700 block mb-1">Nama Promo</label>
-                        <input type="text"
-                               x-model="editingPromo.name"
-                               required
-                               class="w-full px-3.5 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-[#0052cc]" />
-                    </div>
+                    <form @submit.prevent="saveEditPromo()" class="p-6 space-y-4 text-xs font-sans overflow-y-auto flex-1">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="col-span-2">
+                                <label class="font-bold text-gray-700 block mb-1">Nama Promo <span class="text-red-500">*</span></label>
+                                <input type="text"
+                                       x-model="editingPromo.name"
+                                       required
+                                       class="w-full px-3.5 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-[#0052cc]" />
+                            </div>
+                            <div class="col-span-2">
+                                <label class="font-bold text-gray-700 block mb-1">Keterangan / Slogan Promo</label>
+                                <input type="text"
+                                       x-model="editingPromo.condition"
+                                       class="w-full px-3.5 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-[#0052cc]" />
+                            </div>
+                        </div>
 
-                    <div>
-                        <label class="font-bold text-gray-700 block mb-1">Keterangan / Syarat Ketentuan</label>
-                        <input type="text"
-                               x-model="editingPromo.condition"
-                               class="w-full px-3.5 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-[#0052cc]" />
-                    </div>
+                        <!-- Promo Type & Scope -->
+                        <div class="p-3.5 bg-slate-50 rounded-xl border border-gray-200 space-y-3">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="font-bold text-gray-700 block mb-1">Tipe Promosi</label>
+                                    <select x-model="editingPromo.type" class="w-full px-3 py-2 border border-gray-300 rounded-xl font-medium bg-white focus:outline-none focus:border-[#0052cc]">
+                                        <option value="PERCENTAGE">Diskon Persentase (%)</option>
+                                        <option value="FIXED">Potongan Tetap Nominal (Rp)</option>
+                                        <option value="SPECIAL_PRICE">Harga Coret / Promo JSM (Rp Promo)</option>
+                                        <option value="BOGO">Beli X Gratis Y (Buy One Get One)</option>
+                                        <option value="TIERED">Beli Banyak Lebih Murah (Grosir Bertingkat)</option>
+                                        <option value="BUNDLE">Paket Bundling (Beli Bareng Lebih Hemat)</option>
+                                        <option value="PWP">Tebus Murah (Min. Belanja Transaksi)</option>
+                                    </select>
+                                </div>
 
-                    <div>
-                        <label class="font-bold text-gray-700 block mb-1">Label Diskon Tampil</label>
-                        <input type="text"
-                               x-model="editingPromo.typeLabel"
-                               class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono focus:outline-none focus:border-[#0052cc]" />
-                    </div>
+                                <div x-show="editingPromo.type !== 'BUNDLE' && editingPromo.type !== 'PWP'">
+                                    <label class="font-bold text-gray-700 block mb-1">Target Produk</label>
+                                    <select x-model="editingPromo.scope" class="w-full px-3 py-2 border border-gray-300 rounded-xl font-medium bg-white focus:outline-none focus:border-[#0052cc]">
+                                        <option value="ALL">Semua Produk Toko</option>
+                                        <option value="CATEGORY">Kategori Tertentu</option>
+                                        <option value="PRODUCTS">Produk Tertentu (Pilihan)</option>
+                                    </select>
+                                </div>
+                            </div>
 
-                    <div>
-                        <label class="font-bold text-gray-700 block mb-1">Teks Periode</label>
-                        <input type="text"
-                               x-model="editingPromo.period"
-                               class="w-full px-3 py-2 border border-gray-300 rounded-xl" />
-                    </div>
+                            <!-- Category Selector -->
+                            <div x-show="editingPromo.scope === 'CATEGORY' && editingPromo.type !== 'BUNDLE' && editingPromo.type !== 'PWP'">
+                                <label class="font-bold text-gray-700 block mb-1">Pilih Kategori Produk</label>
+                                <div class="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-2 bg-white rounded-xl border border-gray-200">
+                                    <template x-for="cat in availableCategories" :key="cat">
+                                        <button type="button"
+                                                @click="toggleDay(editingPromo.categories, cat)"
+                                                :class="editingPromo.categories.includes(cat) ? 'bg-[#0052cc] text-white font-bold' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                                                class="px-2.5 py-1 rounded-lg text-xs cursor-pointer transition-colors"
+                                                x-text="cat"></button>
+                                    </template>
+                                </div>
+                            </div>
 
-                    <div>
-                        <label class="font-bold text-gray-700 block mb-1">Status Promo</label>
-                        <select x-model="editingPromo.status" class="w-full px-3 py-2 border border-gray-300 rounded-xl">
-                            <option value="AKTIF">AKTIF</option>
-                            <option value="MENDATANG">MENDATANG</option>
-                            <option value="BERAKHIR">BERAKHIR</option>
-                        </select>
-                    </div>
+                            <!-- Product Selector -->
+                            <div x-show="(editingPromo.scope === 'PRODUCTS' || editingPromo.type === 'BUNDLE') && editingPromo.type !== 'PWP'">
+                                <label class="font-bold text-gray-700 block mb-1" x-text="editingPromo.type === 'BUNDLE' ? 'Pilih Produk Paket Bundling (Min. 2 Produk)' : 'Pilih Produk Target'"></label>
+                                <div class="max-h-36 overflow-y-auto p-2 bg-white rounded-xl border border-gray-200 space-y-1">
+                                    <template x-for="p in availableProducts" :key="p.id">
+                                        <label class="flex items-center justify-between p-1.5 hover:bg-slate-50 rounded-lg cursor-pointer text-xs">
+                                            <div class="flex items-center gap-2">
+                                                <input type="checkbox"
+                                                       :checked="editingPromo.product_ids.includes(p.id)"
+                                                       @change="toggleProductId(editingPromo.product_ids, p.id)"
+                                                       class="rounded text-[#0052cc] border-gray-300">
+                                                <div>
+                                                    <span class="font-bold text-gray-900" x-text="p.name"></span>
+                                                    <span class="text-[10px] text-gray-400 font-mono ml-1" x-text="'[' + p.sku + ']'"></span>
+                                                </div>
+                                            </div>
+                                            <span class="font-mono text-gray-600 font-bold" x-text="'Rp ' + Number(p.price).toLocaleString('id-ID')"></span>
+                                        </label>
+                                    </template>
+                                </div>
+                            </div>
 
-                    <div class="pt-2 flex justify-end gap-2">
-                        <button type="button"
-                                @click="showEditModal = false"
-                                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold cursor-pointer">
-                            Batal
-                        </button>
-                        <button type="submit"
-                                class="px-5 py-2 bg-[#0052cc] hover:bg-blue-700 text-white rounded-xl font-bold cursor-pointer">
-                            Simpan Perubahan
-                        </button>
-                    </div>
-                </form>
-            </template>
+                            <!-- Value / Type specific -->
+                            <div class="grid grid-cols-2 gap-3" x-show="['PERCENTAGE', 'FIXED', 'SPECIAL_PRICE'].includes(editingPromo.type)">
+                                <div>
+                                    <label class="font-bold text-gray-700 block mb-1">
+                                        <span x-show="editingPromo.type === 'PERCENTAGE'">Besaran Diskon (%)</span>
+                                        <span x-show="editingPromo.type === 'FIXED'">Nominal Potongan (Rp)</span>
+                                        <span x-show="editingPromo.type === 'SPECIAL_PRICE'">Harga Promo Coret Baru (Rp)</span>
+                                    </label>
+                                    <input type="number"
+                                           x-model="editingPromo.value"
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono focus:outline-none focus:border-[#0052cc]" />
+                                </div>
+                                <div>
+                                    <label class="font-bold text-gray-700 block mb-1">Maksimal Qty per Struk <span class="text-gray-400 font-normal">(opsional)</span></label>
+                                    <input type="number"
+                                           x-model="editingPromo.max_qty_per_trx"
+                                           placeholder="Kosong = Bebas"
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono" />
+                                </div>
+                            </div>
+
+                            <!-- BOGO -->
+                            <div class="grid grid-cols-3 gap-3" x-show="editingPromo.type === 'BOGO'">
+                                <div>
+                                    <label class="font-bold text-gray-700 block mb-1">Beli (X)</label>
+                                    <input type="number" x-model="editingPromo.buy_qty" class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono text-center font-bold" />
+                                </div>
+                                <div>
+                                    <label class="font-bold text-gray-700 block mb-1">Gratis (Y)</label>
+                                    <input type="number" x-model="editingPromo.get_qty" class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono text-center font-bold text-emerald-600" />
+                                </div>
+                                <div>
+                                    <label class="font-bold text-gray-700 block mb-1">Max Gratis per Struk</label>
+                                    <input type="number" x-model="editingPromo.max_qty_per_trx" class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono text-center" />
+                                </div>
+                            </div>
+
+                            <!-- TIERED -->
+                            <div class="grid grid-cols-2 gap-3" x-show="editingPromo.type === 'TIERED'">
+                                <div>
+                                    <label class="font-bold text-gray-700 block mb-1">Minimal Beli Qty (≥)</label>
+                                    <input type="number" x-model="editingPromo.min_qty" class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono font-bold" />
+                                </div>
+                                <div>
+                                    <label class="font-bold text-gray-700 block mb-1">Harga Satuan Grosir @ (Rp)</label>
+                                    <input type="number" x-model="editingPromo.value" class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono font-bold text-[#0052cc]" />
+                                </div>
+                            </div>
+
+                            <!-- BUNDLE -->
+                            <div class="grid grid-cols-2 gap-3" x-show="editingPromo.type === 'BUNDLE'">
+                                <div>
+                                    <label class="font-bold text-gray-700 block mb-1">Harga Paket Bundling (Rp)</label>
+                                    <input type="number" x-model="editingPromo.value" class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono font-bold text-[#0052cc]" />
+                                </div>
+                                <div>
+                                    <label class="font-bold text-gray-700 block mb-1">Max Paket per Struk</label>
+                                    <input type="number" x-model="editingPromo.max_qty_per_trx" class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono" />
+                                </div>
+                            </div>
+
+                            <!-- PWP -->
+                            <div class="space-y-2.5" x-show="editingPromo.type === 'PWP'">
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="font-bold text-gray-700 block mb-1">Min. Belanja Keranjang (Rp)</label>
+                                        <input type="number" x-model="editingPromo.min_purchase" class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono font-bold" />
+                                    </div>
+                                    <div>
+                                        <label class="font-bold text-gray-700 block mb-1">Harga Tebus Murah (Rp)</label>
+                                        <input type="number" x-model="editingPromo.value" class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono font-bold text-rose-600" />
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="font-bold text-gray-700 block mb-1">Produk yang Ditebus</label>
+                                        <select x-model="editingPromo.reward_product_id" class="w-full px-3 py-2 border border-gray-300 rounded-xl bg-white font-medium">
+                                            <option value="">-- Pilih Produk Tebusan --</option>
+                                            <template x-for="p in availableProducts" :key="p.id">
+                                                <option :value="p.id" x-text="p.name + ' (' + p.sku + ')'"></option>
+                                            </template>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="font-bold text-gray-700 block mb-1">Max Tebus per Struk</label>
+                                        <input type="number" x-model="editingPromo.max_qty_per_trx" class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Period & Schedule -->
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="font-bold text-gray-700 block mb-1">Tanggal Mulai</label>
+                                <input type="date"
+                                       x-model="editingPromo.periodStart"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono" />
+                            </div>
+                            <div>
+                                <label class="font-bold text-gray-700 block mb-1">Tanggal Selesai</label>
+                                <input type="date"
+                                       x-model="editingPromo.periodEnd"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono" />
+                            </div>
+                        </div>
+
+                        <!-- Days of Week -->
+                        <div>
+                            <div class="flex items-center justify-between mb-1.5">
+                                <label class="font-bold text-gray-700 block">Berlaku Hari Tertentu <span class="text-gray-400 font-normal">(kosong = setiap hari)</span></label>
+                                <button type="button" @click="setJsm(editingPromo)" class="text-[11px] font-bold text-[#0052cc] hover:underline cursor-pointer">+ Pilih JSM (Jum-Sab-Min)</button>
+                            </div>
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <template x-for="(dName, dIdx) in ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min']" :key="dIdx + 1">
+                                    <button type="button"
+                                            @click="toggleDay(editingPromo.days_of_week, dIdx + 1)"
+                                            :class="editingPromo.days_of_week.includes(dIdx + 1) ? 'bg-[#0052cc] text-white font-bold' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                                            class="px-2.5 py-1 rounded-lg text-xs cursor-pointer transition-colors"
+                                            x-text="dName"></button>
+                                </template>
+                                <button type="button" x-show="editingPromo.days_of_week.length > 0" @click="editingPromo.days_of_week = []" class="text-[11px] text-gray-400 hover:text-gray-600 px-1.5 cursor-pointer">Reset</button>
+                            </div>
+                        </div>
+
+                        <!-- Member & Status -->
+                        <div class="grid grid-cols-2 gap-3 pt-1 border-t border-gray-100 items-center">
+                            <label class="flex items-center gap-2 cursor-pointer select-none">
+                                <input type="checkbox"
+                                       x-model="editingPromo.member_only"
+                                       class="w-4 h-4 rounded text-[#0052cc] border-gray-300">
+                                <div>
+                                    <span class="font-bold text-gray-800 block">Khusus Anggota Koperasi</span>
+                                    <span class="text-[10px] text-gray-500">Hanya berlaku saat mode Member aktif di kasir</span>
+                                </div>
+                            </label>
+                            <div>
+                                <label class="font-bold text-gray-700 block mb-1">Status Promo</label>
+                                <select x-model="editingPromo.status" class="w-full px-3 py-2 border border-gray-300 rounded-xl bg-white">
+                                    <option value="AKTIF">AKTIF</option>
+                                    <option value="MENDATANG">MENDATANG</option>
+                                    <option value="BERAKHIR">BERAKHIR</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="pt-3 flex justify-end gap-2 border-t border-gray-100 shrink-0">
+                            <button type="button"
+                                    @click="showEditModal = false"
+                                    class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold cursor-pointer">
+                                Batal
+                            </button>
+                            <button type="submit"
+                                    class="px-5 py-2 bg-[#0052cc] hover:bg-blue-700 text-white rounded-xl font-bold cursor-pointer">
+                                Simpan Perubahan
+                            </button>
+                        </div>
+                    </form>
+                </template>
 
             </div>
         </div>
@@ -898,8 +1450,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
                 <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-slate-50">
                     <div class="flex items-center gap-2.5">
-                        <span class="material-symbols-rounded text-amber-600 text-[22px]">tune</span>
-                        <h3 class="font-bold text-gray-900 text-sm">Konfigurasi Aturan Diskon Expired</h3>
+                        <span class="material-symbols-rounded text-[#0052cc] text-[22px]">tune</span>
+                        <h3 class="font-bold text-gray-900 text-sm">Konfigurasi Promo Toko &amp; Diskon Expired</h3>
                     </div>
                     <button @click="showRuleModal = false" class="text-gray-400 hover:text-gray-600 cursor-pointer">
                         <span class="material-symbols-rounded text-[20px]">close</span>
@@ -907,36 +1459,65 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                 </div>
 
                 <div class="p-6 space-y-4 text-xs font-sans">
-                    <div>
-                        <label class="font-bold text-gray-700 block mb-1">Diskon Near-Expiry (H-7 sebelum kadaluarsa)</label>
-                        <div class="flex items-center gap-2">
-                            <input type="number"
-                                   x-model="expirySettings.h7Percent"
-                                   class="w-24 px-3 py-2 border border-gray-300 rounded-xl font-mono text-center font-bold" />
-                            <span class="font-bold text-gray-700">%</span>
+                    <!-- Master Control Switches (Manager Exclusive Authority) -->
+                    <div class="p-3.5 bg-blue-50/70 rounded-xl border border-blue-200/90 space-y-3">
+                        <label class="flex items-start gap-2.5 cursor-pointer select-none">
+                            <input type="checkbox"
+                                   x-model="expirySettings.promoEngineEnabled"
+                                   class="w-4 h-4 mt-0.5 rounded text-[#0052cc] border-gray-300 focus:ring-[#0052cc]">
+                            <div>
+                                <span class="text-[12px] font-bold text-gray-900 block">Master Saklar Promo Toko</span>
+                                <span class="text-[10.5px] text-gray-500 leading-tight block">Jika dimatikan oleh Manager, seluruh promo toko seketika nonaktif di seluruh mesin kasir.</span>
+                            </div>
+                        </label>
+
+                        <div class="border-t border-blue-100"></div>
+
+                        <label class="flex items-start gap-2.5 cursor-pointer select-none">
+                            <input type="checkbox"
+                                   x-model="expirySettings.allowCashierToggle"
+                                   class="w-4 h-4 mt-0.5 rounded text-[#0052cc] border-gray-300 focus:ring-[#0052cc]">
+                            <div>
+                                <span class="text-[12px] font-bold text-gray-900 block">Izinkan Kasir Mengatur Saklar Promo di POS</span>
+                                <span class="text-[10.5px] text-gray-500 leading-tight block">Kasir dapat menyalakan/mematikan promo toko saat bertransaksi (misal jika pembeli grosir/menolak syarat promo).</span>
+                            </div>
+                        </label>
+                    </div>
+
+                    <!-- Near Expiry Auto-Discounts -->
+                    <div class="pt-1 space-y-3">
+                        <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block">Aturan Otomatis Near-Expiry (FEFO)</span>
+                        <div>
+                            <label class="font-bold text-gray-700 block mb-1">Diskon Near-Expiry (H-7 sebelum kadaluarsa)</label>
+                            <div class="flex items-center gap-2">
+                                <input type="number"
+                                       x-model="expirySettings.h7Percent"
+                                       class="w-24 px-3 py-2 border border-gray-300 rounded-xl font-mono text-center font-bold" />
+                                <span class="font-bold text-gray-700">%</span>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="font-bold text-gray-700 block mb-1">Diskon Critical (H-3 sebelum kadaluarsa)</label>
+                            <div class="flex items-center gap-2">
+                                <input type="number"
+                                       x-model="expirySettings.h3Percent"
+                                       class="w-24 px-3 py-2 border border-gray-300 rounded-xl font-mono text-center font-bold text-red-600" />
+                                <span class="font-bold text-gray-700">%</span>
+                            </div>
                         </div>
                     </div>
 
-                    <div>
-                        <label class="font-bold text-gray-700 block mb-1">Diskon Critical (H-3 sebelum kadaluarsa)</label>
-                        <div class="flex items-center gap-2">
-                            <input type="number"
-                                   x-model="expirySettings.h3Percent"
-                                   class="w-24 px-3 py-2 border border-gray-300 rounded-xl font-mono text-center font-bold text-red-600" />
-                            <span class="font-bold text-gray-700">%</span>
-                        </div>
-                    </div>
-
-                    <div class="pt-2 flex justify-end gap-2">
+                    <div class="pt-2 flex justify-end gap-2 border-t border-gray-100">
                         <button type="button"
                                 @click="showRuleModal = false"
                                 class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold cursor-pointer">
                             Tutup
                         </button>
                         <button type="button"
-                                @click="saveSettings(); showRuleModal = false; triggerToast('Aturan diskon expired berhasil disimpan!')"
+                                @click="saveSettings(); showRuleModal = false; triggerToast('Pengaturan promo toko berhasil disimpan!')"
                                 class="px-5 py-2 bg-[#0052cc] hover:bg-blue-700 text-white rounded-xl font-bold cursor-pointer">
-                            Simpan Aturan
+                            Simpan Pengaturan
                         </button>
                     </div>
                 </div>

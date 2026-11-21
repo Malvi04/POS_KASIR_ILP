@@ -75,6 +75,14 @@
             return null;
         }
     },
+    resolveBranchLocationId(branchName) {
+        if (this.activeSession?.locationId) return Number(this.activeSession.locationId);
+        const b = String(branchName || this.getActiveBranch() || '').toLowerCase();
+        if (b.includes('cabang a') || b.includes('cabang 1') || b === 'cab-002') return 3;
+        if (b.includes('cabang b') || b.includes('cabang 2') || b === 'cab-003') return 4;
+        if (b.includes('gudang') || b === 'gdg-001') return 1;
+        return 2; // Default Toko Pusat (CAB-001)
+    },
     isCatalogSyncing: false,
 
     async initProducts() {
@@ -87,7 +95,7 @@
         try {
             if (window.PosDb && typeof window.PosDb.products?.getByLocation === 'function') {
                 await window.PosDb.init();
-                const locId = this.activeSession?.locationId || (branch.includes('1') ? 2 : (branch.includes('2') ? 3 : 1));
+                const locId = this.resolveBranchLocationId(branch);
                 const dexieProds = await window.PosDb.products.getByLocation(locId, { limit: 100 });
                 if (Array.isArray(dexieProds) && dexieProds.length > 0) {
                     const result = this.deduplicateProducts(dexieProds);
@@ -220,7 +228,7 @@
 
             const deduped = this.deduplicateProducts(accumulated).unique;
             const branchKey = this.getBranchCacheKey(expectedBranch);
-            const locId = resolvedLoc?.id || (expectedBranch.includes('1') ? 2 : (expectedBranch.includes('2') ? 3 : 1));
+            const locId = resolvedLoc?.id || this.resolveBranchLocationId(expectedBranch);
             const meta = {
                 branch: expectedBranch,
                 location_id: locId,
@@ -469,6 +477,254 @@
         localStorage.setItem('pos_ilp_active_cart_v1', JSON.stringify(this.cart));
     },
 
+    // ===================== PROMO ENGINE (ala Alfamart) =====================
+    // Promo sepenuhnya diatur Manager. Kasir hanya bisa ON/OFF per transaksi
+    // atau per item jika diizinkan Manager. Logika = cermin App\Services\PromotionEngine.
+    promoData: { engine_enabled: true, allow_cashier_toggle: true, promotions: [] },
+    promoEnabled: localStorage.getItem('pos_ilp_promo_enabled_v1') !== '0',
+    pwpDismissed: [],
+    promoClock: Date.now(),
+
+    async initPromotions() {
+        try {
+            const cached = localStorage.getItem('pos_ilp_active_promotions_v1');
+            if (cached) this.promoData = Object.assign(this.promoData, JSON.parse(cached));
+        } catch (e) {}
+        await this.fetchPromotions();
+        setInterval(() => { this.promoClock = Date.now(); this.fetchPromotions(); }, 60000);
+    },
+
+    async fetchPromotions() {
+        try {
+            const res = await fetch('/api/pos/promotions/active', { headers: { 'Accept': 'application/json' } });
+            if (!res.ok) return;
+            const json = await res.json();
+            if (json.success && json.data) {
+                this.promoData = json.data;
+                localStorage.setItem('pos_ilp_active_promotions_v1', JSON.stringify(json.data));
+                if (!json.data.allow_cashier_toggle) this.setPromoEnabled(true);
+            }
+        } catch (e) {}
+    },
+
+    get canTogglePromo() {
+        return Boolean(this.promoData.engine_enabled && this.promoData.allow_cashier_toggle);
+    },
+
+    setPromoEnabled(val) {
+        this.promoEnabled = Boolean(val);
+        localStorage.setItem('pos_ilp_promo_enabled_v1', this.promoEnabled ? '1' : '0');
+    },
+
+    togglePromoEnabled() {
+        if (!this.canTogglePromo) {
+            this.triggerPosToast('Pengaturan promo dikunci oleh Manager.', 'error');
+            return;
+        }
+        this.setPromoEnabled(!this.promoEnabled);
+        this.triggerPosToast(this.promoEnabled ? 'Promo toko diterapkan pada transaksi ini.' : 'Promo toko dinonaktifkan untuk transaksi ini (harga normal).');
+    },
+
+    toggleItemPromo(idx) {
+        if (!this.canTogglePromo || !this.cart[idx]) return;
+        this.cart[idx].promoDisabled = !this.cart[idx].promoDisabled;
+        this.saveCart();
+    },
+
+    isPromoRunning(p) {
+        const now = new Date(this.promoClock);
+        if (p.period_end) {
+            const rawEnd = String(p.period_end);
+            const end = new Date(rawEnd.includes('T') ? rawEnd : (rawEnd + 'T23:59:59'));
+            if (!isNaN(end.getTime()) && now > end) return false;
+        }
+        const days = Array.isArray(p.days_of_week) ? p.days_of_week.map(Number) : [];
+        const iso = now.getDay() === 0 ? 7 : now.getDay();
+        if (days.length > 0 && !days.includes(iso)) return false;
+        const hm = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+        if (p.time_start && hm < p.time_start) return false;
+        if (p.time_end && hm > p.time_end) return false;
+        return true;
+    },
+
+    get runningPromotions() {
+        if (!this.promoData.engine_enabled) return [];
+        return (this.promoData.promotions || []).filter(p => this.isPromoRunning(p) && (!p.member_only || this.isMember));
+    },
+
+    cartLineMatchesProduct(it, productId, sku) {
+        const itSku = String(it.sku || '').trim().toUpperCase();
+        return (it.productId && Number(it.productId) === Number(productId)) || (sku && itSku === String(sku).trim().toUpperCase());
+    },
+
+    promoTargets(p, it) {
+        const scope = String(p.scope || 'ALL').toUpperCase();
+        if (scope === 'PRODUCTS') {
+            return (p.product_ids || []).some((id, i) => this.cartLineMatchesProduct(it, id, (p.product_skus || [])[i]))
+                || (p.product_skus || []).some(s => this.cartLineMatchesProduct(it, null, s));
+        }
+        if (scope === 'CATEGORY') {
+            const cats = (p.categories || []).map(c => String(c).toLowerCase());
+            return cats.includes(String(it.category || '').toLowerCase());
+        }
+        return true;
+    },
+
+    promoItemDiscount(p, price, qty) {
+        const value = Number(p.value) || 0;
+        const cap = p.max_qty_per_trx ? Number(p.max_qty_per_trx) : null;
+        const units = cap ? Math.min(qty, cap) : qty;
+        const minQty = Number(p.min_qty) || 0;
+        switch (p.type) {
+            case 'PERCENTAGE':
+                if (minQty > 0 && qty < minQty) return 0;
+                return Math.round(price * Math.min(100, value) / 100) * units;
+            case 'FIXED':
+                if (minQty > 0 && qty < minQty) return 0;
+                return Math.round(Math.min(value, price)) * units;
+            case 'SPECIAL_PRICE':
+                return Math.round(Math.max(0, price - value)) * units;
+            case 'TIERED':
+                if (qty < Math.max(2, minQty)) return 0;
+                return Math.round(Math.max(0, price - value)) * units;
+            case 'BOGO': {
+                const buy = Math.max(1, Number(p.buy_qty) || 1);
+                const get = Math.max(1, Number(p.get_qty) || 1);
+                let free = Math.floor(qty / (buy + get)) * get;
+                if (cap) free = Math.min(free, cap);
+                return Math.round(price) * free;
+            }
+        }
+        return 0;
+    },
+
+    linePrice(it) {
+        return this.isMember ? (it.memberPrice || it.price) : it.price;
+    },
+
+    get promoLines() {
+        const lines = this.cart.map(() => ({ promotionId: null, promoName: null, discount: 0, type: null }));
+        if (!this.promoEnabled || this.cart.length === 0) return lines;
+        const promos = this.runningPromotions;
+        if (promos.length === 0) return lines;
+        const eligible = (it) => !it.isNearExpired && !it.promoDisabled && (Number(it.qty) || 0) > 0;
+        const itemTypes = ['PERCENTAGE', 'FIXED', 'SPECIAL_PRICE', 'BOGO', 'TIERED'];
+
+        // 1. Promo per-item (potongan terbesar menang)
+        this.cart.forEach((it, i) => {
+            if (!eligible(it)) return;
+            promos.forEach(p => {
+                if (!itemTypes.includes(p.type) || !this.promoTargets(p, it)) return;
+                const d = this.promoItemDiscount(p, Number(this.linePrice(it)) || 0, Number(it.qty) || 0);
+                if (d > lines[i].discount) lines[i] = { promotionId: p.id, promoName: p.name, discount: d, type: p.type };
+            });
+        });
+
+        // 2. Tebus Murah (PWP)
+        promos.filter(p => p.type === 'PWP' && p.reward_product_id).forEach(p => {
+            this.cart.forEach((it, i) => {
+                const rw = p.reward_product || {};
+                if (!eligible(it) || !this.cartLineMatchesProduct(it, p.reward_product_id, rw.sku)) return;
+                const base = this.pwpEligibleBase(p, lines, i);
+                if (base < (Number(p.min_purchase) || 0)) return;
+                const units = Math.min(Number(it.qty) || 0, Math.max(1, Number(p.max_qty_per_trx) || 1));
+                const d = Math.round(Math.max(0, (Number(this.linePrice(it)) || 0) - (Number(p.value) || 0)) * units);
+                if (d > lines[i].discount) lines[i] = { promotionId: p.id, promoName: p.name, discount: d, type: 'PWP' };
+            });
+        });
+
+        // 3. Paket Bundling
+        promos.filter(p => p.type === 'BUNDLE').forEach(p => {
+            const ids = [...new Set((p.product_ids || []).map(Number))];
+            if (ids.length < 2) return;
+            const members = [];
+            for (let k = 0; k < ids.length; k++) {
+                const sku = (p.product_skus || [])[k];
+                const idx = this.cart.findIndex((it, i) => eligible(it) && !lines[i].promotionId && this.cartLineMatchesProduct(it, ids[k], sku));
+                if (idx === -1) return;
+                members.push(idx);
+            }
+            let sets = Math.min(...members.map(i => Number(this.cart[i].qty) || 0));
+            if (p.max_qty_per_trx) sets = Math.min(sets, Number(p.max_qty_per_trx));
+            const normal = members.reduce((s, i) => s + (Number(this.linePrice(this.cart[i])) || 0), 0);
+            const perSet = Math.max(0, normal - (Number(p.value) || 0));
+            if (sets <= 0 || perSet <= 0 || normal <= 0) return;
+            const total = Math.round(perSet * sets);
+            let allocated = 0;
+            members.forEach((i, k) => {
+                const share = k === members.length - 1 ? total - allocated : Math.round(total * ((Number(this.linePrice(this.cart[i])) || 0) / normal));
+                allocated += share;
+                lines[i] = { promotionId: p.id, promoName: p.name, discount: share, type: 'BUNDLE' };
+            });
+        });
+
+        return lines;
+    },
+
+    pwpEligibleBase(p, lines, skipIdx) {
+        const excluded = (p.excluded_categories || []).map(c => String(c).toLowerCase());
+        return this.cart.reduce((sum, it, j) => {
+            if (j === skipIdx) return sum;
+            if (excluded.includes(String(it.category || '').toLowerCase())) return sum;
+            return sum + (Number(this.linePrice(it)) || 0) * (Number(it.qty) || 0) - ((lines && lines[j]) ? lines[j].discount : 0);
+        }, 0);
+    },
+
+    get promoSavings() {
+        return this.promoLines.reduce((s, l) => s + (l.discount || 0), 0);
+    },
+
+    get cartWithPromo() {
+        const lines = this.promoLines;
+        return this.cart.map((it, i) => Object.assign({}, it, {
+            promoName: lines[i].promoName,
+            promoDiscount: lines[i].discount,
+            promotionId: lines[i].promotionId
+        }));
+    },
+
+    // Penawaran Tebus Murah yang memenuhi syarat / hampir memenuhi syarat
+    get pwpOffers() {
+        if (!this.promoEnabled || this.cart.length === 0) return [];
+        const lines = this.promoLines;
+        return this.runningPromotions
+            .filter(p => p.type === 'PWP' && p.reward_product && !this.pwpDismissed.includes(p.id))
+            .filter(p => !this.cart.some(it => this.cartLineMatchesProduct(it, p.reward_product_id, p.reward_product.sku)))
+            .map(p => {
+                const base = this.pwpEligibleBase(p, lines, -1);
+                const min = Number(p.min_purchase) || 0;
+                return { promo: p, base: base, eligible: base >= min, shortBy: Math.max(0, min - base) };
+            })
+            .filter(o => o.eligible || o.shortBy <= (Number(o.promo.min_purchase) || 0) * 0.5);
+    },
+
+    async takePwpOffer(offer) {
+        const rw = offer.promo.reward_product || {};
+        let p = (this.products || []).find(x => (rw.sku && x.sku === rw.sku) || (rw.barcode && x.barcode === rw.barcode));
+        if (!p && rw.barcode) {
+            try {
+                const res = await fetch(`/api/pos/products/barcode/${encodeURIComponent(rw.barcode)}?branch=${encodeURIComponent(this.getActiveBranch())}`, { headers: { 'Accept': 'application/json' } });
+                const json = await res.json();
+                if (json.success && json.data) p = json.data;
+            } catch (e) {}
+        }
+        if (!p) {
+            this.triggerPosToast(`Produk tebusan [${rw.name || '-'}] tidak tersedia di stok toko ini.`, 'error');
+            return;
+        }
+        this.addToCart(p);
+    },
+
+    skipPwpOffer(offer) {
+        this.pwpDismissed.push(offer.promo.id);
+    },
+
+    resetPromoTransactionState() {
+        this.pwpDismissed = [];
+        if (this.canTogglePromo) this.setPromoEnabled(true);
+    },
+    // =================== END PROMO ENGINE ===================
+
     addToCart(p) {
         if (!p) return;
         if ((Number(p.stock) || 0) <= 0) {
@@ -488,8 +744,12 @@
 
         if (existing) {
             existing.qty = (Number(existing.qty) || 0) + 1;
+            if (!existing.productId && p.id) existing.productId = p.id;
+            if (!existing.category && p.category) existing.category = p.category;
         } else {
             this.cart.push({
+                productId: p.id || null,
+                category: p.category || '',
                 sku: p.sku || '',
                 barcode: p.barcode || '',
                 name: p.name || 'Produk',
@@ -502,7 +762,8 @@
                 isNearExpired: Boolean(p.is_near_expired),
                 daysUntilExpiration: p.days_until_expiration,
                 clearanceDiscountPercent: Number(p.clearance_discount_percent) || 0,
-                clearanceWarningBadge: p.clearance_warning_badge || null
+                clearanceWarningBadge: p.clearance_warning_badge || null,
+                promoDisabled: false
             });
         }
         this.saveCart();
@@ -639,7 +900,7 @@
 
         // 1b. Fast IndexedDB (Dexie) lookup by barcode & SKU for large offline catalogs
         if (window.PosDb && typeof window.PosDb.products?.findByBarcode === 'function') {
-            const locId = this.activeSession?.locationId || (this.getActiveBranch().includes('1') ? 2 : (this.getActiveBranch().includes('2') ? 3 : 1));
+            const locId = this.resolveBranchLocationId(this.getActiveBranch());
             const dexieProd = await window.PosDb.products.findByBarcode(locId, q);
             if (dexieProd) {
                 this.addToCart(dexieProd);
@@ -721,15 +982,19 @@
     },
 
     // Cart Financial Calculations
-    get subtotal() {
+    get grossSubtotal() {
         return this.cart.reduce((sum, it) => {
             const price = this.isMember ? (it.memberPrice || it.price) : it.price;
             return sum + (price * it.qty);
         }, 0);
     },
 
+    get subtotal() {
+        return Math.max(0, this.grossSubtotal - this.promoSavings);
+    },
+
     get discountSavings() {
-        return this.cart.reduce((sum, it) => {
+        const baseSavings = this.cart.reduce((sum, it) => {
             let itemSavings = 0;
             // Member savings
             if (this.isMember && it.memberPrice && it.memberPrice < it.price) {
@@ -741,13 +1006,17 @@
             }
             return sum + itemSavings;
         }, 0);
+        return baseSavings + this.promoSavings;
     },
 
     get taxAmount() {
-        return this.cart.reduce((sum, it) => {
+        const lines = this.promoLines;
+        return this.cart.reduce((sum, it, i) => {
             if (it.isTaxable !== false) {
                 const price = this.isMember ? (it.memberPrice || it.price) : it.price;
-                return sum + Math.round((price * it.qty) * 0.11);
+                const lineDisc = (lines && lines[i]) ? (Number(lines[i].discount) || 0) : 0;
+                const lineNet = Math.max(0, (price * it.qty) - lineDisc);
+                return sum + Math.round(lineNet * 0.11);
             }
             return sum;
         }, 0);
@@ -1010,6 +1279,7 @@
         // Clear Cart ONLY after offline queue write succeeded
         this.cart = [];
         this.saveCart();
+        this.resetPromoTransactionState();
 
         // Close modal & navigate to receipt print
         this.paymentModal.open = false;
@@ -1050,6 +1320,7 @@
             split_cash: method === 'campuran' ? this.paymentModal.splitCash : 0,
             split_non_cash: method === 'campuran' ? this.paymentModal.splitNonCash : 0,
             member_nik: method === 'kredit' ? (this.memberValidation.data ? this.memberValidation.data.nik : (this.selectedMember ? this.selectedMember.nik : null)) : (this.isMember && this.selectedMember ? this.selectedMember.nik : null),
+            promo_enabled: this.canTogglePromo ? this.promoEnabled : true,
             items: this.cart.map(it => ({
                 sku: it.sku,
                 barcode: it.barcode,
@@ -1058,7 +1329,8 @@
                 unit: it.unit || 'Pcs',
                 price: it.price,
                 member_price: it.memberPrice || it.price,
-                is_member: this.isMember
+                is_member: this.isMember,
+                promo_disabled: Boolean(it.promoDisabled)
             }))
         };
 
@@ -1107,7 +1379,8 @@
                 method: json.data.payment_method,
                 methodLabel: json.data.payment_method === 'TUNAI' ? 'Uang Tunai' : (json.data.payment_method === 'QRIS' ? 'QRIS Dinamis' : (json.data.payment_method === 'KREDIT' ? 'Kredit Anggota' : 'Campuran')),
                 subtotal: json.data.subtotal,
-                discount: json.data.discount_total,
+                discount: (Number(json.data.discount_total) || 0) + (Number(json.data.promo_discount_total) || Number(this.promoSavings) || 0),
+                promoDiscountTotal: json.data.promo_discount_total || this.promoSavings,
                 tax: json.data.tax_total,
                 total: json.data.grand_total,
                 cashGiven: json.data.cash_received,
@@ -1115,15 +1388,24 @@
                 paymentReference: json.data.payment_reference,
                 member: json.data.member,
                 syncStatus: 'SYNCED',
-                items: this.cart.map(it => ({
-                    name: it.name,
-                    qty: it.qty,
-                    unit: it.unit || 'Pcs',
-                    price: this.isMember ? (it.memberPrice || it.price) : it.price,
-                    total: (this.isMember ? (it.memberPrice || it.price) : it.price) * it.qty,
-                    isNearExpired: it.isNearExpired,
-                    clearanceDiscountPercent: it.clearanceDiscountPercent
-                }))
+                items: this.cart.map((it, i) => {
+                    const promoLine = (this.promoLines && this.promoLines[i]) ? this.promoLines[i] : null;
+                    const unitP = this.isMember ? (it.memberPrice || it.price) : it.price;
+                    const promoDisc = (promoLine && !it.promoDisabled && this.promoEnabled) ? (promoLine.discount || 0) : 0;
+                    return {
+                        name: it.name,
+                        qty: it.qty,
+                        unit: it.unit || 'Pcs',
+                        price: unitP,
+                        total: Math.max(0, (unitP * it.qty) - promoDisc),
+                        isNearExpired: it.isNearExpired,
+                        clearanceDiscountPercent: it.clearanceDiscountPercent,
+                        promoName: promoLine ? promoLine.promoName : null,
+                        promoDiscount: promoDisc,
+                        promo_name: promoLine ? promoLine.promoName : null,
+                        promo_discount: promoDisc
+                    };
+                })
             };
 
             localStorage.setItem('pos_ilp_latest_printed_receipt_v1', JSON.stringify(trxRecord));
@@ -1153,6 +1435,7 @@
             // Clear Cart
             this.cart = [];
             this.saveCart();
+            this.resetPromoTransactionState();
 
             // Close modal & navigate to receipt print
             this.paymentModal.open = false;
@@ -1177,7 +1460,7 @@
         this.posToastTimer = setTimeout(() => { this.showPosToast = false; }, 3500);
     }
 }"
-x-init="initOpening(); initProducts(); initCart(); initHeldBills();"
+x-init="initOpening(); initProducts(); initCart(); initHeldBills(); initPromotions();"
 @pos-session-sync.window="initOpening()"
 @pos-inventory-synced.window="initProducts()"
 @pos:inventory_updated.window="initProducts()"
@@ -1317,12 +1600,24 @@ class="flex w-full h-full relative text-gray-800">
                                             <template x-if="p.is_consignment">
                                                 <span class="text-[9.5px] font-extrabold text-amber-800 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded">UMKM</span>
                                             </template>
+                                            <template x-if="p.is_coupon || (p.category && (p.category.toLowerCase().includes('kupon') || p.category.toLowerCase().includes('voucher')))">
+                                                <span class="text-[9.5px] font-extrabold text-indigo-800 bg-indigo-100 border border-indigo-300 px-1.5 py-0.5 rounded">KUPON</span>
+                                            </template>
                                         </div>
                                         <span class="font-mono text-[10px] text-gray-400" x-text="p.sku"></span>
                                     </div>
                                     <h4 class="font-bold text-gray-900 text-xs leading-snug line-clamp-2 group-hover:text-[#0052cc] transition-colors" x-text="p.name"></h4>
                                     <template x-if="p.is_consignment && p.supplier_name">
                                         <p class="text-[10px] text-amber-700 font-semibold mt-0.5 truncate" x-text="'Mitra: ' + p.supplier_name"></p>
+                                    </template>
+
+                                    <!-- Out of stock badge -->
+                                    <template x-if="(Number(p.stock) || 0) <= 0">
+                                        <div class="mt-1">
+                                            <span class="inline-flex items-center gap-1 text-[9.5px] font-black text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded">
+                                                STOK HABIS
+                                            </span>
+                                        </div>
                                     </template>
 
                                     <!-- Auto-Discount Expired Badge (Warning H-14) -->
@@ -1350,7 +1645,9 @@ class="flex w-full h-full relative text-gray-800">
                                         </template>
                                     </div>
                                     <div class="flex items-center justify-between text-[10.5px]">
-                                        <span class="text-gray-500 font-medium" x-text="'Stok: ' + p.stock + ' ' + (p.unit || 'Pcs')"></span>
+                                        <span class="font-medium"
+                                              :class="(Number(p.stock) || 0) <= 0 ? 'text-rose-600 font-bold' : 'text-gray-500'"
+                                              x-text="(Number(p.stock) || 0) <= 0 ? 'Stok: HABIS' : ('Stok: ' + p.stock + ' ' + (p.unit || 'Pcs'))"></span>
                                         <span class="text-[10px] font-bold"
                                               :class="p.is_taxable !== false ? 'text-blue-600' : 'text-gray-400'"
                                               x-text="p.is_taxable !== false ? 'PPN' : 'Non-PPN'"></span>
@@ -1417,10 +1714,70 @@ class="flex w-full h-full relative text-gray-800">
                             <span x-text="isMember ? 'Aktif' : 'Aktifkan'"></span>
                         </button>
                     </div>
+
+                    <!-- Store Promotion Benefit Toggle (Manager Controlled, Cashier Switchable) -->
+                    <div class="flex items-center justify-between p-2.5 rounded-xl border transition-all"
+                         :class="promoEnabled ? 'bg-blue-50 border-blue-300 text-blue-900' : 'bg-white border-gray-200 text-gray-700'">
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-rounded text-[20px]" :class="promoEnabled ? 'text-[#0052cc]' : 'text-gray-400'">local_offer</span>
+                            <div class="text-xs">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="font-bold block" x-text="promoEnabled ? 'Promo Toko Aktif' : 'Promo Toko Nonaktif'"></span>
+                                    <template x-if="runningPromotions.length > 0 && promoEnabled">
+                                        <span class="text-[9.5px] font-extrabold bg-[#0052cc] text-white px-1.5 py-0.5 rounded-full" x-text="runningPromotions.length + ' Promo'"></span>
+                                    </template>
+                                </div>
+                                <span class="text-[10px] text-gray-500" x-text="!canTogglePromo ? 'Otomatis aktif (dikelola penuh Manager)' : (promoEnabled ? 'Diskon harga coret/BOGO/paket otomatis' : 'Pelanggan tidak menggunakan promo (harga normal)')"></span>
+                            </div>
+                        </div>
+                        <template x-if="canTogglePromo">
+                            <button type="button"
+                                    @click="togglePromoEnabled()"
+                                    :class="promoEnabled ? 'bg-[#0052cc] text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'"
+                                    class="px-3 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer">
+                                <span x-text="promoEnabled ? 'Aktif' : 'Nonaktif'"></span>
+                            </button>
+                        </template>
+                        <template x-if="!canTogglePromo">
+                            <span class="text-[11px] font-bold text-blue-700 bg-blue-100/70 px-2 py-0.5 rounded-md">Otomatis</span>
+                        </template>
+                    </div>
                 </div>
 
                 <!-- Cart Items List -->
                 <div class="flex-1 overflow-y-auto p-4 space-y-2.5">
+                    <!-- Tebus Murah (PWP) Offer Banner (Alfamart Reference) -->
+                    <template x-for="offer in pwpOffers" :key="offer.promo.id">
+                        <div class="p-2.5 rounded-xl border border-amber-300 bg-gradient-to-r from-amber-50 to-orange-50 text-amber-950 flex flex-col gap-1.5 shadow-2xs">
+                            <div class="flex items-start justify-between gap-1">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="material-symbols-rounded text-[18px] text-amber-700">redeem</span>
+                                    <span class="text-xs font-black uppercase tracking-wide text-amber-900" x-text="offer.eligible ? 'Hak Tebus Murah Tersedia!' : 'Tawaran Tebus Murah'"></span>
+                                </div>
+                                <button type="button" @click="skipPwpOffer(offer)" class="text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer">
+                                    <span class="material-symbols-rounded text-[14px]">close</span>
+                                </button>
+                            </div>
+                            <p class="text-[11px] leading-snug">
+                                <template x-if="offer.eligible">
+                                    <span>Belanja &gt; <strong x-text="formatRupiah(offer.promo.min_purchase)"></strong>! Tebus <strong x-text="offer.promo.reward_product?.name"></strong> hanya seharga <strong class="text-rose-700 font-mono" x-text="formatRupiah(offer.promo.value)"></strong>!</span>
+                                </template>
+                                <template x-if="!offer.eligible">
+                                    <span>Tambah belanjaan <strong class="font-mono" x-text="formatRupiah(offer.shortBy)"></strong> lagi untuk tebus <strong x-text="offer.promo.reward_product?.name"></strong> seharga <strong class="text-rose-700 font-mono" x-text="formatRupiah(offer.promo.value)"></strong>.</span>
+                                </template>
+                            </p>
+                            <template x-if="offer.eligible">
+                                <div class="flex justify-end gap-1.5 pt-0.5">
+                                    <button type="button" @click="skipPwpOffer(offer)" class="px-2 py-1 text-[10.5px] font-bold text-gray-500 hover:bg-white/80 rounded-lg cursor-pointer">Lewati</button>
+                                    <button type="button" @click="takePwpOffer(offer)" class="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white text-[10.5px] font-black rounded-lg shadow-2xs cursor-pointer flex items-center gap-1">
+                                        <span class="material-symbols-rounded text-[14px]">add</span>
+                                        <span>Tebus Murah</span>
+                                    </button>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+
                     <template x-for="(item, idx) in cart" :key="item.sku">
                         <div class="bg-white p-3 rounded-xl shadow-2xs border border-gray-200 flex gap-2.5 relative">
                             <div class="flex-1 flex flex-col justify-between">
@@ -1433,9 +1790,49 @@ class="flex w-full h-full relative text-gray-800">
                                                 <span x-text="'Auto-Diskon H-' + (item.daysUntilExpiration || '14') + ' (' + item.clearanceDiscountPercent + '%)'"></span>
                                             </span>
                                         </template>
+
+                                        <!-- Promo Toko Badge on Item (Alfamart Style) -->
+                                        <template x-if="promoLines[idx]?.promoName && !item.promoDisabled && promoEnabled">
+                                            <div class="flex items-center gap-1 mt-1">
+                                                <span class="text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-blue-50 text-[#0052cc] border border-blue-200 flex items-center gap-0.5">
+                                                    <span class="material-symbols-rounded text-[11px]">sell</span>
+                                                    <span x-text="promoLines[idx].promoName + ' (-' + formatRupiah(promoLines[idx].discount) + ')'"></span>
+                                                </span>
+                                                <template x-if="canTogglePromo">
+                                                    <button type="button"
+                                                            @click="toggleItemPromo(idx)"
+                                                            title="Nonaktifkan promo untuk produk ini"
+                                                            class="text-gray-400 hover:text-rose-600 cursor-pointer">
+                                                        <span class="material-symbols-rounded text-[13px]">cancel</span>
+                                                    </button>
+                                                </template>
+                                            </div>
+                                        </template>
+
+                                        <!-- Promo Disabled by Cashier Notice -->
+                                        <template x-if="item.promoDisabled">
+                                            <div class="flex items-center gap-1 mt-1">
+                                                <span class="text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-gray-100 text-gray-500 border border-gray-200">
+                                                    Promo Dinonaktifkan
+                                                </span>
+                                                <template x-if="canTogglePromo">
+                                                    <button type="button"
+                                                            @click="toggleItemPromo(idx)"
+                                                            class="text-[9.5px] text-[#0052cc] hover:underline font-bold cursor-pointer">
+                                                        Aktifkan
+                                                    </button>
+                                                </template>
+                                            </div>
+                                        </template>
                                     </div>
                                     <div class="flex items-center gap-1.5 shrink-0">
-                                        <span class="font-mono font-bold text-gray-900 text-xs" x-text="formatRupiah((isMember ? (item.memberPrice || item.price) : item.price) * item.qty)"></span>
+                                        <div class="text-right">
+                                            <span class="font-mono font-bold text-gray-900 text-xs"
+                                                  x-text="formatRupiah(Math.max(0, (isMember ? (item.memberPrice || item.price) : item.price) * item.qty - ((promoLines[idx]?.discount && !item.promoDisabled && promoEnabled) ? promoLines[idx].discount : 0)))"></span>
+                                            <template x-if="promoLines[idx]?.discount > 0 && !item.promoDisabled && promoEnabled">
+                                                <span class="block text-[9.5px] text-gray-400 line-through font-mono" x-text="formatRupiah((isMember ? (item.memberPrice || item.price) : item.price) * item.qty)"></span>
+                                            </template>
+                                        </div>
                                         <!-- Void Item Button (Perlu PIN SPV) -->
                                         <button type="button"
                                                 @click="requestVoidItem(idx)"
@@ -1478,12 +1875,21 @@ class="flex w-full h-full relative text-gray-800">
                     <div class="space-y-1.5 mb-3 text-xs">
                         <div class="flex justify-between text-gray-600 font-medium">
                             <span>Subtotal Belanja</span>
-                            <span class="font-mono font-bold text-gray-800" x-text="formatRupiah(subtotal)"></span>
+                            <span class="font-mono font-bold text-gray-800" x-text="formatRupiah(grossSubtotal)"></span>
                         </div>
-                        <template x-if="discountSavings > 0">
+                        <template x-if="promoSavings > 0">
+                            <div class="flex justify-between text-[#0052cc] font-bold">
+                                <div class="flex items-center gap-1">
+                                    <span class="material-symbols-rounded text-[14px]">sell</span>
+                                    <span>Diskon Promo Toko</span>
+                                </div>
+                                <span class="font-mono" x-text="'-' + formatRupiah(promoSavings)"></span>
+                            </div>
+                        </template>
+                        <template x-if="(discountSavings - promoSavings) > 0">
                             <div class="flex justify-between text-emerald-600 font-bold">
                                 <span>Hemat (Member / Expired Clearance)</span>
-                                <span class="font-mono" x-text="'-' + formatRupiah(discountSavings)"></span>
+                                <span class="font-mono" x-text="'-' + formatRupiah(discountSavings - promoSavings)"></span>
                             </div>
                         </template>
                         <div class="flex justify-between text-gray-600 font-medium">

@@ -6,6 +6,7 @@
 <div x-data="{
     ...cashierOpeningData(),
     periodFilter: 'all',
+    customDate: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date()),
     selectedSessionFilter: 'all',
     selectedMethodFilter: 'all',
     selectedStatusFilter: 'all',
@@ -49,16 +50,28 @@
         this.transactions = [];
     },
 
+    getJakartaDate(d = new Date()) {
+        return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+    },
+
+    getStartOfWeekWib() {
+        const d = new Date();
+        const day = d.getDay();
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+        const start = new Date(d.setDate(diff));
+        return this.getJakartaDate(start);
+    },
+
     get filteredTransactions() {
-        const now = new Date();
-        const todayStr = now.toISOString().split('T')[0];
-        const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay()).toISOString().split('T')[0];
-        const monthPrefix = now.toISOString().substring(0, 7);
-        const yearPrefix = now.getFullYear().toString();
+        const todayStr = this.getJakartaDate();
+        const startOfWeek = this.getStartOfWeekWib();
+        const monthPrefix = todayStr.substring(0, 7);
+        const yearPrefix = todayStr.substring(0, 4);
 
         return this.transactions.filter(t => {
-            // Period filter (Harian, Mingguan, Bulanan, Tahunan)
+            // Period filter (Per Tanggal, Hari Ini, Mingguan, Bulanan, Tahunan)
             if (this.periodFilter === 'today' && t.date && t.date !== todayStr) return false;
+            if (this.periodFilter === 'custom' && this.customDate && t.date && t.date !== this.customDate) return false;
             if (this.periodFilter === 'week' && t.date && t.date < startOfWeek) return false;
             if (this.periodFilter === 'month' && t.date && !t.date.startsWith(monthPrefix)) return false;
             if (this.periodFilter === 'year' && t.date && !t.date.startsWith(yearPrefix)) return false;
@@ -196,38 +209,54 @@ class="flex flex-col h-screen w-full font-sans">
                 <!-- Filter Section -->
                 <div class="bg-white rounded-t-xl p-5 border border-gray-200 shadow-xs flex flex-col gap-4 border-b-0">
                     <div class="flex items-center justify-between flex-wrap gap-3">
-                        <!-- Quick Period Switcher (Harian, Mingguan, Bulanan, Tahunan) -->
-                        <div class="flex items-center gap-1.5 bg-gray-100 p-1 rounded-xl overflow-x-auto">
-                            <button type="button"
-                                    @click="periodFilter = 'today'"
-                                    :class="periodFilter === 'today' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
-                                    class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
-                                Hari Ini
-                            </button>
-                            <button type="button"
-                                    @click="periodFilter = 'week'"
-                                    :class="periodFilter === 'week' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
-                                    class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
-                                Minggu Ini
-                            </button>
-                            <button type="button"
-                                    @click="periodFilter = 'month'"
-                                    :class="periodFilter === 'month' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
-                                    class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
-                                Bulan Ini
-                            </button>
-                            <button type="button"
-                                    @click="periodFilter = 'year'"
-                                    :class="periodFilter === 'year' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
-                                    class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
-                                Tahun Ini
-                            </button>
-                            <button type="button"
-                                    @click="periodFilter = 'all'"
-                                    :class="periodFilter === 'all' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
-                                    class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
-                                Semua
-                            </button>
+                        <!-- Quick Period Switcher (Harian, Mingguan, Bulanan, Tahunan, Per Tanggal) -->
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <div class="flex items-center gap-1.5 bg-gray-100 p-1 rounded-xl overflow-x-auto">
+                                <button type="button"
+                                        @click="periodFilter = 'today'"
+                                        :class="periodFilter === 'today' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
+                                        class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
+                                    Hari Ini
+                                </button>
+                                <button type="button"
+                                        @click="periodFilter = 'week'"
+                                        :class="periodFilter === 'week' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
+                                        class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
+                                    Minggu Ini
+                                </button>
+                                <button type="button"
+                                        @click="periodFilter = 'month'"
+                                        :class="periodFilter === 'month' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
+                                        class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
+                                    Bulan Ini
+                                </button>
+                                <button type="button"
+                                        @click="periodFilter = 'year'"
+                                        :class="periodFilter === 'year' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
+                                        class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
+                                    Tahun Ini
+                                </button>
+                                <button type="button"
+                                        @click="periodFilter = 'custom'"
+                                        :class="periodFilter === 'custom' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
+                                        class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
+                                    Per Tanggal
+                                </button>
+                                <button type="button"
+                                        @click="periodFilter = 'all'"
+                                        :class="periodFilter === 'all' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900 font-semibold'"
+                                        class="px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap">
+                                    Semua
+                                </button>
+                            </div>
+
+                            <!-- Date Picker for 'custom' (Per Tanggal) -->
+                            <div x-show="periodFilter === 'custom'" x-transition class="flex items-center gap-1.5 bg-white border border-gray-300 rounded-xl px-2.5 py-1 shadow-2xs">
+                                <span class="material-symbols-rounded text-[#0052cc] text-[16px]">calendar_today</span>
+                                <input type="date"
+                                       x-model="customDate"
+                                       class="text-xs font-bold text-gray-800 bg-transparent focus:outline-none cursor-pointer" />
+                            </div>
                         </div>
 
                         <!-- Search Box -->
@@ -286,8 +315,9 @@ class="flex flex-col h-screen w-full font-sans">
                                 <tr class="bg-gray-50/80 border-b border-gray-200 text-gray-600 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
                                     <th class="px-5 py-3.5 text-left w-[140px]">No. Transaksi</th>
                                     <th class="px-5 py-3.5 text-left w-[120px]">ID Sesi</th>
-                                    <th class="px-5 py-3.5 text-left w-[160px]">Petugas Kasir</th>
-                                    <th class="px-5 py-3.5 text-left w-[140px]">Waktu</th>
+                                    <th class="px-5 py-3.5 text-left w-[150px]">Petugas Kasir</th>
+                                    <th class="px-5 py-3.5 text-left w-[130px]">Tanggal</th>
+                                    <th class="px-5 py-3.5 text-left w-[110px]">Waktu</th>
                                     <th class="px-5 py-3.5 text-left w-[140px]">Metode Bayar</th>
                                     <th class="px-5 py-3.5 text-right w-[130px]">Subtotal</th>
                                     <th class="px-5 py-3.5 text-right w-[110px]">PPN (11%)</th>
@@ -302,7 +332,8 @@ class="flex flex-col h-screen w-full font-sans">
                                         <td class="px-5 py-3.5 font-mono font-bold text-[#0052cc] whitespace-nowrap" x-text="trx.id"></td>
                                         <td class="px-5 py-3.5 font-mono text-gray-600 whitespace-nowrap" x-text="trx.sessionId"></td>
                                         <td class="px-5 py-3.5 font-bold text-gray-900 whitespace-nowrap" x-text="trx.cashier"></td>
-                                        <td class="px-5 py-3.5 text-gray-600 whitespace-nowrap" x-text="trx.time"></td>
+                                        <td class="px-5 py-3.5 font-medium text-gray-800 whitespace-nowrap" x-text="trx.displayDate"></td>
+                                        <td class="px-5 py-3.5 text-gray-600 font-mono whitespace-nowrap" x-text="trx.time"></td>
                                         <td class="px-5 py-3.5 whitespace-nowrap">
                                             <span class="px-2.5 py-1 rounded-full text-[10px] font-extrabold"
                                                   :class="{
@@ -338,7 +369,7 @@ class="flex flex-col h-screen w-full font-sans">
                                     </tr>
                                 </template>
                                 <tr x-show="filteredTransactions.length === 0">
-                                    <td colspan="10" class="text-center py-12 text-gray-400">
+                                    <td colspan="11" class="text-center py-12 text-gray-400">
                                         <span class="material-symbols-rounded text-4xl mb-2 text-gray-300">receipt_long</span>
                                         <p class="font-bold text-gray-600">Belum ada transaksi untuk ditampilkan.</p>
                                     </td>

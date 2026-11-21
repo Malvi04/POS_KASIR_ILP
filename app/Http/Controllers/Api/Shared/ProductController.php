@@ -45,7 +45,10 @@ class ProductController extends Controller
         if ($locationIdParam || $locationCode || $branchParam) {
             $targetLocation = $this->stockService->resolveLocation(
                 $locationIdParam,
-                $locationCode ?: $branchParam
+                $locationCode ?: $branchParam,
+                null,
+                $authUser,
+                ($authUser && $authUser->isKasir()) ? 'STORE' : null
             );
         }
 
@@ -66,7 +69,8 @@ class ProductController extends Controller
                     ], 403);
                 }
             } else {
-                $targetLocation = $this->stockService->resolveLocation(null, $authUser->branch, null, $authUser, 'STORE');
+                $primaryBranch = trim(explode(',', $authUser->branch ?? 'Pusat')[0]);
+                $targetLocation = $this->stockService->resolveLocation(null, $primaryBranch, null, $authUser, 'STORE');
             }
         }
 
@@ -846,6 +850,16 @@ class ProductController extends Controller
 
         $product->update($validated);
 
+        if (isset($validated['stock'])) {
+            $wh = Location::where('type', 'WAREHOUSE')->first();
+            if ($wh) {
+                ProductStock::updateOrCreate(
+                    ['product_id' => $product->id, 'location_id' => $wh->id],
+                    ['stock' => (int) $validated['stock'], 'is_active' => true]
+                );
+            }
+        }
+
         return response()->json([
             'success' => true,
             'message' => "Data produk [{$product->name}] berhasil diperbarui.",
@@ -1041,7 +1055,16 @@ class ProductController extends Controller
         }
 
         $locStock = $locationId ? $p->stockAtLocation($locationId) : null;
-        $warehouseStock = (int) ($branchStock['GDG-001'] ?? (count($branchStock) === 0 ? $p->stock : 0));
+        $whStockFound = $branchStock['GDG-001'] ?? null;
+        if ($whStockFound === null) {
+            foreach ($stocks as $ps) {
+                if ($ps->location && $ps->location->type === 'WAREHOUSE') {
+                    $whStockFound = (int) $ps->stock;
+                    break;
+                }
+            }
+        }
+        $warehouseStock = (int) ($whStockFound ?? $p->stock);
         $effectiveStock = $locationId ? (int) ($locStock?->stock ?? 0) : $warehouseStock;
         $effectiveMinStock = ($locStock && $locStock->min_stock !== null) ? (int) $locStock->min_stock : (int) $p->min_stock;
         $stockStatus = $effectiveStock <= 0
@@ -1106,8 +1129,11 @@ class ProductController extends Controller
             'is_taxable' => (bool) $p->is_taxable,
             'tax_rate' => (float) $p->tax_rate,
             'tax_label' => $p->is_taxable ? 'PPN ' . (float) $p->tax_rate . '%' : 'Bebas Pajak (Non-PPN)',
-            // Konsinyasi UMKM
+            // Konsinyasi UMKM & Jenis Produk (Umum, UMKM, Kupon)
             'is_consignment' => (bool) $p->is_consignment,
+            'is_coupon' => (bool) (!empty($p->category) && (str_contains(strtolower($p->category), 'kupon') || str_contains(strtolower($p->category), 'voucher'))),
+            'product_type' => (!empty($p->category) && (str_contains(strtolower($p->category), 'kupon') || str_contains(strtolower($p->category), 'voucher'))) ? 'KUPON' : ($p->is_consignment ? 'UMKM' : 'UMUM'),
+            'product_type_label' => (!empty($p->category) && (str_contains(strtolower($p->category), 'kupon') || str_contains(strtolower($p->category), 'voucher'))) ? 'Kupon / Voucher' : ($p->is_consignment ? 'Produk UMKM' : 'Produk Umum'),
             'supplier_id' => $p->supplier_id,
             'supplier_name' => $p->supplier?->name ?? ($p->is_consignment ? 'Mitra UMKM Lokal' : 'Internal Koperasi'),
             'commission_percent' => (float) $p->commission_percent,

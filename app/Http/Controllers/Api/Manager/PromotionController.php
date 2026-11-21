@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api\Manager;
 
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
+use App\Models\Product;
 use App\Models\Promotion;
+use App\Services\PromotionEngine;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -39,48 +41,131 @@ class PromotionController extends Controller
     }
 
     /**
+     * Validation rules shared by store & update.
+     */
+    protected function rules(bool $isUpdate = false): array
+    {
+        $req = $isUpdate ? 'sometimes|required' : 'required';
+        return [
+            'name' => "{$req}|string|max:255",
+            'condition' => 'nullable|string|max:255',
+            'type' => "{$req}|in:" . implode(',', Promotion::TYPES),
+            'value' => 'nullable|numeric|min:0',
+            'period_start' => 'nullable|date',
+            'period_end' => 'nullable|date|after_or_equal:period_start',
+            'status' => ($isUpdate ? 'sometimes|required' : 'nullable') . '|string|in:AKTIF,MENDATANG,NONAKTIF,BERAKHIR',
+            'scope' => 'nullable|in:ALL,CATEGORY,PRODUCTS',
+            'product_ids' => 'nullable|array',
+            'product_ids.*' => 'integer|exists:products,id',
+            'categories' => 'nullable|array',
+            'categories.*' => 'string|max:100',
+            'buy_qty' => 'nullable|integer|min:1',
+            'get_qty' => 'nullable|integer|min:1',
+            'min_qty' => 'nullable|integer|min:1',
+            'min_purchase' => 'nullable|numeric|min:0',
+            'max_qty_per_trx' => 'nullable|integer|min:1',
+            'reward_product_id' => 'nullable|integer|exists:products,id',
+            'excluded_categories' => 'nullable|array',
+            'excluded_categories.*' => 'string|max:100',
+            'days_of_week' => 'nullable|array',
+            'days_of_week.*' => 'integer|between:1,7',
+            'time_start' => 'nullable|date_format:H:i',
+            'time_end' => 'nullable|date_format:H:i',
+            'member_only' => 'nullable|boolean',
+        ];
+    }
+
+    /**
+     * Business validation per promo type.
+     */
+    protected function validateTypeRules(array $data): ?string
+    {
+        $type = $data['type'] ?? null;
+        $value = (float) ($data['value'] ?? 0);
+        $scope = $data['scope'] ?? 'ALL';
+
+        if (in_array($type, PromotionEngine::ITEM_TYPES, true)) {
+            if ($scope === 'PRODUCTS' && empty($data['product_ids'])) {
+                return 'Pilih minimal 1 produk target promo.';
+            }
+            if ($scope === 'CATEGORY' && empty($data['categories'])) {
+                return 'Pilih minimal 1 kategori target promo.';
+            }
+        }
+
+        return match ($type) {
+            'PERCENTAGE' => ($value <= 0 || $value > 100) ? 'Persentase diskon harus antara 1 - 100%.' : null,
+            'FIXED' => $value <= 0 ? 'Nominal potongan harus lebih dari Rp 0.' : null,
+            'SPECIAL_PRICE' => $value <= 0 ? 'Harga promo (harga coret) wajib diisi.' : null,
+            'TIERED' => ($value <= 0 || (int) ($data['min_qty'] ?? 0) < 2) ? 'Isi minimal qty (≥ 2) dan harga satuan grosir.' : null,
+            'BOGO' => (empty($data['buy_qty']) || empty($data['get_qty'])) ? 'Isi jumlah Beli (X) dan Gratis (Y).' : null,
+            'BUNDLE' => (count($data['product_ids'] ?? []) < 2 || $value <= 0) ? 'Paket bundling wajib minimal 2 produk dan harga paket.' : null,
+            'PWP' => (empty($data['reward_product_id']) || (float) ($data['min_purchase'] ?? 0) <= 0) ? 'Tebus murah wajib mengisi minimal belanja dan produk tebusan.' : null,
+            default => null,
+        };
+    }
+
+    protected function normalizePayload(array $data): array
+    {
+        $type = $data['type'] ?? null;
+        if (in_array($type, ['BUNDLE', 'PWP'], true)) {
+            $data['scope'] = $type === 'BUNDLE' ? 'PRODUCTS' : 'ALL';
+        }
+        if (($data['scope'] ?? 'ALL') !== 'PRODUCTS' && $type !== 'BUNDLE') {
+            $data['product_ids'] = [];
+        }
+        if (($data['scope'] ?? 'ALL') !== 'CATEGORY') {
+            $data['categories'] = [];
+        }
+        foreach (['time_start', 'time_end'] as $k) {
+            if (array_key_exists($k, $data) && $data[$k] === '') {
+                $data[$k] = null;
+            }
+        }
+        return $data;
+    }
+
+    protected function statusColor(string $status): string
+    {
+        return match ($status) {
+            'AKTIF' => 'green',
+            'MENDATANG' => 'blue',
+            default => 'gray',
+        };
+    }
+
+    /**
      * Create a new promotion.
      */
     public function store(Request $request): JsonResponse
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'condition' => 'nullable|string|max:255',
-            'type' => 'required|in:PERCENTAGE,FIXED,BOGO',
-            'value' => 'nullable|numeric|min:0',
-            'period_start' => 'nullable|date',
-            'period_end' => 'nullable|date',
-            'status' => 'nullable|string|in:AKTIF,MENDATANG,NONAKTIF',
-        ]);
+        $validated = $this->normalizePayload($request->validate($this->rules()));
 
-        $code = 'PRM-' . str_pad((string)(Promotion::count() + 1), 3, '0', STR_PAD_LEFT);
+        if ($err = $this->validateTypeRules($validated)) {
+            return response()->json(['success' => false, 'message' => $err], 422);
+        }
 
-        $badgeClass = match ($validated['type']) {
-            'PERCENTAGE' => 'bg-[#dbeafe] text-[#1e40af]',
-            'FIXED' => 'bg-[#e0e7ff] text-[#3730a3]',
-            'BOGO' => 'bg-[#ffedd5] text-[#9a3412]',
-            default => 'bg-gray-100 text-gray-700',
-        };
+        $nextNum = ((int) Promotion::max('id')) + 1;
+        $code = 'PRM-' . str_pad((string) $nextNum, 3, '0', STR_PAD_LEFT);
+        while (Promotion::where('code', $code)->exists()) {
+            $nextNum++;
+            $code = 'PRM-' . str_pad((string) $nextNum, 3, '0', STR_PAD_LEFT);
+        }
 
         $status = $validated['status'] ?? 'AKTIF';
-        $statusColor = match ($status) {
-            'AKTIF' => 'green',
-            'MENDATANG' => 'blue',
-            default => 'red',
-        };
 
-        $promo = Promotion::create([
+        $promo = Promotion::create(array_merge($validated, [
             'code' => $code,
-            'name' => $validated['name'],
             'condition' => $validated['condition'] ?? 'Tanpa syarat',
-            'type' => $validated['type'],
             'value' => $validated['value'] ?? 0,
-            'badge_class' => $badgeClass,
+            'badge_class' => Promotion::badgeClassFor($validated['type']),
             'period_start' => $validated['period_start'] ?? now()->toDateString(),
             'period_end' => $validated['period_end'] ?? now()->addDays(7)->toDateString(),
             'status' => $status,
-            'status_color' => $statusColor,
-        ]);
+            'status_color' => $this->statusColor($status),
+            'scope' => $validated['scope'] ?? 'ALL',
+            'member_only' => (bool) ($validated['member_only'] ?? false),
+        ]));
 
         return response()->json([
             'success' => true,
@@ -96,31 +181,19 @@ class PromotionController extends Controller
     {
         $promo = Promotion::findOrFail($id);
 
-        $validated = $request->validate([
-            'name' => 'sometimes|required|string|max:255',
-            'condition' => 'nullable|string|max:255',
-            'type' => 'sometimes|required|in:PERCENTAGE,FIXED,BOGO',
-            'value' => 'nullable|numeric|min:0',
-            'period_start' => 'nullable|date',
-            'period_end' => 'nullable|date',
-            'status' => 'sometimes|required|string|in:AKTIF,MENDATANG,NONAKTIF',
-        ]);
+        $validated = $request->validate($this->rules(true));
 
+        // Full form update (bukan sekadar toggle status) -> validasi aturan tipe
         if (isset($validated['type'])) {
-            $validated['badge_class'] = match ($validated['type']) {
-                'PERCENTAGE' => 'bg-[#dbeafe] text-[#1e40af]',
-                'FIXED' => 'bg-[#e0e7ff] text-[#3730a3]',
-                'BOGO' => 'bg-[#ffedd5] text-[#9a3412]',
-                default => 'bg-gray-100 text-gray-700',
-            };
+            $validated = $this->normalizePayload($validated);
+            if ($err = $this->validateTypeRules($validated)) {
+                return response()->json(['success' => false, 'message' => $err], 422);
+            }
+            $validated['badge_class'] = Promotion::badgeClassFor($validated['type']);
         }
 
         if (isset($validated['status'])) {
-            $validated['status_color'] = match ($validated['status']) {
-                'AKTIF' => 'green',
-                'MENDATANG' => 'blue',
-                default => 'red',
-            };
+            $validated['status_color'] = $this->statusColor($validated['status']);
         }
 
         $promo->update($validated);
@@ -128,7 +201,7 @@ class PromotionController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Promosi berhasil diperbarui',
-            'data' => $promo,
+            'data' => $promo->fresh(),
         ]);
     }
 
@@ -147,20 +220,37 @@ class PromotionController extends Controller
     }
 
     /**
+     * Lightweight product & category options for the promo form.
+     */
+    public function productOptions(): JsonResponse
+    {
+        $products = Product::query()
+            ->orderBy('name')
+            ->get(['id', 'sku', 'name', 'category', 'price', 'member_price']);
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'products' => $products->map(fn ($p) => [
+                    'id' => $p->id,
+                    'sku' => $p->sku,
+                    'name' => $p->name,
+                    'category' => $p->category,
+                    'price' => (float) $p->price,
+                ])->values(),
+                'categories' => $products->pluck('category')->filter()->unique()->sort()->values(),
+            ],
+        ]);
+    }
+
+    /**
      * Get promo settings & expiry rules.
      */
     public function getSettings(): JsonResponse
     {
-        $setting = AppSetting::where('key', 'promo_settings')->first();
-        $settingsData = $setting ? json_decode($setting->value, true) : [
-            'h7Percent' => 40,
-            'h3Percent' => 70,
-            'autoPrint' => true,
-        ];
-
         return response()->json([
             'success' => true,
-            'data' => $settingsData,
+            'data' => PromotionEngine::settings(),
         ]);
     }
 
@@ -173,17 +263,32 @@ class PromotionController extends Controller
             'h7Percent' => 'required|numeric|min:0|max:100',
             'h3Percent' => 'required|numeric|min:0|max:100',
             'autoPrint' => 'required|boolean',
+            'promoEngineEnabled' => 'nullable|boolean',
+            'allowCashierToggle' => 'nullable|boolean',
         ]);
+
+        $merged = array_merge(PromotionEngine::settings(), array_filter($data, fn ($v) => $v !== null));
 
         AppSetting::updateOrCreate(
             ['key' => 'promo_settings'],
-            ['value' => json_encode($data)]
+            ['value' => json_encode($merged)]
         );
 
         return response()->json([
             'success' => true,
-            'message' => 'Pengaturan promo kadaluarsa berhasil disimpan',
-            'data' => $data,
+            'message' => 'Pengaturan promo berhasil disimpan',
+            'data' => $merged,
+        ]);
+    }
+
+    /**
+     * Promo aktif untuk layar kasir POS (semua role yang login).
+     */
+    public function activeForPos(PromotionEngine $engine): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            'data' => $engine->activePayloadForPos(),
         ]);
     }
 }

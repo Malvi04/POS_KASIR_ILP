@@ -577,14 +577,20 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                 <div class="flex flex-col">
                                                     <span class="font-bold text-gray-900 max-w-[200px] truncate" :title="it.name" x-text="it.name"></span>
                                                     <div class="flex items-center gap-1 mt-0.5">
-                                                        <template x-if="it.is_consignment || it.product_type === 'UMKM'">
+                                                        <template x-if="it.is_coupon || it.product_type === 'KUPON' || (it.category && (it.category.toLowerCase().includes('kupon') || it.category.toLowerCase().includes('voucher')))">
+                                                            <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                                                                <span class="material-symbols-rounded text-[11px]">local_activity</span>
+                                                                <span>Kupon / Voucher</span>
+                                                            </span>
+                                                        </template>
+                                                        <template x-if="(it.is_consignment || it.product_type === 'UMKM') && !(it.is_coupon || it.product_type === 'KUPON') && !(it.category && (it.category.toLowerCase().includes('kupon') || it.category.toLowerCase().includes('voucher')))">
                                                             <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
                                                                 <span class="material-symbols-rounded text-[11px]">storefront</span>
                                                                 <span>Produk UMKM</span>
                                                                 <span x-show="it.supplier_name" x-text="'• ' + it.supplier_name" class="truncate max-w-[120px]"></span>
                                                             </span>
                                                         </template>
-                                                        <template x-if="!it.is_consignment && it.product_type !== 'UMKM'">
+                                                        <template x-if="!it.is_consignment && it.product_type !== 'UMKM' && !it.is_coupon && it.product_type !== 'KUPON' && !(it.category && (it.category.toLowerCase().includes('kupon') || it.category.toLowerCase().includes('voucher')))">
                                                             <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
                                                                 <span class="material-symbols-rounded text-[11px]">inventory_2</span>
                                                                 <span>Produk Umum</span>
@@ -756,14 +762,20 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                 <span class="font-bold text-gray-900" x-text="item.name"></span>
                                                 <div class="flex items-center gap-1.5 mt-0.5">
                                                     <span class="font-mono text-[11px] text-gray-400" x-text="'SKU: ' + item.sku + ' (' + item.unit + ')'"></span>
-                                                    <template x-if="item.is_consignment || item.product_type === 'UMKM'">
+                                                    <template x-if="item.is_coupon || item.product_type === 'KUPON' || (item.category && (item.category.toLowerCase().includes('kupon') || item.category.toLowerCase().includes('voucher')))">
+                                                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                                                            <span class="material-symbols-rounded text-[11px]">local_activity</span>
+                                                            <span>Kupon / Voucher</span>
+                                                        </span>
+                                                    </template>
+                                                    <template x-if="(item.is_consignment || item.product_type === 'UMKM') && !(item.is_coupon || item.product_type === 'KUPON') && !(item.category && (item.category.toLowerCase().includes('kupon') || item.category.toLowerCase().includes('voucher')))">
                                                         <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
                                                             <span class="material-symbols-rounded text-[11px]">storefront</span>
                                                             <span>Produk UMKM</span>
                                                             <span x-show="item.supplier_name" x-text="'• ' + item.supplier_name"></span>
                                                         </span>
                                                     </template>
-                                                    <template x-if="!item.is_consignment && item.product_type !== 'UMKM'">
+                                                    <template x-if="!item.is_consignment && item.product_type !== 'UMKM' && !item.is_coupon && item.product_type !== 'KUPON' && !(item.category && (item.category.toLowerCase().includes('kupon') || item.category.toLowerCase().includes('voucher')))">
                                                         <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
                                                             <span class="material-symbols-rounded text-[11px]">inventory_2</span>
                                                             <span>Produk Umum</span>
@@ -919,14 +931,20 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                             <div class="flex flex-col">
                                                 <span class="font-bold text-gray-800" x-text="it.name"></span>
                                                 <div class="flex items-center gap-1 mt-0.5">
-                                                    <template x-if="it.is_consignment || it.product_type === 'UMKM'">
+                                                    <template x-if="it.is_coupon || it.product_type === 'KUPON' || (it.category && (it.category.toLowerCase().includes('kupon') || it.category.toLowerCase().includes('voucher')))">
+                                                        <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                                                            <span class="material-symbols-rounded text-[11px]">local_activity</span>
+                                                            <span>Kupon / Voucher</span>
+                                                        </span>
+                                                    </template>
+                                                    <template x-if="(it.is_consignment || it.product_type === 'UMKM') && !(it.is_coupon || it.product_type === 'KUPON') && !(it.category && (it.category.toLowerCase().includes('kupon') || it.category.toLowerCase().includes('voucher')))">
                                                         <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
                                                             <span class="material-symbols-rounded text-[11px]">storefront</span>
                                                             <span>Produk UMKM</span>
                                                             <span x-show="it.supplier_name" x-text="'• ' + it.supplier_name"></span>
                                                         </span>
                                                     </template>
-                                                    <template x-if="!it.is_consignment && it.product_type !== 'UMKM'">
+                                                    <template x-if="!it.is_consignment && it.product_type !== 'UMKM' && !it.is_coupon && it.product_type !== 'KUPON' && !(it.category && (it.category.toLowerCase().includes('kupon') || it.category.toLowerCase().includes('voucher')))">
                                                         <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
                                                             <span class="material-symbols-rounded text-[11px]">inventory_2</span>
                                                             <span>Produk Umum</span>

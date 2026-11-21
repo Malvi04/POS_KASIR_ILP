@@ -157,6 +157,8 @@ Route::prefix('pos')->middleware('auth.api')->group(function () {
     Route::post('/checkout', [TransactionController::class, 'checkout']);
     Route::post('/sync-offline', [TransactionController::class, 'syncOffline']);
     Route::get('/transactions/{idOrInvoice}', [TransactionController::class, 'show']);
+    // Promo Engine: daftar promo aktif + pengaturan saklar promo untuk layar kasir
+    Route::get('/promotions/active', [PromotionController::class, 'activeForPos']);
 });
 
 // 6. Otorisasi Void / Pembatalan Transaction (Anti-Fraud Control)
@@ -349,6 +351,7 @@ Route::prefix('products')->middleware('auth.api:manager')->group(function () {
 // Kupon BBM & Voucher Operasional (ERD Kupon BBM)
 Route::prefix('coupons')->middleware('auth.api')->group(function () {
     Route::get('/', [CouponController::class, 'index']);
+    Route::get('/options', [CouponController::class, 'options']);
     Route::post('/', [CouponController::class, 'store']);
     Route::put('/{id}', [CouponController::class, 'update']);
     Route::delete('/{id}', [CouponController::class, 'destroy']);
@@ -374,6 +377,7 @@ Route::prefix('promotions')->middleware('auth.api:manager')->group(function () {
     Route::post('/', [PromotionController::class, 'store']);
     Route::get('/settings', [PromotionController::class, 'getSettings']);
     Route::put('/settings', [PromotionController::class, 'updateSettings']);
+    Route::get('/product-options', [PromotionController::class, 'productOptions']);
     Route::put('/{id}', [PromotionController::class, 'update']);
     Route::delete('/{id}', [PromotionController::class, 'destroy']);
 });

@@ -242,7 +242,7 @@ class Product extends Model
     {
         if ($this->is_critical_expired) {
             $discountPct = $this->effective_discount_percent;
-            return round($this->price * ($discountPct / 100), 2);
+            return round(((float) ($this->price ?? 0)) * ($discountPct / 100), 2);
         }
         return 0.0;
     }
@@ -250,12 +250,12 @@ class Product extends Model
     public function getFinalPriceAttribute(): float
     {
         $discount = $this->effective_clearance_discount;
-        return max(0, $this->price - $discount);
+        return max(0, ((float) ($this->price ?? 0)) - $discount);
     }
 
     public function getFinalMemberPriceAttribute(): float
     {
-        $base = $this->member_price ?? $this->price;
+        $base = (float) ($this->member_price ?? $this->price ?? 0);
         if ($this->is_critical_expired) {
             $discount = round($base * ($this->effective_discount_percent / 100), 2);
             return max(0, $base - $discount);
