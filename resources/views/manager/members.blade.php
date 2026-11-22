@@ -16,9 +16,9 @@
         total_remaining_credit: 0
     },
     branches: [
-        'Cabang 1 - Mill / Pabrik',
-        'Cabang 2 - Kebun Barat',
-        'Cabang 3 - Kebun Timur'
+        'Cabang Pusat',
+        'Cabang A',
+        'Cabang B'
     ],
     departments: [],
     
@@ -42,6 +42,8 @@
     showDeleteModal: false,
     selectedMember: null,
     deleteConfirmInput: '',
+    nextId: null,
+    nextCode: '',
     
     // Plafon Form
     newLimitAmount: 5000000,
@@ -64,7 +66,7 @@
         department: 'Logistik & Distribusi',
         division: '',
         address: '',
-        branch: 'Cabang 1 - Mill / Pabrik',
+        branch: 'Cabang Pusat',
         phone: '',
         fax: '',
         contact: '',
@@ -282,6 +284,10 @@
                     this.currentPage = json.meta.current_page;
                     this.lastPage = json.meta.last_page;
                     this.totalRecords = json.meta.total;
+                    if (json.next_id || (json.meta && json.meta.next_id)) {
+                        this.nextId = json.next_id || json.meta.next_id;
+                        this.nextCode = json.next_code || json.meta.next_code;
+                    }
                 }
             } else {
                 this.triggerToast('Gagal memuat data anggota dari server API.', 'error');
@@ -294,21 +300,46 @@
         }
     },
 
+    // Fetch Next ID and Code from backend
+    async fetchNextCode() {
+        try {
+            const res = await fetch('/api/members/next-code', {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && json.data) {
+                    this.nextId = json.data.next_id;
+                    this.nextCode = json.data.next_code;
+                    if (this.modalMode === 'create' && this.showModal) {
+                        this.formData.customer_id = json.data.next_id;
+                        this.formData.member_code = json.data.next_code;
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Failed to fetch next member code:', e);
+        }
+    },
+
     // Open Create Modal
-    openCreateModal() {
+    async openCreateModal() {
         this.modalMode = 'create';
         this.formErrors = {};
         this.formData = {
             id: null,
-            customer_id: '',
-            member_code: '',
+            customer_id: this.nextId || '',
+            member_code: this.nextCode || '',
             kode_out: '',
             nik: '',
             name: '',
-            department: this.departments[0] || 'General Affairs',
-            division: this.departments[0] || 'General Affairs',
+            department: '',
+            division: '',
             address: '',
-            branch: this.selectedBranch !== 'all' ? this.selectedBranch : 'Cabang 1 - Mill / Pabrik',
+            branch: this.selectedBranch !== 'all' ? this.selectedBranch : 'Cabang Pusat',
             phone: '',
             fax: '',
             contact: '',
@@ -320,6 +351,7 @@
             notes: 'Pendaftaran anggota baru'
         };
         this.showModal = true;
+        await this.fetchNextCode();
     },
 
     // Open Edit Modal
@@ -354,16 +386,36 @@
     async saveMember() {
         if (this.isLoading) return;
         this.formErrors = {};
-        if (!this.formData.name || !String(this.formData.name).trim()) this.formErrors.name = 'Nama lengkap wajib diisi.';
-        if ((this.formData.nik === null || this.formData.nik === undefined || String(this.formData.nik).trim() === '') && (!this.formData.member_code || String(this.formData.member_code).trim() === '')) {
-            this.formErrors.nik = 'NIP / NIK atau Kode wajib diisi.';
+
+        // Only Nip, Nama, Dept, Divisi, Fax, Plafon are required manual fields
+        if (!this.formData.nik || !String(this.formData.nik).trim()) {
+            this.formErrors.nik = 'NIP / NIK wajib diisi.';
         }
-        if (!this.formData.nik || String(this.formData.nik).trim() === '') {
-            this.formData.nik = String(this.formData.member_code).trim();
+        if (!this.formData.name || !String(this.formData.name).trim()) {
+            this.formErrors.name = 'Nama lengkap wajib diisi.';
         }
-        if (!this.formData.department) this.formData.department = this.formData.division || 'Umum';
-        if (!this.formData.division) this.formData.division = this.formData.department;
+        if (!this.formData.department || !String(this.formData.department).trim()) {
+            this.formErrors.department = 'Departemen wajib diisi.';
+        }
+        if (!this.formData.division || !String(this.formData.division).trim()) {
+            this.formErrors.division = 'Divisi wajib diisi.';
+        }
+        if (!this.formData.fax || !String(this.formData.fax).trim()) {
+            this.formErrors.fax = 'Fax wajib diisi.';
+        }
+        if (this.formData.credit_limit === '' || this.formData.credit_limit === null || this.formData.credit_limit === undefined || isNaN(this.formData.credit_limit) || Number(this.formData.credit_limit) < 0) {
+            this.formErrors.credit_limit = 'Plafon kasbon wajib diisi.';
+        }
+
         if (Object.keys(this.formErrors).length > 0) return;
+
+        // Auto-assign ID & Kode if empty
+        if (!this.formData.customer_id && this.nextId) {
+            this.formData.customer_id = this.nextId;
+        }
+        if (!this.formData.member_code && this.nextCode) {
+            this.formData.member_code = this.nextCode;
+        }
 
         this.isLoading = true;
         const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('mbr-' + Date.now());
@@ -387,6 +439,7 @@
                 this.showModal = false;
                 this.triggerToast(json.message);
                 await this.fetchMembers(this.currentPage);
+                await this.fetchNextCode();
             } else {
                 this.triggerToast(json.message || 'Gagal menyimpan data anggota.', 'error');
                 if (json.errors) {
@@ -575,9 +628,9 @@
 
     getBranchBadgeClass(b) {
         if (!b) return 'bg-gray-100 text-gray-700 border-gray-200';
-        if (b.includes('Mill') || b.includes('Pabrik')) return 'bg-blue-50 text-[#0052cc] border-blue-200';
-        if (b.includes('Barat')) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-        if (b.includes('Timur')) return 'bg-purple-50 text-purple-700 border-purple-200';
+        if (b.includes('Pusat')) return 'bg-blue-50 text-[#0052cc] border-blue-200';
+        if (b.includes('Cabang A') || b.includes('Cabang 1') || b.includes('Barat')) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+        if (b.includes('Cabang B') || b.includes('Cabang 2') || b.includes('Timur')) return 'bg-purple-50 text-purple-700 border-purple-200';
         return 'bg-amber-50 text-amber-700 border-amber-200';
     },
 
@@ -619,38 +672,6 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
         <!-- Scrollable Workspace -->
         <div class="flex-1 overflow-y-auto p-8 flex flex-col">
-            
-            <!-- Transparent 3-Branch Selector Bar -->
-            <div class="bg-white rounded-2xl border border-gray-200/90 p-3 shadow-xs mb-6 flex flex-wrap items-center justify-between gap-3">
-                <div class="flex items-center gap-2">
-                    <span class="material-symbols-rounded text-gray-400 text-[20px] ml-2">hub</span>
-                    <span class="text-xs font-bold text-gray-500 uppercase tracking-wider mr-2">Filter Cabang:</span>
-                    <div class="inline-flex p-1 bg-gray-100 rounded-xl gap-1">
-                        <button type="button"
-                                @click="selectedBranch = 'all'; fetchMembers(1);"
-                                :class="selectedBranch === 'all' ? 'bg-white text-[#0052cc] shadow-xs font-black' : 'text-gray-600 hover:text-gray-900 font-bold'"
-                                class="px-3.5 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1.5">
-                            <span>Semua 3 Cabang</span>
-                            <span class="text-[10px] px-1.5 py-0.2 bg-gray-200 rounded-full" x-text="summary.total_members"></span>
-                        </button>
-                        <template x-for="b in branches" :key="b">
-                            <button type="button"
-                                    @click="selectedBranch = b; fetchMembers(1);"
-                                    :class="selectedBranch === b ? 'bg-white text-[#0052cc] shadow-xs font-black' : 'text-gray-600 hover:text-gray-900 font-bold'"
-                                    class="px-3 py-1.5 rounded-lg text-xs transition-all whitespace-nowrap"
-                                    x-text="b">
-                            </button>
-                        </template>
-                    </div>
-                </div>
-
-                <div class="flex items-center gap-3">
-                    <a href="{{ url('/reports') }}" class="flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-xl border border-gray-200 transition-colors shadow-2xs">
-                        <span class="material-symbols-rounded text-[18px] text-[#0052cc]">assessment</span>
-                        <span>Laporan Piutang</span>
-                    </a>
-                </div>
-            </div>
 
             <!-- Summary KPI Cards -->
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
@@ -754,8 +775,15 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </select>
                 </div>
 
-                <!-- Action Buttons: Import Excel, Export Excel, Tambah Karyawan -->
+                <!-- Action Buttons: Laporan Piutang, Import Excel, Export Excel, Tambah Karyawan -->
                 <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+                    <a href="{{ url('/reports') }}"
+                       class="px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-gray-300 rounded-xl font-bold text-[13px] flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
+                       title="Buka Laporan Piutang Kasbon">
+                        <span class="material-symbols-rounded text-[18px] text-[#0052cc]">assessment</span>
+                        <span>Laporan Piutang</span>
+                    </a>
+
                     <button type="button"
                             @click.stop="openImportModal()"
                             class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-[13px] flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
@@ -826,7 +854,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     <td colspan="18" class="px-6 py-14 text-center text-gray-400">
                                         <span class="material-symbols-rounded text-[48px] text-gray-300 block mb-2">person_search</span>
                                         <p class="font-bold text-gray-700 text-sm">Tidak ada data anggota ditemukan</p>
-                                        <p class="text-xs text-gray-400 mt-1">Coba sesuaikan kata kunci pencarian, filter cabang, atau import data Excel.</p>
+                                        <p class="text-xs text-gray-400 mt-1">Coba sesuaikan kata kunci pencarian, departemen, status, atau import data Excel.</p>
                                     </td>
                                 </tr>
                             </template>
@@ -852,7 +880,9 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
                                     <!-- 5. Nama -->
                                     <td class="px-4 py-3 whitespace-nowrap">
-                                        <a :href="'/member-detail?id=' + m.id" class="font-bold text-gray-900 hover:text-[#0052cc] leading-tight block" x-text="m.name"></a>
+                                        <a :href="'/member-detail?id=' + m.id"
+                                           @click="try { localStorage.setItem('pos_last_selected_member_id', String(m.id)); } catch(e) {}"
+                                           class="font-bold text-gray-900 hover:text-[#0052cc] leading-tight block" x-text="m.name"></a>
                                     </td>
 
                                     <!-- 6. Dept -->
@@ -927,6 +957,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                         <div class="inline-flex items-center gap-1">
                                             <!-- Detail Profil & Riwayat -->
                                             <a :href="'/member-detail?id=' + m.id"
+                                               @click="try { localStorage.setItem('pos_last_selected_member_id', String(m.id)); } catch(e) {}"
                                                class="p-1.5 text-gray-400 hover:text-[#0052cc] hover:bg-blue-50 rounded-lg transition-colors"
                                                title="Detail Profil & Riwayat Kasbon">
                                                 <span class="material-symbols-rounded text-[18px]">visibility</span>
@@ -1031,18 +1062,26 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                 <!-- Row 1: ID, Kode, KodeOut, Nip -->
                 <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
                     <div>
-                        <label class="block text-xs font-bold text-gray-700 mb-1">ID</label>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">
+                            ID <span class="text-[10px] font-semibold text-blue-600">(Otomatis)</span>
+                        </label>
                         <input type="text"
                                x-model="formData.customer_id"
                                placeholder="Auto / ID"
-                               class="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-mono focus:outline-none focus:border-[#0052cc]">
+                               :readonly="modalMode === 'create'"
+                               class="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-mono focus:outline-none focus:border-[#0052cc]"
+                               :class="modalMode === 'create' ? 'bg-gray-50 text-gray-700 font-bold' : ''">
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-gray-700 mb-1">Kode</label>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">
+                            Kode <span class="text-[10px] font-semibold text-blue-600">(Otomatis)</span>
+                        </label>
                         <input type="text"
                                x-model="formData.member_code"
                                placeholder="01-0001"
-                               class="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-mono focus:outline-none focus:border-[#0052cc]">
+                               :readonly="modalMode === 'create'"
+                               class="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-mono focus:outline-none focus:border-[#0052cc]"
+                               :class="modalMode === 'create' ? 'bg-gray-50 text-gray-700 font-bold' : ''">
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-gray-700 mb-1">KodeOut</label>
@@ -1077,15 +1116,19 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <label class="block text-xs font-bold text-gray-700 mb-1">Dept <span class="text-red-500">*</span></label>
                         <input type="text"
                                x-model="formData.department"
-                               placeholder="Central Personnel"
-                               class="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs focus:outline-none focus:border-[#0052cc]">
+                               placeholder="General Affairs"
+                               class="w-full px-3 py-2 rounded-xl border text-xs focus:ring-2 focus:ring-[#0052cc]/20 focus:border-[#0052cc] focus:outline-none"
+                               :class="formErrors.department ? 'border-red-400 bg-red-50/20' : 'border-gray-300'">
+                        <p x-show="formErrors.department" x-text="formErrors.department" class="text-[11px] text-red-500 mt-1"></p>
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-gray-700 mb-1">Divisi</label>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Divisi <span class="text-red-500">*</span></label>
                         <input type="text"
                                x-model="formData.division"
-                               placeholder="Central Personnel"
-                               class="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs focus:outline-none focus:border-[#0052cc]">
+                               placeholder="General Affairs"
+                               class="w-full px-3 py-2 rounded-xl border text-xs focus:ring-2 focus:ring-[#0052cc]/20 focus:border-[#0052cc] focus:outline-none"
+                               :class="formErrors.division ? 'border-red-400 bg-red-50/20' : 'border-gray-300'">
+                        <p x-show="formErrors.division" x-text="formErrors.division" class="text-[11px] text-red-500 mt-1"></p>
                     </div>
                 </div>
 
@@ -1106,11 +1149,13 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                class="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-mono focus:outline-none focus:border-[#0052cc]">
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-gray-700 mb-1">Fax</label>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Fax <span class="text-red-500">*</span></label>
                         <input type="text"
                                x-model="formData.fax"
                                placeholder="I/22"
-                               class="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-mono focus:outline-none focus:border-[#0052cc]">
+                               class="w-full px-3 py-2 rounded-xl border text-xs font-mono focus:ring-2 focus:ring-[#0052cc]/20 focus:border-[#0052cc] focus:outline-none"
+                               :class="formErrors.fax ? 'border-red-400 bg-red-50/20' : 'border-gray-300'">
+                        <p x-show="formErrors.fax" x-text="formErrors.fax" class="text-[11px] text-red-500 mt-1"></p>
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-gray-700 mb-1">Contact</label>
@@ -1141,7 +1186,10 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <label class="block text-xs font-bold text-gray-700 mb-1">Plafon (Rp) <span class="text-red-500">*</span></label>
                         <input type="number"
                                x-model="formData.credit_limit"
-                               class="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-mono font-bold focus:outline-none focus:border-[#0052cc]">
+                               placeholder="1000000"
+                               class="w-full px-3 py-2 rounded-xl border text-xs font-mono font-bold focus:ring-2 focus:ring-[#0052cc]/20 focus:border-[#0052cc] focus:outline-none"
+                               :class="formErrors.credit_limit ? 'border-red-400 bg-red-50/20' : 'border-gray-300'">
+                        <p x-show="formErrors.credit_limit" x-text="formErrors.credit_limit" class="text-[11px] text-red-500 mt-1"></p>
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-gray-700 mb-1">NoRekening</label>
@@ -1155,7 +1203,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <input type="text"
                                x-model="formData.branch"
                                list="branchOptionsList"
-                               placeholder="Cabang 1 - Mill / Pabrik"
+                               placeholder="Cabang Pusat"
                                class="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-semibold focus:outline-none focus:border-[#0052cc]">
                         <datalist id="branchOptionsList">
                             <template x-for="b in branches" :key="b">

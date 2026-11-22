@@ -587,13 +587,6 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                 <!-- Breadcrumb & Header Title -->
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                        <div class="flex items-center gap-2 text-[11px] font-bold text-gray-400 tracking-wider mb-1 uppercase">
-                            <span>OPERASIONAL TOKO</span>
-                            <span class="material-symbols-rounded text-[14px]">chevron_right</span>
-                            <span>PRODUK</span>
-                            <span class="material-symbols-rounded text-[14px]">chevron_right</span>
-                            <span class="text-[#0052cc]">DATA BARANG & INFORMASI STOK</span>
-                        </div>
                         <h1 class="text-2xl font-black text-gray-900 tracking-tight">Informasi Stok & Produk</h1>
                     </div>
 

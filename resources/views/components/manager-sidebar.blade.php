@@ -11,7 +11,7 @@
            openMenus: {
                persediaan: {{ in_array($active, ['inventory', 'suppliers', 'pembelian_barang', 'stock_opname', 'kirim_barang']) ? 'true' : 'false' }},
                retur: {{ in_array($active, ['retur', 'retur_masuk']) ? 'true' : 'false' }},
-               anggota: {{ in_array($active, ['members', 'member_detail']) ? 'true' : 'false' }}
+               anggota: {{ in_array($active, ['members', 'member_detail', 'piutang']) ? 'true' : 'false' }}
            },
            isOwner() {
                return (this.currentRole || '').toLowerCase() === 'owner' || (this.currentRole || '').toLowerCase() === 'superadmin';
@@ -115,15 +115,15 @@
                         @click="openMenus.anggota = !openMenus.anggota"
                         :aria-expanded="openMenus.anggota ? 'true' : 'false'"
                         aria-controls="submenu-anggota"
-                        class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-colors text-[13px] {{ in_array($active, ['members', 'member_detail']) ? 'bg-[#eef2ff] text-[#0052cc] font-bold' : 'text-gray-600 hover:bg-gray-200 font-semibold' }} cursor-pointer">
+                        class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-colors text-[13px] {{ in_array($active, ['members', 'member_detail', 'piutang']) ? 'bg-[#eef2ff] text-[#0052cc] font-bold' : 'text-gray-600 hover:bg-gray-200 font-semibold' }} cursor-pointer">
                     <div class="flex items-center gap-3">
-                        <span class="material-symbols-rounded text-[20px] {{ in_array($active, ['members', 'member_detail']) ? 'filled' : '' }}">groups</span>
+                        <span class="material-symbols-rounded text-[20px] {{ in_array($active, ['members', 'member_detail', 'piutang']) ? 'filled' : '' }}">groups</span>
                         <span>Pelanggan &amp; Anggota</span>
                     </div>
                     <span class="material-symbols-rounded text-[18px] transition-transform duration-200 text-gray-400"
                           :class="openMenus.anggota ? 'rotate-180 text-[#0052cc]' : ''">expand_more</span>
                 </button>
-                <div id="submenu-anggota" @if(!in_array($active, ['members', 'member_detail'])) x-cloak @endif x-show="openMenus.anggota" x-transition.origin.top class="flex flex-col gap-1 pl-8 pr-1 py-1">
+                <div id="submenu-anggota" @if(!in_array($active, ['members', 'member_detail', 'piutang'])) x-cloak @endif x-show="openMenus.anggota" x-transition.origin.top class="flex flex-col gap-1 pl-8 pr-1 py-1">
                     <a :href="getNavUrl('{{ url('/members') }}')" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12.5px] transition-colors {{ $active === 'members' ? 'bg-[#0052cc] text-white font-bold' : 'text-gray-600 hover:bg-gray-200 font-medium' }}">
                         <span class="w-1.5 h-1.5 rounded-full {{ $active === 'members' ? 'bg-white' : 'bg-gray-400' }}"></span>
                         <span>Daftar Anggota</span>
@@ -131,6 +131,10 @@
                     <a :href="getNavUrl('{{ url('/member-detail') }}')" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12.5px] transition-colors {{ $active === 'member_detail' ? 'bg-[#0052cc] text-white font-bold' : 'text-gray-600 hover:bg-gray-200 font-medium' }}">
                         <span class="w-1.5 h-1.5 rounded-full {{ $active === 'member_detail' ? 'bg-white' : 'bg-gray-400' }}"></span>
                         <span>Detail &amp; Riwayat</span>
+                    </a>
+                    <a :href="getNavUrl('{{ url('/piutang') }}')" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12.5px] transition-colors {{ $active === 'piutang' ? 'bg-[#0052cc] text-white font-bold' : 'text-gray-600 hover:bg-gray-200 font-medium' }}">
+                        <span class="w-1.5 h-1.5 rounded-full {{ $active === 'piutang' ? 'bg-white' : 'bg-gray-400' }}"></span>
+                        <span>Daftar Piutang</span>
                     </a>
                 </div>
             </div>

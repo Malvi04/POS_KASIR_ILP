@@ -88,30 +88,41 @@
 
     async loadAvailableProducts() {
         try {
-            const res = await fetch('/api/products?location_code=GDG-001&per_page=500', { headers: { 'Accept': 'application/json' } });
-            if (res.ok) {
-                const json = await res.json();
-                const prods = json.data || json;
-                if (Array.isArray(prods)) {
-                    this.availableProducts = prods.map(p => {
-                        const meta = this.resolveProductType(p);
-                        return {
-                            id: p.id,
-                            sku: p.sku || p.barcode || '-',
-                            barcode: p.barcode || p.sku || '-',
-                            name: p.name || p.nama || '-',
-                            category: p.category || p.kategori || 'Umum',
-                            unit: p.unit || 'Pcs',
-                            stock: Math.max(0, Number(p.stock !== undefined ? p.stock : (p.stok || 0))),
-                            is_consignment: meta.is_consignment,
-                            is_coupon: meta.is_coupon,
-                            product_type: meta.product_type,
-                            product_type_label: meta.product_type_label,
-                            supplier_name: p.supplier_name || (p.supplier ? p.supplier.name : '') || ''
-                        };
-                    });
-                    return;
-                }
+            const [resWh, resKpn] = await Promise.all([
+                fetch('/api/products?location_code=GDG-001&per_page=500', { headers: { 'Accept': 'application/json' } }),
+                fetch('/api/products?location_code=GDG-001&category=Kupon&per_page=100', { headers: { 'Accept': 'application/json' } }).catch(() => null)
+            ]);
+            let prods = [];
+            if (resWh && resWh.ok) {
+                const jsonWh = await resWh.json();
+                prods = jsonWh.data || jsonWh || [];
+            }
+            if (resKpn && resKpn.ok) {
+                const jsonKpn = await resKpn.json();
+                const kpnProds = jsonKpn.data || jsonKpn || [];
+                const existingIds = new Set(prods.map(p => p.id));
+                const uniqueKpn = kpnProds.filter(p => !existingIds.has(p.id));
+                prods = [...uniqueKpn, ...prods];
+            }
+            if (Array.isArray(prods)) {
+                this.availableProducts = prods.map(p => {
+                    const meta = this.resolveProductType(p);
+                    return {
+                        id: p.id,
+                        sku: p.sku || p.barcode || '-',
+                        barcode: p.barcode || p.sku || '-',
+                        name: p.name || p.nama || '-',
+                        category: p.category || p.kategori || 'Umum',
+                        unit: p.unit || 'Pcs',
+                        stock: Math.max(0, Number(p.stock !== undefined ? p.stock : (p.stok || 0))),
+                        is_consignment: meta.is_consignment,
+                        is_coupon: meta.is_coupon,
+                        product_type: meta.product_type,
+                        product_type_label: meta.product_type_label,
+                        supplier_name: p.supplier_name || (p.supplier ? p.supplier.name : '') || ''
+                    };
+                });
+                return;
             }
         } catch(e) {
             console.warn('Failed to load products from API:', e);

@@ -1880,7 +1880,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             <div class="space-y-2 max-w-3xl">
                                 <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-200 text-xs font-bold">
                                     <span class="material-symbols-rounded text-[16px]">verified_user</span>
-                                    <span>SOP Pemulihan Akses Internal Koperasi Pabrik</span>
+                                    <span>SOP Pemulihan Akses Internal Koperasi</span>
                                 </div>
                                 <h2 class="text-xl lg:text-2xl font-black tracking-tight text-white">
                                     Pusat Pemulihan Akun &amp; Reset Kredensial Kasir
@@ -2575,7 +2575,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                            class="mt-0.5 rounded border-slate-300 text-[#0052cc] focus:ring-[#0052cc]/20">
                                     <div class="text-[11.5px] text-slate-700">
                                         <strong class="text-slate-900 block">Verifikasi Identitas Anggota (KTA / NIK):</strong>
-                                        KTA Koperasi atau ID Karyawan Pabrik telah diperiksa dan nomor NIK cocok dengan database.
+                                        KTA Koperasi atau ID Karyawan telah diperiksa dan nomor NIK cocok dengan database.
                                     </div>
                                 </label>
 
@@ -2595,7 +2595,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <!-- Integrity & Simulation Disclaimer -->
                         <div class="p-3 bg-amber-50/80 rounded-xl border border-amber-200 text-[10.5px] text-amber-900 leading-relaxed">
                             <strong>Klausul Integritas &amp; Kepatuhan SOP:</strong>
-                            Proses ini merupakan simulasi operasional koperasi karyawan pabrik (in-person physical verification), bukan verifikasi biometrik otomatis atau tautan email publik. Seluruh riwayat reset dicatat pada Audit Trail Koperasi.
+                            Proses ini merupakan verifikasi fisik langsung identitas anggota (in-person physical verification), bukan verifikasi biometrik otomatis atau tautan email publik. Seluruh riwayat reset dicatat pada Audit Trail Koperasi.
                         </div>
 
                         <!-- Footer Actions -->

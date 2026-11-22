@@ -19,10 +19,12 @@ trait SeedsTestFixtures
         $this->seed();
 
         $locations = [
-            ['code' => 'LOC-01', 'name' => 'Cabang 1 - Mill / Pabrik', 'type' => 'STORE', 'is_active' => true],
-            ['code' => 'LOC-02', 'name' => 'Cabang 2 - Kebun Barat', 'type' => 'STORE', 'is_active' => true],
-            ['code' => 'LOC-03', 'name' => 'Cabang 3 - Kebun Timur', 'type' => 'STORE', 'is_active' => true],
-            ['code' => 'LOC-DC', 'name' => 'DC Cikarang (Pusat Logistik)', 'type' => 'WAREHOUSE', 'is_active' => true],
+            ['code' => 'CAB-001', 'name' => 'Cabang Pusat', 'type' => 'STORE', 'is_active' => true],
+            ['code' => 'CAB-002', 'name' => 'Cabang A', 'type' => 'STORE', 'is_active' => true],
+            ['code' => 'CAB-003', 'name' => 'Cabang B', 'type' => 'STORE', 'is_active' => true],
+            ['code' => 'GDG-001', 'name' => 'Gudang Pusat', 'type' => 'WAREHOUSE', 'is_active' => true],
+            ['code' => 'LOC-01', 'name' => 'Cabang Pusat', 'type' => 'STORE', 'is_active' => true],
+            ['code' => 'LOC-DC', 'name' => 'Gudang Pusat', 'type' => 'WAREHOUSE', 'is_active' => true],
         ];
         foreach ($locations as $loc) {
             Location::updateOrCreate(['code' => $loc['code']], $loc);
@@ -34,7 +36,7 @@ trait SeedsTestFixtures
                 'nik' => '1029384756',
                 'name' => 'Santoso',
                 'department' => 'Logistik & Distribusi',
-                'branch' => 'Cabang 1 - Mill / Pabrik',
+                'branch' => 'Cabang Pusat',
                 'phone' => '0812-0000-0001',
                 'join_date' => '2021-01-12',
                 'credit_limit' => 2500000,
@@ -46,7 +48,7 @@ trait SeedsTestFixtures
                 'nik' => '327501440230012',
                 'name' => 'Siti Lestari',
                 'department' => 'Administrasi & Keuangan',
-                'branch' => 'Cabang 2 - Kebun Barat',
+                'branch' => 'Cabang A',
                 'phone' => '0812-0000-0002',
                 'join_date' => '2022-05-05',
                 'credit_limit' => 4000000,
@@ -57,8 +59,8 @@ trait SeedsTestFixtures
                 'member_code' => 'MBR-004',
                 'nik' => '327501002230099',
                 'name' => 'Andri Setiawan',
-                'department' => 'Operasional Kebun',
-                'branch' => 'Cabang 3 - Kebun Timur',
+                'department' => 'Operasional Toko',
+                'branch' => 'Cabang B',
                 'phone' => '0812-0000-0003',
                 'join_date' => '2019-08-10',
                 'credit_limit' => 3000000,

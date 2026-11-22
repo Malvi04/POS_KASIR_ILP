@@ -34,10 +34,32 @@
     coupons: [],
     isLoadingCoupons: false,
 
+    getActiveBranch() {
+        const serverBranch = @js(auth()->user()?->branch ? explode(',', auth()->user()->branch)[0] : '');
+        const raw = this.activeSession?.storeLocation || localStorage.getItem('pos_kasir_branch') || serverBranch || this.selectedBranch || 'Cabang Pusat';
+        return this.normalizeBranchName ? this.normalizeBranchName(raw) : raw;
+    },
+
+    resolveBranchLocationId(branchName) {
+        if (this.activeSession?.locationId) return Number(this.activeSession.locationId);
+        const b = String(branchName || this.getActiveBranch() || '').toLowerCase();
+        if (b.includes('cabang a') || b.includes('cabang 1') || b === 'cab-002') return 3;
+        if (b.includes('cabang b') || b.includes('cabang 2') || b === 'cab-003') return 4;
+        if (b.includes('gudang') || b === 'gdg-001') return 1;
+        return 2; // Default Toko Pusat (CAB-001)
+    },
+
     async initCoupons() {
         this.isLoadingCoupons = true;
         try {
-            const res = await fetch('/api/coupons?per_page=100');
+            const branch = this.getActiveBranch();
+            const locId = this.resolveBranchLocationId(branch);
+            const queryParams = new URLSearchParams({
+                per_page: '100',
+                branch: branch,
+                location_id: locId
+            });
+            const res = await fetch(`/api/coupons?${queryParams.toString()}`);
             if (res.ok) {
                 const json = await res.json();
                 if (json.success && Array.isArray(json.data)) {
@@ -131,8 +153,8 @@
 
     async saveNewKupon() {
         if (this.isSavingKupon) return;
-        if (!this.formKupon.code || !this.formKupon.recipientName) {
-            alert('Mohon lengkapi nomor seri kupon dan nama penerima!');
+        if (!this.formKupon.code) {
+            alert('Mohon lengkapi nomor seri kupon!');
             return;
         }
 
@@ -153,9 +175,9 @@
                 badgeClass: badge,
                 dotClass: dot,
                 itemDetail: this.formKupon.notes || label,
-                recipientName: this.formKupon.recipientName,
+                recipientName: this.formKupon.recipientName || '-',
                 recipientRole: this.formKupon.recipientDept || 'Karyawan',
-                recipientNik: this.formKupon.recipientNik || 'NIK-PENDING',
+                recipientNik: this.formKupon.recipientNik || '-',
                 vehicleNo: '-',
                 qty: this.formKupon.volume || '1 Unit',
                 nominal: Number(this.formKupon.nominal) || 0,
@@ -624,25 +646,6 @@ class="flex flex-col h-screen w-full font-sans">
                                placeholder="Contoh: #KPN-BBM-9921"
                                required
                                class="w-full px-3.5 py-2 border border-gray-300 rounded-xl font-mono uppercase focus:outline-none focus:border-[#0052cc]" />
-                    </div>
-
-                    <!-- Penerima -->
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="font-bold text-gray-700 block mb-1">Nama Penerima <span class="text-red-500">*</span></label>
-                            <input type="text"
-                                   x-model="formKupon.recipientName"
-                                   placeholder="Nama karyawan / anggota"
-                                   required
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-[#0052cc]" />
-                        </div>
-                        <div>
-                            <label class="font-bold text-gray-700 block mb-1">NIK / ID Karyawan</label>
-                            <input type="text"
-                                   x-model="formKupon.recipientNik"
-                                   placeholder="Nomor NIK"
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono focus:outline-none focus:border-[#0052cc]" />
-                        </div>
                     </div>
 
                     <!-- Volume & Nilai -->

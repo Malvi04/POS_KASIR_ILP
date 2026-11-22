@@ -154,7 +154,7 @@
                                         <div class="font-bold text-slate-800 text-[11.5px]">Langkah Pemulihan:</div>
                                         <ol class="list-decimal pl-4 space-y-1.5 text-[11px]">
                                             <li>Laporkan kendala langsung kepada Manager Cabang yang sedang bertugas di gerai ini.</li>
-                                            <li>Tunjukkan bukti identitas (KTA Koperasi atau ID Karyawan Pabrik dengan NIK).</li>
+                                            <li>Tunjukkan bukti identitas (KTA Koperasi atau ID Karyawan dengan NIK).</li>
                                             <li>Manager akan membuka menu <em>Kelola Akun &gt; Pemulihan Akun</em> untuk menerbitkan PIN sementara baru khusus untuk akun Anda.</li>
                                         </ol>
                                     </div>

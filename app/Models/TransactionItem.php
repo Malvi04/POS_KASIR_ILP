@@ -17,6 +17,7 @@ class TransactionItem extends Model
         'batch_allocations',
         'sku',
         'barcode',
+        'coupon_number',
         'product_name',
         'unit',
         'unit_price',

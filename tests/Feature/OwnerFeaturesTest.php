@@ -15,9 +15,9 @@ class OwnerFeaturesTest extends TestCase
         parent::setUp();
 
         foreach ([
-            ['code' => 'LOC-01', 'name' => 'Pusat', 'type' => 'STORE', 'is_active' => true],
-            ['code' => 'LOC-02', 'name' => 'Cabang 1 - Mill / Pabrik', 'type' => 'STORE', 'is_active' => true],
-            ['code' => 'LOC-03', 'name' => 'Cabang 2 - Kebun Barat', 'type' => 'STORE', 'is_active' => true],
+            ['code' => 'CAB-001', 'name' => 'Cabang Pusat', 'type' => 'STORE', 'is_active' => true],
+            ['code' => 'CAB-002', 'name' => 'Cabang A', 'type' => 'STORE', 'is_active' => true],
+            ['code' => 'CAB-003', 'name' => 'Cabang B', 'type' => 'STORE', 'is_active' => true],
         ] as $loc) {
             Location::updateOrCreate(['code' => $loc['code']], $loc);
         }
@@ -138,11 +138,11 @@ class OwnerFeaturesTest extends TestCase
         // 1. Create Supervisor Account
         $createRes = $this->postJson('/api/users', [
             'nik' => $uniqueNik,
-            'name' => 'Supervisor Cabang 2',
+            'name' => 'Supervisor Cabang B',
             'username' => $uniqueUser,
             'email' => $uniqueUser . '@ilp.com',
             'role' => 'Supervisor',
-            'branch' => 'Cabang 2 - Kebun Barat',
+            'branch' => 'Cabang B',
             'pin' => '654321',
             'password' => 'spvsecret123',
             'password_confirmation' => 'spvsecret123',
@@ -177,7 +177,7 @@ class OwnerFeaturesTest extends TestCase
         // 1. Bulk limit update
         $bulkRes = $this->postJson('/api/members/bulk-limit', [
             'target_type' => 'DEPARTMENT',
-            'target_value' => 'Operasional Kebun',
+            'target_value' => 'Operasional Toko',
             'credit_limit' => 3500000,
             'notes' => 'Penyesuaian plafon tahunan oleh Owner',
         ]);
@@ -232,7 +232,7 @@ class OwnerFeaturesTest extends TestCase
         $createRes = $this->postJson('/api/branches', [
             'name' => 'Cabang Baru Test Unit',
             'facilityType' => 'store',
-            'address' => 'Jl. Perkebunan Sawit No. 10',
+            'address' => 'Jl. Niaga Utama No. 10',
             'manager' => 'Manager Baru Test',
             'managerEmail' => 'manager_baru@ilp.com',
             'status' => 'AKTIF',

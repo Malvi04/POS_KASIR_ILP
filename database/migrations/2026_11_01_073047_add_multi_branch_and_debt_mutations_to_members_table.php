@@ -13,7 +13,7 @@ return new class extends Migration
     {
         // 1. Extend members table for Multi-Cabang, Phone, and Joining information
         Schema::table('members', function (Blueprint $table) {
-            $table->string('branch')->default('Cabang 1 - Mill / Pabrik')->after('department')->index();
+            $table->string('branch')->default('Cabang Pusat')->after('department')->index();
             $table->string('phone')->nullable()->after('branch');
             $table->date('join_date')->nullable()->after('phone');
             $table->text('notes')->nullable()->after('status');

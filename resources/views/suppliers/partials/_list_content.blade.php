@@ -608,6 +608,7 @@ function supplierListApp(config) {
         },
 
         notify(msg, type = 'success') {
+            if (!msg || typeof msg !== 'string' || !msg.trim()) return;
             if (typeof window.triggerToast === 'function') {
                 window.triggerToast(msg, type);
             }

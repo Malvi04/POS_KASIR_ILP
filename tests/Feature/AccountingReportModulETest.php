@@ -23,9 +23,9 @@ class AccountingReportModulETest extends TestCase
         AppSetting::set('tax_rate_percent', '11', 'tax');
 
         foreach ([
-            ['code' => 'LOC-01', 'name' => 'Pusat', 'type' => 'STORE', 'is_active' => true],
-            ['code' => 'LOC-02', 'name' => 'Cabang 1 - Mill / Pabrik', 'type' => 'STORE', 'is_active' => true],
-            ['code' => 'LOC-03', 'name' => 'Cabang 2 - Kebun Barat', 'type' => 'STORE', 'is_active' => true],
+            ['code' => 'CAB-001', 'name' => 'Cabang Pusat', 'type' => 'STORE', 'is_active' => true],
+            ['code' => 'CAB-002', 'name' => 'Cabang A', 'type' => 'STORE', 'is_active' => true],
+            ['code' => 'CAB-003', 'name' => 'Cabang B', 'type' => 'STORE', 'is_active' => true],
         ] as $loc) {
             Location::updateOrCreate(['code' => $loc['code']], $loc);
         }
@@ -43,6 +43,8 @@ class AccountingReportModulETest extends TestCase
             'success' => true,
         ]);
         $this->assertArrayHasKey('summary', $response->json());
+        $this->assertArrayHasKey('terminals_breakdown', $response->json());
+        $this->assertArrayHasKey('cashiers_breakdown', $response->json());
         $this->assertArrayHasKey('shifts_breakdown', $response->json());
         $this->assertArrayHasKey('branch_breakdown', $response->json());
         $this->assertCount(3, $response->json('branch_breakdown'));
@@ -56,6 +58,16 @@ class AccountingReportModulETest extends TestCase
         $weeklyRes = $this->getJson('/api/reports/sales?period=weekly');
         $weeklyRes->assertStatus(200);
         $this->assertEquals('weekly', $weeklyRes->json('filters.period'));
+
+        // 4. Terminal Filter
+        $terminalRes = $this->getJson('/api/reports/sales?period=monthly&terminal_code=POS-01');
+        $terminalRes->assertStatus(200);
+        $this->assertEquals('POS-01', $terminalRes->json('filters.terminal_code'));
+
+        // 5. Cashier Search by Username / Name
+        $searchRes = $this->getJson('/api/reports/sales?period=monthly&search=admin');
+        $searchRes->assertStatus(200);
+        $this->assertEquals('admin', $searchRes->json('filters.search'));
     }
 
     /**

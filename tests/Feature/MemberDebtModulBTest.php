@@ -48,11 +48,11 @@ class MemberDebtModulBTest extends TestCase
         $branches = $response->json('branches');
         $this->assertCount(3, $branches);
 
-        // Filter by Cabang 2
-        $responseCabang2 = $this->getJson('/api/members?branch=' . urlencode('Cabang 2 - Kebun Barat'));
-        $responseCabang2->assertStatus(200);
-        foreach ($responseCabang2->json('data') as $item) {
-            $this->assertEquals('Cabang 2 - Kebun Barat', $item['branch']);
+        // Filter by Cabang A
+        $responseCabangA = $this->getJson('/api/members?branch=' . urlencode('Cabang A'));
+        $responseCabangA->assertStatus(200);
+        foreach ($responseCabangA->json('data') as $item) {
+            $this->assertEquals('Cabang A', $item['branch']);
         }
     }
 
@@ -76,12 +76,12 @@ class MemberDebtModulBTest extends TestCase
         $payload = [
             'nik' => $uniqueNik,
             'name' => 'Karyawan Baru PT ILP',
-            'department' => 'Agronomi & Riset',
-            'branch' => 'Cabang 3 - Kebun Timur',
+            'department' => 'Keuangan & Akuntansi',
+            'branch' => 'Cabang B',
             'phone' => '081233445566',
             'credit_limit' => 4500000,
             'status' => 'AKTIF',
-            'notes' => 'Karyawan baru divisi pembibitan tebu.',
+            'notes' => 'Karyawan baru divisi operasional.',
         ];
 
         $response = $this->postJson('/api/members', $payload);
@@ -93,7 +93,7 @@ class MemberDebtModulBTest extends TestCase
 
         $this->assertDatabaseHas('members', [
             'nik' => $uniqueNik,
-            'branch' => 'Cabang 3 - Kebun Timur',
+            'branch' => 'Cabang B',
             'credit_limit' => 4500000,
         ]);
     }

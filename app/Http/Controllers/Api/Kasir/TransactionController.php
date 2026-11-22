@@ -45,6 +45,7 @@ class TransactionController extends Controller
             'items' => 'required|array|min:1',
             'items.*.sku' => 'nullable|string',
             'items.*.barcode' => 'nullable|string',
+            'items.*.coupon_number' => 'nullable|string|max:100',
             'items.*.name' => 'required|string',
             'items.*.qty' => 'required|integer|min:1',
             'items.*.price' => 'required|numeric|min:0',
@@ -186,6 +187,36 @@ class TransactionController extends Controller
             $processedItems = [];
 
             foreach ($validated['items'] as $rawItem) {
+                $couponNumber = !empty($rawItem['coupon_number']) ? trim($rawItem['coupon_number']) : null;
+                if (!$couponNumber && !empty($rawItem['barcode']) && str_starts_with($rawItem['barcode'], '#KPN-')) {
+                    $couponNumber = trim($rawItem['barcode']);
+                }
+                $couponUnit = null;
+                if ($couponNumber) {
+                    $couponUnit = \App\Models\CouponUnit::where('serial_number', $couponNumber)
+                        ->orWhere('serial_number', '#' . ltrim($couponNumber, '#'))
+                        ->lockForUpdate()
+                        ->first();
+                    if ($couponUnit && in_array(strtoupper($couponUnit->status), ['REDEEMED', 'SELESAI', 'EXPIRED'])) {
+                        return response()->json([
+                            'success' => false,
+                            'error_code' => 'COUPON_ALREADY_REDEEMED',
+                            'message' => "Kupon [{$couponNumber}] sudah pernah ditukarkan atau tidak valid.",
+                        ], 422);
+                    }
+                    if ($couponUnit && $storeLocation) {
+                        $locMatches = ($couponUnit->location_id && (int) $couponUnit->location_id === (int) $storeLocation->id)
+                            || ($couponUnit->branch && strcasecmp(trim($couponUnit->branch), trim($storeLocation->name)) === 0);
+                        if (!$locMatches) {
+                            return response()->json([
+                                'success' => false,
+                                'error_code' => 'COUPON_NOT_AT_STORE',
+                                'message' => "Kupon [{$couponNumber}] belum diterima di gerai {$storeLocation->name} (posisi kupon saat ini: " . ($couponUnit->branch ?: 'Gudang Pusat') . "). Harap konfirmasi penerimaan di menu Barang Masuk terlebih dahulu.",
+                            ], 422);
+                        }
+                    }
+                }
+
                 $product = null;
                 if (!empty($rawItem['barcode'])) {
                     $product = Product::where('barcode', $rawItem['barcode'])->lockForUpdate()->first();
@@ -205,6 +236,7 @@ class TransactionController extends Controller
 
                 $qty = (int) $rawItem['qty'];
                 $isMemberMode = (bool) ($rawItem['is_member'] ?? ($member !== null));
+                $isCouponItem = ($couponNumber !== null || ($product && (str_contains(strtolower($product->category ?? ''), 'kupon') || str_contains(strtolower($product->category ?? ''), 'voucher'))));
 
                 if ($product) {
                     $itemUnit = $rawItem['unit'] ?? $product->unit;
@@ -213,7 +245,23 @@ class TransactionController extends Controller
                     $primaryBatchId = null;
                     $batchAllocations = null;
 
-                    if ($useStoreStock && $storeLocation) {
+                    if ($isCouponItem) {
+                        // Coupon voucher: deduct store stock if location stock exists, but don't fail if stock is zero
+                        if ($useStoreStock && $storeLocation) {
+                            $deductRes = $stockService->deductStock($product->id, $storeLocation->id, $baseQtyToDeduct, [
+                                'movement_type' => 'SALE_OUT',
+                                'allow_negative' => true,
+                                'reference_type' => Transaction::class,
+                                'user_id' => $user?->id,
+                                'notes' => "Penjualan Kupon POS {$shift->terminal_code} ({$storeLocation->name})",
+                            ]);
+                            if ($deductRes['success']) {
+                                $primaryBatchId = $deductRes['primary_batch_id'] ?? null;
+                                $batchAllocations = !empty($deductRes['allocations']) ? $deductRes['allocations'] : null;
+                            }
+                            $product->refresh();
+                        }
+                    } elseif ($useStoreStock && $storeLocation) {
                         $deductRes = $stockService->deductStock($product->id, $storeLocation->id, $baseQtyToDeduct, [
                             'movement_type' => 'SALE_OUT',
                             'reference_type' => Transaction::class,
@@ -268,6 +316,7 @@ class TransactionController extends Controller
                         'batch_allocations' => $batchAllocations,
                         'sku' => $product->sku,
                         'barcode' => $product->barcode,
+                        'coupon_number' => $couponNumber ?? $couponUnit?->serial_number,
                         'product_name' => $product->name,
                         'unit' => $product->unit,
                         'unit_price' => $unitFinalPrice,
@@ -283,25 +332,26 @@ class TransactionController extends Controller
                         '_promo_disabled' => (bool) ($rawItem['promo_disabled'] ?? false),
                     ];
                 } else {
-                    // Fallback item if not in master db
+                    // Fallback item if not in master db (e.g. Coupon voucher item or custom entry)
                     $unitPrice = (float) $rawItem['price'];
 
                     $processedItems[] = [
                         'product_id' => null,
-                        'sku' => $rawItem['sku'] ?? 'GEN-ITEM',
-                        'barcode' => $rawItem['barcode'] ?? '-',
+                        'sku' => $rawItem['sku'] ?? ($couponNumber ? preg_replace('/[^A-Za-z0-9\-]/', '', $couponNumber) : 'GEN-ITEM'),
+                        'barcode' => $rawItem['barcode'] ?? ($couponNumber ?? '-'),
+                        'coupon_number' => $couponNumber ?? $couponUnit?->serial_number,
                         'product_name' => $rawItem['name'],
-                        'unit' => $rawItem['unit'] ?? 'Pcs',
+                        'unit' => $rawItem['unit'] ?? 'Lembar',
                         'unit_price' => $unitPrice,
                         'qty' => $qty,
-                        'is_taxable' => true,
+                        'is_taxable' => false,
                         'tax_amount' => 0,
                         'is_expired_clearance' => false,
                         'clearance_discount_percent' => 0,
                         'discount_amount' => 0,
                         'total_price' => 0,
-                        '_category' => null,
-                        '_tax_rate' => $isGlobalTaxActive ? $globalTaxRate : 0,
+                        '_category' => 'Kupon',
+                        '_tax_rate' => 0,
                         '_promo_disabled' => true,
                     ];
                 }
@@ -396,6 +446,9 @@ class TransactionController extends Controller
                         ],
                     ], 422);
                 }
+
+                $isOverLimit = !empty($eligibility['is_over_limit']);
+                $debtStatus = $isOverLimit ? 'MELEBIHI_LIMIT' : 'DALAM_LIMIT';
             } elseif ($method === 'CAMPURAN') {
                 if ($splitCash + $splitNonCash < $grandTotal) {
                     return response()->json([
@@ -442,25 +495,46 @@ class TransactionController extends Controller
                 'split_cash' => $method === 'CAMPURAN' ? $splitCash : 0,
                 'split_non_cash' => $method === 'CAMPURAN' ? $splitNonCash : 0,
                 'status' => 'SUCCESS',
+                'is_over_limit' => $isOverLimit ?? false,
+                'debt_status' => $debtStatus ?? ($method === 'KREDIT' ? 'DALAM_LIMIT' : null),
             ]);
 
             // 6. Save Transaction Items
             foreach ($processedItems as $itemData) {
-                if ($itemData['product_id']) {
-                    TransactionItem::create(array_merge($itemData, ['transaction_id' => $transaction->id]));
+                TransactionItem::create(array_merge($itemData, ['transaction_id' => $transaction->id]));
+
+                // If this item was a coupon sale, redeem the coupon in coupon_units & record redemption
+                if (!empty($itemData['coupon_number'])) {
+                    $couponToRedeem = \App\Models\CouponUnit::where('serial_number', $itemData['coupon_number'])
+                        ->orWhere('serial_number', '#' . ltrim($itemData['coupon_number'], '#'))
+                        ->lockForUpdate()
+                        ->first();
+                    if ($couponToRedeem) {
+                        $couponToRedeem->update(['status' => 'REDEEMED']);
+                        \App\Models\CouponRedemption::create([
+                            'coupon_unit_id' => $couponToRedeem->id,
+                            'transaction_id' => $transaction->id,
+                            'redeemed_at' => now(),
+                            'redeemed_by' => $user?->id ?? Auth::id(),
+                            'status' => 'COMPLETED',
+                        ]);
+                    }
                 }
             }
 
             // 6b. Deduct credit ceiling & record audit mutation if KREDIT
             if ($method === 'KREDIT' && $member) {
-                $branchName = $user?->branch ?? ($shift->terminal_code ? "Terminal {$shift->terminal_code}" : 'Cabang 1 - Mill / Pabrik');
+                $branchName = $user?->branch ?? ($shift->terminal_code ? "Terminal {$shift->terminal_code}" : 'Cabang Pusat');
+                $noteSuffix = ($isOverLimit ?? false) ? ' [MELEBIHI LIMIT PIUTANG]' : '';
                 $member->recordKasbon(
                     amount: $grandTotal,
                     invoiceNumber: $invoiceNumber,
                     transactionId: $transaction->id,
                     branch: $branchName,
                     processedBy: $cashierName,
-                    notes: "Belanja Kasbon POS (Invoice: {$invoiceNumber})"
+                    notes: "Belanja Kasbon POS (Invoice: {$invoiceNumber}){$noteSuffix}",
+                    isOverLimit: $isOverLimit ?? false,
+                    debtStatus: $debtStatus ?? 'DALAM_LIMIT'
                 );
             }
 
@@ -539,6 +613,7 @@ class TransactionController extends Controller
                     'promo_enabled' => (bool) $promoEnabled,
                     'items' => array_map(fn ($it) => [
                         'sku' => $it['sku'],
+                        'coupon_number' => $it['coupon_number'] ?? null,
                         'name' => $it['product_name'],
                         'qty' => $it['qty'],
                         'unit_price' => (float) $it['unit_price'],
@@ -1032,12 +1107,18 @@ class TransactionController extends Controller
                         $product->save();
                     }
 
+                    $couponNumSync = !empty($rawItem['coupon_number']) ? trim($rawItem['coupon_number']) : null;
+                    if (!$couponNumSync && !empty($rawItem['barcode']) && str_starts_with($rawItem['barcode'], '#KPN-')) {
+                        $couponNumSync = trim($rawItem['barcode']);
+                    }
+
                     $processedItems[] = [
                         'product_id' => $product->id,
                         'stock_batch_id' => $primaryBatchId,
                         'batch_allocations' => $batchAllocations,
                         'sku' => $product->sku,
                         'barcode' => $product->barcode,
+                        'coupon_number' => $couponNumSync,
                         'product_name' => $product->name,
                         'unit' => $itemUnit,
                         'unit_price' => $unitPrice,
@@ -1056,6 +1137,9 @@ class TransactionController extends Controller
                 $grandTotal = (float) $trxData['grand_total'];
                 $method = strtoupper($trxData['payment_method']);
                 $createdAt = !empty($trxData['created_at']) ? Carbon::parse($trxData['created_at']) : now();
+
+                $isOverLimitSync = ($method === 'KREDIT' && $member && ($member->current_debt + $grandTotal > $member->credit_limit));
+                $debtStatusSync = ($method === 'KREDIT') ? ($isOverLimitSync ? 'MELEBIHI_LIMIT' : 'DALAM_LIMIT') : null;
 
                 $transaction = new Transaction([
                     'invoice_number' => $invoiceNumber,
@@ -1080,6 +1164,8 @@ class TransactionController extends Controller
                     'split_cash' => (float) ($trxData['split_cash'] ?? 0),
                     'split_non_cash' => (float) ($trxData['split_non_cash'] ?? 0),
                     'status' => 'SUCCESS',
+                    'is_over_limit' => $isOverLimitSync,
+                    'debt_status' => $debtStatusSync,
                 ]);
                 $transaction->created_at = $createdAt;
                 $transaction->updated_at = now();
@@ -1087,17 +1173,37 @@ class TransactionController extends Controller
 
                 foreach ($processedItems as $itemData) {
                     TransactionItem::create(array_merge($itemData, ['transaction_id' => $transaction->id]));
+
+                    if (!empty($itemData['coupon_number'])) {
+                        $couponToRedeem = \App\Models\CouponUnit::where('serial_number', $itemData['coupon_number'])
+                            ->orWhere('serial_number', '#' . ltrim($itemData['coupon_number'], '#'))
+                            ->lockForUpdate()
+                            ->first();
+                        if ($couponToRedeem) {
+                            $couponToRedeem->update(['status' => 'REDEEMED']);
+                            \App\Models\CouponRedemption::create([
+                                'coupon_unit_id' => $couponToRedeem->id,
+                                'transaction_id' => $transaction->id,
+                                'redeemed_at' => now(),
+                                'redeemed_by' => $resolvedUser?->id ?? Auth::id(),
+                                'status' => 'COMPLETED',
+                            ]);
+                        }
+                    }
                 }
 
                 if ($method === 'KREDIT' && $member) {
                     $branchName = $storeLocation?->name ?? ($resolvedUser?->branch ?? "Terminal {$shift->terminal_code}");
+                    $noteSuffix = $isOverLimitSync ? ' [MELEBIHI LIMIT PIUTANG]' : '';
                     $member->recordKasbon(
                         amount: $grandTotal,
                         invoiceNumber: $invoiceNumber,
                         transactionId: $transaction->id,
                         branch: $branchName,
                         processedBy: $cashierName,
-                        notes: "Belanja Kasbon POS [Offline Sync] (Invoice: {$invoiceNumber})"
+                        notes: "Belanja Kasbon POS [Offline Sync] (Invoice: {$invoiceNumber}){$noteSuffix}",
+                        isOverLimit: $isOverLimitSync,
+                        debtStatus: $debtStatusSync
                     );
                 }
 
@@ -1259,6 +1365,8 @@ class TransactionController extends Controller
                 'cash_received' => (float) $transaction->cash_received,
                 'change_returned' => (float) $transaction->change_returned,
                 'status' => $transaction->status,
+                'is_over_limit' => (bool) $transaction->is_over_limit,
+                'debt_status' => $transaction->debt_status,
                 'created_at' => $transaction->created_at->toIso8601String(),
                 'member' => $transaction->member ? [
                     'nik' => $transaction->member->nik,
@@ -1267,14 +1375,19 @@ class TransactionController extends Controller
                 ] : null,
                 'items' => $transaction->items->map(fn($it) => [
                     'sku' => $it->sku,
+                    'barcode' => $it->barcode,
+                    'coupon_number' => $it->coupon_number,
                     'name' => $it->product_name,
+                    'product_name' => $it->product_name,
                     'unit' => $it->unit,
                     'unit_price' => (float) $it->unit_price,
+                    'price' => (float) $it->unit_price,
                     'qty' => (int) $it->qty,
                     'is_expired_clearance' => (bool) $it->is_expired_clearance,
                     'clearance_discount_percent' => (float) $it->clearance_discount_percent,
                     'discount_amount' => (float) $it->discount_amount,
                     'total_price' => (float) $it->total_price,
+                    'total' => (float) $it->total_price,
                     'promotion_id' => $it->promotion_id,
                     'promo_name' => $it->promo_name,
                     'promo_discount' => (float) ($it->promo_discount ?? 0),
@@ -1394,7 +1507,10 @@ class TransactionController extends Controller
                 'items' => $t->items->map(fn($it) => [
                     'id' => $it->id,
                     'sku' => $it->sku,
+                    'barcode' => $it->barcode,
+                    'coupon_number' => $it->coupon_number,
                     'name' => $it->product_name,
+                    'product_name' => $it->product_name,
                     'unit' => $it->unit ?? 'Pcs',
                     'qty' => (int) $it->qty,
                     'price' => (float) $it->unit_price,

@@ -44,6 +44,9 @@ class Member extends Model
         'remaining_credit',
         'is_active',
         'debt_utilization_percent',
+        'is_over_limit',
+        'excess_debt_amount',
+        'debt_status',
     ];
 
     public function debtMutations(): HasMany
@@ -66,12 +69,33 @@ class Member extends Model
         return strtoupper($this->status ?? '') === 'AKTIF';
     }
 
+    public function getIsOverLimitAttribute(): bool
+    {
+        return (float) $this->current_debt > (float) $this->credit_limit;
+    }
+
+    public function getExcessDebtAmountAttribute(): float
+    {
+        return max(0, (float) $this->current_debt - (float) $this->credit_limit);
+    }
+
+    public function getDebtStatusAttribute(): string
+    {
+        if ((float) $this->current_debt <= 0) {
+            return 'LUNAS';
+        }
+        if ((float) $this->current_debt > (float) $this->credit_limit) {
+            return 'MELEBIHI_LIMIT';
+        }
+        return 'DALAM_LIMIT';
+    }
+
     public function getDebtUtilizationPercentAttribute(): float
     {
         if ($this->credit_limit <= 0) {
-            return 0;
+            return $this->current_debt > 0 ? 100 : 0;
         }
-        return round(min(100, ($this->current_debt / $this->credit_limit) * 100), 2);
+        return round(($this->current_debt / $this->credit_limit) * 100, 1);
     }
 
     public function checkCreditEligibility(float $amount): array
@@ -79,26 +103,38 @@ class Member extends Model
         if (!$this->is_active) {
             return [
                 'eligible' => false,
+                'is_over_limit' => false,
+                'debt_status' => 'DIBLOKIR',
                 'reason' => 'Status keanggotaan tidak aktif atau diblokir oleh bagian keuangan koperasi.',
                 'remaining_credit' => $this->remaining_credit,
+                'excess_amount' => 0,
             ];
         }
 
-        if ($this->remaining_credit < $amount) {
-            $shortage = $amount - $this->remaining_credit;
+        $projectedDebt = (float) $this->current_debt + $amount;
+        $isOverLimit = $projectedDebt > (float) $this->credit_limit;
+        $excessAmount = $isOverLimit ? ($projectedDebt - (float) $this->credit_limit) : 0;
+
+        if ($isOverLimit) {
             return [
-                'eligible' => false,
-                'reason' => "Total belanja (Rp " . number_format($amount, 0, ',', '.') . ") melebihi sisa plafon kredit (Rp " . number_format($this->remaining_credit, 0, ',', '.') . "). Kurang: Rp " . number_format($shortage, 0, ',', '.'),
+                'eligible' => true,
+                'is_over_limit' => true,
+                'debt_status' => 'MELEBIHI_LIMIT',
+                'reason' => "Total belanja melebihi batas plafon kredit (Kelebihan: Rp " . number_format($excessAmount, 0, ',', '.') . "). Transaksi tetap dapat dilanjutkan dengan status 'MELEBIHI LIMIT PIUTANG'.",
                 'remaining_credit' => $this->remaining_credit,
-                'shortage' => $shortage,
+                'projected_remaining' => 0,
+                'excess_amount' => $excessAmount,
             ];
         }
 
         return [
             'eligible' => true,
+            'is_over_limit' => false,
+            'debt_status' => 'DALAM_LIMIT',
             'reason' => 'Plafon kredit mencukupi.',
             'remaining_credit' => $this->remaining_credit,
-            'projected_remaining' => $this->remaining_credit - $amount,
+            'projected_remaining' => max(0, (float) $this->credit_limit - $projectedDebt),
+            'excess_amount' => 0,
         ];
     }
 
@@ -109,18 +145,24 @@ class Member extends Model
         float $amount,
         ?string $invoiceNumber = null,
         ?int $transactionId = null,
-        string $branch = 'Cabang 1 - Mill / Pabrik',
+        string $branch = 'Cabang Pusat',
         string $processedBy = 'Kasir Sistem',
-        string $notes = 'Transaksi Kasbon POS Potong Gaji'
+        string $notes = 'Transaksi Kasbon POS Potong Gaji',
+        bool $isOverLimit = false,
+        ?string $debtStatus = null
     ): DebtMutation {
         $previousDebt = (float) $this->current_debt;
         $newDebt = $previousDebt + $amount;
 
         $this->current_debt = $newDebt;
-        if ($this->remaining_credit <= 0) {
-            // Can optionally flag or keep active based on policy
-        }
         $this->save();
+
+        if ($debtStatus === null) {
+            $debtStatus = ($newDebt > (float) $this->credit_limit) ? 'MELEBIHI_LIMIT' : 'DALAM_LIMIT';
+        }
+        if (!$isOverLimit && $newDebt > (float) $this->credit_limit) {
+            $isOverLimit = true;
+        }
 
         return DebtMutation::create([
             'member_id' => $this->id,
@@ -134,6 +176,8 @@ class Member extends Model
             'new_debt' => $newDebt,
             'previous_limit' => (float) $this->credit_limit,
             'new_limit' => (float) $this->credit_limit,
+            'is_over_limit' => $isOverLimit,
+            'debt_status' => $debtStatus,
             'notes' => $notes,
             'processed_by' => $processedBy,
         ]);
@@ -156,7 +200,7 @@ class Member extends Model
             'member_nik' => $this->nik,
             'transaction_id' => null,
             'invoice_number' => null,
-            'branch' => $this->branch ?? 'Cabang 1 - Mill / Pabrik',
+            'branch' => $this->branch ?? 'Cabang Pusat',
             'mutation_type' => 'LIMIT_ADJUSTMENT',
             'amount' => abs($newLimit - $previousLimit),
             'previous_debt' => (float) $this->current_debt,

@@ -338,7 +338,7 @@ class ExcelExportService
         // ----------------------------------------------------
         $meta = [
             ['Periode Pemotongan Gaji', $startDate->translatedFormat('F Y') . ' (' . $month . ')'],
-            ['Filter Cabang Penugasan', $branch && $branch !== 'all' ? $branch : 'Semua Cabang (Pusat & Kebun)'],
+            ['Filter Cabang Penugasan', $branch && $branch !== 'all' ? $branch : 'Semua Cabang (Cabang Pusat, Cabang A, Cabang B)'],
             ['Filter Departemen', $department && $department !== 'all' ? $department : 'Semua Departemen'],
             ['Tanggal Cetak Dokumen', Carbon::now()->format('d/m/Y H:i:s') . ' WIB'],
         ];
@@ -440,7 +440,7 @@ class ExcelExportService
             $sheet->setCellValueExplicit("C{$currRow}", (string)$m->nik, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
             $sheet->setCellValue("D{$currRow}", $m->name);
             $sheet->setCellValue("E{$currRow}", $m->department);
-            $sheet->setCellValue("F{$currRow}", $m->branch ?: 'Cabang 1 - Mill / Pabrik');
+            $sheet->setCellValue("F{$currRow}", $m->branch ?: 'Cabang Pusat');
             $sheet->setCellValue("G{$currRow}", (float)$m->credit_limit);
             $sheet->setCellValue("H{$currRow}", (float)$m->current_debt);
             $sheet->setCellValue("I{$currRow}", (float)$remaining);

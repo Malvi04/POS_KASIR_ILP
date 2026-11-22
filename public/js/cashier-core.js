@@ -206,11 +206,11 @@
                 ],
 
                 normalizeBranchName(str) {
-                    if (!str) return 'Pusat';
+                    if (!str) return 'Cabang Pusat';
                     const s = str.toString().toLowerCase();
-                    if (s.includes('pusat') || s.includes('minimarket')) return 'Pusat';
-                    if (s.includes('sektor a') || s.includes('cabang a') || s.includes('cabang 1') || s.includes('mill') || s.includes('pabrik')) return 'Cabang A';
-                    if (s.includes('sektor b') || s.includes('cabang b') || s.includes('cabang 2')) return 'Cabang B';
+                    if (s.includes('pusat') || s.includes('minimarket')) return 'Cabang Pusat';
+                    if (s.includes('cabang a') || s.includes('sektor a') || s.includes('cabang 1')) return 'Cabang A';
+                    if (s.includes('cabang b') || s.includes('sektor b') || s.includes('cabang 2')) return 'Cabang B';
                     return str;
                 },
 

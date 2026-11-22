@@ -14,8 +14,26 @@ class Product extends Model
     use HasFactory;
 
     protected $fillable = [
-        'ilp_id',
+        'id_produk',
         'sku',
+        'kode_barcode',
+        'kode_produk',
+        'qty_produk',
+        'nama_produk',
+        'satuan_unit',
+        'harga_beli',
+        'harga_jual_umum',
+        'harga_jual_member',
+        'produk_disc',
+        'minimum_stock',
+        'ppn_out',
+        'ppn_chk',
+        'harga_beli_terakhir',
+        'status_barang',
+        'kode_suplier',
+        'manufacturing_date',
+        'exp_date',
+        'ilp_id',
         'barcode',
         'name',
         'brand',
@@ -50,6 +68,16 @@ class Product extends Model
     ];
 
     protected $casts = [
+        'qty_produk' => 'float',
+        'harga_beli' => 'float',
+        'harga_jual_umum' => 'float',
+        'harga_jual_member' => 'float',
+        'produk_disc' => 'float',
+        'minimum_stock' => 'integer',
+        'ppn_out' => 'float',
+        'harga_beli_terakhir' => 'float',
+        'manufacturing_date' => 'date',
+        'exp_date' => 'date',
         'cost_price' => 'float',
         'last_cost_price' => 'float',
         'price' => 'float',
@@ -90,6 +118,136 @@ class Product extends Model
     public function supplier(): BelongsTo
     {
         return $this->belongsTo(Supplier::class);
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (Product $product) {
+            // Bidirectional synchronization between 19 standard columns and legacy columns
+            if ($product->isDirty('nama_produk') && !$product->isDirty('name')) {
+                $product->name = $product->nama_produk;
+            } elseif ($product->isDirty('name') && !$product->isDirty('nama_produk')) {
+                $product->nama_produk = $product->name;
+            }
+
+            if ($product->isDirty('kode_barcode') && !$product->isDirty('barcode')) {
+                $product->barcode = $product->kode_barcode;
+            } elseif ($product->isDirty('barcode') && !$product->isDirty('kode_barcode')) {
+                $product->kode_barcode = $product->barcode;
+            }
+
+            if ($product->isDirty('kode_produk') && !$product->isDirty('sku')) {
+                $product->sku = $product->kode_produk;
+            } elseif ($product->isDirty('sku') && !$product->isDirty('kode_produk')) {
+                $product->kode_produk = $product->sku;
+            }
+
+            if ($product->isDirty('qty_produk') && !$product->isDirty('stock')) {
+                $product->stock = (int) $product->qty_produk;
+            } elseif ($product->isDirty('stock') && !$product->isDirty('qty_produk')) {
+                $product->qty_produk = $product->stock;
+            }
+
+            if ($product->isDirty('satuan_unit') && !$product->isDirty('unit')) {
+                $product->unit = $product->satuan_unit;
+            } elseif ($product->isDirty('unit') && !$product->isDirty('satuan_unit')) {
+                $product->satuan_unit = $product->unit;
+            }
+
+            if ($product->isDirty('harga_beli') && !$product->isDirty('cost_price')) {
+                $product->cost_price = $product->harga_beli;
+            } elseif ($product->isDirty('cost_price') && !$product->isDirty('harga_beli')) {
+                $product->harga_beli = $product->cost_price;
+            }
+
+            if ($product->isDirty('harga_jual_umum') && !$product->isDirty('price')) {
+                $product->price = $product->harga_jual_umum;
+            } elseif ($product->isDirty('price') && !$product->isDirty('harga_jual_umum')) {
+                $product->harga_jual_umum = $product->price;
+            }
+
+            if ($product->isDirty('harga_jual_member') && !$product->isDirty('member_price')) {
+                $product->member_price = $product->harga_jual_member;
+            } elseif ($product->isDirty('member_price') && !$product->isDirty('harga_jual_member')) {
+                $product->harga_jual_member = $product->member_price;
+            }
+
+            if ($product->isDirty('produk_disc') && !$product->isDirty('clearance_discount_percent')) {
+                $product->clearance_discount_percent = $product->produk_disc;
+            } elseif ($product->isDirty('clearance_discount_percent') && !$product->isDirty('produk_disc')) {
+                $product->produk_disc = $product->clearance_discount_percent;
+            }
+
+            if ($product->isDirty('minimum_stock') && !$product->isDirty('min_stock')) {
+                $product->min_stock = (int) $product->minimum_stock;
+            } elseif ($product->isDirty('min_stock') && !$product->isDirty('minimum_stock')) {
+                $product->minimum_stock = $product->min_stock;
+            }
+
+            if ($product->isDirty('ppn_out') && !$product->isDirty('tax_rate')) {
+                $product->tax_rate = $product->ppn_out;
+            } elseif ($product->isDirty('tax_rate') && !$product->isDirty('ppn_out')) {
+                $product->ppn_out = $product->tax_rate;
+            }
+
+            if ($product->isDirty('ppn_chk')) {
+                $product->is_taxable = in_array(strtoupper((string) $product->ppn_chk), ['Y', '1', 'TRUE']);
+            } elseif ($product->isDirty('is_taxable')) {
+                $product->ppn_chk = $product->is_taxable ? 'Y' : 'N';
+            }
+
+            if ($product->isDirty('harga_beli_terakhir') && !$product->isDirty('last_cost_price')) {
+                $product->last_cost_price = $product->harga_beli_terakhir;
+            } elseif ($product->isDirty('last_cost_price') && !$product->isDirty('harga_beli_terakhir')) {
+                $product->harga_beli_terakhir = $product->last_cost_price;
+            }
+
+            if ($product->isDirty('status_barang') && !$product->isDirty('status')) {
+                $product->status = $product->status_barang;
+            } elseif ($product->isDirty('status') && !$product->isDirty('status_barang')) {
+                $product->status_barang = $product->status;
+            }
+
+            if ($product->isDirty('kode_suplier') && !$product->isDirty('ko_sup')) {
+                $product->ko_sup = $product->kode_suplier;
+            } elseif ($product->isDirty('ko_sup') && !$product->isDirty('kode_suplier')) {
+                $product->kode_suplier = $product->ko_sup;
+            }
+
+            if ($product->isDirty('exp_date') && !$product->isDirty('expired_date')) {
+                $product->expired_date = $product->exp_date;
+            } elseif ($product->isDirty('expired_date') && !$product->isDirty('exp_date')) {
+                $product->exp_date = $product->expired_date;
+            }
+
+            if ($product->isDirty('id_produk') && !$product->isDirty('ilp_id')) {
+                $product->ilp_id = $product->id_produk;
+            } elseif ($product->isDirty('ilp_id') && !$product->isDirty('id_produk')) {
+                $product->id_produk = $product->ilp_id;
+            }
+
+            // Fallback ensure both pairs are never empty
+            $product->name = $product->name ?? $product->nama_produk ?? 'Produk';
+            $product->nama_produk = $product->nama_produk ?? $product->name;
+            $product->sku = $product->sku ?? $product->kode_produk ?? '';
+            $product->kode_produk = $product->kode_produk ?? $product->sku;
+            $product->barcode = $product->barcode ?? $product->kode_barcode ?? $product->sku;
+            $product->kode_barcode = $product->kode_barcode ?? $product->barcode;
+            $product->stock = $product->stock ?? (int) ($product->qty_produk ?? 0);
+            $product->qty_produk = $product->qty_produk ?? $product->stock;
+            $product->unit = $product->unit ?? $product->satuan_unit ?? 'Pcs';
+            $product->satuan_unit = $product->satuan_unit ?? $product->unit;
+            $product->cost_price = $product->cost_price ?? $product->harga_beli ?? 0;
+            $product->harga_beli = $product->harga_beli ?? $product->cost_price;
+            $product->price = $product->price ?? $product->harga_jual_umum ?? 0;
+            $product->harga_jual_umum = $product->harga_jual_umum ?? $product->price;
+            $product->member_price = $product->member_price ?? $product->harga_jual_member ?? $product->price;
+            $product->harga_jual_member = $product->harga_jual_member ?? $product->member_price;
+            $product->min_stock = $product->min_stock ?? (int) ($product->minimum_stock ?? 5);
+            $product->minimum_stock = $product->minimum_stock ?? $product->min_stock;
+            $product->status = $product->status ?? $product->status_barang ?? 'TERSEDIA';
+            $product->status_barang = $product->status_barang ?? $product->status;
+        });
     }
 
     public function supplierProducts(): HasMany

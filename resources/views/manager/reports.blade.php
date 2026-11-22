@@ -37,9 +37,64 @@
             payment_breakdown: { tunai: 0, qris: 0, kredit_kasbon: 0, campuran: 0 }
         },
         shifts_breakdown: [],
+        terminals_breakdown: [],
+        cashiers_breakdown: [],
         branch_breakdown: [],
         daily_trends: [],
         recent_transactions: []
+    },
+
+    // ==========================================
+    // 1B. Modul E: Laporan Penjualan Per Terminal State
+    // ==========================================
+    terminalPeriod: 'daily', // 'daily' | 'weekly' | 'monthly' | 'yearly'
+    terminalDate: '{{ date('Y-m-d') }}',
+    terminalMonth: '{{ date('Y-m') }}',
+    terminalYear: '{{ date('Y') }}',
+    terminalBranch: 'all',
+    terminalSelected: 'all',
+    isLoadingTerminal: false,
+    terminalData: {
+        summary: {},
+        terminals_breakdown: []
+    },
+
+    get availableTerminalsForBranch() {
+        const b = String(this.terminalBranch || 'all').toLowerCase();
+        if (b.includes('pusat')) {
+            return ['POS-01', 'POS-02', 'POS-03', 'POS-04', 'POS-05'];
+        }
+        if (b.includes('cabang a')) {
+            return ['POS-06', 'POS-07', 'POS-08', 'POS-09', 'POS-10'];
+        }
+        if (b.includes('cabang b')) {
+            return ['POS-11', 'POS-12', 'POS-13', 'POS-14', 'POS-15'];
+        }
+        return [
+            'POS-01', 'POS-02', 'POS-03', 'POS-04', 'POS-05',
+            'POS-06', 'POS-07', 'POS-08', 'POS-09', 'POS-10',
+            'POS-11', 'POS-12', 'POS-13', 'POS-14', 'POS-15'
+        ];
+    },
+
+    onTerminalBranchChange() {
+        this.terminalSelected = 'all';
+        this.loadTerminalReport();
+    },
+
+    // ==========================================
+    // 1C. Modul E: Laporan Penjualan Per Akun Kasir State
+    // ==========================================
+    cashierPeriod: 'daily', // 'daily' | 'weekly' | 'monthly' | 'yearly'
+    cashierDate: '{{ date('Y-m-d') }}',
+    cashierMonth: '{{ date('Y-m') }}',
+    cashierYear: '{{ date('Y') }}',
+    cashierBranch: 'all',
+    cashierSearch: '',
+    isLoadingCashier: false,
+    cashierData: {
+        summary: {},
+        cashiers_breakdown: []
     },
 
     // ==========================================
@@ -160,6 +215,8 @@
     async initReports() {
         const loaders = {
             sales_accounting: () => this.loadSalesReport(),
+            sales_terminal: () => this.loadTerminalReport(),
+            sales_cashier: () => this.loadCashierReport(),
             profit_loss: () => this.loadProfitLossReport(),
             fast_moving: () => this.loadFastMoving(),
             cash_reconciliation: () => this.loadCashReconciliation(),
@@ -197,6 +254,64 @@
             this.triggerToast('Gagal memuat laporan penjualan.', 'error');
         } finally {
             this.isLoadingSales = false;
+        }
+    },
+
+    // 1B. Load Terminal Report API
+    async loadTerminalReport() {
+        this.isLoadingTerminal = true;
+        try {
+            const params = new URLSearchParams({
+                period: this.terminalPeriod,
+                branch: this.terminalBranch,
+                date: this.terminalDate,
+                month: this.terminalMonth,
+                year: this.terminalYear,
+                terminal_code: this.terminalSelected
+            });
+            const res = await fetch(`/api/reports/sales?${params.toString()}`, {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success) {
+                    this.terminalData = json;
+                }
+            }
+        } catch (e) {
+            console.error('Error fetching terminal report:', e);
+            this.triggerToast('Gagal memuat laporan per terminal.', 'error');
+        } finally {
+            this.isLoadingTerminal = false;
+        }
+    },
+
+    // 1C. Load Cashier Report API
+    async loadCashierReport() {
+        this.isLoadingCashier = true;
+        try {
+            const params = new URLSearchParams({
+                period: this.cashierPeriod,
+                branch: this.cashierBranch || 'all',
+                date: this.cashierDate,
+                month: this.cashierMonth,
+                year: this.cashierYear,
+                search: this.cashierSearch
+            });
+            const res = await fetch(`/api/reports/sales?${params.toString()}`, {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success) {
+                    this.cashierData = json;
+                }
+            }
+        } catch (e) {
+            console.error('Error fetching cashier report:', e);
+            this.triggerToast('Gagal memuat laporan per akun kasir.', 'error');
+        } finally {
+            this.isLoadingCashier = false;
         }
     },
 
@@ -395,7 +510,11 @@
     syncPeriodDates() {
         if (this.periodMode === 'daily') {
             this.salesPeriod = 'daily';
+            this.terminalPeriod = 'daily';
+            this.cashierPeriod = 'daily';
             this.salesDate = this.selectedDate;
+            this.terminalDate = this.selectedDate;
+            this.cashierDate = this.selectedDate;
             this.plStartDate = this.selectedDate;
             this.plEndDate = this.selectedDate;
             this.consolidatedStartDate = this.selectedDate;
@@ -403,7 +522,11 @@
             this.month = this.selectedDate ? this.selectedDate.slice(0, 7) : '{{ date('Y-m') }}';
         } else if (this.periodMode === 'yearly') {
             this.salesPeriod = 'yearly';
+            this.terminalPeriod = 'yearly';
+            this.cashierPeriod = 'yearly';
             const y = this.selectedYear || '{{ date('Y') }}';
+            this.terminalYear = y;
+            this.cashierYear = y;
             this.plStartDate = y + '-01-01';
             this.plEndDate = y + '-12-31';
             this.consolidatedStartDate = this.plStartDate;
@@ -411,7 +534,11 @@
             this.month = y + '-01';
         } else { // monthly
             this.salesPeriod = 'monthly';
+            this.terminalPeriod = 'monthly';
+            this.cashierPeriod = 'monthly';
             this.salesMonth = this.selectedMonth || '{{ date('Y-m') }}';
+            this.terminalMonth = this.selectedMonth || '{{ date('Y-m') }}';
+            this.cashierMonth = this.selectedMonth || '{{ date('Y-m') }}';
             const parts = (this.selectedMonth || '{{ date('Y-m') }}').split('-');
             const yr = parseInt(parts[0], 10);
             const mo = parseInt(parts[1], 10);
@@ -423,6 +550,8 @@
             this.month = this.selectedMonth;
         }
         this.salesBranch = this.selectedBranch;
+        this.terminalBranch = this.selectedBranch;
+        this.cashierBranch = this.selectedBranch;
         this.plBranch = this.selectedBranch;
         this.consolidatedBranch = this.selectedBranch;
     },
@@ -453,7 +582,9 @@
 
     getTabTitle() {
         const titles = {
-            sales_accounting: 'Laporan Penjualan Cabang & Shift Kasir',
+            sales_accounting: 'Laporan Penjualan Cabang (Konsolidasi)',
+            sales_terminal: 'Laporan Penjualan Berdasarkan Terminal Kasir',
+            sales_cashier: 'Laporan Penjualan Berdasarkan Akun Kasir',
             profit_loss: 'Laporan Laba / Rugi Bersih (P&L)',
             fast_moving: 'Laporan Analisis Barang Terlaris & Restock',
             cash_reconciliation: 'Laporan Rekonsiliasi Kas Shift Kasir',
@@ -483,33 +614,101 @@
         const dateSuffix = this.periodMode === 'daily' ? this.selectedDate : (this.periodMode === 'yearly' ? this.selectedYear : this.selectedMonth);
 
         if (this.activeTab === 'sales_accounting') {
-            const headers = ['Kode Shift', 'Terminal', 'Nama Kasir', 'Jumlah Transaksi', 'Modal Awal (Rp)', 'Penjualan Tunai (Rp)', 'Total Omzet (Rp)', 'Status Sesi'];
-            const rows = (this.salesData?.shifts_breakdown || []).map(s => [
-                s.shift_code || '-',
-                s.terminal_code || '-',
-                s.cashier_name || '-',
-                Number(s.transaction_count || 0),
-                Number(s.opening_cash || 0),
-                Number(s.cash_sales || 0),
-                Number(s.total_sales || 0),
-                s.status || '-'
+            const headers = ['No', 'Kode Cabang', 'Nama Cabang Outlet', 'Jumlah Transaksi', 'Total Penjualan (Rp)', 'Kontribusi (%)'];
+            const rows = (this.salesData?.branch_breakdown || []).map((b, idx) => [
+                idx + 1,
+                b.branch_code || '-',
+                b.branch_name || '-',
+                Number(b.transaction_count || 0),
+                Number(b.total_sales || 0),
+                (b.contribution_percent || 0) + '%'
             ]);
             const totals = [
                 'TOTAL OMZET',
                 '',
                 '',
                 Number(this.salesData?.summary?.transaction_count || 0),
-                '',
-                '',
                 Number(this.salesData?.summary?.grand_total || 0),
-                ''
+                '100%'
             ];
 
             window.exportTableToExcel({
-                filename: `Laporan_Penjualan_${this.periodMode}_${dateSuffix}.xlsx`,
-                sheetName: 'Penjualan',
+                filename: `Laporan_Penjualan_Cabang_${dateSuffix}.xlsx`,
+                sheetName: 'Penjualan Cabang',
                 title: 'PT INDO LAMPUNG PERKASA - MINIMARKET KOPERASI',
-                subtitle: 'LAPORAN PENJUALAN KASIR & CABANG (' + periodStr + ')',
+                subtitle: 'LAPORAN REKAPITULASI PENJUALAN PER CABANG (' + periodStr + ')',
+                metadata: baseMeta,
+                headers: headers,
+                rows: rows,
+                totals: totals
+            });
+        } else if (this.activeTab === 'sales_terminal') {
+            const headers = ['No', 'Terminal', 'Cabang Penugasan', 'Jumlah Transaksi', 'Penjualan Tunai (Rp)', 'Penjualan Non-Tunai (Rp)', 'Total Omzet (Rp)', 'Kontribusi (%)'];
+            const rows = (this.terminalData?.terminals_breakdown || []).map((t, idx) => [
+                idx + 1,
+                t.terminal_code || '-',
+                t.branch || '-',
+                Number(t.transaction_count || 0),
+                Number(t.cash_sales || 0),
+                Number(t.non_cash_sales || 0),
+                Number(t.total_sales || 0),
+                (t.contribution_percent || 0) + '%'
+            ]);
+            const totals = [
+                'TOTAL',
+                '',
+                '',
+                Number(this.terminalData?.summary?.transaction_count || 0),
+                Number(this.terminalData?.summary?.payment_breakdown?.tunai || 0),
+                Number((this.terminalData?.summary?.grand_total || 0) - (this.terminalData?.summary?.payment_breakdown?.tunai || 0)),
+                Number(this.terminalData?.summary?.grand_total || 0),
+                '100%'
+            ];
+
+            window.exportTableToExcel({
+                filename: `Laporan_Penjualan_Terminal_${dateSuffix}.xlsx`,
+                sheetName: 'Terminal Kasir',
+                title: 'PT INDO LAMPUNG PERKASA - MINIMARKET KOPERASI',
+                subtitle: 'LAPORAN PENJUALAN BERDASARKAN TERMINAL KASIR (' + periodStr + ')',
+                metadata: baseMeta,
+                headers: headers,
+                rows: rows,
+                totals: totals
+            });
+        } else if (this.activeTab === 'sales_cashier') {
+            const headers = ['No', 'Nama Kasir', 'Username', 'NIP / NIK', 'Cabang Penugasan', 'Jumlah Transaksi', 'Penjualan Tunai (Rp)', 'Penjualan Non-Tunai (Rp)', 'Rata-rata / Trx (Rp)', 'Total Omzet (Rp)', 'Kontribusi (%)'];
+            const rows = (this.cashierData?.cashiers_breakdown || []).map((c, idx) => [
+                idx + 1,
+                c.cashier_name || '-',
+                c.cashier_username || '-',
+                c.cashier_nik || '-',
+                c.branch || '-',
+                Number(c.transaction_count || 0),
+                Number(c.cash_sales || 0),
+                Number(c.non_cash_sales || 0),
+                Number(c.average_sales || 0),
+                Number(c.total_sales || 0),
+                (c.contribution_percent || 0) + '%'
+            ]);
+            const totals = [
+                'TOTAL',
+                '',
+                '',
+                '',
+                '',
+                Number(this.cashierData?.summary?.transaction_count || 0),
+                Number(this.cashierData?.summary?.payment_breakdown?.tunai || 0),
+                Number((this.cashierData?.summary?.grand_total || 0) - (this.cashierData?.summary?.payment_breakdown?.tunai || 0)),
+                '',
+                Number(this.cashierData?.summary?.grand_total || 0),
+                '100%'
+            ];
+
+            window.exportTableToExcel({
+                filename: `Laporan_Penjualan_Akun_Kasir_${dateSuffix}.xlsx`,
+                sheetName: 'Akun Kasir',
+                title: 'PT INDO LAMPUNG PERKASA - MINIMARKET KOPERASI',
+                subtitle: 'LAPORAN PENJUALAN BERDASARKAN AKUN KASIR (' + periodStr + ')',
                 metadata: baseMeta,
                 headers: headers,
                 rows: rows,
@@ -774,51 +973,69 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             :class="activeTab === 'sales_accounting' ? 'bg-white text-[#0052cc] shadow-xs font-black' : 'text-gray-600 hover:text-gray-900 font-bold'"
                             class="px-3.5 py-2 rounded-lg text-xs transition-all flex items-center gap-1.5 cursor-pointer">
                         <span class="material-symbols-rounded text-[17px]">point_of_sale</span>
-                        <span>1. Penjualan Cabang &amp; Shift</span>
+                        <span>1. Penjualan Cabang</span>
                     </button>
 
-                    <!-- Tab 2: Laporan Laba/Rugi (Modul E) -->
+                    <!-- Tab 2: Laporan Penjualan Per Terminal -->
+                    <button type="button"
+                            @click="activeTab = 'sales_terminal'; loadTerminalReport()"
+                            :class="activeTab === 'sales_terminal' ? 'bg-white text-[#0052cc] shadow-xs font-black' : 'text-gray-600 hover:text-gray-900 font-bold'"
+                            class="px-3.5 py-2 rounded-lg text-xs transition-all flex items-center gap-1.5 cursor-pointer">
+                        <span class="material-symbols-rounded text-[17px]">point_of_sale</span>
+                        <span>2. Penjualan Terminal Kasir</span>
+                    </button>
+
+                    <!-- Tab 3: Laporan Penjualan Per Akun Kasir -->
+                    <button type="button"
+                            @click="activeTab = 'sales_cashier'; loadCashierReport()"
+                            :class="activeTab === 'sales_cashier' ? 'bg-white text-emerald-700 shadow-xs font-black' : 'text-gray-600 hover:text-gray-900 font-bold'"
+                            class="px-3.5 py-2 rounded-lg text-xs transition-all flex items-center gap-1.5 cursor-pointer">
+                        <span class="material-symbols-rounded text-[17px]">badge</span>
+                        <span>3. Penjualan Akun Kasir</span>
+                    </button>
+
+                    <!-- Tab 4: Laporan Laba/Rugi (Modul E) -->
                     <button type="button"
                             @click="activeTab = 'profit_loss'; loadProfitLossReport()"
                             :class="activeTab === 'profit_loss' ? 'bg-white text-emerald-700 shadow-xs font-black' : 'text-gray-600 hover:text-gray-900 font-bold'"
                             class="px-3.5 py-2 rounded-lg text-xs transition-all flex items-center gap-1.5 cursor-pointer">
                         <span class="material-symbols-rounded text-[17px]">account_balance</span>
-                        <span>2. Laba / Rugi Bersih (P&amp;L)</span>
+                        <span>4. Laba / Rugi Bersih (P&amp;L)</span>
                     </button>
 
-                    <!-- Tab 3: Barang Terlaris (Modul E) -->
+                    <!-- Tab 5: Barang Terlaris (Modul E) -->
                     <button type="button"
                             @click="activeTab = 'fast_moving'; loadFastMoving()"
                             :class="activeTab === 'fast_moving' ? 'bg-white text-amber-700 shadow-xs font-black' : 'text-gray-600 hover:text-gray-900 font-bold'"
                             class="px-3.5 py-2 rounded-lg text-xs transition-all flex items-center gap-1.5 cursor-pointer">
                         <span class="material-symbols-rounded text-[17px]">local_fire_department</span>
-                        <span>3. Barang Terlaris &amp; Restock</span>
+                        <span>5. Barang Terlaris &amp; Restock</span>
                     </button>
 
-                    <!-- Tab 4: Rekonsiliasi Kas (Modul E) -->
+                    <!-- Tab 6: Rekonsiliasi Kas (Modul E) -->
                     <button type="button"
                             @click="activeTab = 'cash_reconciliation'; loadCashReconciliation()"
                             :class="activeTab === 'cash_reconciliation' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-gray-600 hover:text-gray-900 font-bold'"
                             class="px-3.5 py-2 rounded-lg text-xs transition-all flex items-center gap-1.5 cursor-pointer">
                         <span class="material-symbols-rounded text-[17px]">price_check</span>
-                        <span>4. Rekonsiliasi Kas Shift</span>
+                        <span>6. Rekonsiliasi Kas Shift</span>
                     </button>
 
-                    <!-- Tab 5: Pajak Produk (Modul E) -->
+                    <!-- Tab 7: Pajak Produk (Modul E) -->
                     <button type="button"
                             @click="activeTab = 'product_taxes'; loadTaxProducts()"
                             :class="activeTab === 'product_taxes' ? 'bg-white text-teal-700 shadow-xs font-black' : 'text-gray-600 hover:text-gray-900 font-bold'"
                             class="px-3.5 py-2 rounded-lg text-xs transition-all flex items-center gap-1.5 cursor-pointer">
                         <span class="material-symbols-rounded text-[17px]">receipt</span>
-                        <span>5. Produk Kena Pajak (PPN)</span>
+                        <span>7. Produk Kena Pajak (PPN)</span>
                     </button>
 
-                    <!-- Tab 6: Piutang Anggota (Modul B) -->
+                    <!-- Tab 8: Piutang Anggota (Modul B) -->
                     <button type="button"
                             @click="activeTab = 'payroll_debt'; loadDebtReport()"
                             :class="activeTab === 'payroll_debt' ? 'bg-white text-purple-700 shadow-xs font-black' : 'text-gray-600 hover:text-gray-900 font-bold'"
                             class="px-3.5 py-2 rounded-lg text-xs transition-all flex items-center gap-1.5 cursor-pointer">
-                        <span class="material-symbols-rounded text-[17px]">badge</span>
+                        <span class="material-symbols-rounded text-[17px]">credit_card</span>
                         <span>Piutang Anggota (Payroll)</span>
                     </button>
 
@@ -955,10 +1172,10 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3 border-b border-gray-200">
                         <div>
                             <div class="flex items-center gap-2">
-                                <h1 class="text-[19px] font-black text-gray-900 tracking-tight">Laporan Penjualan Cabang &amp; Shift Kasir</h1>
-                                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200">Modul E: Penjualan</span>
+                                <h1 class="text-[19px] font-black text-gray-900 tracking-tight">Laporan Penjualan Cabang, Terminal &amp; Kasir</h1>
+                                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200">Penjualan</span>
                             </div>
-                            <p class="text-xs text-gray-500 mt-1">Laporan omzet penjualan per-shift kasir, per-cabang, dan konsolidasi 3 cabang periode harian, mingguan, bulanan.</p>
+                            <p class="text-xs text-gray-500 mt-1">Laporan omzet penjualan per-terminal kasir, per-akun kasir, per-cabang, dan konsolidasi 3 cabang periode harian, mingguan, bulanan.</p>
                         </div>
 
                         <!-- Filter Toolbar -->
@@ -1067,42 +1284,343 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         </div>
                     </div>
 
-                    <!-- Breakdown Per-Shift Table -->
+                </div>
+
+                <!-- ========================================================= -->
+                <!-- 2. TAB: LAPORAN PENJUALAN PER TERMINAL KASIR             -->
+                <!-- ========================================================= -->
+                <div x-show="activeTab === 'sales_terminal'" class="space-y-6" style="display: none;">
+                    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3 border-b border-gray-200">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <h1 class="text-[19px] font-black text-gray-900 tracking-tight">Rincian Penjualan Berdasarkan Terminal Kasir</h1>
+                                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-[#0052cc] border border-blue-200">Terminal Kasir</span>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">Laporan omzet penjualan, volume transaksi, dan arus kas per mesin terminal POS masing-masing cabang.</p>
+                        </div>
+
+                        <!-- Filter Toolbar Terminal -->
+                        <div class="flex flex-wrap items-center gap-2">
+                            <!-- Periode Selector: Tanggal (Harian), Minggu (Mingguan), Bulan (Bulanan), Tahun (Tahunan) -->
+                            <div class="inline-flex p-1 bg-white border border-gray-300 rounded-xl text-xs font-bold shadow-2xs">
+                                <button type="button" @click="terminalPeriod = 'daily'; loadTerminalReport()"
+                                        :class="terminalPeriod === 'daily' ? 'bg-[#0052cc] text-white' : 'text-gray-600'"
+                                        class="px-3 py-1 rounded-lg transition-all cursor-pointer">Tanggal</button>
+                                <button type="button" @click="terminalPeriod = 'weekly'; loadTerminalReport()"
+                                        :class="terminalPeriod === 'weekly' ? 'bg-[#0052cc] text-white' : 'text-gray-600'"
+                                        class="px-3 py-1 rounded-lg transition-all cursor-pointer">Minggu</button>
+                                <button type="button" @click="terminalPeriod = 'monthly'; loadTerminalReport()"
+                                        :class="terminalPeriod === 'monthly' ? 'bg-[#0052cc] text-white' : 'text-gray-600'"
+                                        class="px-3 py-1 rounded-lg transition-all cursor-pointer">Bulan</button>
+                                <button type="button" @click="terminalPeriod = 'yearly'; loadTerminalReport()"
+                                        :class="terminalPeriod === 'yearly' ? 'bg-[#0052cc] text-white' : 'text-gray-600'"
+                                        class="px-3 py-1 rounded-lg transition-all cursor-pointer">Tahun</button>
+                            </div>
+
+                            <!-- Dynamic Period Input -->
+                            <template x-if="terminalPeriod === 'daily' || terminalPeriod === 'weekly'">
+                                <input type="date"
+                                       x-model="terminalDate"
+                                       @change="loadTerminalReport()"
+                                       class="bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-800 outline-none shadow-2xs cursor-pointer" />
+                            </template>
+                            <template x-if="terminalPeriod === 'monthly'">
+                                <input type="month"
+                                       x-model="terminalMonth"
+                                       @change="loadTerminalReport()"
+                                       class="bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-800 outline-none shadow-2xs cursor-pointer" />
+                            </template>
+                            <template x-if="terminalPeriod === 'yearly'">
+                                <select x-model="terminalYear"
+                                        @change="loadTerminalReport()"
+                                        class="bg-white border border-gray-300 rounded-xl px-3.5 py-2 text-xs font-bold text-gray-800 outline-none shadow-2xs cursor-pointer">
+                                    <option value="2024">Tahun 2024</option>
+                                    <option value="2025">Tahun 2025</option>
+                                    <option value="2026">Tahun 2026</option>
+                                    <option value="2027">Tahun 2027</option>
+                                </select>
+                            </template>
+
+                            <!-- Filter Cabang -->
+                            <select x-model="terminalBranch" @change="onTerminalBranchChange()"
+                                    class="bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 shadow-2xs cursor-pointer">
+                                <option value="all">Semua Cabang (Konsolidasi)</option>
+                                <option value="Pusat">Cabang Pusat</option>
+                                <option value="Cabang A">Cabang A</option>
+                                <option value="Cabang B">Cabang B</option>
+                            </select>
+
+                            <!-- Filter Terminal Kasir -->
+                            <select x-model="terminalSelected" @change="loadTerminalReport()"
+                                    class="bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-[#0052cc] shadow-2xs cursor-pointer">
+                                <option value="all">Semua Terminal Kasir</option>
+                                <template x-for="tCode in availableTerminalsForBranch" :key="tCode">
+                                    <option :value="tCode" x-text="'Terminal ' + tCode"></option>
+                                </template>
+                            </select>
+
+                            <button type="button" @click="loadTerminalReport()"
+                                    class="p-2 bg-[#0052cc] hover:bg-[#0043a8] text-white rounded-xl shadow-2xs transition-colors cursor-pointer"
+                                    title="Segarkan data terminal">
+                                <span class="material-symbols-rounded text-[18px]">refresh</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 4 Terminal KPI Cards -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                        <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs flex flex-col justify-between">
+                            <span class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">TOTAL OMZET TERMINAL</span>
+                            <div class="mt-2">
+                                <h3 class="text-[22px] font-mono font-black text-gray-900" x-text="formatRupiah(terminalData?.summary?.grand_total || 0)">Rp 0</h3>
+                                <p class="text-[11px] text-gray-400 font-mono mt-0.5" x-text="(terminalData?.summary?.transaction_count || 0) + ' Transaksi Berhasil'"></p>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs flex flex-col justify-between">
+                            <span class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">TOTAL TRANSAKSI</span>
+                            <div class="mt-2">
+                                <h3 class="text-[22px] font-mono font-black text-[#0052cc]" x-text="(terminalData?.summary?.transaction_count || 0) + ' Struk'">0 Struk</h3>
+                                <p class="text-[11px] text-gray-400 font-mono mt-0.5" x-text="(terminalData?.terminals_breakdown?.length || 0) + ' Terminal Aktif'"></p>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs flex flex-col justify-between">
+                            <span class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">PENJUALAN TUNAI (CASH)</span>
+                            <div class="mt-2">
+                                <h3 class="text-[22px] font-mono font-black text-emerald-600" x-text="formatRupiah(terminalData?.summary?.payment_breakdown?.tunai || 0)">Rp 0</h3>
+                                <p class="text-[11px] text-emerald-700 font-bold mt-0.5">Fisik Kas Laci Terminal</p>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs flex flex-col justify-between">
+                            <span class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">PENJUALAN NON-TUNAI</span>
+                            <div class="mt-2">
+                                <h3 class="text-[22px] font-mono font-black text-blue-600" x-text="formatRupiah((terminalData?.summary?.payment_breakdown?.qris || 0) + (terminalData?.summary?.payment_breakdown?.campuran || 0) + (terminalData?.summary?.payment_breakdown?.kredit_kasbon || 0))">Rp 0</h3>
+                                <p class="text-[11px] text-gray-400 font-mono mt-0.5">QRIS, Debit &amp; Kasbon Anggota</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Breakdown Per-Terminal Table -->
                     <div class="bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-4">
                         <div class="flex items-center justify-between">
-                            <h3 class="text-sm font-bold text-gray-900">Rincian Penjualan Berdasarkan Shift Kasir</h3>
-                            <span class="text-xs text-gray-500 font-mono" x-text="(salesData?.shifts_breakdown?.length || 0) + ' Sesi Shift Terdata'"></span>
+                            <div class="flex items-center gap-2">
+                                <span class="material-symbols-rounded text-[#0052cc] text-[20px]">point_of_sale</span>
+                                <h3 class="text-sm font-bold text-gray-900">Rincian Penjualan Berdasarkan Terminal Kasir</h3>
+                            </div>
+                            <span class="text-xs text-gray-500 font-mono" x-text="(terminalData?.terminals_breakdown?.length || 0) + ' Terminal Kasir Terdata'"></span>
                         </div>
 
                         <div class="overflow-x-auto">
                             <table class="w-full text-left text-xs min-w-[800px] border-collapse">
                                 <thead class="bg-gray-50 border-b border-gray-200 text-gray-500 text-[11px] font-bold uppercase">
                                     <tr>
-                                        <th class="px-4 py-3">KODE SHIFT</th>
                                         <th class="px-4 py-3">TERMINAL</th>
-                                        <th class="px-4 py-3">NAMA KASIR</th>
-                                        <th class="px-4 py-3 text-center">TRANSAKSI</th>
-                                        <th class="px-4 py-3 text-right">MODAL AWAL</th>
+                                        <th class="px-4 py-3">CABANG PENUGASAN</th>
+                                        <th class="px-4 py-3 text-center">JUMLAH TRANSAKSI</th>
                                         <th class="px-4 py-3 text-right">PENJUALAN TUNAI</th>
+                                        <th class="px-4 py-3 text-right">PENJUALAN NON-TUNAI</th>
                                         <th class="px-4 py-3 text-right font-bold text-gray-900">TOTAL OMZET</th>
-                                        <th class="px-4 py-3 text-center">STATUS</th>
+                                        <th class="px-4 py-3 text-center">KONTRIBUSI</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-100 text-gray-700">
-                                    <template x-for="s in (salesData?.shifts_breakdown || [])" :key="s.shift_id">
+                                    <template x-for="t in (terminalData?.terminals_breakdown || [])" :key="t.terminal_code">
                                         <tr class="hover:bg-slate-50">
-                                            <td class="px-4 py-3 font-mono text-gray-500" x-text="s.shift_code"></td>
-                                            <td class="px-4 py-3 font-mono font-bold text-gray-700" x-text="s.terminal_code"></td>
-                                            <td class="px-4 py-3 font-bold text-gray-900" x-text="s.cashier_name"></td>
-                                            <td class="px-4 py-3 text-center font-mono" x-text="s.transaction_count"></td>
-                                            <td class="px-4 py-3 text-right font-mono text-gray-600" x-text="formatRupiah(s.opening_cash)"></td>
-                                            <td class="px-4 py-3 text-right font-mono text-emerald-600" x-text="formatRupiah(s.cash_sales)"></td>
-                                            <td class="px-4 py-3 text-right font-mono font-bold text-gray-900" x-text="formatRupiah(s.total_sales)"></td>
+                                            <td class="px-4 py-3 font-mono font-bold text-[#0052cc]" x-text="t.terminal_code"></td>
+                                            <td class="px-4 py-3 font-semibold text-gray-800" x-text="t.branch"></td>
+                                            <td class="px-4 py-3 text-center font-mono font-bold" x-text="t.transaction_count"></td>
+                                            <td class="px-4 py-3 text-right font-mono text-emerald-600" x-text="formatRupiah(t.cash_sales)"></td>
+                                            <td class="px-4 py-3 text-right font-mono text-blue-600" x-text="formatRupiah(t.non_cash_sales)"></td>
+                                            <td class="px-4 py-3 text-right font-mono font-bold text-gray-900" x-text="formatRupiah(t.total_sales)"></td>
                                             <td class="px-4 py-3 text-center">
-                                                <span class="px-2 py-0.5 rounded text-[10px] font-bold"
-                                                      :class="s.status === 'OPEN' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-gray-100 text-gray-600'"
-                                                      x-text="s.status"></span>
+                                                <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200"
+                                                      x-text="(t.contribution_percent || 0) + '%'"></span>
                                             </td>
+                                        </tr>
+                                    </template>
+                                    <template x-if="!terminalData?.terminals_breakdown || terminalData.terminals_breakdown.length === 0">
+                                        <tr>
+                                            <td colspan="7" class="px-4 py-6 text-center text-gray-400">Tidak ada data transaksi per terminal pada periode ini.</td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ========================================================= -->
+                <!-- 3. TAB: LAPORAN PENJUALAN PER AKUN KASIR                 -->
+                <!-- ========================================================= -->
+                <div x-show="activeTab === 'sales_cashier'" class="space-y-6" style="display: none;">
+                    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3 border-b border-gray-200">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <h1 class="text-[19px] font-black text-gray-900 tracking-tight">Rincian Penjualan Berdasarkan Akun Kasir</h1>
+                                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Akun Kasir</span>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">Laporan produktivitas staf kasir, rekap transaksi tunai & non-tunai, serta kontribusi omzet per kasir.</p>
+                        </div>
+
+                        <!-- Filter Toolbar Akun Kasir -->
+                        <div class="flex flex-wrap items-center gap-2">
+                            <!-- Search Bar (Mencari Username dari Akun Kasir) -->
+                            <div class="relative">
+                                <span class="material-symbols-rounded absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-[18px]">search</span>
+                                <input type="text"
+                                       x-model="cashierSearch"
+                                       @input.debounce.300ms="loadCashierReport()"
+                                       placeholder="Cari username kasir..."
+                                       class="bg-white border border-gray-300 rounded-xl pl-9 pr-4 py-2 text-xs font-semibold text-gray-800 outline-none shadow-2xs focus:border-emerald-600 transition-colors w-52 sm:w-64" />
+                                <button type="button"
+                                        x-show="cashierSearch.length > 0"
+                                        @click="cashierSearch = ''; loadCashierReport()"
+                                        class="material-symbols-rounded absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-[16px] cursor-pointer">
+                                    close
+                                </button>
+                            </div>
+
+                            <!-- Periode Selector: Tanggal (Harian), Minggu (Mingguan), Bulan (Bulanan), Tahun (Tahunan) -->
+                            <div class="inline-flex p-1 bg-white border border-gray-300 rounded-xl text-xs font-bold shadow-2xs">
+                                <button type="button" @click="cashierPeriod = 'daily'; loadCashierReport()"
+                                        :class="cashierPeriod === 'daily' ? 'bg-emerald-600 text-white' : 'text-gray-600'"
+                                        class="px-3 py-1 rounded-lg transition-all cursor-pointer">Tanggal</button>
+                                <button type="button" @click="cashierPeriod = 'weekly'; loadCashierReport()"
+                                        :class="cashierPeriod === 'weekly' ? 'bg-emerald-600 text-white' : 'text-gray-600'"
+                                        class="px-3 py-1 rounded-lg transition-all cursor-pointer">Minggu</button>
+                                <button type="button" @click="cashierPeriod = 'monthly'; loadCashierReport()"
+                                        :class="cashierPeriod === 'monthly' ? 'bg-emerald-600 text-white' : 'text-gray-600'"
+                                        class="px-3 py-1 rounded-lg transition-all cursor-pointer">Bulan</button>
+                                <button type="button" @click="cashierPeriod = 'yearly'; loadCashierReport()"
+                                        :class="cashierPeriod === 'yearly' ? 'bg-emerald-600 text-white' : 'text-gray-600'"
+                                        class="px-3 py-1 rounded-lg transition-all cursor-pointer">Tahun</button>
+                            </div>
+
+                            <!-- Dynamic Period Input -->
+                            <template x-if="cashierPeriod === 'daily' || cashierPeriod === 'weekly'">
+                                <input type="date"
+                                       x-model="cashierDate"
+                                       @change="loadCashierReport()"
+                                       class="bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-800 outline-none shadow-2xs cursor-pointer" />
+                            </template>
+                            <template x-if="cashierPeriod === 'monthly'">
+                                <input type="month"
+                                       x-model="cashierMonth"
+                                       @change="loadCashierReport()"
+                                       class="bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-800 outline-none shadow-2xs cursor-pointer" />
+                            </template>
+                            <template x-if="cashierPeriod === 'yearly'">
+                                <select x-model="cashierYear"
+                                        @change="loadCashierReport()"
+                                        class="bg-white border border-gray-300 rounded-xl px-3.5 py-2 text-xs font-bold text-gray-800 outline-none shadow-2xs cursor-pointer">
+                                    <option value="2024">Tahun 2024</option>
+                                    <option value="2025">Tahun 2025</option>
+                                    <option value="2026">Tahun 2026</option>
+                                    <option value="2027">Tahun 2027</option>
+                                </select>
+                            </template>
+
+                            <!-- Filter Cabang -->
+                            <select x-model="cashierBranch" @change="loadCashierReport()"
+                                    class="bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 shadow-2xs cursor-pointer">
+                                <option value="all">Semua Cabang (Konsolidasi)</option>
+                                <option value="Pusat">Cabang Pusat</option>
+                                <option value="Cabang A">Cabang A</option>
+                                <option value="Cabang B">Cabang B</option>
+                            </select>
+
+                            <button type="button" @click="loadCashierReport()"
+                                    class="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-2xs transition-colors cursor-pointer"
+                                    title="Segarkan data akun kasir">
+                                <span class="material-symbols-rounded text-[18px]">refresh</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 4 Cashier KPI Cards -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                        <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs flex flex-col justify-between">
+                            <span class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">TOTAL OMZET KASIR</span>
+                            <div class="mt-2">
+                                <h3 class="text-[22px] font-mono font-black text-gray-900" x-text="formatRupiah(cashierData?.summary?.grand_total || 0)">Rp 0</h3>
+                                <p class="text-[11px] text-gray-400 font-mono mt-0.5" x-text="(cashierData?.summary?.transaction_count || 0) + ' Transaksi Berhasil'"></p>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs flex flex-col justify-between">
+                            <span class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">TOTAL TRANSAKSI</span>
+                            <div class="mt-2">
+                                <h3 class="text-[22px] font-mono font-black text-emerald-700" x-text="(cashierData?.summary?.transaction_count || 0) + ' Struk'">0 Struk</h3>
+                                <p class="text-[11px] text-gray-400 font-mono mt-0.5" x-text="(cashierData?.cashiers_breakdown?.length || 0) + ' Akun Kasir Terdata'"></p>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs flex flex-col justify-between">
+                            <span class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">RATA-RATA / TRANSAKSI</span>
+                            <div class="mt-2">
+                                <h3 class="text-[22px] font-mono font-black text-blue-600" x-text="formatRupiah(cashierData?.summary?.average_basket || 0)">Rp 0</h3>
+                                <p class="text-[11px] text-gray-400 font-mono mt-0.5">Nilai rata-rata keranjang kasir</p>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs flex flex-col justify-between">
+                            <span class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">AKUN KASIR AKTIF</span>
+                            <div class="mt-2">
+                                <h3 class="text-[22px] font-mono font-black text-purple-700" x-text="(cashierData?.cashiers_breakdown?.length || 0) + ' Kasir'">0 Kasir</h3>
+                                <p class="text-[11px] text-gray-400 font-mono mt-0.5">Beroperasi pada periode ini</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Breakdown Per-Akun Kasir Table -->
+                    <div class="bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-4">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="material-symbols-rounded text-emerald-600 text-[20px]">badge</span>
+                                <h3 class="text-sm font-bold text-gray-900">Rincian Penjualan Berdasarkan Akun Kasir</h3>
+                            </div>
+                            <span class="text-xs text-gray-500 font-mono" x-text="(cashierData?.cashiers_breakdown?.length || 0) + ' Akun Kasir Terdata'"></span>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs min-w-[850px] border-collapse">
+                                <thead class="bg-gray-50 border-b border-gray-200 text-gray-500 text-[11px] font-bold uppercase">
+                                    <tr>
+                                        <th class="px-4 py-3">NAMA KASIR</th>
+                                        <th class="px-4 py-3">USERNAME / NIP</th>
+                                        <th class="px-4 py-3">CABANG</th>
+                                        <th class="px-4 py-3 text-center">JUMLAH TRANSAKSI</th>
+                                        <th class="px-4 py-3 text-right">PENJUALAN TUNAI</th>
+                                        <th class="px-4 py-3 text-right">PENJUALAN NON-TUNAI</th>
+                                        <th class="px-4 py-3 text-right text-gray-600">RATA-RATA / TRX</th>
+                                        <th class="px-4 py-3 text-right font-bold text-gray-900">TOTAL OMZET</th>
+                                        <th class="px-4 py-3 text-center">KONTRIBUSI</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100 text-gray-700">
+                                    <template x-for="c in (cashierData?.cashiers_breakdown || [])" :key="c.cashier_name + (c.cashier_username || c.cashier_nik || '')">
+                                        <tr class="hover:bg-slate-50">
+                                            <td class="px-4 py-3 font-bold text-gray-900" x-text="c.cashier_name"></td>
+                                            <td class="px-4 py-3 font-mono text-gray-600">
+                                                <span class="font-bold text-emerald-700" x-text="c.cashier_username ? '@' + c.cashier_username : (c.cashier_nik || '-')"></span>
+                                            </td>
+                                            <td class="px-4 py-3 font-semibold text-gray-800" x-text="c.branch"></td>
+                                            <td class="px-4 py-3 text-center font-mono font-bold" x-text="c.transaction_count"></td>
+                                            <td class="px-4 py-3 text-right font-mono text-emerald-600" x-text="formatRupiah(c.cash_sales)"></td>
+                                            <td class="px-4 py-3 text-right font-mono text-blue-600" x-text="formatRupiah(c.non_cash_sales)"></td>
+                                            <td class="px-4 py-3 text-right font-mono text-gray-600" x-text="formatRupiah(c.average_sales)"></td>
+                                            <td class="px-4 py-3 text-right font-mono font-bold text-gray-900" x-text="formatRupiah(c.total_sales)"></td>
+                                            <td class="px-4 py-3 text-center">
+                                                <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                                      x-text="(c.contribution_percent || 0) + '%'"></span>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                    <template x-if="!cashierData?.cashiers_breakdown || cashierData.cashiers_breakdown.length === 0">
+                                        <tr>
+                                            <td colspan="9" class="px-4 py-6 text-center text-gray-400">Tidak ada data transaksi per akun kasir pada periode ini.</td>
                                         </tr>
                                     </template>
                                 </tbody>
@@ -1951,66 +2469,112 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         </template>
 
                         <!-- 4. COMPLETE TABULAR DATA ACCORDING TO ACTIVE TAB -->
-                        <!-- TAB 1: Penjualan -->
+                        <!-- TAB 1: Penjualan Cabang -->
                         <template x-if="activeTab === 'sales_accounting'">
-                            <div class="space-y-6">
-                                <div>
-                                    <h4 class="text-xs font-black uppercase text-gray-700 mb-2">A. Rekapitulasi Performa Antar Cabang</h4>
-                                    <table class="w-full text-left text-[11px] border-collapse border border-gray-300">
-                                        <thead>
-                                            <tr class="bg-gray-100 border-b border-gray-300 font-bold uppercase">
-                                                <th class="p-2 border border-gray-300">Kode</th>
-                                                <th class="p-2 border border-gray-300">Nama Cabang Outlet</th>
-                                                <th class="p-2 border border-gray-300 text-center">Transaksi</th>
-                                                <th class="p-2 border border-gray-300 text-right">Total Penjualan (Rp)</th>
-                                                <th class="p-2 border border-gray-300 text-center">Kontribusi (%)</th>
+                            <div class="space-y-4">
+                                <h4 class="text-xs font-black uppercase text-gray-700 mb-2">Rekapitulasi Performa Penjualan Antar Cabang</h4>
+                                <table class="w-full text-left text-[11px] border-collapse border border-gray-300">
+                                    <thead>
+                                        <tr class="bg-gray-100 border-b border-gray-300 font-bold uppercase">
+                                            <th class="p-2 border border-gray-300">Kode</th>
+                                            <th class="p-2 border border-gray-300">Nama Cabang Outlet</th>
+                                            <th class="p-2 border border-gray-300 text-center">Transaksi</th>
+                                            <th class="p-2 border border-gray-300 text-right">Total Penjualan (Rp)</th>
+                                            <th class="p-2 border border-gray-300 text-center">Kontribusi (%)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template x-for="b in (salesData?.branch_breakdown || [])" :key="b.branch_code">
+                                            <tr class="border-b border-gray-200">
+                                                <td class="p-2 border border-gray-300 font-mono" x-text="b.branch_code"></td>
+                                                <td class="p-2 border border-gray-300 font-bold" x-text="b.branch_name"></td>
+                                                <td class="p-2 border border-gray-300 text-center font-mono" x-text="b.transaction_count"></td>
+                                                <td class="p-2 border border-gray-300 text-right font-mono" x-text="formatRupiah(b.total_sales)"></td>
+                                                <td class="p-2 border border-gray-300 text-center font-bold" x-text="b.contribution_percent + '%'"></td>
                                             </tr>
-                                        </thead>
-                                        <tbody>
-                                            <template x-for="b in (salesData?.branch_breakdown || [])" :key="b.branch_code">
-                                                <tr class="border-b border-gray-200">
-                                                    <td class="p-2 border border-gray-300 font-mono" x-text="b.branch_code"></td>
-                                                    <td class="p-2 border border-gray-300 font-bold" x-text="b.branch_name"></td>
-                                                    <td class="p-2 border border-gray-300 text-center font-mono" x-text="b.transaction_count"></td>
-                                                    <td class="p-2 border border-gray-300 text-right font-mono" x-text="formatRupiah(b.total_sales)"></td>
-                                                    <td class="p-2 border border-gray-300 text-center font-bold" x-text="b.contribution_percent + '%'"></td>
-                                                </tr>
-                                            </template>
-                                        </tbody>
-                                    </table>
-                                </div>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </template>
 
-                                <div>
-                                    <h4 class="text-xs font-black uppercase text-gray-700 mb-2">B. Rekapitulasi Penjualan Per Shift Kasir</h4>
-                                    <table class="w-full text-left text-[11px] border-collapse border border-gray-300">
-                                        <thead>
-                                            <tr class="bg-gray-100 border-b border-gray-300 font-bold uppercase">
-                                                <th class="p-2 border border-gray-300">Kode Shift</th>
-                                                <th class="p-2 border border-gray-300">Terminal</th>
-                                                <th class="p-2 border border-gray-300">Nama Kasir</th>
-                                                <th class="p-2 border border-gray-300 text-center">Transaksi</th>
-                                                <th class="p-2 border border-gray-300 text-right">Modal Awal (Rp)</th>
-                                                <th class="p-2 border border-gray-300 text-right">Penjualan Tunai (Rp)</th>
-                                                <th class="p-2 border border-gray-300 text-right">Total Omzet (Rp)</th>
-                                                <th class="p-2 border border-gray-300 text-center">Status</th>
+                        <!-- TAB 2: Penjualan Berdasarkan Terminal Kasir -->
+                        <template x-if="activeTab === 'sales_terminal'">
+                            <div class="space-y-4">
+                                <h4 class="text-xs font-black uppercase text-gray-700 mb-2">Rekapitulasi Penjualan Berdasarkan Mesin Terminal Kasir</h4>
+                                <table class="w-full text-left text-[11px] border-collapse border border-gray-300">
+                                    <thead>
+                                        <tr class="bg-gray-100 border-b border-gray-300 font-bold uppercase">
+                                            <th class="p-2 border border-gray-300">Terminal</th>
+                                            <th class="p-2 border border-gray-300">Cabang Penugasan</th>
+                                            <th class="p-2 border border-gray-300 text-center">Transaksi</th>
+                                            <th class="p-2 border border-gray-300 text-right">Penjualan Tunai (Rp)</th>
+                                            <th class="p-2 border border-gray-300 text-right">Penjualan Non-Tunai (Rp)</th>
+                                            <th class="p-2 border border-gray-300 text-right">Total Omzet (Rp)</th>
+                                            <th class="p-2 border border-gray-300 text-center">Kontribusi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template x-for="t in (terminalData?.terminals_breakdown || [])" :key="t.terminal_code">
+                                            <tr class="border-b border-gray-200">
+                                                <td class="p-2 border border-gray-300 font-mono font-bold text-blue-700" x-text="t.terminal_code"></td>
+                                                <td class="p-2 border border-gray-300 font-semibold" x-text="t.branch"></td>
+                                                <td class="p-2 border border-gray-300 text-center font-mono font-bold" x-text="t.transaction_count"></td>
+                                                <td class="p-2 border border-gray-300 text-right font-mono" x-text="formatRupiah(t.cash_sales)"></td>
+                                                <td class="p-2 border border-gray-300 text-right font-mono" x-text="formatRupiah(t.non_cash_sales)"></td>
+                                                <td class="p-2 border border-gray-300 text-right font-mono font-bold" x-text="formatRupiah(t.total_sales)"></td>
+                                                <td class="p-2 border border-gray-300 text-center font-bold" x-text="(t.contribution_percent || 0) + '%'"></td>
                                             </tr>
-                                        </thead>
-                                        <tbody>
-                                            <template x-for="s in (salesData?.shifts_breakdown || [])" :key="s.shift_id || s.shift_code">
-                                                <tr class="border-b border-gray-200">
-                                                    <td class="p-2 border border-gray-300 font-mono" x-text="s.shift_code"></td>
-                                                    <td class="p-2 border border-gray-300 font-mono font-bold" x-text="s.terminal_code"></td>
-                                                    <td class="p-2 border border-gray-300 font-bold" x-text="s.cashier_name"></td>
-                                                    <td class="p-2 border border-gray-300 text-center font-mono" x-text="s.transaction_count"></td>
-                                                    <td class="p-2 border border-gray-300 text-right font-mono" x-text="formatRupiah(s.opening_cash)"></td>
-                                                    <td class="p-2 border border-gray-300 text-right font-mono" x-text="formatRupiah(s.cash_sales)"></td>
-                                                    <td class="p-2 border border-gray-300 text-right font-mono font-bold" x-text="formatRupiah(s.total_sales)"></td>
-                                                    <td class="p-2 border border-gray-300 text-center font-bold" x-text="s.status"></td>
-                                                </tr>
-                                            </template>
-                                        </tbody>
-                                    </table>
-                                </div>
+                                        </template>
+                                        <template x-if="!terminalData?.terminals_breakdown || terminalData.terminals_breakdown.length === 0">
+                                            <tr>
+                                                <td colspan="7" class="p-4 text-center text-gray-400">Tidak ada data transaksi per terminal kasir pada periode ini.</td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </template>
+
+                        <!-- TAB 3: Penjualan Berdasarkan Akun Kasir -->
+                        <template x-if="activeTab === 'sales_cashier'">
+                            <div class="space-y-4">
+                                <h4 class="text-xs font-black uppercase text-gray-700 mb-2">Rekapitulasi Penjualan Berdasarkan Akun Pengguna Kasir</h4>
+                                <table class="w-full text-left text-[11px] border-collapse border border-gray-300">
+                                    <thead>
+                                        <tr class="bg-gray-100 border-b border-gray-300 font-bold uppercase">
+                                            <th class="p-2 border border-gray-300">Nama Kasir</th>
+                                            <th class="p-2 border border-gray-300">Username / NIP</th>
+                                            <th class="p-2 border border-gray-300">Cabang</th>
+                                            <th class="p-2 border border-gray-300 text-center">Transaksi</th>
+                                            <th class="p-2 border border-gray-300 text-right">Penjualan Tunai (Rp)</th>
+                                            <th class="p-2 border border-gray-300 text-right">Penjualan Non-Tunai (Rp)</th>
+                                            <th class="p-2 border border-gray-300 text-right">Rata-rata / Trx (Rp)</th>
+                                            <th class="p-2 border border-gray-300 text-right">Total Omzet (Rp)</th>
+                                            <th class="p-2 border border-gray-300 text-center">Kontribusi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template x-for="c in (cashierData?.cashiers_breakdown || [])" :key="c.cashier_name + (c.cashier_username || c.cashier_nik || '')">
+                                            <tr class="border-b border-gray-200">
+                                                <td class="p-2 border border-gray-300 font-bold" x-text="c.cashier_name"></td>
+                                                <td class="p-2 border border-gray-300 font-mono text-gray-600" x-text="c.cashier_username ? '@' + c.cashier_username : (c.cashier_nik || '-')"></td>
+                                                <td class="p-2 border border-gray-300 font-semibold" x-text="c.branch"></td>
+                                                <td class="p-2 border border-gray-300 text-center font-mono font-bold" x-text="c.transaction_count"></td>
+                                                <td class="p-2 border border-gray-300 text-right font-mono" x-text="formatRupiah(c.cash_sales)"></td>
+                                                <td class="p-2 border border-gray-300 text-right font-mono" x-text="formatRupiah(c.non_cash_sales)"></td>
+                                                <td class="p-2 border border-gray-300 text-right font-mono" x-text="formatRupiah(c.average_sales)"></td>
+                                                <td class="p-2 border border-gray-300 text-right font-mono font-bold" x-text="formatRupiah(c.total_sales)"></td>
+                                                <td class="p-2 border border-gray-300 text-center font-bold" x-text="(c.contribution_percent || 0) + '%'"></td>
+                                            </tr>
+                                        </template>
+                                        <template x-if="!cashierData?.cashiers_breakdown || cashierData.cashiers_breakdown.length === 0">
+                                            <tr>
+                                                <td colspan="9" class="p-4 text-center text-gray-400">Tidak ada data transaksi per akun kasir pada periode ini.</td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
                             </div>
                         </template>
 

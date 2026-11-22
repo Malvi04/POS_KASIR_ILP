@@ -112,8 +112,8 @@ class CashierFeaturesComprehensiveTest extends TestCase
         $createRes = $this->postJson('/api/members', [
             'nik' => $uniqueNik,
             'name' => 'Kusuma Wardana',
-            'department' => 'Operasional Kebun',
-            'branch' => 'Cabang 2 - Kebun Barat',
+            'department' => 'Operasional Toko',
+            'branch' => 'Cabang A',
             'phone' => '081234567899',
             'credit_limit' => 3000000,
             'status' => 'AKTIF',
@@ -133,8 +133,8 @@ class CashierFeaturesComprehensiveTest extends TestCase
         // 3. Update Member
         $updateRes = $this->putJson("/api/members/{$memberId}", [
             'name' => 'Kusuma Wardana S.P.',
-            'department' => 'Agronomi & QC',
-            'branch' => 'Cabang 2 - Kebun Barat',
+            'department' => 'Keuangan & QC',
+            'branch' => 'Cabang A',
             'phone' => '081234567800',
             'status' => 'AKTIF',
             'notes' => 'Update jabatan',

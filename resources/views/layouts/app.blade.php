@@ -11,7 +11,7 @@
             $posActiveRoleSlot = 'owner';
         } elseif ($reqRoleParam === 'kasir' || str_starts_with($reqPath, 'pos') || str_starts_with($reqPath, 'kasir') || str_starts_with($reqPath, 'cashier') || in_array($reqPath, ['select-shift', 'proses-kredit', 'cetak-struk', 'kupon'], true)) {
             $posActiveRoleSlot = 'kasir';
-        } elseif (str_starts_with($reqPath, 'manager') || in_array($reqPath, ['dashboard', 'inventory', 'members', 'member-detail', 'umkm-partners', 'promosi', 'absensi', 'reports', 'kelola-akun', 'settings', 'stock-opname', 'retur', 'retur-masuk', 'kirim-barang', 'pembelian-barang', 'suppliers'], true) || str_starts_with($reqPath, 'suppliers/')) {
+        } elseif (str_starts_with($reqPath, 'manager') || in_array($reqPath, ['dashboard', 'inventory', 'members', 'member-detail', 'piutang', 'umkm-partners', 'promosi', 'absensi', 'reports', 'kelola-akun', 'settings', 'stock-opname', 'retur', 'retur-masuk', 'kirim-barang', 'pembelian-barang', 'suppliers'], true) || str_starts_with($reqPath, 'suppliers/')) {
             $posActiveRoleSlot = 'manager';
         } else {
             $posActiveRoleSlot = '';

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Kasir;
 use App\Events\StockUpdatedEvent;
 use App\Http\Controllers\Api\Shared\NotificationController;
 use App\Http\Controllers\Controller;
+use App\Models\CouponUnit;
 use App\Models\GoodsReceipt;
 use App\Models\GoodsReceiptItem;
 use App\Models\Location;
@@ -130,6 +131,7 @@ class GoodsReceiptController extends Controller
             'items.*.unit' => 'nullable|string|max:50',
             'items.*.qtySent' => 'nullable|numeric|min:0',
             'items.*.qty_sent' => 'nullable|numeric|min:0',
+            'items.*.qty' => 'nullable|numeric|min:0',
             'items.*.condition' => 'nullable|string|max:50',
             'items.*.expired_date' => 'nullable|date',
             'items.*.batch_number' => 'nullable|string|max:100',
@@ -192,7 +194,7 @@ class GoodsReceiptController extends Controller
             ]);
 
             foreach ($validated['items'] as $it) {
-                $qty = (int) round((float) ($it['qtySent'] ?? $it['qty_sent'] ?? 0));
+                $qty = (int) round((float) ($it['qtySent'] ?? $it['qty_sent'] ?? $it['qty'] ?? 0));
                 if ($qty <= 0) {
                     continue;
                 }
@@ -354,6 +356,7 @@ class GoodsReceiptController extends Controller
 
                     if ($qtyRec > 0) {
                         $this->creditStoreBatchesFromReceiptItem($item, $toLoc->id, $qtyRec, $receipt);
+                        $this->transferCouponsForReceiptItem($item, $toLoc, $qtyRec, $receipt);
                     }
                 }
 
@@ -500,6 +503,7 @@ class GoodsReceiptController extends Controller
 
                 if ($qtyRec > 0) {
                     $this->creditStoreBatchesFromReceiptItem($item, $toLoc->id, $qtyRec, $receipt);
+                    $this->transferCouponsForReceiptItem($item, $toLoc, $qtyRec, $receipt);
                 }
             }
 
@@ -684,6 +688,56 @@ class GoodsReceiptController extends Controller
                 'user_id' => Auth::id(),
                 'notes' => "Penerimaan distribusi {$receipt->receipt_number} (lebih kirim)",
             ]);
+        }
+    }
+
+    private function transferCouponsForReceiptItem(GoodsReceiptItem $item, Location $toLoc, int $qtyRec, GoodsReceipt $receipt): void
+    {
+        $isCouponProduct = false;
+        if ($item->product) {
+            $cat = strtolower($item->product->category ?? '');
+            $sku = strtoupper($item->product->sku ?? '');
+            if (str_contains($cat, 'kupon') || str_contains($cat, 'voucher') || str_starts_with($sku, 'KPN')) {
+                $isCouponProduct = true;
+            }
+        }
+
+        if ($isCouponProduct && $item->product) {
+            $fromLocId = $receipt->from_location_id ?: 1;
+            $fromLocName = $receipt->fromLocation?->name ?: 'Gudang Pusat';
+
+            $couponsToTransfer = CouponUnit::where('product_id', $item->product_id)
+                ->where(function ($q) use ($fromLocId, $fromLocName) {
+                    $q->where('location_id', $fromLocId)
+                      ->orWhere('branch', $fromLocName);
+                })
+                ->whereNotIn('status', ['REDEEMED', 'SELESAI', 'EXPIRED'])
+                ->take($qtyRec)
+                ->get();
+
+            if ($couponsToTransfer->isEmpty()) {
+                $cleanSku = preg_replace('/[^A-Za-z0-9\-]/', '', $item->product->sku);
+                $couponsToTransfer = CouponUnit::where(function ($cq) use ($item, $cleanSku) {
+                        $cq->where('serial_number', $item->product->barcode)
+                           ->orWhere('serial_number', '#' . $item->product->barcode)
+                           ->orWhere('serial_number', 'like', "%{$cleanSku}%");
+                    })
+                    ->where(function ($q) use ($fromLocId, $fromLocName) {
+                        $q->where('location_id', $fromLocId)
+                          ->orWhere('branch', $fromLocName);
+                    })
+                    ->whereNotIn('status', ['REDEEMED', 'SELESAI', 'EXPIRED'])
+                    ->take($qtyRec)
+                    ->get();
+            }
+
+            foreach ($couponsToTransfer as $cUnit) {
+                $cUnit->update([
+                    'location_id' => $toLoc->id,
+                    'branch' => $toLoc->name,
+                    'status' => 'TERVALIDASI',
+                ]);
+            }
         }
     }
 

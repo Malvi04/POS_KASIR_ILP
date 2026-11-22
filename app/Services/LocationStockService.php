@@ -27,7 +27,7 @@ class LocationStockService
 
         $defaults = [
             ['code' => 'GDG-001', 'name' => 'Gudang Pusat', 'type' => 'WAREHOUSE', 'status' => 'AKTIF', 'is_active' => true],
-            ['code' => 'CAB-001', 'name' => 'Toko Pusat', 'type' => 'STORE', 'status' => 'AKTIF', 'is_active' => true],
+            ['code' => 'CAB-001', 'name' => 'Cabang Pusat', 'type' => 'STORE', 'status' => 'AKTIF', 'is_active' => true],
             ['code' => 'CAB-002', 'name' => 'Cabang A', 'type' => 'STORE', 'status' => 'AKTIF', 'is_active' => true],
             ['code' => 'CAB-003', 'name' => 'Cabang B', 'type' => 'STORE', 'status' => 'AKTIF', 'is_active' => true],
         ];
@@ -854,8 +854,8 @@ class LocationStockService
         if (str_contains($lower, 'gudang') || $lower === 'dc' || str_contains($lower, 'logistik') || $lower === 'gdg-001' || $lower === 'loc-dc') {
             return ['gdg-001', 'loc-dc', 'gudang', 'dc'];
         }
-        if ($lower === 'pusat' || str_contains($lower, 'toko pusat') || str_contains($lower, 'minimarket pusat') || str_contains($lower, 'cabang pusat') || $lower === 'cab-001' || $lower === 'loc-01') {
-            return ['cab-001', 'loc-01', 'toko pusat', 'pusat'];
+        if ($lower === 'pusat' || str_contains($lower, 'cabang pusat') || str_contains($lower, 'toko pusat') || str_contains($lower, 'minimarket pusat') || $lower === 'cab-001' || $lower === 'loc-01') {
+            return ['cab-001', 'loc-01', 'cabang pusat', 'toko pusat', 'pusat'];
         }
         if (str_contains($lower, 'cabang a') || str_contains($lower, 'cabang 1') || str_contains($lower, 'sektor a') || $lower === 'cab-002' || $lower === 'loc-02') {
             return ['cab-002', 'loc-02', 'cabang a', 'cabang 1'];

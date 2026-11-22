@@ -66,9 +66,12 @@
                             method: d.payment_method,
                             methodLabel: d.payment_method === 'TUNAI' ? 'Uang Tunai' : (d.payment_method === 'QRIS' ? 'QRIS Dinamis' : (d.payment_method === 'KREDIT' ? 'Kredit Anggota (Piutang)' : (d.payment_method === 'CAMPURAN' ? 'Tunai + QRIS' : d.payment_method))),
                             paymentReference: d.payment_reference || null,
+                            is_over_limit: Boolean(d.is_over_limit),
+                            debt_status: d.debt_status || null,
                             member: d.member || null,
                             items: (d.items || []).map(it => ({
-                                name: it.name,
+                                name: it.name || it.product_name,
+                                coupon_number: it.coupon_number || it.serial_number || null,
                                 qty: it.qty,
                                 unit: it.unit || 'Pcs',
                                 price: it.unit_price,
@@ -140,7 +143,8 @@
                         paymentReference: d.paymentReference || null,
                         member: d.member || null,
                         items: (d.items || []).map(it => ({
-                            name: it.name,
+                            name: it.name || it.product_name,
+                            coupon_number: it.coupon_number || it.serial_number || null,
                             qty: it.qty,
                             unit: it.unit || 'Pcs',
                             price: it.price,
@@ -373,6 +377,13 @@ class="flex flex-col min-h-screen w-full bg-[#f4f6f8] font-sans antialiased text
                             <div class="font-bold text-[11.5px] uppercase tracking-tight leading-snug break-words"
                                  x-text="(idx + 1) + '. ' + item.name"></div>
 
+                            <!-- Line 1b: Coupon Number info on thermal receipt -->
+                            <template x-if="item.coupon_number || item.serial_number">
+                                <div class="text-[10px] font-mono font-bold text-neutral-800 pl-3">
+                                    No. Kupon: <span x-text="item.coupon_number || item.serial_number"></span>
+                                </div>
+                            </template>
+
                             <!-- Line 2: Qty x Price on left, Line Total on far right -->
                             <div class="flex justify-between items-baseline text-[11px] pl-3 text-neutral-900">
                                 <span class="font-mono text-neutral-800"
@@ -465,6 +476,11 @@ class="flex flex-col min-h-screen w-full bg-[#f4f6f8] font-sans antialiased text
                               x-text="paymentStatusText"></span>
                         <div class="flex-1 border-t border-dashed border-black"></div>
                     </div>
+                    <template x-if="receipt?.is_over_limit || receipt?.isOverLimit || receipt?.debt_status === 'MELEBIHI_LIMIT' || receipt?.debtStatus === 'MELEBIHI_LIMIT'">
+                        <div class="my-1.5 py-1 px-2 border-2 border-dashed border-black text-center font-black text-[11px] uppercase tracking-wider font-mono">
+                            *** STATUS: MELEBIHI LIMIT PIUTANG ***
+                        </div>
+                    </template>
                     <div class="border-t border-dashed border-black mt-1"></div>
                 </div>
 

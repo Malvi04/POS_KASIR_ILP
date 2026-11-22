@@ -169,6 +169,8 @@
                         this.syncStoreCatalogIncremental(branch, terminal, json.location || null);
                     }
                 }
+                // Preload available coupon units for POS cashier
+                this.loadCouponProductsInPos(false);
             } catch (e) {
                 // Silent fallback to branch cache
             }
@@ -349,6 +351,44 @@
             this.isLoadingUmkmPos = false;
         }
     },
+
+    isLoadingCouponPos: false,
+    async loadCouponProductsInPos(switchToKuponTab = true) {
+        if (this.isLoadingCouponPos) return;
+        this.isLoadingCouponPos = true;
+        try {
+            const res = await fetch('/api/pos/products/coupons', {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                }
+            });
+            const json = await res.json();
+            if (res.ok && json.success && Array.isArray(json.data)) {
+                const byKey = new Map();
+                (this.products || []).forEach(p => {
+                    if (p && (p.sku || p.barcode)) byKey.set(String(p.sku || p.barcode).toUpperCase(), p);
+                });
+                json.data.forEach(p => {
+                    if (p && (p.sku || p.barcode)) byKey.set(String(p.sku || p.barcode).toUpperCase(), p);
+                });
+                this.products = Array.from(byKey.values());
+                if (switchToKuponTab) {
+                    this.selectedCategory = 'Kupon';
+                    this.triggerPosToast(json.message || `Ditemukan ${json.data.length} kupon aktif di sistem!`, json.data.length > 0 ? 'success' : 'info');
+                }
+            } else if (switchToKuponTab) {
+                this.triggerPosToast(json.message || 'Gagal memuat data kupon.', 'error');
+            }
+        } catch (e) {
+            console.warn('Coupon fetch error in POS:', e);
+            if (switchToKuponTab) {
+                this.triggerPosToast('Gagal memuat kupon dari server.', 'error');
+            }
+        } finally {
+            this.isLoadingCouponPos = false;
+        }
+    },
     get visibleProducts() {
         return (this.filteredProducts || []).slice(0, this.displayLimit);
     },
@@ -364,6 +404,9 @@
             if (!p) return false;
             if (selected === 'produk umkm') {
                 if (!p.is_consignment) return false;
+            } else if (selected === 'kupon' || selected === 'kupon komoditas') {
+                const isKpn = Boolean(p.is_coupon || p.coupon_number || (p.category && (p.category.toLowerCase().includes('kupon') || p.category.toLowerCase().includes('voucher'))));
+                if (!isKpn) return false;
             } else if (selected !== 'semua') {
                 const pCat = (p.category || '').trim().toLowerCase();
                 if (pCat !== selected) return false;
@@ -373,7 +416,8 @@
                 const matchBarcode = (p.barcode || '').toLowerCase().includes(search);
                 const matchSku = (p.sku || '').toLowerCase().includes(search);
                 const matchSupplier = (p.supplier_name || '').toLowerCase().includes(search);
-                return matchName || matchBarcode || matchSku || matchSupplier;
+                const matchCoupon = (p.coupon_number || p.serial_number || '').toLowerCase().includes(search);
+                return matchName || matchBarcode || matchSku || matchSupplier || matchCoupon;
             }
             return true;
         });
@@ -727,14 +771,28 @@
 
     addToCart(p) {
         if (!p) return;
-        if ((Number(p.stock) || 0) <= 0) {
+
+        const isCoupon = Boolean(p.is_coupon || p.coupon_number || (p.category && (p.category.toLowerCase().includes('kupon') || p.category.toLowerCase().includes('voucher'))));
+        const couponNumber = p.coupon_number || p.serial_number || (p.barcode && String(p.barcode).startsWith('#KPN-') ? p.barcode : null);
+
+        if (!isCoupon && (Number(p.stock) || 0) <= 0) {
             this.triggerPosToast(`Stok [${p.name}] HABIS di Stock Toko lokasi ini.`, 'error');
             return;
         }
+
+        if (isCoupon && couponNumber) {
+            const alreadyInCart = this.cart.find(it => (it.coupon_number && it.coupon_number === couponNumber) || (it.barcode && it.barcode === couponNumber));
+            if (alreadyInCart) {
+                this.triggerPosToast(`Kupon [${couponNumber}] sudah ada di keranjang belanja.`, 'warning');
+                return;
+            }
+        }
+
         const targetSku = (p.sku || '').trim().toUpperCase();
         const targetBarcode = (p.barcode || '').trim();
 
         const existing = this.cart.find(it => {
+            if (isCoupon) return false;
             const itSku = (it.sku || '').trim().toUpperCase();
             const itBarcode = (it.barcode || '').trim();
             const matchSku = targetSku && itSku && targetSku === itSku;
@@ -752,27 +810,35 @@
                 category: p.category || '',
                 sku: p.sku || '',
                 barcode: p.barcode || '',
+                coupon_number: couponNumber,
+                serial_number: couponNumber,
+                is_coupon: isCoupon,
                 name: p.name || 'Produk',
                 originalPrice: Number(p.original_price || p.price) || 0,
                 price: Number(p.price) || 0,
                 memberPrice: Number(p.member_price || p.price) || 0,
                 qty: 1,
-                unit: p.unit || 'Pcs',
-                isTaxable: p.is_taxable !== false,
+                unit: p.unit || (isCoupon ? 'Lembar' : 'Pcs'),
+                isTaxable: p.is_taxable !== false && !isCoupon,
                 isNearExpired: Boolean(p.is_near_expired),
                 daysUntilExpiration: p.days_until_expiration,
                 clearanceDiscountPercent: Number(p.clearance_discount_percent) || 0,
                 clearanceWarningBadge: p.clearance_warning_badge || null,
-                promoDisabled: false
+                promoDisabled: Boolean(isCoupon || p.promoDisabled)
             });
         }
         this.saveCart();
         const discountNotice = p.is_near_expired ? ` (+Diskon Clearance ${p.clearance_discount_percent}%)` : '';
-        this.triggerPosToast(`+1 ${p.name}${discountNotice} ditambahkan`);
+        const couponNotice = couponNumber ? ` (No. Kupon: ${couponNumber})` : '';
+        this.triggerPosToast(`+1 ${p.name}${discountNotice}${couponNotice} ditambahkan`);
     },
 
     updateCartQty(index, delta) {
         if (this.cart[index]) {
+            if ((this.cart[index].is_coupon || this.cart[index].coupon_number) && delta > 0) {
+                this.triggerPosToast('Kupon dengan nomor seri unik hanya berjumlah 1 unit per kupon.', 'warning');
+                return;
+            }
             if (delta < 0 && this.cart[index].qty === 1) {
                 // If reducing 1 to 0, require Supervisor Void authorization
                 this.requestVoidItem(index);
@@ -1324,6 +1390,7 @@
             items: this.cart.map(it => ({
                 sku: it.sku,
                 barcode: it.barcode,
+                coupon_number: it.coupon_number || it.serial_number || null,
                 name: it.name,
                 qty: it.qty,
                 unit: it.unit || 'Pcs',
@@ -1394,6 +1461,9 @@
                     const promoDisc = (promoLine && !it.promoDisabled && this.promoEnabled) ? (promoLine.discount || 0) : 0;
                     return {
                         name: it.name,
+                        coupon_number: it.coupon_number || it.serial_number || null,
+                        serial_number: it.coupon_number || it.serial_number || null,
+                        is_coupon: Boolean(it.is_coupon || it.coupon_number),
                         qty: it.qty,
                         unit: it.unit || 'Pcs',
                         price: unitP,
@@ -1567,6 +1637,16 @@ class="flex w-full h-full relative text-gray-800">
 
                 <!-- Category Tabs -->
                 <div class="flex items-center gap-2 overflow-x-auto pb-3 scrollbar-hide shrink-0">
+                    <!-- Quick Kupon Filter & Load Button -->
+                    <button type="button"
+                            @click="loadCouponProductsInPos(true)"
+                            :class="(selectedCategory || '').trim().toLowerCase() === 'kupon' ? 'bg-[#0052cc] text-white shadow-xs' : 'bg-blue-50 border border-blue-200 text-[#0052cc] hover:bg-blue-100'"
+                            class="px-3.5 py-2 font-bold rounded-full text-xs transition-colors whitespace-nowrap cursor-pointer flex items-center gap-1.5 shrink-0"
+                            title="Tampilkan & Jual Kupon Komoditas">
+                        <span class="material-symbols-rounded text-[15px]" :class="isLoadingCouponPos ? 'animate-spin' : ''">confirmation_number</span>
+                        <span x-text="isLoadingCouponPos ? 'Memuat Kupon...' : 'Kupon'"></span>
+                    </button>
+
                     <!-- Quick UMKM Filter & Load Button -->
                     <button type="button"
                             @click="loadUmkmProductsInPos(true)"
@@ -1607,12 +1687,18 @@ class="flex w-full h-full relative text-gray-800">
                                         <span class="font-mono text-[10px] text-gray-400" x-text="p.sku"></span>
                                     </div>
                                     <h4 class="font-bold text-gray-900 text-xs leading-snug line-clamp-2 group-hover:text-[#0052cc] transition-colors" x-text="p.name"></h4>
+                                    <template x-if="p.coupon_number">
+                                        <p class="text-[10px] text-[#0052cc] font-mono font-bold mt-0.5 truncate flex items-center gap-1">
+                                            <span class="material-symbols-rounded text-[12px]">confirmation_number</span>
+                                            <span x-text="p.coupon_number"></span>
+                                        </p>
+                                    </template>
                                     <template x-if="p.is_consignment && p.supplier_name">
                                         <p class="text-[10px] text-amber-700 font-semibold mt-0.5 truncate" x-text="'Mitra: ' + p.supplier_name"></p>
                                     </template>
 
                                     <!-- Out of stock badge -->
-                                    <template x-if="(Number(p.stock) || 0) <= 0">
+                                    <template x-if="!p.is_coupon && (Number(p.stock) || 0) <= 0">
                                         <div class="mt-1">
                                             <span class="inline-flex items-center gap-1 text-[9.5px] font-black text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded">
                                                 STOK HABIS
@@ -1778,12 +1864,18 @@ class="flex w-full h-full relative text-gray-800">
                         </div>
                     </template>
 
-                    <template x-for="(item, idx) in cart" :key="item.sku">
+                    <template x-for="(item, idx) in cart" :key="item.coupon_number || item.sku || idx">
                         <div class="bg-white p-3 rounded-xl shadow-2xs border border-gray-200 flex gap-2.5 relative">
                             <div class="flex-1 flex flex-col justify-between">
                                 <div class="flex justify-between items-start gap-2">
                                     <div>
                                         <h4 class="font-bold text-gray-900 text-xs leading-snug" x-text="item.name"></h4>
+                                        <template x-if="item.coupon_number || item.serial_number">
+                                            <div class="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 bg-blue-50 border border-blue-200 text-[#0052cc] rounded text-[10px] font-mono font-bold">
+                                                <span class="material-symbols-rounded text-[12px]">confirmation_number</span>
+                                                <span x-text="'No. Kupon: ' + (item.coupon_number || item.serial_number)"></span>
+                                            </div>
+                                        </template>
                                         <template x-if="item.isNearExpired">
                                             <span class="text-[10px] text-rose-600 font-extrabold flex items-center gap-0.5 mt-0.5">
                                                 <span class="material-symbols-rounded text-[12px]">alarm</span>
@@ -1853,7 +1945,7 @@ class="flex w-full h-full relative text-gray-800">
                                     <div class="flex items-center bg-gray-100 rounded-lg p-0.5">
                                         <button type="button" @click="updateCartQty(idx, -1)" class="w-6 h-6 flex items-center justify-center text-gray-600 hover:bg-white rounded font-bold cursor-pointer transition-colors">-</button>
                                         <span class="w-7 text-center font-bold text-xs font-mono" x-text="item.qty"></span>
-                                        <button type="button" @click="updateCartQty(idx, 1)" class="w-6 h-6 flex items-center justify-center text-gray-600 hover:bg-white rounded font-bold cursor-pointer transition-colors">+</button>
+                                        <button type="button" @click="updateCartQty(idx, 1)" :disabled="item.coupon_number || item.is_coupon" :class="(item.coupon_number || item.is_coupon) ? 'opacity-30 cursor-not-allowed' : 'hover:bg-white cursor-pointer'" class="w-6 h-6 flex items-center justify-center text-gray-600 rounded font-bold transition-colors">+</button>
                                     </div>
                                 </div>
                             </div>

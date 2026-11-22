@@ -7,9 +7,9 @@
     ...cashierOpeningData(),
     members: [],
     branches: [
-        'Cabang 1 - Mill / Pabrik',
-        'Cabang 2 - Kebun Barat',
-        'Cabang 3 - Kebun Timur'
+        'Cabang Pusat',
+        'Cabang A',
+        'Cabang B'
     ],
     searchQuery: '',
     statusFilter: 'all',
@@ -26,6 +26,8 @@
     formMode: 'create', // 'create' | 'edit'
     formSubmitting: false,
     formErrors: {},
+    nextId: null,
+    nextCode: '',
     memberForm: {
         id: null,
         customer_id: '',
@@ -33,10 +35,10 @@
         kode_out: '',
         nik: '',
         name: '',
-        department: 'General Affairs',
-        division: 'General Affairs',
+        department: '',
+        division: '',
         address: '',
-        branch: 'Cabang 1 - Mill / Pabrik',
+        branch: 'Cabang Pusat',
         phone: '',
         fax: '',
         contact: '',
@@ -56,20 +58,44 @@
         setTimeout(() => { this.showToast = false; }, 3500);
     },
 
-    openCreateMemberModal() {
+    async fetchNextCode() {
+        try {
+            const res = await fetch('/api/members/next-code', {
+                headers: { 
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && json.data) {
+                    this.nextId = json.data.next_id;
+                    this.nextCode = json.data.next_code;
+                    if (this.formMode === 'create' && this.showFormModal) {
+                        this.memberForm.customer_id = json.data.next_id;
+                        this.memberForm.member_code = json.data.next_code;
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Failed to fetch next member code:', e);
+        }
+    },
+
+    async openCreateMemberModal() {
         this.formMode = 'create';
         this.formErrors = {};
         this.memberForm = {
             id: null,
-            customer_id: '',
-            member_code: '',
+            customer_id: this.nextId || '',
+            member_code: this.nextCode || '',
             kode_out: '',
             nik: '',
             name: '',
-            department: 'General Affairs',
-            division: 'General Affairs',
+            department: '',
+            division: '',
             address: '',
-            branch: this.branches[0] || 'Cabang 1 - Mill / Pabrik',
+            branch: this.branches[0] || 'Cabang Pusat',
             phone: '',
             fax: '',
             contact: '',
@@ -81,6 +107,7 @@
             notes: ''
         };
         this.showFormModal = true;
+        await this.fetchNextCode();
     },
 
     openEditMemberModal(m) {
@@ -113,9 +140,26 @@
     async submitMemberForm() {
         if (this.formSubmitting) return;
         this.formErrors = {};
-        if (!this.memberForm.name.trim()) this.formErrors.name = 'Nama lengkap wajib diisi.';
-        if (!this.memberForm.nik.trim()) this.formErrors.nik = 'NIK wajib diisi.';
+
+        // Only Nip, Nama, Dept, Divisi, Fax, Plafon are required manual fields
+        if (!this.memberForm.nik || !String(this.memberForm.nik).trim()) this.formErrors.nik = 'NIP / NIK wajib diisi.';
+        if (!this.memberForm.name || !String(this.memberForm.name).trim()) this.formErrors.name = 'Nama lengkap wajib diisi.';
+        if (!this.memberForm.department || !String(this.memberForm.department).trim()) this.formErrors.department = 'Departemen wajib diisi.';
+        if (!this.memberForm.division || !String(this.memberForm.division).trim()) this.formErrors.division = 'Divisi wajib diisi.';
+        if (!this.memberForm.fax || !String(this.memberForm.fax).trim()) this.formErrors.fax = 'Fax wajib diisi.';
+        if (this.memberForm.credit_limit === '' || this.memberForm.credit_limit === null || this.memberForm.credit_limit === undefined || isNaN(this.memberForm.credit_limit) || Number(this.memberForm.credit_limit) < 0) {
+            this.formErrors.credit_limit = 'Plafon kasbon wajib diisi.';
+        }
+
         if (Object.keys(this.formErrors).length > 0) return;
+
+        // Auto-assign ID & Kode if empty
+        if (!this.memberForm.customer_id && this.nextId) {
+            this.memberForm.customer_id = this.nextId;
+        }
+        if (!this.memberForm.member_code && this.nextCode) {
+            this.memberForm.member_code = this.nextCode;
+        }
 
         this.formSubmitting = true;
         const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('mbr-' + Date.now());
@@ -237,6 +281,10 @@
                 if (json.success && Array.isArray(json.data)) {
                     this.members = json.data;
                     if (json.branches) this.branches = json.branches;
+                    if (json.next_id || (json.meta && json.meta.next_id)) {
+                        this.nextId = json.next_id || json.meta.next_id;
+                        this.nextCode = json.next_code || json.meta.next_code;
+                    }
                     if (json.meta) {
                         this.currentPage = json.meta.current_page || 1;
                         this.lastPage = json.meta.last_page || 1;
@@ -258,9 +306,9 @@
 
     getBranchBadgeClass(b) {
         if (!b) return 'bg-gray-100 text-gray-700';
-        if (b.includes('Mill') || b.includes('Pabrik')) return 'bg-blue-50 text-[#0052cc] border-blue-200';
-        if (b.includes('Barat')) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-        if (b.includes('Timur')) return 'bg-purple-50 text-purple-700 border-purple-200';
+        if (b.includes('Pusat')) return 'bg-blue-50 text-[#0052cc] border-blue-200';
+        if (b.includes('Cabang A') || b.includes('Cabang 1') || b.includes('Barat')) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+        if (b.includes('Cabang B') || b.includes('Cabang 2') || b.includes('Timur')) return 'bg-purple-50 text-purple-700 border-purple-200';
         return 'bg-amber-50 text-amber-700 border-amber-200';
     }
 }"
@@ -313,7 +361,7 @@ class="flex flex-col h-screen w-full font-sans">
                         <div>
                             <h3 class="text-xs font-bold text-[#0052cc] uppercase tracking-wider">Akses Terpusat Transparan Multi-Cabang</h3>
                             <p class="text-xs text-blue-900 mt-0.5 leading-relaxed">
-                                Kasir di terminal ini dapat memeriksa dan memproses transaksi kasbon untuk karyawan dari seluruh unit kerja: <strong>Cabang 1 (Mill/Pabrik)</strong>, <strong>Cabang 2 (Kebun Barat)</strong>, dan <strong>Cabang 3 (Kebun Timur)</strong>.
+                                Kasir di terminal ini dapat memeriksa dan memproses transaksi kasbon untuk karyawan dari seluruh unit kerja: <strong>Cabang Pusat</strong>, <strong>Cabang A</strong>, dan <strong>Cabang B</strong>.
                             </p>
                         </div>
                     </div>
@@ -337,9 +385,9 @@ class="flex flex-col h-screen w-full font-sans">
                                 @change="fetchMembers()"
                                 class="w-full sm:w-auto px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 shadow-xs cursor-pointer focus:outline-none">
                             <option value="all">Semua 3 Cabang</option>
-                            <option value="Cabang 1 - Mill / Pabrik">Cabang 1 - Mill / Pabrik</option>
-                            <option value="Cabang 2 - Kebun Barat">Cabang 2 - Kebun Barat</option>
-                            <option value="Cabang 3 - Kebun Timur">Cabang 3 - Kebun Timur</option>
+                            <option value="Cabang Pusat">Cabang Pusat</option>
+                            <option value="Cabang A">Cabang A</option>
+                            <option value="Cabang B">Cabang B</option>
                         </select>
                     </div>
 
@@ -619,18 +667,26 @@ class="flex flex-col h-screen w-full font-sans">
             <form @submit.prevent="submitMemberForm()" class="space-y-3.5 mt-4 text-xs">
                 <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
                     <div>
-                        <label class="block font-bold text-gray-700 mb-1">ID</label>
+                        <label class="block font-bold text-gray-700 mb-1">
+                            ID <span class="text-[10px] font-semibold text-blue-600">(Otomatis)</span>
+                        </label>
                         <input type="text"
                                x-model="memberForm.customer_id"
                                placeholder="Auto / ID"
-                               class="w-full px-3 py-2 rounded-xl border border-gray-200 font-mono text-xs focus:border-[#0052cc] outline-none">
+                               :readonly="formMode === 'create'"
+                               class="w-full px-3 py-2 rounded-xl border border-gray-200 font-mono text-xs focus:border-[#0052cc] outline-none"
+                               :class="formMode === 'create' ? 'bg-gray-50 text-gray-700 font-bold' : ''">
                     </div>
                     <div>
-                        <label class="block font-bold text-gray-700 mb-1">Kode</label>
+                        <label class="block font-bold text-gray-700 mb-1">
+                            Kode <span class="text-[10px] font-semibold text-blue-600">(Otomatis)</span>
+                        </label>
                         <input type="text"
                                x-model="memberForm.member_code"
                                placeholder="01-0001"
-                               class="w-full px-3 py-2 rounded-xl border border-gray-200 font-mono text-xs focus:border-[#0052cc] outline-none">
+                               :readonly="formMode === 'create'"
+                               class="w-full px-3 py-2 rounded-xl border border-gray-200 font-mono text-xs focus:border-[#0052cc] outline-none"
+                               :class="formMode === 'create' ? 'bg-gray-50 text-gray-700 font-bold' : ''">
                     </div>
                     <div>
                         <label class="block font-bold text-gray-700 mb-1">KodeOut</label>
@@ -659,18 +715,20 @@ class="flex flex-col h-screen w-full font-sans">
                         <span class="text-rose-500 text-[10px]" x-text="formErrors.name"></span>
                     </div>
                     <div>
-                        <label class="block font-bold text-gray-700 mb-1">Dept</label>
+                        <label class="block font-bold text-gray-700 mb-1">Dept <span class="text-rose-500">*</span></label>
                         <input type="text"
                                x-model="memberForm.department"
                                placeholder="Departemen..."
                                class="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:border-[#0052cc] outline-none">
+                        <span class="text-rose-500 text-[10px]" x-text="formErrors.department"></span>
                     </div>
                     <div>
-                        <label class="block font-bold text-gray-700 mb-1">Divisi</label>
+                        <label class="block font-bold text-gray-700 mb-1">Divisi <span class="text-rose-500">*</span></label>
                         <input type="text"
                                x-model="memberForm.division"
                                placeholder="Divisi..."
                                class="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:border-[#0052cc] outline-none">
+                        <span class="text-rose-500 text-[10px]" x-text="formErrors.division"></span>
                     </div>
                 </div>
 
@@ -690,11 +748,12 @@ class="flex flex-col h-screen w-full font-sans">
                                class="w-full px-3 py-2 rounded-xl border border-gray-200 font-mono text-xs focus:border-[#0052cc] outline-none">
                     </div>
                     <div>
-                        <label class="block font-bold text-gray-700 mb-1">Fax</label>
+                        <label class="block font-bold text-gray-700 mb-1">Fax <span class="text-rose-500">*</span></label>
                         <input type="text"
                                x-model="memberForm.fax"
                                placeholder="I/22"
                                class="w-full px-3 py-2 rounded-xl border border-gray-200 font-mono text-xs focus:border-[#0052cc] outline-none">
+                        <span class="text-rose-500 text-[10px]" x-text="formErrors.fax"></span>
                     </div>
                     <div>
                         <label class="block font-bold text-gray-700 mb-1">Contact</label>
@@ -721,12 +780,13 @@ class="flex flex-col h-screen w-full font-sans">
                                class="w-full px-3 py-2 rounded-xl border border-gray-200 font-mono text-xs focus:border-[#0052cc] outline-none">
                     </div>
                     <div>
-                        <label class="block font-bold text-gray-700 mb-1">Plafon (Rp)</label>
+                        <label class="block font-bold text-gray-700 mb-1">Plafon (Rp) <span class="text-rose-500">*</span></label>
                         <input type="number"
                                x-model="memberForm.credit_limit"
                                min="0"
                                step="50000"
                                class="w-full px-3 py-2 rounded-xl border border-gray-200 font-mono text-xs focus:border-[#0052cc] outline-none">
+                        <span class="text-rose-500 text-[10px]" x-text="formErrors.credit_limit"></span>
                     </div>
                     <div>
                         <label class="block font-bold text-gray-700 mb-1">NoRekening</label>
@@ -738,9 +798,9 @@ class="flex flex-col h-screen w-full font-sans">
                     <div>
                         <label class="block font-bold text-gray-700 mb-1">Cabang Penugasan</label>
                         <select x-model="memberForm.branch" class="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-xs font-semibold focus:border-[#0052cc] outline-none cursor-pointer">
-                            <option value="Cabang 1 - Mill / Pabrik">Cabang 1 - Mill / Pabrik</option>
-                            <option value="Cabang 2 - Kebun Barat">Cabang 2 - Kebun Barat</option>
-                            <option value="Cabang 3 - Kebun Timur">Cabang 3 - Kebun Timur</option>
+                            <option value="Cabang Pusat">Cabang Pusat</option>
+                            <option value="Cabang A">Cabang A</option>
+                            <option value="Cabang B">Cabang B</option>
                         </select>
                     </div>
                 </div>

@@ -172,8 +172,8 @@
 
     async saveNewKupon() {
         if (this.isSavingKupon) return;
-        if (!this.formKupon.code || !this.formKupon.recipientName) {
-            alert('Mohon lengkapi nomor seri kupon dan nama penerima!');
+        if (!this.formKupon.code) {
+            alert('Mohon lengkapi nomor seri kupon!');
             return;
         }
 
@@ -183,7 +183,7 @@
             const payload = {
                 category: this.formKupon.category,
                 serial_number: this.formKupon.code.toUpperCase().trim(),
-                recipient_name: this.formKupon.recipientName.trim(),
+                recipient_name: this.formKupon.recipientName ? this.formKupon.recipientName.trim() : '-',
                 recipient_nik: this.formKupon.recipientNik ? this.formKupon.recipientNik.trim() : null,
                 recipient_dept: this.formKupon.recipientDept || 'Operasional Toko',
                 volume: this.formKupon.volume || '1 Unit',
@@ -697,25 +697,6 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                placeholder="Contoh: #KPN-BBM-9921"
                                required
                                class="w-full px-3.5 py-2 border border-gray-300 rounded-xl font-mono uppercase focus:outline-none focus:border-[#0052cc]" />
-                    </div>
-
-                    <!-- Penerima -->
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="font-bold text-gray-700 block mb-1">Nama Penerima <span class="text-red-500">*</span></label>
-                            <input type="text"
-                                   x-model="formKupon.recipientName"
-                                   placeholder="Nama karyawan / anggota"
-                                   required
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-[#0052cc]" />
-                        </div>
-                        <div>
-                            <label class="font-bold text-gray-700 block mb-1">NIK / ID Karyawan</label>
-                            <input type="text"
-                                   x-model="formKupon.recipientNik"
-                                   placeholder="Nomor NIK"
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-xl font-mono focus:outline-none focus:border-[#0052cc]" />
-                        </div>
                     </div>
 
                     <!-- Volume, Kuota Lembar Gudang, & Nilai -->

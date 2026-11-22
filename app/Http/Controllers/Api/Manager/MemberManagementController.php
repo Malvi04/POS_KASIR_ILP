@@ -109,6 +109,7 @@ class MemberManagementController extends Controller
 
         // Paginated results
         $paginated = $query->orderBy($sortBy, $sortOrder)->paginate($perPage);
+        $nextInfo = self::calculateNextIdAndCode();
 
         return response()->json([
             'success' => true,
@@ -121,7 +122,11 @@ class MemberManagementController extends Controller
                 'last_page' => $paginated->lastPage(),
                 'per_page' => $paginated->perPage(),
                 'total' => $paginated->total(),
+                'next_id' => $nextInfo['next_id'],
+                'next_code' => $nextInfo['next_code'],
             ],
+            'next_id' => $nextInfo['next_id'],
+            'next_code' => $nextInfo['next_code'],
         ]);
     }
 
@@ -178,6 +183,55 @@ class MemberManagementController extends Controller
     }
 
     /**
+     * Calculate next auto-incrementing ID and member code based on latest member record.
+     */
+    public static function calculateNextIdAndCode(): array
+    {
+        $maxId = (int) (Member::max('id') ?? 0) + 1;
+
+        $latest = Member::whereNotNull('member_code')
+            ->where('member_code', '!=', '')
+            ->orderBy('id', 'desc')
+            ->first();
+
+        $latestCode = $latest ? trim((string) $latest->member_code) : '';
+        $nextCode = 'MBR-' . Str::padLeft((string) $maxId, 4, '0');
+
+        if ($latestCode && preg_match('/^(.*?)(\d+)$/', $latestCode, $m)) {
+            $prefix = $m[1];
+            $num = $m[2];
+            $nextNum = (int) $num + 1;
+            $candidate = $prefix . Str::padLeft((string) $nextNum, strlen($num), '0');
+
+            while (Member::where('member_code', $candidate)->exists()) {
+                $nextNum++;
+                $candidate = $prefix . Str::padLeft((string) $nextNum, strlen($num), '0');
+            }
+            $nextCode = $candidate;
+        }
+
+        return [
+            'next_id' => $maxId,
+            'next_code' => $nextCode,
+            'latest_id' => $latest?->id ?? null,
+            'latest_code' => $latestCode,
+        ];
+    }
+
+    /**
+     * API endpoint to get next available member ID and code for auto-filling form.
+     */
+    public function nextCode(Request $request): JsonResponse
+    {
+        $next = self::calculateNextIdAndCode();
+
+        return response()->json([
+            'success' => true,
+            'data' => $next,
+        ]);
+    }
+
+    /**
      * Store new member.
      */
     public function store(Request $request): JsonResponse
@@ -205,12 +259,18 @@ class MemberManagementController extends Controller
         ]);
 
         return DB::transaction(function () use ($validated, $request) {
+            $next = self::calculateNextIdAndCode();
+
+            $customerId = !empty($validated['customer_id'])
+                ? trim((string) $validated['customer_id'])
+                : (string) $next['next_id'];
+
             $memberCode = !empty($validated['member_code'])
-                ? trim($validated['member_code'])
-                : ('MBR-' . Str::padLeft((string) (Member::max('id') + 1), 4, '0'));
+                ? trim((string) $validated['member_code'])
+                : $next['next_code'];
 
             $member = Member::create([
-                'customer_id' => $validated['customer_id'] ?? null,
+                'customer_id' => $customerId,
                 'member_code' => $memberCode,
                 'kode_out' => $validated['kode_out'] ?? null,
                 'nik' => $validated['nik'],
@@ -218,7 +278,7 @@ class MemberManagementController extends Controller
                 'department' => $validated['department'],
                 'division' => $validated['division'] ?? $validated['department'],
                 'address' => $validated['address'] ?? null,
-                'branch' => $validated['branch'] ?? 'Cabang 1 - Mill / Pabrik',
+                'branch' => $validated['branch'] ?? 'Cabang Pusat',
                 'phone' => $validated['phone'] ?? null,
                 'fax' => $validated['fax'] ?? null,
                 'contact' => $validated['contact'] ?? null,
@@ -228,7 +288,7 @@ class MemberManagementController extends Controller
                 'join_date' => $validated['join_date'] ?? now()->toDateString(),
                 'credit_limit' => (float) $validated['credit_limit'],
                 'current_debt' => 0,
-                'status' => $validated['status'],
+                'status' => $validated['status'] ?? 'AKTIF',
                 'notes' => $validated['notes'] ?? 'Pendaftaran anggota baru',
             ]);
 

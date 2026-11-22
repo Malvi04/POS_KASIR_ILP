@@ -76,7 +76,7 @@ class DatabaseSeeder extends Seeder
             'void_require_supervisor_pin' => ['value' => '1', 'group' => 'security'],
             'manual_discount_require_pin' => ['value' => '1', 'group' => 'security'],
             'credit_limit_default' => ['value' => '2500000', 'group' => 'credit'],
-            'branches_list' => ['value' => json_encode(['Pusat']), 'group' => 'store'],
+            'branches_list' => ['value' => json_encode(['Cabang Pusat', 'Cabang A', 'Cabang B']), 'group' => 'store'],
         ];
 
         foreach ($defaultSettings as $key => $data) {
@@ -139,7 +139,7 @@ class DatabaseSeeder extends Seeder
         if (!app()->runningUnitTests() && Location::count() === 0) {
             $defaultLocations = [
                 ['code' => 'GDG-001', 'name' => 'Gudang Pusat', 'type' => 'WAREHOUSE', 'status' => 'AKTIF', 'is_active' => true],
-                ['code' => 'CAB-001', 'name' => 'Toko Pusat', 'type' => 'STORE', 'status' => 'AKTIF', 'is_active' => true],
+                ['code' => 'CAB-001', 'name' => 'Cabang Pusat', 'type' => 'STORE', 'status' => 'AKTIF', 'is_active' => true],
                 ['code' => 'CAB-002', 'name' => 'Cabang A', 'type' => 'STORE', 'status' => 'AKTIF', 'is_active' => true],
                 ['code' => 'CAB-003', 'name' => 'Cabang B', 'type' => 'STORE', 'status' => 'AKTIF', 'is_active' => true],
             ];

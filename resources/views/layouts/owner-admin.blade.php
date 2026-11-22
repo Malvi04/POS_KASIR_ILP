@@ -14,13 +14,14 @@
          toastType: 'info',
          showToast: false,
          triggerToast(msg, type = 'info') {
+             if (!msg || typeof msg !== 'string' || !msg.trim()) return;
              this.toastMessage = msg;
              this.toastType = type;
              this.showToast = true;
              setTimeout(() => { this.showToast = false; }, 3200);
          }
      }"
-     x-init="window.triggerToast = (msg, type = 'info') => triggerToast(msg, type)">
+     x-init="(() => { window.triggerToast = (msg, type = 'info') => { if (msg) triggerToast(msg, type); }; })()">
 
     <!-- Shared Sidebar -->
     <x-admin.sidebar :active="$active" />
@@ -37,7 +38,7 @@
 
             <!-- Global Toast Notification Banner -->
             <div x-cloak 
-                 x-show="showToast" 
+                 x-show="showToast && !!toastMessage" 
                  x-transition:enter="transition ease-out duration-300"
                  x-transition:enter-start="opacity-0 translate-y-3"
                  x-transition:enter-end="opacity-100 translate-y-0"

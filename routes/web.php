@@ -214,6 +214,10 @@ Route::middleware(['auth.web:manager'])->group(function () {
         return view('manager.member-detail');
     })->name('manager.member-detail');
 
+    Route::get('/manager/piutang', function () {
+        return view('manager.piutang');
+    })->name('manager.piutang');
+
     Route::get('/manager/umkm-partners', function () {
         return view('manager.umkm-partners');
     })->name('manager.umkm-partners');
@@ -271,6 +275,10 @@ Route::middleware(['auth.web:manager'])->group(function () {
     Route::get('/member-detail', function () {
         return view('manager.member-detail');
     });
+
+    Route::get('/piutang', function () {
+        return view('manager.piutang');
+    })->name('piutang');
 
     Route::get('/umkm-partners', function () {
         if (request('role') === 'owner') {

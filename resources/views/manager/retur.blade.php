@@ -815,13 +815,6 @@ class="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-800 overflow-hidde
                 <!-- Title Header & Breadcrumb -->
                 <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
                     <div>
-                        <div class="flex flex-wrap items-center gap-1.5 text-[10px] font-extrabold text-slate-400 tracking-wider uppercase mb-1.5">
-                            <span>OPERASIONAL CABANG</span>
-                            <span class="material-symbols-rounded text-[13px]">chevron_right</span>
-                            <span>INVENTARIS &amp; LOGISTIK</span>
-                            <span class="material-symbols-rounded text-[13px]">chevron_right</span>
-                            <span class="text-[#0052cc]">MANAJEMEN RETUR BARANG</span>
-                        </div>
                         <div class="flex flex-wrap items-center gap-3">
                             <h1 class="text-[24px] lg:text-[26px] font-black text-[#0f172a] tracking-tight leading-tight">Manajemen Retur Barang Toko ke Gudang</h1>
                             <span class="inline-flex items-center gap-1.5 bg-[#dbeafe] text-[#1e40af] text-[12px] font-extrabold px-3 py-1 rounded-full border border-blue-200/80 shadow-2xs">

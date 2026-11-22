@@ -30,8 +30,17 @@ class AccountingReportController extends Controller
             $startDate = $request->query('date', $today->toDateString());
             $endDate = $startDate;
         } elseif ($period === 'weekly' || $period === 'mingguan') {
-            $startDate = $request->query('start_date', $today->copy()->startOfWeek()->toDateString());
-            $endDate = $request->query('end_date', $today->copy()->endOfWeek()->toDateString());
+            if ($request->filled('start_date') && $request->filled('end_date')) {
+                $startDate = $request->query('start_date');
+                $endDate = $request->query('end_date');
+            } elseif ($request->filled('date')) {
+                $ref = Carbon::parse($request->query('date'));
+                $startDate = $ref->copy()->startOfWeek()->toDateString();
+                $endDate = $ref->copy()->endOfWeek()->toDateString();
+            } else {
+                $startDate = $today->copy()->startOfWeek()->toDateString();
+                $endDate = $today->copy()->endOfWeek()->toDateString();
+            }
         } elseif ($period === 'monthly' || $period === 'bulanan') {
             $month = $request->query('month', $today->format('Y-m'));
             $startDate = Carbon::parse($month . '-01')->startOfMonth()->toDateString();
@@ -62,6 +71,8 @@ class AccountingReportController extends Controller
         $locationIdFilter = $request->integer('location_id') ?: null;
         $shiftId = $request->query('shift_id');
         $cashierNik = $request->query('cashier_nik');
+        $terminalCode = $request->query('terminal_code', $request->query('terminal'));
+        $search = trim((string) $request->query('search', $request->query('q', '')));
 
         [$startDate, $endDate] = $this->resolveReportDateRange($request);
 
@@ -70,6 +81,10 @@ class AccountingReportController extends Controller
             ->whereDate('created_at', '>=', $startDate)
             ->whereDate('created_at', '<=', $endDate)
             ->whereIn('status', ['SUCCESS', 'COMPLETED']);
+
+        if ($terminalCode && $terminalCode !== 'all') {
+            $query->where('terminal_code', $terminalCode);
+        }
 
         if ($shiftId) {
             $query->where('shift_id', $shiftId);
@@ -81,7 +96,19 @@ class AccountingReportController extends Controller
             });
         }
 
-        $rawTransactions = $query->with(['items', 'location', 'shift'])->orderByDesc('created_at')->get();
+        if ($search !== '') {
+            $query->where(function ($cq) use ($search) {
+                $cq->where('cashier_name', 'like', "%{$search}%")
+                   ->orWhere('terminal_code', 'like', "%{$search}%")
+                   ->orWhereHas('user', function ($uq) use ($search) {
+                       $uq->where('username', 'like', "%{$search}%")
+                          ->orWhere('name', 'like', "%{$search}%")
+                          ->orWhere('nik', 'like', "%{$search}%");
+                   });
+            });
+        }
+
+        $rawTransactions = $query->with(['items', 'location', 'shift', 'user'])->orderByDesc('created_at')->get();
         $stockService = app(LocationStockService::class);
         $locations = Location::where('type', '!=', 'WAREHOUSE')->orderBy('code')->get();
         $filterResolution = $stockService->resolveReportFilterLocation($branch, $locationIdFilter);
@@ -111,7 +138,68 @@ class AccountingReportController extends Controller
         $creditSales = round((float) $transactions->where('payment_method', 'KREDIT')->sum('grand_total'), 2);
         $mixedSales = round((float) $transactions->where('payment_method', 'CAMPURAN')->sum('grand_total'), 2);
 
-        // 2. Breakdown Per-Shift Kasir (Batch load shifts to eliminate N+1 queries)
+        // 2. Breakdown Per-Terminal Kasir
+        $terminalsBreakdown = [];
+        $terminalsGroup = $transactions->groupBy(function ($tx) {
+            return $tx->terminal_code ?: ($tx->shift?->terminal_code ?: 'POS-01');
+        });
+
+        $sortedTerminals = $terminalsGroup->keys()->sort()->values();
+        foreach ($sortedTerminals as $tCode) {
+            $tTxs = $terminalsGroup->get($tCode);
+            $tTotal = round((float) $tTxs->sum('grand_total'), 2);
+            $tCash = round((float) $tTxs->where('payment_method', 'TUNAI')->sum('grand_total'), 2);
+            $tNonCash = round($tTotal - $tCash, 2);
+            $tBranch = $tTxs->first()->location?->name ?? ($tTxs->first()->branch ?? '-');
+
+            $terminalsBreakdown[] = [
+                'terminal_code' => $tCode,
+                'branch' => $tBranch,
+                'transaction_count' => $tTxs->count(),
+                'cash_sales' => $tCash,
+                'non_cash_sales' => $tNonCash,
+                'total_sales' => $tTotal,
+                'contribution_percent' => $totalGrandTotal > 0 ? round(($tTotal / $totalGrandTotal) * 100, 2) : 0,
+            ];
+        }
+
+        // 3. Breakdown Per-Akun Kasir
+        $cashiersBreakdown = [];
+        $cashiersGroup = $transactions->groupBy(function ($tx) {
+            return $tx->user_id
+                ? ('USER_' . $tx->user_id)
+                : ($tx->cashier_name ?: ($tx->shift?->cashier_name ?: 'Kasir'));
+        });
+
+        foreach ($cashiersGroup as $cKey => $cTxs) {
+            $sampleTx = $cTxs->first();
+            $cName = $sampleTx->cashier_name ?: ($sampleTx->user?->name ?: ($sampleTx->shift?->cashier_name ?: 'Kasir'));
+            $cUsername = $sampleTx->user?->username ?? ($sampleTx->cashier_nik ?? '-');
+            $cNik = $sampleTx->user?->nik ?? ($sampleTx->shift?->cashier_nik ?? '-');
+            $cBranch = $sampleTx->location?->name ?? ($sampleTx->branch ?? ($sampleTx->user?->branch ?? '-'));
+            $cTotal = round((float) $cTxs->sum('grand_total'), 2);
+            $cCash = round((float) $cTxs->where('payment_method', 'TUNAI')->sum('grand_total'), 2);
+            $cNonCash = round($cTotal - $cCash, 2);
+            $cCount = $cTxs->count();
+            $cAvg = $cCount > 0 ? round($cTotal / $cCount, 2) : 0;
+
+            $cashiersBreakdown[] = [
+                'cashier_name' => $cName,
+                'cashier_username' => $cUsername,
+                'cashier_nik' => $cNik,
+                'branch' => $cBranch,
+                'transaction_count' => $cCount,
+                'cash_sales' => $cCash,
+                'non_cash_sales' => $cNonCash,
+                'total_sales' => $cTotal,
+                'average_sales' => $cAvg,
+                'contribution_percent' => $totalGrandTotal > 0 ? round(($cTotal / $totalGrandTotal) * 100, 2) : 0,
+            ];
+        }
+
+        usort($cashiersBreakdown, fn ($a, $b) => $b['total_sales'] <=> $a['total_sales']);
+
+        // 4. Breakdown Per-Shift Kasir (Legacy fallback)
         $shiftsData = [];
         $shiftsGroup = $transactions->groupBy('shift_id');
         $shiftIds = $shiftsGroup->keys()->filter()->values()->all();
@@ -176,6 +264,8 @@ class AccountingReportController extends Controller
                 'branch' => $branch,
                 'location_id' => $locationIdFilter,
                 'shift_id' => $shiftId,
+                'terminal_code' => $terminalCode,
+                'search' => $search,
             ],
             'summary' => [
                 'gross_sales' => $totalGrossSales,
@@ -191,6 +281,8 @@ class AccountingReportController extends Controller
                     'campuran' => $mixedSales,
                 ],
             ],
+            'terminals_breakdown' => $terminalsBreakdown,
+            'cashiers_breakdown' => $cashiersBreakdown,
             'shifts_breakdown' => $shiftsData,
             'branch_breakdown' => $branchBreakdown,
             'excluded_warehouse_transactions' => $stockService->summarizeExcludedTransactions($partitioned['warehouse_transactions']),

@@ -931,8 +931,8 @@ class MemberExcelService
 
         $samples = [
             ['', '0', '', '0', 'Umum', 'Umum', 'Umum', '', '', '', '', '', '', 1000000, '', ''],
-            ['1', '01-0001', '', '199701002', 'Ir. H. Mudjiono', 'Central Personnel', 'Central Personnel', '', '', 'I/22', '', '', '', 1000000, '', 'Cabang 1 - Mill / Pabrik'],
-            ['2', '01-0002', '', '199501093', 'Suparlan, SE', 'Central Personnel', 'Central Personnel', '', '', 'III/17', '', '', '', 1000000, '', 'Cabang 1 - Mill / Pabrik'],
+            ['1', '01-0001', '', '199701002', 'Ir. H. Mudjiono', 'Central Personnel', 'Central Personnel', '', '', 'I/22', '', '', '', 1000000, '', 'Cabang Pusat'],
+            ['2', '01-0002', '', '199501093', 'Suparlan, SE', 'Central Personnel', 'Central Personnel', '', '', 'III/17', '', '', '', 1000000, '', 'Cabang Pusat'],
         ];
 
         foreach ($samples as $rIdx => $sampleRow) {

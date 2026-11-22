@@ -258,7 +258,7 @@ class MemberDebtReportController extends Controller
             fputcsv($output, ['UNTUK PEMOTONGAN GAJI (PAYROLL DEBT DEDUCTION)']);
             fputcsv($output, []);
             fputcsv($output, ['Periode Pemotongan Gaji', $startDate->translatedFormat('F Y') . ' (' . $month . ')']);
-            fputcsv($output, ['Filter Cabang', $branch !== '' && $branch !== 'all' ? $branch : 'Semua 3 Cabang (Pusat & Kebun)']);
+            fputcsv($output, ['Filter Cabang', $branch !== '' && $branch !== 'all' ? $branch : 'Semua 3 Cabang (Cabang Pusat, Cabang A, Cabang B)']);
             fputcsv($output, ['Filter Departemen', $department !== '' && $department !== 'all' ? $department : 'Semua Departemen']);
             fputcsv($output, ['Tanggal Generate File', Carbon::now()->format('d/m/Y H:i:s') . ' WIB']);
             fputcsv($output, []);

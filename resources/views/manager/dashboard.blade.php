@@ -282,7 +282,6 @@ class="flex h-screen w-full bg-[#f4f7fb] font-sans text-gray-800 overflow-hidden
                                 <th class="py-3 px-4">Nomor Terminal</th>
                                 <th class="py-3 px-4">Total Transaksi Hari Ini</th>
                                 <th class="py-3 px-4">Status</th>
-                                <th class="py-3 px-4 text-center">Navigasi</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100">
@@ -302,17 +301,11 @@ class="flex h-screen w-full bg-[#f4f7fb] font-sans text-gray-800 overflow-hidden
                                             <span class="font-bold" :class="cashier.status === 'Aktif' ? 'text-green-600' : 'text-gray-500'" x-text="cashier.status"></span>
                                         </div>
                                     </td>
-                                    <td class="py-3 px-4 text-center whitespace-nowrap">
-                                        <a href="/kasir/transaksi" class="inline-flex items-center gap-1 text-[#0052cc] hover:underline font-bold text-xs">
-                                            Lihat Sesi
-                                            <span class="material-symbols-rounded text-sm">arrow_forward</span>
-                                        </a>
-                                    </td>
                                 </tr>
                             </template>
                             <template x-if="cashierList.length === 0">
                                 <tr>
-                                    <td colspan="5" class="py-8 text-center text-slate-400 text-xs">
+                                    <td colspan="4" class="py-8 text-center text-slate-400 text-xs">
                                         <span class="material-symbols-rounded text-2xl text-slate-300 block mb-1">person_off</span>
                                         Belum ada sesi kasir aktif hari ini.
                                     </td>

@@ -255,7 +255,7 @@
                                     </div>
                                     <p class="leading-relaxed text-[12px] text-slate-700"
                                        x-text="recoveryType === 'password' 
-                                            ? 'Password portal digunakan saat awal masuk aplikasi di web. Karena akun kasir terintegrasi dengan identitas anggota koperasi pabrik, reset password tidak dilakukan via tautan email publik melainkan melalui verifikasi tatap muka oleh Manager Cabang.' 
+                                            ? 'Password portal digunakan saat awal masuk aplikasi di web. Karena akun kasir terintegrasi dengan identitas anggota koperasi, reset password tidak dilakukan via tautan email publik melainkan melalui verifikasi tatap muka oleh Manager Cabang.' 
                                             : 'PIN 6-digit digunakan saat verifikasi serah terima kas atau pembukaan sesi kasir di terminal POS. Jika lupa PIN, Manager Cabang yang bertugas dapat menerbitkan PIN sementara baru setelah memverifikasi identitas Anda.'">
                                     </p>
                                 </div>
@@ -269,7 +269,7 @@
                                             <span class="w-6 h-6 rounded-full bg-[#0052cc] text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">1</span>
                                             <div>
                                                 <span class="font-bold text-slate-900 block text-xs">Temui Manager Cabang yang Bertugas</span>
-                                                <p class="text-[11.5px] text-slate-600 mt-0.5">Kunjungi kantor operasional gerai minimarket tempat Anda ditugaskan (Pusat, Cabang A, atau Cabang B).</p>
+                                                <p class="text-[11.5px] text-slate-600 mt-0.5">Kunjungi kantor operasional gerai minimarket tempat Anda ditugaskan (Cabang Pusat, Cabang A, atau Cabang B).</p>
                                             </div>
                                         </div>
 
@@ -277,7 +277,7 @@
                                             <span class="w-6 h-6 rounded-full bg-[#0052cc] text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">2</span>
                                             <div>
                                                 <span class="font-bold text-slate-900 block text-xs">Bawa Bukti Identitas Anggota</span>
-                                                <p class="text-[11.5px] text-slate-600 mt-0.5">Siapkan Kartu Tanda Anggota (KTA) Koperasi atau ID Karyawan Pabrik dengan NIK terdaftar untuk verifikasi fisik.</p>
+                                                <p class="text-[11.5px] text-slate-600 mt-0.5">Siapkan Kartu Tanda Anggota (KTA) Koperasi atau ID Karyawan dengan NIK terdaftar untuk verifikasi fisik.</p>
                                             </div>
                                         </div>
 

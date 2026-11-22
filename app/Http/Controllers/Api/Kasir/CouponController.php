@@ -24,17 +24,41 @@ class CouponController extends Controller
         $branch = trim($request->query('branch', ''));
         $perPage = max(5, min(100, (int) $request->query('per_page', 50)));
 
+        $authUser = \Illuminate\Support\Facades\Auth::user();
+        $isKasir = $authUser && $authUser->isKasir();
+        if ($isKasir && empty($branch)) {
+            $branch = $authUser->branch ?: ($request->header('X-Branch') ?: 'Cabang Pusat');
+        }
+
+        $locationId = $request->integer('location_id') ?: ($request->header('X-Location-Id') ? (int) $request->header('X-Location-Id') : null);
+        /** @var \App\Services\LocationStockService $stockService */
+        $stockService = app(\App\Services\LocationStockService::class);
+        $targetLoc = null;
+        if ($locationId || ($branch !== '' && $branch !== 'all')) {
+            $targetLoc = $stockService->resolveLocation($locationId, $branch ?: null, null, $authUser, 'STORE');
+        }
+
         $query = CouponUnit::with(['redemptions.redeemedByUser', 'product', 'location'])->latest('id');
 
         if ($category !== '' && $category !== 'all') {
             $query->where('category', strtolower($category));
         }
 
-        if ($branch !== '' && $branch !== 'all') {
+        if ($targetLoc) {
+            $query->where(function ($q) use ($targetLoc) {
+                $q->where('location_id', $targetLoc->id)
+                  ->orWhere('branch', $targetLoc->name);
+            });
+        } elseif ($branch !== '' && $branch !== 'all') {
             $query->where(function ($q) use ($branch) {
                 $q->where('branch', 'like', "%{$branch}%")
                   ->orWhereHas('location', fn($lq) => $lq->where('name', 'like', "%{$branch}%"));
             });
+        } elseif ($isKasir) {
+            $query->where(function ($q) {
+                $q->whereNotNull('location_id')
+                  ->where('location_id', '!=', 1);
+            })->where('branch', '!=', 'Gudang Pusat');
         }
 
         if ($status !== '' && $status !== 'all') {
@@ -179,7 +203,7 @@ class CouponController extends Controller
             ->orderBy('name', 'asc')
             ->get();
 
-        $branches = ['Pusat', 'Cabang A', 'Cabang B'];
+        $branches = ['Cabang Pusat', 'Cabang A', 'Cabang B'];
         foreach ($locations as $loc) {
             if (!in_array($loc->name, $branches)) {
                 $branches[] = $loc->name;
@@ -213,7 +237,7 @@ class CouponController extends Controller
             'quota' => 'nullable|integer|min:1',
             'category' => 'required|string|max:50',
             'serial_number' => 'nullable|string|max:100|unique:coupon_units,serial_number',
-            'recipient_name' => 'required|string|max:150',
+            'recipient_name' => 'nullable|string|max:150',
             'recipient_nik' => 'nullable|string|max:50',
             'recipient_dept' => 'nullable|string|max:100',
             'vehicle_no' => 'nullable|string|max:50',
@@ -307,16 +331,18 @@ class CouponController extends Controller
         }
 
         $notes = $validated['notes'] ?? ($product ? "Kupon penukaran produk: {$product->name}" : null);
+        $initLocId = $warehouseLoc?->id ?? 1;
+        $initBranchName = $warehouseLoc?->name ?? 'Gudang Pusat';
 
         $coupon = CouponUnit::create([
             'product_id' => $product ? $product->id : null,
-            'location_id' => $warehouseLoc?->id,
-            'branch' => $validated['branch'] ?? ($warehouseLoc?->name ?? 'Pusat'),
+            'location_id' => $initLocId,
+            'branch' => $initBranchName,
             'quota' => $quota,
             'allocated_by' => \Illuminate\Support\Facades\Auth::id(),
             'category' => $catKey,
             'serial_number' => $serial,
-            'recipient_name' => $validated['recipient_name'],
+            'recipient_name' => $validated['recipient_name'] ?? '-',
             'recipient_nik' => $validated['recipient_nik'] ?? null,
             'recipient_dept' => $validated['recipient_dept'] ?? 'Operasional Toko',
             'vehicle_no' => $validated['vehicle_no'] ?? null,

@@ -36,6 +36,8 @@ class Transaction extends Model
         'split_cash',
         'split_non_cash',
         'status',
+        'is_over_limit',
+        'debt_status',
         'voided_at',
         'voided_by',
         'void_reason',
@@ -50,6 +52,7 @@ class Transaction extends Model
         'change_returned' => 'float',
         'split_cash' => 'float',
         'split_non_cash' => 'float',
+        'is_over_limit' => 'boolean',
         'voided_at' => 'datetime',
     ];
 

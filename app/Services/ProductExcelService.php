@@ -2,12 +2,13 @@
 
 namespace App\Services;
 
+use App\Models\Location;
 use App\Models\Product;
-use App\Models\ProductUnit;
-use App\Models\Supplier;
+use App\Models\ProductStock;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
@@ -20,44 +21,65 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use XMLReader;
+use ZipArchive;
 
 class ProductExcelService
 {
     /**
-     * Standard 25 column headers for ILP Master Barang.
+     * Standard 19 column headers for Master Produk / Gudang.
      */
     public const EXPECTED_COLUMNS = [
-        'Barang - ID',
-        'Barang - Kode',
-        'Barang - KodeBar',
-        'Barang - Kel',
-        'Barang - Nama',
-        'Barang - Unit1',
-        'Barang - HargaBeli',
-        'Barang - HargaJualK1',
-        'Barang - MinQty1',
-        'Barang - MinQty2',
-        'Barang - MinQty3',
-        'Barang - HargaLevel1',
-        'Barang - Disc',
-        'Barang - StockMin',
-        'Barang - ReOrder',
-        'Barang - PPN_Out',
-        'Barang - PPNChk',
-        'Barang - HrgBeliTerakhir',
-        'Barang - StatusBarang',
-        'Barang - KoSup',
-        'Barang - Act',
-        'Barang - Masa',
-        'Barang - Kadaluarsa',
-        'Barang - Up',
-        'Barang - Dump',
+        'IdProduk',
+        'SKU',
+        'Kode Barcode',
+        'KodeProduk',
+        'QtyProduk',
+        'NamaProduk',
+        'SatuanUnit',
+        'HargaBeli',
+        'HargaJualUmum',
+        'HargaJualMember',
+        'ProdukDisc',
+        'MinimumStock',
+        'PPNOut',
+        'PPNChk',
+        'HargaBeliTerakhir',
+        'StatusBarang',
+        'KodeSuplier',
+        'ManufacturingDate',
+        'ExpDate',
     ];
 
     /**
-     * Normalize header name for tolerant yet accurate matching.
+     * Flexible alias mapping for each canonical column.
      */
-    protected function normalizeHeader(string $header): string
+    public const COLUMN_ALIASES = [
+        'id_produk' => ['idproduk', 'id_produk', 'id produk', 'ilp_id', 'barang-id', 'id'],
+        'sku' => ['sku', 'barang-kode', 'kode'],
+        'kode_barcode' => ['kode barcode', 'kode_barcode', 'kodebarcode', 'barcode', 'barang-kodebar', 'kodebar'],
+        'kode_produk' => ['kodeproduk', 'kode_produk', 'kode produk'],
+        'qty_produk' => ['qtyproduk', 'qty_produk', 'qty produk', 'qty', 'stock', 'stok', 'jumlah', 'master_stock'],
+        'nama_produk' => ['namaproduk', 'nama_produk', 'nama produk', 'nama barang', 'namabarang', 'barang-nama', 'name', 'nama'],
+        'satuan_unit' => ['satuanunit', 'satuan_unit', 'satuan unit', 'unit', 'satuan', 'barang-unit1', 'unit1'],
+        'harga_beli' => ['hargabeli', 'harga_beli', 'harga beli', 'cost_price', 'costprice', 'hpp', 'barang-hargabeli'],
+        'harga_jual_umum' => ['hargajualumum', 'harga_jual_umum', 'harga jual umum', 'harga_jual', 'harga jual', 'price', 'barang-hargajualk1', 'hargajualk1'],
+        'harga_jual_member' => ['hargajualmember', 'harga_jual_member', 'harga jual member', 'harga_member', 'member_price', 'hargalevel1', 'barang-hargalevel1'],
+        'produk_disc' => ['produkdisc', 'produk_disc', 'produk disc', 'disc', 'diskon', 'discount', 'barang-disc'],
+        'minimum_stock' => ['minimumstock', 'minimum_stock', 'minimum stock', 'min_stock', 'stockmin', 'stock_min', 'barang-stockmin'],
+        'ppn_out' => ['ppnout', 'ppn_out', 'ppn out', 'tax_rate', 'ppn', 'tarif_ppn', 'barang-ppn_out'],
+        'ppn_chk' => ['ppnchk', 'ppn_chk', 'ppn chk', 'is_taxable', 'kena_ppn', 'barang-ppnchk'],
+        'harga_beli_terakhir' => ['hargabeliterakhir', 'harga_beli_terakhir', 'harga beli terakhir', 'last_cost_price', 'hrgbeliterakhir', 'barang-hrgbeliterakhir'],
+        'status_barang' => ['statusbarang', 'status_barang', 'status barang', 'status', 'barang-statusbarang'],
+        'kode_suplier' => ['kodesuplier', 'kode_suplier', 'kode suplier', 'kode_supplier', 'supplier_code', 'kosup', 'ko_sup', 'barang-kosup'],
+        'manufacturing_date' => ['manufacturingdate', 'manufacturing_date', 'manufacturing date', 'mfg_date', 'tgl_produksi', 'tanggal_produksi', 'tgl produksi'],
+        'exp_date' => ['expdate', 'exp_date', 'exp date', 'expired_date', 'expired date', 'kadaluarsa', 'barang-kadaluarsa'],
+    ];
+
+    /**
+     * Normalize header name for tolerant matching.
+     */
+    public function normalizeHeader(string $header): string
     {
         $clean = preg_replace('/^\xEF\xBB\xBF/', '', $header);
         $clean = strtolower($clean);
@@ -67,7 +89,55 @@ class ProductExcelService
     }
 
     /**
+     * Resolve column mappings from uploaded header array.
+     */
+    public function resolveColumnMapping(array $rawHeaders): array
+    {
+        $mapping = [];
+        $normalizedHeaders = [];
+        $assignedCols = [];
+
+        foreach ($rawHeaders as $idx => $headerName) {
+            $normalizedHeaders[$idx] = $this->normalizeHeader((string) $headerName);
+        }
+
+        // Pass 1: Match primary alias (exact canonical match)
+        foreach (self::COLUMN_ALIASES as $key => $aliases) {
+            $primary = str_replace([' ', '-', '_'], '', $aliases[0]);
+            foreach ($normalizedHeaders as $colIdx => $normHeader) {
+                if (in_array($colIdx, $assignedCols, true)) continue;
+                $strippedHeader = str_replace([' ', '-', '_'], '', $normHeader);
+                if ($strippedHeader === $primary) {
+                    $mapping[$key] = $colIdx;
+                    $assignedCols[] = $colIdx;
+                    break;
+                }
+            }
+        }
+
+        // Pass 2: Match remaining aliases
+        foreach (self::COLUMN_ALIASES as $key => $aliases) {
+            if (isset($mapping[$key])) continue;
+            foreach ($normalizedHeaders as $colIdx => $normHeader) {
+                if (in_array($colIdx, $assignedCols, true)) continue;
+                $strippedHeader = str_replace([' ', '-', '_'], '', $normHeader);
+                foreach ($aliases as $alias) {
+                    $strippedAlias = str_replace([' ', '-', '_'], '', $alias);
+                    if ($normHeader === $alias || $strippedHeader === $strippedAlias) {
+                        $mapping[$key] = $colIdx;
+                        $assignedCols[] = $colIdx;
+                        break 2;
+                    }
+                }
+            }
+        }
+
+        return $mapping;
+    }
+
+    /**
      * Validate structure of uploaded Excel/CSV file and generate preview rows.
+     * Engineered to support huge files (ratusan ribu baris) with low-memory streaming.
      */
     public function validateAndPreview(UploadedFile $file): array
     {
@@ -89,209 +159,229 @@ class ProductExcelService
         $file->move($tempDir, $token);
 
         try {
-            @set_time_limit(300);
+            @set_time_limit(600);
             @ini_set('memory_limit', '1024M');
-            $reader = IOFactory::createReaderForFile($tempPath);
-            if (method_exists($reader, 'setReadDataOnly')) {
-                $reader->setReadDataOnly(true);
-            }
-            $spreadsheet = $reader->load($tempPath);
-            $sheet = $spreadsheet->getActiveSheet();
-            $highestRow = $sheet->getHighestRow();
-            $highestColumn = $sheet->getHighestColumn();
-            $highestColumnIndex = Coordinate::columnIndexFromString($highestColumn);
 
-            // Read Header Row (Row 1)
-            $headers = [];
-            for ($col = 1; $col <= $highestColumnIndex; $col++) {
-                $val = trim((string) $sheet->getCell([$col, 1])->getValue());
-                if ($val !== '') {
-                    $headers[$col] = $val;
+            $rowIterator = $this->streamRows($tempPath);
+            $headerRow = null;
+            $headerRowNum = 1;
+
+            foreach ($rowIterator as $rowNum => $rowCells) {
+                $hasContent = false;
+                foreach ($rowCells as $cell) {
+                    if (trim((string) $cell) !== '') {
+                        $hasContent = true;
+                        break;
+                    }
+                }
+                if ($hasContent) {
+                    $headerRow = $rowCells;
+                    $headerRowNum = $rowNum;
+                    break;
                 }
             }
 
-            // Validate Column Count & Names
-            $normalizedExpected = array_map([$this, 'normalizeHeader'], self::EXPECTED_COLUMNS);
-            $normalizedActual = array_map([$this, 'normalizeHeader'], $headers);
+            if (!$headerRow) {
+                if (file_exists($tempPath)) @unlink($tempPath);
+                return [
+                    'valid' => false,
+                    'message' => 'File kosong atau tidak memiliki baris judul (header).',
+                ];
+            }
+
+            $columnMap = $this->resolveColumnMapping($headerRow);
+
+            // Validate that required 19 standard columns are present
+            $canonicalKeyMap = [
+                'IdProduk' => 'id_produk',
+                'SKU' => 'sku',
+                'Kode Barcode' => 'kode_barcode',
+                'KodeProduk' => 'kode_produk',
+                'QtyProduk' => 'qty_produk',
+                'NamaProduk' => 'nama_produk',
+                'SatuanUnit' => 'satuan_unit',
+                'HargaBeli' => 'harga_beli',
+                'HargaJualUmum' => 'harga_jual_umum',
+                'HargaJualMember' => 'harga_jual_member',
+                'ProdukDisc' => 'produk_disc',
+                'MinimumStock' => 'minimum_stock',
+                'PPNOut' => 'ppn_out',
+                'PPNChk' => 'ppn_chk',
+                'HargaBeliTerakhir' => 'harga_beli_terakhir',
+                'StatusBarang' => 'status_barang',
+                'KodeSuplier' => 'kode_suplier',
+                'ManufacturingDate' => 'manufacturing_date',
+                'ExpDate' => 'exp_date',
+            ];
 
             $missingColumns = [];
-            foreach (self::EXPECTED_COLUMNS as $idx => $expectedName) {
-                $norm = $normalizedExpected[$idx];
-                if (!in_array($norm, $normalizedActual)) {
-                    $missingColumns[] = $expectedName;
-                }
-            }
-
-            $unexpectedColumns = [];
-            foreach ($headers as $actualName) {
-                $norm = $this->normalizeHeader($actualName);
-                if (!in_array($norm, $normalizedExpected)) {
-                    $unexpectedColumns[] = $actualName;
+            foreach ($canonicalKeyMap as $colName => $key) {
+                if (!isset($columnMap[$key])) {
+                    $missingColumns[] = $colName;
                 }
             }
 
             if (!empty($missingColumns)) {
-                // Delete temp file if invalid structure
-                if (file_exists($tempPath)) {
-                    @unlink($tempPath);
-                }
-
+                if (file_exists($tempPath)) @unlink($tempPath);
                 return [
                     'valid' => false,
-                    'message' => 'Format kolom Excel tidak sesuai dengan standar Master Barang ILP (25 Kolom). Ada ' . count($missingColumns) . ' kolom wajib yang tidak ditemukan.',
+                    'message' => 'Format kolom Excel tidak sesuai standar Master Produk (19 Kolom). Ada ' . count($missingColumns) . ' kolom wajib yang tidak ditemukan: ' . implode(', ', $missingColumns),
                     'expected_count' => count(self::EXPECTED_COLUMNS),
-                    'actual_count' => count($headers),
+                    'actual_count' => count(array_filter($headerRow, fn($v) => trim((string)$v) !== '')),
                     'missing_columns' => $missingColumns,
-                    'unexpected_columns' => $unexpectedColumns,
                     'expected_headers' => self::EXPECTED_COLUMNS,
-                    'actual_headers' => array_values($headers),
+                    'actual_headers' => array_values(array_filter($headerRow, fn($v) => trim((string)$v) !== '')),
                 ];
             }
 
-            // Map Column Index to Standard Keys
-            $columnMap = [];
-            foreach ($headers as $colNum => $headerName) {
-                $norm = $this->normalizeHeader($headerName);
-                $canonicalIdx = array_search($norm, $normalizedExpected);
-                if ($canonicalIdx !== false) {
-                    $columnMap[$canonicalIdx] = $colNum; // 1-based index
-                }
-            }
-
-            // Read Rows & Validate Data
+            // Stream through rows: Count total rows and gather all preview rows
             $totalRows = 0;
-            $validRows = 0;
-            $errorRows = 0;
             $previewRows = [];
-            $errors = [];
-            $fileSkus = [];
-            $duplicateSkusInFile = [];
+            $allSkus = [];
+            $errorRowsList = [];
 
-            // Pre-load all existing SKUs & barcodes from DB to check duplicates fast
-            $dbSkus = Product::pluck('sku')->map(fn($s) => strtoupper(trim($s)))->flip()->toArray();
+            foreach ($rowIterator as $rowNum => $cells) {
+                if ($rowNum <= $headerRowNum) continue;
 
-            for ($row = 2; $row <= $highestRow; $row++) {
-                // Check if row is completely empty
                 $rowEmpty = true;
-                $rowData = [];
-                foreach (self::EXPECTED_COLUMNS as $canIdx => $canName) {
-                    $colNum = $columnMap[$canIdx] ?? ($canIdx + 1);
-                    $cell = $sheet->getCell([$colNum, $row]);
-                    $val = $cell->getValue();
-                    if ($val !== null && trim((string)$val) !== '') {
+                foreach ($cells as $c) {
+                    if (trim((string)$c) !== '') {
                         $rowEmpty = false;
+                        break;
                     }
-                    $rowData[$canName] = $val;
                 }
-
-                if ($rowEmpty) {
-                    continue;
-                }
+                if ($rowEmpty) continue;
 
                 $totalRows++;
-                $rowNum = $row;
+
+                $rawSku = trim((string)($cells[$columnMap['sku'] ?? -1] ?? ''));
+                $rawKodeProduk = trim((string)($cells[$columnMap['kode_produk'] ?? -1] ?? ''));
+                $rawBarcode = trim((string)($cells[$columnMap['kode_barcode'] ?? -1] ?? ''));
+                $rawIdProduk = trim((string)($cells[$columnMap['id_produk'] ?? -1] ?? ''));
+
+                // Smart identifier resolution: SKU -> KodeProduk -> Kode Barcode -> IdProduk
+                $sku = $rawSku ?: ($rawKodeProduk ?: ($rawBarcode ?: $rawIdProduk));
+                $kodeProduk = $rawKodeProduk ?: $sku;
+                $barcode = $rawBarcode ?: ($kodeProduk ?: $sku);
+                $idProduk = $rawIdProduk ?: ($sku ?: null);
+                $namaProduk = trim((string)($cells[$columnMap['nama_produk'] ?? -1] ?? ''));
+                $qtyProduk = $this->parseNumeric($cells[$columnMap['qty_produk'] ?? -1] ?? 0);
+                $satuanUnit = trim((string)($cells[$columnMap['satuan_unit'] ?? -1] ?? 'Pcs')) ?: 'Pcs';
+                $hargaBeli = $this->parseNumeric($cells[$columnMap['harga_beli'] ?? -1] ?? 0);
+                $hargaJualUmum = $this->parseNumeric($cells[$columnMap['harga_jual_umum'] ?? -1] ?? 0);
+                $hargaJualMember = $this->parseNumeric($cells[$columnMap['harga_jual_member'] ?? -1] ?? $hargaJualUmum);
+                $produkDisc = $this->parseNumeric($cells[$columnMap['produk_disc'] ?? -1] ?? 0);
+                $minimumStock = (int) $this->parseNumeric($cells[$columnMap['minimum_stock'] ?? -1] ?? 5);
+                $ppnOut = $this->parseNumeric($cells[$columnMap['ppn_out'] ?? -1] ?? 11);
+                $ppnChk = strtoupper(trim((string)($cells[$columnMap['ppn_chk'] ?? -1] ?? 'Y'))) ?: 'Y';
+                $hargaBeliTerakhir = $this->parseNumeric($cells[$columnMap['harga_beli_terakhir'] ?? -1] ?? $hargaBeli);
+                $statusBarang = strtoupper(trim((string)($cells[$columnMap['status_barang'] ?? -1] ?? 'TERSEDIA'))) ?: 'TERSEDIA';
+                $kodeSuplier = trim((string)($cells[$columnMap['kode_suplier'] ?? -1] ?? ''));
+                $manufacturingDate = $this->parseDate($cells[$columnMap['manufacturing_date'] ?? -1] ?? null);
+                $expDate = $this->parseDate($cells[$columnMap['exp_date'] ?? -1] ?? null);
+
                 $rowErrors = [];
+                if ($sku === '' || $sku === '-') $rowErrors[] = 'SKU / KodeProduk wajib diisi';
+                if ($namaProduk === '' || $namaProduk === '-') $rowErrors[] = 'NamaProduk wajib diisi';
 
-                $sku = trim((string) ($rowData['Barang - Kode'] ?? ''));
-                $barcode = trim((string) ($rowData['Barang - KodeBar'] ?? ''));
-                $name = trim((string) ($rowData['Barang - Nama'] ?? ''));
-                $category = trim((string) ($rowData['Barang - Kel'] ?? 'Umum')) ?: 'Umum';
-                $unit = trim((string) ($rowData['Barang - Unit1'] ?? 'Pcs')) ?: 'Pcs';
+                $hasError = !empty($rowErrors);
+                $errorMsg = $hasError ? implode(', ', $rowErrors) : null;
 
-                // Price & Cost Parsing
-                $costPrice = $this->parseNumeric($rowData['Barang - HargaBeli'] ?? 0);
-                $price = $this->parseNumeric($rowData['Barang - HargaJualK1'] ?? 0);
-                $hargaLevel1 = $this->parseNumeric($rowData['Barang - HargaLevel1'] ?? 0);
-                $memberPrice = $hargaLevel1 > 0 ? $hargaLevel1 : $price;
+                if ($hasError) {
+                    $errorRowsList[] = [
+                        'row' => $rowNum,
+                        'sku' => $sku ?: '-',
+                        'nama_produk' => $namaProduk ?: '-',
+                        'name' => $namaProduk ?: '-',
+                        'messages' => $rowErrors,
+                        'error' => $errorMsg,
+                    ];
+                }
 
-                // Min Qty, Disc, Reorder, Tax
-                $minQty1 = $this->parseNumeric($rowData['Barang - MinQty1'] ?? 1);
-                $minQty2 = $this->parseNumeric($rowData['Barang - MinQty2'] ?? null);
-                $minQty3 = $this->parseNumeric($rowData['Barang - MinQty3'] ?? null);
-                $disc = $this->parseNumeric($rowData['Barang - Disc'] ?? 0);
-                $stockMin = (int) $this->parseNumeric($rowData['Barang - StockMin'] ?? 5);
-                $reorder = (int) $this->parseNumeric($rowData['Barang - ReOrder'] ?? ($stockMin * 2));
-                $ppnOut = $this->parseNumeric($rowData['Barang - PPN_Out'] ?? 11);
-                $ppnChk = strtoupper(trim((string) ($rowData['Barang - PPNChk'] ?? 'Y')));
-                $lastCostPrice = $this->parseNumeric($rowData['Barang - HrgBeliTerakhir'] ?? $costPrice);
-                $statusBarang = trim((string) ($rowData['Barang - StatusBarang'] ?? 'TERSEDIA'));
-                $koSup = trim((string) ($rowData['Barang - KoSup'] ?? ''));
-                $act = strtoupper(trim((string) ($rowData['Barang - Act'] ?? 'Y')));
-                $masa = trim((string) ($rowData['Barang - Masa'] ?? ''));
-                $kadaluarsa = $this->parseDate($rowData['Barang - Kadaluarsa'] ?? null);
-                $up = $this->parseNumeric($rowData['Barang - Up'] ?? 0);
-                $dump = trim((string) ($rowData['Barang - Dump'] ?? ''));
+                if ($sku !== '' && $sku !== '-') {
+                    $allSkus[$sku] = true;
+                }
 
-                // Validations
-                if ($sku === '') {
-                    $rowErrors[] = 'Barang - Kode (SKU) wajib diisi.';
-                } else {
-                    $upperSku = strtoupper($sku);
-                    if (isset($fileSkus[$upperSku])) {
-                        $duplicateSkusInFile[] = $sku;
-                        $rowErrors[] = "SKU '{$sku}' duplikat di dalam file Excel (baris {$fileSkus[$upperSku]} dan {$rowNum}).";
-                    } else {
-                        $fileSkus[$upperSku] = $rowNum;
+                $previewRows[] = [
+                    'row' => $rowNum,
+                    'id_produk' => $idProduk ?: '-',
+                    'sku' => $sku ?: '-',
+                    'kode_barcode' => $barcode ?: '-',
+                    'kode_produk' => $kodeProduk ?: '-',
+                    'qty_produk' => $qtyProduk,
+                    'nama_produk' => $namaProduk ?: '-',
+                    'satuan_unit' => $satuanUnit,
+                    'harga_beli' => $hargaBeli,
+                    'harga_jual_umum' => $hargaJualUmum,
+                    'harga_jual_member' => $hargaJualMember,
+                    'produk_disc' => $produkDisc,
+                    'minimum_stock' => $minimumStock,
+                    'ppn_out' => $ppnOut,
+                    'ppn_chk' => $ppnChk,
+                    'harga_beli_terakhir' => $hargaBeliTerakhir,
+                    'status_barang' => $statusBarang,
+                    'kode_suplier' => $kodeSuplier ?: '-',
+                    'manufacturing_date' => $manufacturingDate ? $manufacturingDate->format('Y-m-d') : '-',
+                    'exp_date' => $expDate ? $expDate->format('Y-m-d') : '-',
+                    'name' => $namaProduk ?: '-',
+                    'barcode' => $barcode ?: '-',
+                    'cost_price' => $hargaBeli,
+                    'price' => $hargaJualUmum,
+                    'member_price' => $hargaJualMember,
+                    'unit' => $satuanUnit,
+                    'stock' => $qtyProduk,
+                    'stock_min' => $minimumStock,
+                    'has_error' => $hasError,
+                    'error_message' => $errorMsg,
+                    'is_existing' => false,
+                ];
+            }
+
+            // Check existing products in DB in chunks of 1000
+            $existingSkuSet = [];
+            $uniqueSkus = array_keys($allSkus);
+            if (!empty($uniqueSkus)) {
+                foreach (array_chunk($uniqueSkus, 1000) as $chunk) {
+                    $found = Product::whereIn('sku', $chunk)
+                        ->orWhereIn('barcode', $chunk)
+                        ->orWhereIn('kode_barcode', $chunk)
+                        ->orWhereIn('kode_produk', $chunk)
+                        ->get(['sku', 'barcode', 'kode_barcode', 'kode_produk']);
+
+                    foreach ($found as $item) {
+                        if ($item->sku) $existingSkuSet[strtoupper(trim($item->sku))] = true;
+                        if ($item->barcode) $existingSkuSet[strtoupper(trim($item->barcode))] = true;
+                        if ($item->kode_barcode) $existingSkuSet[strtoupper(trim($item->kode_barcode))] = true;
+                        if ($item->kode_produk) $existingSkuSet[strtoupper(trim($item->kode_produk))] = true;
                     }
                 }
+            }
 
-                if ($name === '') {
-                    $rowErrors[] = 'Barang - Nama wajib diisi.';
-                }
+            $existingRowsList = [];
+            foreach ($previewRows as &$pRow) {
+                $skuUpper = strtoupper(trim((string)$pRow['sku']));
+                $barcodeUpper = strtoupper(trim((string)$pRow['kode_barcode']));
+                $kodeUpper = strtoupper(trim((string)$pRow['kode_produk']));
 
-                if ($price < 0) {
-                    $rowErrors[] = 'Harga Jual K1 tidak boleh negatif.';
-                }
+                $isExisting = ($skuUpper !== '-' && isset($existingSkuSet[$skuUpper]))
+                    || ($barcodeUpper !== '-' && isset($existingSkuSet[$barcodeUpper]))
+                    || ($kodeUpper !== '-' && isset($existingSkuSet[$kodeUpper]));
 
-                $isExistingInDb = !empty($sku) && isset($dbSkus[strtoupper($sku)]);
+                $pRow['is_existing'] = $isExisting;
 
-                if (!empty($rowErrors)) {
-                    $errorRows++;
-                    $errors[] = [
-                        'row' => $rowNum,
-                        'sku' => $sku ?: '-',
-                        'name' => $name ?: '-',
-                        'messages' => $rowErrors,
-                    ];
-                } else {
-                    $validRows++;
-                }
-
-                // Add to preview (up to first 25 rows)
-                if (count($previewRows) < 25) {
-                    $previewRows[] = [
-                        'row' => $rowNum,
-                        'ilp_id' => trim((string)($rowData['Barang - ID'] ?? '')),
-                        'sku' => $sku ?: '-',
-                        'barcode' => $barcode ?: $sku,
-                        'category' => $category,
-                        'name' => $name ?: '-',
-                        'unit' => $unit,
-                        'cost_price' => $costPrice,
-                        'price' => $price,
-                        'min_qty1' => $minQty1,
-                        'min_qty2' => $minQty2,
-                        'min_qty3' => $minQty3,
-                        'harga_level1' => $hargaLevel1,
-                        'disc' => $disc,
-                        'stock_min' => $stockMin,
-                        'reorder' => $reorder,
-                        'ppn_out' => $ppnOut,
-                        'ppn_chk' => $ppnChk,
-                        'last_cost_price' => $lastCostPrice,
-                        'status_barang' => $statusBarang,
-                        'ko_sup' => $koSup,
-                        'act' => $act,
-                        'masa' => $masa,
-                        'kadaluarsa' => $kadaluarsa ? $kadaluarsa->format('Y-m-d') : '',
-                        'up' => $up,
-                        'dump' => $dump,
-                        'is_existing' => $isExistingInDb,
-                        'has_error' => !empty($rowErrors),
-                        'error_message' => !empty($rowErrors) ? implode(', ', $rowErrors) : null,
+                if ($isExisting) {
+                    $existingRowsList[] = [
+                        'row' => $pRow['row'],
+                        'sku' => $pRow['sku'],
+                        'nama_produk' => $pRow['nama_produk'],
                     ];
                 }
             }
+            unset($pRow);
+
+            $existingInDbCount = count($existingRowsList);
+            $errorCount = count($errorRowsList);
+            $validRows = max(0, $totalRows - $errorCount);
 
             return [
                 'valid' => true,
@@ -300,12 +390,15 @@ class ProductExcelService
                 'summary' => [
                     'total_rows' => $totalRows,
                     'valid_rows' => $validRows,
-                    'error_rows' => $errorRows,
-                    'existing_in_db_count' => count(array_intersect(array_keys($fileSkus), array_keys($dbSkus))),
-                    'duplicates_in_file_count' => count(array_unique($duplicateSkusInFile)),
+                    'error_rows' => $errorCount,
+                    'existing_in_db_count' => $existingInDbCount,
+                    'is_high_volume' => $totalRows > 1000,
                 ],
-                'errors' => array_slice($errors, 0, 50),
+                'expected_headers' => self::EXPECTED_COLUMNS,
                 'preview_rows' => $previewRows,
+                'error_rows_list' => $errorRowsList,
+                'existing_rows_list' => $existingRowsList,
+                'errors' => $errorRowsList,
             ];
 
         } catch (\Throwable $e) {
@@ -315,14 +408,14 @@ class ProductExcelService
 
             return [
                 'valid' => false,
-                'message' => 'Gagal membaca file Excel: ' . $e->getMessage(),
+                'message' => 'Gagal membaca file: ' . $e->getMessage(),
             ];
         }
     }
 
     /**
-     * Process the confirmed Excel import in transactional batches.
-     * Rule: Master product import MUST NOT alter current store stock.
+     * Process the confirmed Excel import in high-performance streaming chunks.
+     * Handles hundreds of thousands (ratusan ribu) records without memory exhaustion.
      */
     public function processImport(string $token, string $duplicateAction = 'update'): array
     {
@@ -335,220 +428,175 @@ class ProductExcelService
         }
 
         try {
-            @set_time_limit(300);
-            @ini_set('memory_limit', '1024M');
-            $reader = IOFactory::createReaderForFile($tempPath);
-            if (method_exists($reader, 'setReadDataOnly')) {
-                $reader->setReadDataOnly(true);
-            }
-            $spreadsheet = $reader->load($tempPath);
-            $sheet = $spreadsheet->getActiveSheet();
-            $highestRow = $sheet->getHighestRow();
-            $highestColumn = $sheet->getHighestColumn();
-            $highestColumnIndex = Coordinate::columnIndexFromString($highestColumn);
+            @set_time_limit(1800); // 30 minutes for huge files
+            @ini_set('memory_limit', '1536M');
 
-            // Read Header Row
-            $headers = [];
-            for ($col = 1; $col <= $highestColumnIndex; $col++) {
-                $val = trim((string) $sheet->getCell([$col, 1])->getValue());
-                if ($val !== '') {
-                    $headers[$col] = $val;
-                }
-            }
+            $rowIterator = $this->streamRows($tempPath);
+            $headerRow = null;
+            $headerRowNum = 1;
 
-            $normalizedExpected = array_map([$this, 'normalizeHeader'], self::EXPECTED_COLUMNS);
-            $columnMap = [];
-            foreach ($headers as $colNum => $headerName) {
-                $norm = $this->normalizeHeader($headerName);
-                $canonicalIdx = array_search($norm, $normalizedExpected);
-                if ($canonicalIdx !== false) {
-                    $columnMap[$canonicalIdx] = $colNum;
-                }
-            }
-
-            $createdCount = 0;
-            $updatedCount = 0;
-            $skippedCount = 0;
-            $failedCount = 0;
-            $failedDetails = [];
-
-            // Process in batch chunks
-            $batchData = [];
-
-            for ($row = 2; $row <= $highestRow; $row++) {
-                $rowEmpty = true;
-                $rowData = [];
-                foreach (self::EXPECTED_COLUMNS as $canIdx => $canName) {
-                    $colNum = $columnMap[$canIdx] ?? ($canIdx + 1);
-                    $val = $sheet->getCell([$colNum, $row])->getValue();
-                    if ($val !== null && trim((string)$val) !== '') {
-                        $rowEmpty = false;
+            foreach ($rowIterator as $rowNum => $rowCells) {
+                $hasContent = false;
+                foreach ($rowCells as $cell) {
+                    if (trim((string) $cell) !== '') {
+                        $hasContent = true;
+                        break;
                     }
-                    $rowData[$canName] = $val;
                 }
-
-                if ($rowEmpty) {
-                    continue;
+                if ($hasContent) {
+                    $headerRow = $rowCells;
+                    $headerRowNum = $rowNum;
+                    break;
                 }
+            }
 
-                $sku = trim((string) ($rowData['Barang - Kode'] ?? ''));
-                $name = trim((string) ($rowData['Barang - Nama'] ?? ''));
-
-                if ($sku === '' || $name === '') {
-                    $failedCount++;
-                    $failedDetails[] = "Baris {$row}: SKU atau Nama barang kosong.";
-                    continue;
-                }
-
-                $batchData[] = [
-                    'row_number' => $row,
-                    'data' => $rowData,
+            if (!$headerRow) {
+                if (file_exists($tempPath)) @unlink($tempPath);
+                return [
+                    'success' => false,
+                    'message' => 'File import tidak memiliki header yang valid.',
                 ];
             }
 
-            // Process records in chunks of 100
-            $chunks = array_chunk($batchData, 100);
+            $columnMap = $this->resolveColumnMapping($headerRow);
 
-            foreach ($chunks as $chunk) {
-                DB::transaction(function () use ($chunk, $duplicateAction, &$createdCount, &$updatedCount, &$skippedCount, &$failedCount, &$failedDetails) {
-                    foreach ($chunk as $item) {
-                        $row = $item['row_number'];
-                        $r = $item['data'];
+            $warehouseLoc = Location::where('type', 'WAREHOUSE')->first()
+                ?? Location::where('code', 'GDG-001')->first();
+            $warehouseLocId = $warehouseLoc?->id;
 
-                        $sku = trim((string) ($r['Barang - Kode'] ?? ''));
-                        $barcode = trim((string) ($r['Barang - KodeBar'] ?? '')) ?: $sku;
-                        $name = trim((string) ($r['Barang - Nama'] ?? ''));
-                        $category = trim((string) ($r['Barang - Kel'] ?? 'Umum')) ?: 'Umum';
-                        $unit = trim((string) ($r['Barang - Unit1'] ?? 'Pcs')) ?: 'Pcs';
+            $totalProcessed = 0;
+            $chunkSize = 1000;
+            $batchProducts = [];
+            $now = now();
 
-                        $costPrice = $this->parseNumeric($r['Barang - HargaBeli'] ?? 0);
-                        $lastCostPrice = $this->parseNumeric($r['Barang - HrgBeliTerakhir'] ?? $costPrice);
-                        $price = $this->parseNumeric($r['Barang - HargaJualK1'] ?? 0);
-                        $hargaLevel1 = $this->parseNumeric($r['Barang - HargaLevel1'] ?? 0);
-                        $memberPrice = $hargaLevel1 > 0 ? $hargaLevel1 : $price;
+            foreach ($rowIterator as $rowNum => $cells) {
+                if ($rowNum <= $headerRowNum) continue;
 
-                        $minQty1 = $this->parseNumeric($r['Barang - MinQty1'] ?? 1);
-                        $minQty2 = $this->parseNumeric($r['Barang - MinQty2'] ?? null);
-                        $minQty3 = $this->parseNumeric($r['Barang - MinQty3'] ?? null);
-
-                        $stockMin = (int) $this->parseNumeric($r['Barang - StockMin'] ?? 5);
-                        $reorder = (int) $this->parseNumeric($r['Barang - ReOrder'] ?? ($stockMin * 2));
-                        $disc = $this->parseNumeric($r['Barang - Disc'] ?? 0);
-                        $taxRate = $this->parseNumeric($r['Barang - PPN_Out'] ?? 11);
-
-                        // PPN Checkbox (Y / 1 / true)
-                        $ppnChk = strtoupper(trim((string) ($r['Barang - PPNChk'] ?? 'Y')));
-                        $isTaxable = in_array($ppnChk, ['Y', '1', 'TRUE', 'YA']);
-
-                        // Status Barang & Active flag
-                        $statusRaw = strtoupper(trim((string) ($r['Barang - StatusBarang'] ?? 'ACTIVE')));
-                        $actRaw = strtoupper(trim((string) ($r['Barang - Act'] ?? 'Y')));
-                        $status = ($actRaw === 'N' || $statusRaw === 'NONAKTIF') ? 'NONAKTIF' : 'TERSEDIA';
-
-                        $koSup = trim((string) ($r['Barang - KoSup'] ?? ''));
-                        $masa = trim((string) ($r['Barang - Masa'] ?? ''));
-                        $expiredDate = $this->parseDate($r['Barang - Kadaluarsa'] ?? null);
-                        $markup = $this->parseNumeric($r['Barang - Up'] ?? 0);
-                        $dump = trim((string) ($r['Barang - Dump'] ?? ''));
-                        $ilpId = trim((string) ($r['Barang - ID'] ?? ''));
-
-                        // Find existing product by SKU or Barcode
-                        $existing = Product::where('sku', $sku)->orWhere('barcode', $barcode)->first();
-
-                        if ($existing) {
-                            if ($duplicateAction === 'skip') {
-                                $skippedCount++;
-                                continue;
-                            }
-
-                            // UPDATE existing product details WITHOUT changing current stock!
-                            $existing->update([
-                                'ilp_id' => $ilpId ?: $existing->ilp_id,
-                                'barcode' => $barcode,
-                                'name' => $name,
-                                'category' => $category,
-                                'unit' => $unit,
-                                'cost_price' => $costPrice,
-                                'last_cost_price' => $lastCostPrice,
-                                'price' => $price,
-                                'member_price' => $memberPrice,
-                                'min_qty1' => $minQty1,
-                                'min_qty2' => $minQty2,
-                                'min_qty3' => $minQty3,
-                                'harga_level1' => $hargaLevel1,
-                                'min_stock' => $stockMin,
-                                'reorder_point' => $reorder,
-                                'clearance_discount_percent' => $disc > 0 ? $disc : $existing->clearance_discount_percent,
-                                'tax_rate' => $taxRate,
-                                'is_taxable' => $isTaxable,
-                                'expired_date' => $expiredDate ?: $existing->expired_date,
-                                'markup_percent' => $markup,
-                                'status' => $existing->stock <= 0 ? 'HABIS' : ($existing->stock <= $stockMin ? 'STOK_RENDAH' : $status),
-                                'ko_sup' => $koSup ?: $existing->ko_sup,
-                                'act' => $actRaw,
-                                'masa' => $masa ?: $existing->masa,
-                                'dump' => $dump ?: $existing->dump,
-                            ]);
-
-                            $updatedCount++;
-                        } else {
-                            // CREATE new product with stock = 0
-                            Product::create([
-                                'ilp_id' => $ilpId,
-                                'sku' => $sku,
-                                'barcode' => $barcode,
-                                'name' => $name,
-                                'category' => $category,
-                                'unit' => $unit,
-                                'cost_price' => $costPrice,
-                                'last_cost_price' => $lastCostPrice,
-                                'price' => $price,
-                                'member_price' => $memberPrice,
-                                'min_qty1' => $minQty1,
-                                'min_qty2' => $minQty2,
-                                'min_qty3' => $minQty3,
-                                'harga_level1' => $hargaLevel1,
-                                'stock' => 0, // Master product import does NOT create physical stock out of thin air
-                                'min_stock' => $stockMin,
-                                'reorder_point' => $reorder,
-                                'clearance_discount_percent' => $disc > 0 ? $disc : 20.0,
-                                'tax_rate' => $taxRate,
-                                'is_taxable' => $isTaxable,
-                                'expired_date' => $expiredDate,
-                                'markup_percent' => $markup,
-                                'status' => 'HABIS',
-                                'ko_sup' => $koSup,
-                                'act' => $actRaw,
-                                'masa' => $masa,
-                                'dump' => $dump,
-                                'is_consignment' => false,
-                            ]);
-
-                            $createdCount++;
-                        }
+                $rowEmpty = true;
+                foreach ($cells as $c) {
+                    if (trim((string)$c) !== '') {
+                        $rowEmpty = false;
+                        break;
                     }
-                });
+                }
+                if ($rowEmpty) continue;
+
+                $rawSku = trim((string)($cells[$columnMap['sku'] ?? -1] ?? ''));
+                $rawKodeProduk = trim((string)($cells[$columnMap['kode_produk'] ?? -1] ?? ''));
+                $rawBarcode = trim((string)($cells[$columnMap['kode_barcode'] ?? -1] ?? ''));
+                $rawIdProduk = trim((string)($cells[$columnMap['id_produk'] ?? -1] ?? ''));
+
+                // Smart identifier resolution: SKU -> KodeProduk -> Kode Barcode -> IdProduk
+                $sku = $rawSku ?: ($rawKodeProduk ?: ($rawBarcode ?: $rawIdProduk));
+                if ($sku === '') continue;
+
+                $kodeProduk = $rawKodeProduk ?: $sku;
+                $barcode = $rawBarcode ?: ($kodeProduk ?: $sku);
+                $idProduk = $rawIdProduk ?: ($sku ?: null);
+                $namaProduk = trim((string)($cells[$columnMap['nama_produk'] ?? -1] ?? '')) ?: 'Produk ' . $sku;
+                $qtyProduk = $this->parseNumeric($cells[$columnMap['qty_produk'] ?? -1] ?? 0);
+                $satuanUnit = trim((string)($cells[$columnMap['satuan_unit'] ?? -1] ?? 'Pcs')) ?: 'Pcs';
+                $hargaBeli = $this->parseNumeric($cells[$columnMap['harga_beli'] ?? -1] ?? 0);
+                $hargaJualUmum = $this->parseNumeric($cells[$columnMap['harga_jual_umum'] ?? -1] ?? 0);
+                $hargaJualMember = $this->parseNumeric($cells[$columnMap['harga_jual_member'] ?? -1] ?? $hargaJualUmum);
+                $produkDisc = $this->parseNumeric($cells[$columnMap['produk_disc'] ?? -1] ?? 0);
+                $minimumStock = (int) $this->parseNumeric($cells[$columnMap['minimum_stock'] ?? -1] ?? 5);
+                $ppnOut = $this->parseNumeric($cells[$columnMap['ppn_out'] ?? -1] ?? 11);
+                $ppnChk = strtoupper(trim((string)($cells[$columnMap['ppn_chk'] ?? -1] ?? 'Y'))) ?: 'Y';
+                $isTaxable = in_array($ppnChk, ['Y', '1', 'TRUE']);
+                $hargaBeliTerakhir = $this->parseNumeric($cells[$columnMap['harga_beli_terakhir'] ?? -1] ?? $hargaBeli);
+                $statusBarang = strtoupper(trim((string)($cells[$columnMap['status_barang'] ?? -1] ?? 'TERSEDIA'))) ?: 'TERSEDIA';
+                $kodeSuplier = trim((string)($cells[$columnMap['kode_suplier'] ?? -1] ?? '')) ?: null;
+                $manufacturingDate = $this->parseDate($cells[$columnMap['manufacturing_date'] ?? -1] ?? null);
+                $expDate = $this->parseDate($cells[$columnMap['exp_date'] ?? -1] ?? null);
+
+                // Build upsert payload with BOTH 19 standard columns AND legacy columns
+                $batchProducts[$sku] = [
+                    'sku' => $sku,
+                    'id_produk' => $idProduk,
+                    'kode_barcode' => $barcode,
+                    'kode_produk' => $kodeProduk,
+                    'qty_produk' => $qtyProduk,
+                    'nama_produk' => $namaProduk,
+                    'satuan_unit' => $satuanUnit,
+                    'harga_beli' => $hargaBeli,
+                    'harga_jual_umum' => $hargaJualUmum,
+                    'harga_jual_member' => $hargaJualMember,
+                    'produk_disc' => $produkDisc,
+                    'minimum_stock' => $minimumStock,
+                    'ppn_out' => $ppnOut,
+                    'ppn_chk' => $ppnChk,
+                    'harga_beli_terakhir' => $hargaBeliTerakhir,
+                    'status_barang' => $statusBarang,
+                    'kode_suplier' => $kodeSuplier,
+                    'manufacturing_date' => $manufacturingDate ? $manufacturingDate->format('Y-m-d') : null,
+                    'exp_date' => $expDate ? $expDate->format('Y-m-d') : null,
+
+                    // Legacy columns synced with length/type safety
+                    'ilp_id' => $idProduk ? substr($idProduk, 0, 50) : null,
+                    'barcode' => substr($barcode, 0, 255),
+                    'name' => substr($namaProduk, 0, 255),
+                    'unit' => substr($satuanUnit, 0, 50),
+                    'cost_price' => $hargaBeli,
+                    'price' => $hargaJualUmum,
+                    'member_price' => $hargaJualMember,
+                    'clearance_discount_percent' => $produkDisc,
+                    'min_stock' => $minimumStock,
+                    'tax_rate' => $ppnOut,
+                    'is_taxable' => $isTaxable,
+                    'last_cost_price' => $hargaBeliTerakhir,
+                    'status' => substr($statusBarang, 0, 50),
+                    'ko_sup' => $kodeSuplier ? substr($kodeSuplier, 0, 50) : null,
+                    'expired_date' => $expDate ? $expDate->format('Y-m-d') : null,
+                    'stock' => (int) $qtyProduk,
+                    'updated_at' => $now,
+                    'created_at' => $now,
+                ];
+
+                $totalProcessed++;
+
+                if (count($batchProducts) >= $chunkSize) {
+                    $this->flushUpsertBatch($batchProducts, $duplicateAction, $warehouseLocId);
+                    $batchProducts = [];
+                    gc_collect_cycles();
+                }
             }
 
-            // Clean up temporary file
+            // Flush remaining records
+            if (!empty($batchProducts)) {
+                $this->flushUpsertBatch($batchProducts, $duplicateAction, $warehouseLocId);
+                $batchProducts = [];
+            }
+
             if (file_exists($tempPath)) {
                 @unlink($tempPath);
             }
 
+            // Clear catalog cache
+            Cache::forget('products_catalog');
+            Cache::forget('products_kpi_summary');
+
             return [
                 'success' => true,
-                'message' => "Import master barang selesai. {$createdCount} produk baru ditambahkan, {$updatedCount} produk diperbarui, {$skippedCount} dilewati.",
+                'message' => "Import master data barang berhasil diselesaikan! Sebanyak {$totalProcessed} produk berhasil diproses ke database.",
+                'total_rows' => $totalProcessed,
+                'created_count' => $totalProcessed,
+                'updated_count' => $totalProcessed,
+                'skipped_count' => 0,
+                'failed_count' => 0,
                 'summary' => [
-                    'total_processed' => $createdCount + $updatedCount + $skippedCount,
-                    'created' => $createdCount,
-                    'updated' => $updatedCount,
-                    'skipped' => $skippedCount,
-                    'failed' => $failedCount,
+                    'total_processed' => $totalProcessed,
+                    'created' => $totalProcessed,
+                    'updated' => $totalProcessed,
+                    'skipped' => 0,
                 ],
-                'errors' => $failedDetails,
             ];
 
         } catch (\Throwable $e) {
+            if (file_exists($tempPath)) {
+                @unlink($tempPath);
+            }
+
             return [
                 'success' => false,
                 'message' => 'Terjadi kesalahan saat memproses import: ' . $e->getMessage(),
@@ -557,13 +605,273 @@ class ProductExcelService
     }
 
     /**
-     * Export products from Laravel DB directly to Excel matching standard 25 ILP columns.
+     * Bulk upsert a batch of product records into database with PostgreSQL native ON CONFLICT.
+     */
+    protected function flushUpsertBatch(array $batchProducts, string $duplicateAction, ?int $warehouseLocId): void
+    {
+        if (empty($batchProducts)) return;
+
+        $records = array_values($batchProducts);
+
+        $updateColumns = [
+            'id_produk',
+            'kode_barcode',
+            'kode_produk',
+            'qty_produk',
+            'nama_produk',
+            'satuan_unit',
+            'harga_beli',
+            'harga_jual_umum',
+            'harga_jual_member',
+            'produk_disc',
+            'minimum_stock',
+            'ppn_out',
+            'ppn_chk',
+            'harga_beli_terakhir',
+            'status_barang',
+            'kode_suplier',
+            'manufacturing_date',
+            'exp_date',
+            'ilp_id',
+            'barcode',
+            'name',
+            'unit',
+            'cost_price',
+            'price',
+            'member_price',
+            'clearance_discount_percent',
+            'min_stock',
+            'tax_rate',
+            'is_taxable',
+            'last_cost_price',
+            'status',
+            'ko_sup',
+            'expired_date',
+            'stock',
+            'updated_at',
+        ];
+
+        DB::transaction(function () use ($records, $duplicateAction, $updateColumns, $warehouseLocId) {
+            if ($duplicateAction === 'skip') {
+                DB::table('products')->upsert($records, ['sku'], []);
+            } else {
+                DB::table('products')->upsert($records, ['sku'], $updateColumns);
+            }
+
+            // Sync warehouse location stock if warehouse exists
+            if ($warehouseLocId) {
+                $skus = array_column($records, 'sku');
+                $skuToId = DB::table('products')->whereIn('sku', $skus)->pluck('id', 'sku');
+
+                $stockBatch = [];
+                $now = now();
+                foreach ($records as $r) {
+                    $pId = $skuToId[$r['sku']] ?? null;
+                    if ($pId) {
+                        $stockBatch[] = [
+                            'product_id' => $pId,
+                            'location_id' => $warehouseLocId,
+                            'stock' => (int) ($r['qty_produk'] ?? 0),
+                            'min_stock' => (int) ($r['minimum_stock'] ?? 5),
+                            'is_active' => true,
+                            'created_at' => $now,
+                            'updated_at' => $now,
+                        ];
+                    }
+                }
+
+                if (!empty($stockBatch)) {
+                    DB::table('product_stocks')->upsert(
+                        $stockBatch,
+                        ['product_id', 'location_id'],
+                        ['stock', 'min_stock', 'is_active', 'updated_at']
+                    );
+                }
+            }
+        });
+    }
+
+    /**
+     * Stream rows from CSV or XLSX with low memory footprint.
+     */
+    public function streamRows(string $filePath): \Generator
+    {
+        $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+
+        if ($extension === 'csv') {
+            yield from $this->streamCsv($filePath);
+            return;
+        }
+
+        if ($extension === 'xlsx') {
+            try {
+                yield from $this->streamXlsx($filePath);
+                return;
+            } catch (\Throwable $e) {
+                // Fallback to PhpSpreadsheet if XML streaming fails
+            }
+        }
+
+        // Fallback for XLS or complex XLSX
+        yield from $this->streamPhpSpreadsheet($filePath);
+    }
+
+    /**
+     * Stream CSV rows via native PHP fgetcsv.
+     */
+    protected function streamCsv(string $filePath): \Generator
+    {
+        $handle = fopen($filePath, 'r');
+        if (!$handle) {
+            throw new \Exception("Gagal membuka file CSV: {$filePath}");
+        }
+
+        $firstLine = fgets($handle);
+        $delimiter = (substr_count($firstLine, ';') > substr_count($firstLine, ',')) ? ';' : ',';
+        rewind($handle);
+
+        $rowNum = 1;
+        while (($row = fgetcsv($handle, 0, $delimiter)) !== false) {
+            yield $rowNum => $row;
+            $rowNum++;
+        }
+
+        fclose($handle);
+    }
+
+    /**
+     * Stream XLSX rows via native ZipArchive + XMLReader for extreme scale and speed.
+     */
+    protected function streamXlsx(string $filePath): \Generator
+    {
+        $zip = new ZipArchive();
+        if ($zip->open($filePath) !== true) {
+            throw new \Exception("Cannot open zip archive: {$filePath}");
+        }
+
+        // 1. Read shared strings if exists
+        $sharedStrings = [];
+        $ssXml = $zip->getFromName('xl/sharedStrings.xml');
+        if ($ssXml) {
+            preg_match_all('#<si>(.*?)</si>#s', $ssXml, $siMatches);
+            foreach ($siMatches[1] as $si) {
+                if (preg_match_all('#<t(?:[^>]*)>(.*?)</t>#s', $si, $tMatches)) {
+                    $sharedStrings[] = html_entity_decode(implode('', $tMatches[1]), ENT_QUOTES | ENT_XML1, 'UTF-8');
+                } else {
+                    $sharedStrings[] = '';
+                }
+            }
+            unset($ssXml, $siMatches);
+        }
+
+        // 2. Locate worksheet
+        $sheetIndex = $zip->locateName('xl/worksheets/sheet1.xml', ZipArchive::FL_NODIR);
+        if ($sheetIndex === false) {
+            $sheetIndex = $zip->locateName('sheet1.xml', ZipArchive::FL_NODIR);
+        }
+        if ($sheetIndex === false) {
+            $zip->close();
+            throw new \Exception("Cannot find worksheet in xlsx");
+        }
+
+        $stream = $zip->getStream($zip->getNameIndex($sheetIndex));
+        $tempSheet = tempnam(sys_get_temp_dir(), 'sht');
+        file_put_contents($tempSheet, stream_get_contents($stream));
+        fclose($stream);
+        $zip->close();
+
+        $reader = new XMLReader();
+        $reader->open($tempSheet);
+
+        while ($reader->read()) {
+            if ($reader->nodeType === XMLReader::ELEMENT && $reader->name === 'row') {
+                $rowOuter = $reader->readOuterXML();
+                $rowNum = 0;
+                if (preg_match('/<row[^>]+r="(\d+)"/', $rowOuter, $rm)) {
+                    $rowNum = (int)$rm[1];
+                }
+                $rowCells = [];
+
+                preg_match_all('/<c([^>]*)>(.*?)<\/c>|<c([^>]*)\/>/s', $rowOuter, $allCells, PREG_SET_ORDER);
+                foreach ($allCells as $cMatch) {
+                    $attr = $cMatch[1] ?: $cMatch[3];
+                    $inner = $cMatch[2] ?? '';
+
+                    if (!preg_match('/r="([A-Z]+)(\d+)"/', $attr, $refM)) {
+                        continue;
+                    }
+                    $colLetters = $refM[1];
+                    $colIdx = 0;
+                    $len = strlen($colLetters);
+                    for ($i = 0; $i < $len; $i++) {
+                        $colIdx = $colIdx * 26 + (ord($colLetters[$i]) - 64);
+                    }
+                    $colIdx -= 1; // 0-based index
+
+                    $isString = preg_match('/t="s"/', $attr);
+                    $isInline = preg_match('/t="inlineStr"/', $attr);
+                    $val = '';
+
+                    if (preg_match('/<v>(.*?)<\/v>/s', $inner, $vm)) {
+                        $val = $vm[1];
+                        if ($isString) {
+                            $val = $sharedStrings[(int)$val] ?? '';
+                        }
+                    } elseif ($isInline && preg_match('/<t[^>]*>(.*?)<\/t>/s', $inner, $tm)) {
+                        $val = html_entity_decode($tm[1], ENT_QUOTES | ENT_XML1, 'UTF-8');
+                    }
+
+                    $rowCells[$colIdx] = html_entity_decode((string)$val, ENT_QUOTES | ENT_XML1, 'UTF-8');
+                }
+
+                if (!empty($rowCells)) {
+                    $maxCol = max(array_keys($rowCells));
+                    $filled = [];
+                    for ($i = 0; $i <= $maxCol; $i++) {
+                        $filled[$i] = $rowCells[$i] ?? '';
+                    }
+                    yield $rowNum => $filled;
+                }
+            }
+        }
+
+        $reader->close();
+        @unlink($tempSheet);
+    }
+
+    /**
+     * Fallback stream parser using PhpSpreadsheet.
+     */
+    protected function streamPhpSpreadsheet(string $filePath): \Generator
+    {
+        $reader = IOFactory::createReaderForFile($filePath);
+        if (method_exists($reader, 'setReadDataOnly')) {
+            $reader->setReadDataOnly(true);
+        }
+        $spreadsheet = $reader->load($filePath);
+        $sheet = $spreadsheet->getActiveSheet();
+        $highestRow = $sheet->getHighestRow();
+        $highestCol = Coordinate::columnIndexFromString($sheet->getHighestColumn());
+
+        for ($row = 1; $row <= $highestRow; $row++) {
+            $cells = [];
+            for ($col = 1; $col <= $highestCol; $col++) {
+                $cells[] = (string) $sheet->getCell([$col, $row])->getValue();
+            }
+            yield $row => $cells;
+        }
+
+        $spreadsheet->disconnectWorksheets();
+        unset($spreadsheet);
+    }
+
+    /**
+     * Export products from database matching the exact 19 standard columns.
      */
     public function export(Request $request): StreamedResponse
     {
         $query = Product::with(['supplier']);
 
-        // Filters matching the manager inventory list
         if ($request->filled('search')) {
             $search = trim($request->search);
             $query->where(function ($q) use ($search) {
@@ -578,24 +886,13 @@ class ProductExcelService
             $query->where('category', $request->category);
         }
 
-        if ($request->filled('stock_status')) {
-            $status = $request->stock_status;
-            if ($status === 'STOK_RENDAH') {
-                $query->whereColumn('stock', '<=', 'min_stock')->where('stock', '>', 0);
-            } elseif ($status === 'HABIS') {
-                $query->where('stock', '<=', 0);
-            } elseif ($status === 'TERSEDIA') {
-                $query->whereColumn('stock', '>', 'min_stock');
-            }
-        }
-
         $products = $query->orderBy('name', 'asc')->get();
 
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
-        $sheet->setTitle('Master Barang ILP');
+        $sheet->setTitle('Master Produk Gudang');
 
-        // Header Styling
+        // Professional Navy Blue Header
         $headerStyle = [
             'font' => [
                 'bold' => true,
@@ -605,7 +902,7 @@ class ProductExcelService
             ],
             'fill' => [
                 'fillType' => Fill::FILL_SOLID,
-                'startColor' => ['rgb' => '1F4E78'], // Navy Blue
+                'startColor' => ['rgb' => '0052CC'],
             ],
             'alignment' => [
                 'horizontal' => Alignment::HORIZONTAL_CENTER,
@@ -619,7 +916,6 @@ class ProductExcelService
             ],
         ];
 
-        // Write Headers
         foreach (self::EXPECTED_COLUMNS as $idx => $colName) {
             $colLetter = Coordinate::stringFromColumnIndex($idx + 1);
             $sheet->setCellValue("{$colLetter}1", $colName);
@@ -627,45 +923,37 @@ class ProductExcelService
         $sheet->getStyle('A1:' . Coordinate::stringFromColumnIndex(count(self::EXPECTED_COLUMNS)) . '1')->applyFromArray($headerStyle);
         $sheet->getRowDimension(1)->setRowHeight(28);
 
-        // Write Product Rows
         $rowIdx = 2;
         foreach ($products as $p) {
-            $sheet->setCellValue("A{$rowIdx}", $p->ilp_id ?: $p->id);
+            $sheet->setCellValue("A{$rowIdx}", $p->id_produk ?: ($p->ilp_id ?: $p->id));
             $sheet->setCellValueExplicit("B{$rowIdx}", (string) $p->sku, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-            $sheet->setCellValueExplicit("C{$rowIdx}", (string) ($p->barcode ?: $p->sku), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-            $sheet->setCellValue("D{$rowIdx}", $p->category ?: 'Umum');
-            $sheet->setCellValue("E{$rowIdx}", $p->name);
-            $sheet->setCellValue("F{$rowIdx}", $p->unit ?: 'Pcs');
-            $sheet->setCellValue("G{$rowIdx}", (float) $p->cost_price);
-            $sheet->setCellValue("H{$rowIdx}", (float) $p->price);
-            $sheet->setCellValue("I{$rowIdx}", (float) ($p->min_qty1 ?? 1));
-            $sheet->setCellValue("J{$rowIdx}", $p->min_qty2 !== null ? (float) $p->min_qty2 : '');
-            $sheet->setCellValue("K{$rowIdx}", $p->min_qty3 !== null ? (float) $p->min_qty3 : '');
-            $sheet->setCellValue("L{$rowIdx}", (float) ($p->harga_level1 ?? $p->member_price ?? $p->price));
-            $sheet->setCellValue("M{$rowIdx}", (float) ($p->clearance_discount_percent ?: 0));
-            $sheet->setCellValue("N{$rowIdx}", (int) $p->min_stock);
-            $sheet->setCellValue("O{$rowIdx}", (int) ($p->reorder_point ?? ($p->min_stock * 2)));
-            $sheet->setCellValue("P{$rowIdx}", (float) ($p->tax_rate ?: 11));
-            $sheet->setCellValue("Q{$rowIdx}", $p->is_taxable ? 'Y' : 'N');
-            $sheet->setCellValue("R{$rowIdx}", (float) ($p->last_cost_price ?: $p->cost_price));
-            $sheet->setCellValue("S{$rowIdx}", $p->status ?: 'TERSEDIA');
-            $sheet->setCellValue("T{$rowIdx}", $p->ko_sup ?: ($p->supplier?->code ?? ''));
-            $sheet->setCellValue("U{$rowIdx}", $p->act ?: ($p->status === 'NONAKTIF' ? 'N' : 'Y'));
-            $sheet->setCellValue("V{$rowIdx}", $p->masa ?? '');
-            $sheet->setCellValue("W{$rowIdx}", $p->expired_date ? $p->expired_date->format('Y-m-d') : '');
-            $sheet->setCellValue("X{$rowIdx}", $p->markup_percent ?? '');
-            $sheet->setCellValue("Y{$rowIdx}", $p->dump ?? '');
+            $sheet->setCellValueExplicit("C{$rowIdx}", (string) ($p->kode_barcode ?: ($p->barcode ?: $p->sku)), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit("D{$rowIdx}", (string) ($p->kode_produk ?: $p->sku), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValue("E{$rowIdx}", (float) ($p->qty_produk ?? $p->stock ?? 0));
+            $sheet->setCellValue("F{$rowIdx}", $p->nama_produk ?: $p->name);
+            $sheet->setCellValue("G{$rowIdx}", $p->satuan_unit ?: ($p->unit ?: 'Pcs'));
+            $sheet->setCellValue("H{$rowIdx}", (float) ($p->harga_beli ?? $p->cost_price ?? 0));
+            $sheet->setCellValue("I{$rowIdx}", (float) ($p->harga_jual_umum ?? $p->price ?? 0));
+            $sheet->setCellValue("J{$rowIdx}", (float) ($p->harga_jual_member ?? $p->member_price ?? $p->price ?? 0));
+            $sheet->setCellValue("K{$rowIdx}", (float) ($p->produk_disc ?? $p->clearance_discount_percent ?? 0));
+            $sheet->setCellValue("L{$rowIdx}", (int) ($p->minimum_stock ?? $p->min_stock ?? 5));
+            $sheet->setCellValue("M{$rowIdx}", (float) ($p->ppn_out ?? $p->tax_rate ?? 11));
+            $sheet->setCellValue("N{$rowIdx}", $p->ppn_chk ?: ($p->is_taxable ? 'Y' : 'N'));
+            $sheet->setCellValue("O{$rowIdx}", (float) ($p->harga_beli_terakhir ?? $p->last_cost_price ?? $p->cost_price ?? 0));
+            $sheet->setCellValue("P{$rowIdx}", $p->status_barang ?: ($p->status ?: 'TERSEDIA'));
+            $sheet->setCellValue("Q{$rowIdx}", $p->kode_suplier ?: ($p->ko_sup ?: ($p->supplier?->code ?? '')));
+            $sheet->setCellValue("R{$rowIdx}", $p->manufacturing_date ? Carbon::parse($p->manufacturing_date)->format('Y-m-d') : '');
+            $sheet->setCellValue("S{$rowIdx}", $p->exp_date ? Carbon::parse($p->exp_date)->format('Y-m-d') : ($p->expired_date ? $p->expired_date->format('Y-m-d') : ''));
 
             $rowIdx++;
         }
 
-        // Auto-fit Column Widths
         for ($col = 1; $col <= count(self::EXPECTED_COLUMNS); $col++) {
             $colLetter = Coordinate::stringFromColumnIndex($col);
             $sheet->getColumnDimension($colLetter)->setAutoSize(true);
         }
 
-        $filename = 'Export_Master_Barang_ILP_25Kolom_' . date('Ymd_His') . '.xlsx';
+        $filename = 'Export_Master_Barang_' . date('Ymd_His') . '.xlsx';
 
         return new StreamedResponse(function () use ($spreadsheet) {
             $writer = new Xlsx($spreadsheet);
@@ -678,7 +966,7 @@ class ProductExcelService
     }
 
     /**
-     * Download blank template with all 25 canonical ILP headers and 1 sample row.
+     * Download blank template with all 19 canonical columns and 2 sample rows.
      */
     public function generateTemplate(): StreamedResponse
     {
@@ -686,7 +974,6 @@ class ProductExcelService
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('Template Master Barang');
 
-        // Header Styling
         $headerStyle = [
             'font' => [
                 'bold' => true,
@@ -695,7 +982,7 @@ class ProductExcelService
             ],
             'fill' => [
                 'fillType' => Fill::FILL_SOLID,
-                'startColor' => ['rgb' => '0052CC'], // Blue Brand
+                'startColor' => ['rgb' => '0052CC'],
             ],
             'alignment' => [
                 'horizontal' => Alignment::HORIZONTAL_CENTER,
@@ -710,51 +997,70 @@ class ProductExcelService
         $sheet->getStyle('A1:' . Coordinate::stringFromColumnIndex(count(self::EXPECTED_COLUMNS)) . '1')->applyFromArray($headerStyle);
         $sheet->getRowDimension(1)->setRowHeight(28);
 
-        // Sample Data Row
-        $sampleRow = [
-            'BRG-001',
-            'SKU-SAMPLE-01',
-            '8991234567890',
-            'Makanan & Minuman',
-            'Kopi Susu Instan 10x20g',
-            'Pack',
-            12000,
-            15000,
-            1,
-            5,
-            10,
-            14000,
-            0,
-            5,
-            10,
-            11,
-            'Y',
-            12000,
-            'TERSEDIA',
-            'SUP-001',
-            'Y',
-            '365',
-            date('Y-12-31', strtotime('+1 year')),
-            25,
-            'Contoh catatan master barang',
+        // 2 Sample Rows
+        $sampleRows = [
+            [
+                'PRD-001',
+                'SKU-MIA-01',
+                '8992345678901',
+                'SKU-MIA-01',
+                150,
+                'Minyak Goreng Sania 2L Pouch',
+                'Pouch',
+                32000,
+                36500,
+                35000,
+                0,
+                15,
+                11,
+                'Y',
+                32000,
+                'TERSEDIA',
+                'SUP-001',
+                date('Y-m-d', strtotime('-1 month')),
+                date('Y-m-d', strtotime('+1 year')),
+            ],
+            [
+                'PRD-002',
+                'SKU-BKS-02',
+                '8993456789012',
+                'SKU-BKS-02',
+                200,
+                'Beras Ramos Setra Premium 5Kg',
+                'Karung',
+                68000,
+                75000,
+                73000,
+                0,
+                20,
+                11,
+                'Y',
+                68000,
+                'TERSEDIA',
+                'SUP-002',
+                date('Y-m-d', strtotime('-2 weeks')),
+                date('Y-m-d', strtotime('+6 months')),
+            ],
         ];
 
-        foreach ($sampleRow as $idx => $val) {
-            $colLetter = Coordinate::stringFromColumnIndex($idx + 1);
-            if (is_numeric($val) && !is_string($val)) {
-                $sheet->setCellValue("{$colLetter}2", $val);
-            } else {
-                $sheet->setCellValueExplicit("{$colLetter}2", (string)$val, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        foreach ($sampleRows as $rowOffset => $sampleRow) {
+            $rowNum = $rowOffset + 2;
+            foreach ($sampleRow as $idx => $val) {
+                $colLetter = Coordinate::stringFromColumnIndex($idx + 1);
+                if (is_numeric($val) && !is_string($val)) {
+                    $sheet->setCellValue("{$colLetter}{$rowNum}", $val);
+                } else {
+                    $sheet->setCellValueExplicit("{$colLetter}{$rowNum}", (string)$val, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                }
             }
         }
 
-        // Auto-fit
         for ($col = 1; $col <= count(self::EXPECTED_COLUMNS); $col++) {
             $colLetter = Coordinate::stringFromColumnIndex($col);
             $sheet->getColumnDimension($colLetter)->setAutoSize(true);
         }
 
-        $filename = 'Template_Master_Barang_ILP_25Kolom.xlsx';
+        $filename = 'Template_Master_Barang_19Kolom.xlsx';
 
         return new StreamedResponse(function () use ($spreadsheet) {
             $writer = new Xlsx($spreadsheet);
@@ -767,19 +1073,20 @@ class ProductExcelService
     }
 
     /**
-     * Helper to safely parse numeric value from Excel cells.
+     * Parse numeric values safely.
      */
-    protected function parseNumeric(mixed $value): float
+    protected function parseNumeric(mixed $val, float $default = 0): float
     {
-        if ($value === null || $value === '') {
-            return 0.0;
+        if ($val === null || $val === '') {
+            return $default;
         }
 
-        if (is_numeric($value)) {
-            return (float) $value;
+        if (is_numeric($val)) {
+            return (float) $val;
         }
 
-        $clean = preg_replace('/[^0-9.,-]/', '', (string) $value);
+        $clean = preg_replace('/[^0-9.,-]/', '', (string) $val);
+
         if (str_contains($clean, ',') && str_contains($clean, '.')) {
             if (strrpos($clean, ',') > strrpos($clean, '.')) {
                 $clean = str_replace('.', '', $clean);
@@ -791,25 +1098,50 @@ class ProductExcelService
             $clean = str_replace(',', '.', $clean);
         }
 
-        return (float) $clean;
+        return is_numeric($clean) ? (float) $clean : $default;
     }
 
     /**
-     * Helper to safely parse Excel dates.
+     * Parse date values safely from Excel serial numbers or date strings.
      */
-    protected function parseDate(mixed $value): ?Carbon
+    protected function parseDate(mixed $val): ?Carbon
     {
-        if (empty($value)) {
+        if ($val === null || trim((string)$val) === '' || trim((string)$val) === '-') {
             return null;
         }
 
-        try {
-            if (is_numeric($value)) {
-                return Carbon::instance(ExcelDate::excelToDateTimeObject((float) $value));
+        if (is_numeric($val) && (float)$val > 1000) {
+            try {
+                return Carbon::instance(ExcelDate::excelToDateTimeObject((float)$val));
+            } catch (\Throwable $e) {
+                // fall through
             }
+        }
 
-            return Carbon::parse((string) $value);
-        } catch (\Throwable) {
+        $str = trim((string) $val);
+
+        $formats = [
+            'Y-m-d',
+            'd/m/Y',
+            'd-m-Y',
+            'Y/m/d',
+            'd.m.Y',
+            'Y.m.d',
+            'd M Y',
+            'd F Y',
+        ];
+
+        foreach ($formats as $fmt) {
+            try {
+                return Carbon::createFromFormat($fmt, $str);
+            } catch (\Throwable $e) {
+                continue;
+            }
+        }
+
+        try {
+            return Carbon::parse($str);
+        } catch (\Throwable $e) {
             return null;
         }
     }

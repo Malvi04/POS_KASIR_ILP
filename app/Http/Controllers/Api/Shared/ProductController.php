@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Shared;
 
 use App\Http\Controllers\Controller;
+use App\Models\CouponUnit;
 use App\Models\Location;
 use App\Models\Product;
 use App\Models\ProductStock;
@@ -48,7 +49,7 @@ class ProductController extends Controller
                 $locationCode ?: $branchParam,
                 null,
                 $authUser,
-                ($authUser && $authUser->isKasir()) ? 'STORE' : null
+                null
             );
         }
 
@@ -68,8 +69,13 @@ class ProductController extends Controller
                         'message' => "Akun Kasir tidak memiliki akses ke inventaris lokasi {$targetLocation->name}.",
                     ], 403);
                 }
+            } elseif ($locationIdParam || $locationCode || $branchParam) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Lokasi yang diminta tidak ditemukan atau tidak diizinkan untuk Kasir.',
+                ], 403);
             } else {
-                $primaryBranch = trim(explode(',', $authUser->branch ?? 'Pusat')[0]);
+                $primaryBranch = trim(explode(',', $authUser->branch ?? 'Cabang Pusat')[0]);
                 $targetLocation = $this->stockService->resolveLocation(null, $primaryBranch, null, $authUser, 'STORE');
             }
         }
@@ -91,7 +97,15 @@ class ProductController extends Controller
         }
 
         if ($category !== '' && $category !== 'all' && $category !== 'Semua') {
-            $query->where('category', $category);
+            if (strtolower($category) === 'kupon' || str_contains(strtolower($category), 'kupon')) {
+                $query->where(function ($sub) {
+                    $sub->where('category', 'like', '%Kupon%')
+                        ->orWhere('category', 'like', '%Voucher%')
+                        ->orWhere('sku', 'like', 'KPN%');
+                });
+            } else {
+                $query->where('category', $category);
+            }
         }
 
         if ($stockFilter === 'STOK_RENDAH') {
@@ -230,6 +244,56 @@ class ProductController extends Controller
                 });
         }
 
+        // Filter Kupon category specifically for POS coupon unit sales
+        if ($category && (strtolower($category) === 'kupon' || str_contains(strtolower($category), 'kupon'))) {
+            $couponQuery = CouponUnit::with('product')
+                ->whereIn('status', ['AVAILABLE', 'ISSUED', 'TERVALIDASI', 'SIAP_AMBIL']);
+
+            if ($location) {
+                $couponQuery->where(function ($cq) use ($location) {
+                    $cq->where('location_id', $location->id)
+                      ->orWhere('branch', $location->name);
+                });
+            } else {
+                $couponQuery->where(function ($cq) {
+                    $cq->whereNotNull('location_id')->where('location_id', '!=', 1);
+                })->where('branch', '!=', 'Gudang Pusat');
+            }
+
+            if ($q !== '') {
+                $lowerQ = strtolower($q);
+                $couponQuery->where(function ($cq) use ($q, $lowerQ) {
+                    $cq->where('serial_number', 'like', "%{$q}%")
+                       ->orWhere('recipient_name', 'like', "%{$q}%")
+                       ->orWhere('notes', 'like', "%{$q}%")
+                       ->orWhere('category', 'like', "%{$q}%")
+                       ->orWhere('volume', 'like', "%{$q}%");
+                });
+            }
+
+            $coupons = $couponQuery->latest('id')->take($limit)->get();
+            $items = $coupons->map(fn ($c) => $this->formatCouponAsProductPayload($c, $location))->values()->all();
+
+            return response()->json([
+                'success' => true,
+                'catalog_mode' => 'KUPON',
+                'location' => $location ? [
+                    'id' => $location->id,
+                    'code' => $location->code,
+                    'name' => $location->name,
+                ] : null,
+                'is_exact_barcode' => false,
+                'count' => count($items),
+                'data' => $items,
+                'meta' => [
+                    'current_page' => 1,
+                    'last_page' => 1,
+                    'per_page' => $limit,
+                    'total' => count($items),
+                ],
+            ]);
+        }
+
         if ($category && $category !== 'Semua' && $category !== 'all') {
             $query->where('category', $category);
         }
@@ -293,6 +357,25 @@ class ProductController extends Controller
         $items = collect($paginated->items())->map(
             fn ($p) => $this->formatProductPayload($p, $strictStoreMode ? $location?->id : null, $location)
         )->values()->all();
+
+        // Also search active coupons if query matches coupon serial/notes/category
+        if ($q !== '') {
+            $matchingCoupons = CouponUnit::with('product')
+                ->whereIn('status', ['AVAILABLE', 'ISSUED', 'TERVALIDASI', 'SIAP_AMBIL'])
+                ->where(function ($cq) use ($q, $lowerQ) {
+                    $cq->where('serial_number', 'like', "%{$q}%")
+                       ->orWhere('notes', 'like', "%{$q}%")
+                       ->orWhere('category', 'like', "%{$q}%")
+                       ->orWhere('volume', 'like', "%{$q}%");
+                })
+                ->take(10)
+                ->get();
+
+            if ($matchingCoupons->isNotEmpty()) {
+                $couponItems = $matchingCoupons->map(fn ($c) => $this->formatCouponAsProductPayload($c, $location))->all();
+                $items = array_merge($couponItems, $items);
+            }
+        }
 
         return response()->json([
             'success' => true,
@@ -386,6 +469,26 @@ class ProductController extends Controller
             fn ($p) => $this->formatProductPayload($p, $location->id, $location)
         )->values()->all();
 
+        if ($afterId === 0 && !$since) {
+            $couponQuery = CouponUnit::with('product')
+                ->whereIn('status', ['AVAILABLE', 'ISSUED', 'TERVALIDASI', 'SIAP_AMBIL']);
+            if ($location) {
+                $couponQuery->where(function ($cq) use ($location) {
+                    $cq->where('location_id', $location->id)
+                      ->orWhere('branch', $location->name);
+                });
+            } else {
+                $couponQuery->where(function ($cq) {
+                    $cq->whereNotNull('location_id')->where('location_id', '!=', 1);
+                })->where('branch', '!=', 'Gudang Pusat');
+            }
+            $activeCoupons = $couponQuery->get();
+            if ($activeCoupons->isNotEmpty()) {
+                $couponPayloads = $activeCoupons->map(fn ($c) => $this->formatCouponAsProductPayload($c, $location))->all();
+                $items = array_merge($items, $couponPayloads);
+            }
+        }
+
         return response()->json([
             'success' => true,
             'catalog_mode' => 'STOCK_TOKO',
@@ -439,6 +542,41 @@ class ProductController extends Controller
         }
 
         if (!$product) {
+            $cleanBarcode = ltrim($barcode, '#');
+            $coupon = CouponUnit::with('product')
+                ->where(function ($q) use ($barcode, $cleanBarcode) {
+                    $q->where('serial_number', $barcode)
+                      ->orWhere('serial_number', '#' . $cleanBarcode)
+                      ->orWhere('serial_number', $cleanBarcode);
+                })
+                ->whereIn('status', ['AVAILABLE', 'ISSUED', 'TERVALIDASI', 'SIAP_AMBIL'])
+                ->first();
+
+            if ($coupon) {
+                if ($location && $location->type === 'STORE') {
+                    $isMatch = ((int) $coupon->location_id === (int) $location->id) || (strcasecmp((string) $coupon->branch, (string) $location->name) === 0);
+                    if (!$isMatch) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => "Kupon [{$coupon->serial_number}] belum diterima di gerai {$location->name} (masih berada di " . ($coupon->branch ?: 'Gudang Pusat') . "). Harap lakukan pengiriman dan penerimaan di menu Barang Masuk terlebih dahulu.",
+                            'data' => null,
+                        ], 404);
+                    }
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'message' => "Kupon [{$coupon->serial_number}] berhasil dipindai.",
+                    'catalog_mode' => 'KUPON',
+                    'location' => $location ? [
+                        'id' => $location->id,
+                        'code' => $location->code,
+                        'name' => $location->name,
+                    ] : null,
+                    'data' => $this->formatCouponAsProductPayload($coupon, $location),
+                ]);
+            }
+
             $locMsg = ($strictStoreMode && $location) ? " pada Stock Toko [{$location->name}]" : ' dalam sistem katalog';
             return response()->json([
                 'success' => false,
@@ -478,12 +616,144 @@ class ProductController extends Controller
             $query->whereHas('productStocks', fn ($sq) => $sq->where('location_id', $location->id)->where('is_active', true));
         }
 
-        $categories = $query->orderBy('category')->pluck('category');
+        $categories = $query->orderBy('category')->pluck('category')->toArray();
+        $couponQuery = CouponUnit::whereIn('status', ['AVAILABLE', 'ISSUED', 'TERVALIDASI', 'SIAP_AMBIL']);
+        if ($location) {
+            $couponQuery->where(function ($cq) use ($location) {
+                $cq->where('location_id', $location->id)
+                  ->orWhere('branch', $location->name);
+            });
+        } else {
+            $couponQuery->where(function ($cq) {
+                $cq->whereNotNull('location_id')->where('location_id', '!=', 1);
+            })->where('branch', '!=', 'Gudang Pusat');
+        }
+        $hasCoupons = $couponQuery->exists();
+        if ($hasCoupons && !in_array('Kupon', $categories)) {
+            $categories[] = 'Kupon';
+        }
 
         return response()->json([
             'success' => true,
-            'data' => array_merge(['Semua'], $categories->toArray()),
+            'data' => array_merge(['Semua'], $categories),
         ]);
+    }
+
+    /**
+     * List all active coupons for Cashier POS.
+     */
+    public function couponProducts(Request $request): JsonResponse
+    {
+        $locContext = $this->resolvePosStoreContext($request);
+        $location = $locContext['location'] ?? null;
+
+        $couponQuery = CouponUnit::with('product')
+            ->whereIn('status', ['AVAILABLE', 'ISSUED', 'TERVALIDASI', 'SIAP_AMBIL']);
+
+        if ($location) {
+            $couponQuery->where(function ($cq) use ($location) {
+                $cq->where('location_id', $location->id)
+                  ->orWhere('branch', $location->name);
+            });
+        } else {
+            $couponQuery->where(function ($cq) {
+                $cq->whereNotNull('location_id')->where('location_id', '!=', 1);
+            })->where('branch', '!=', 'Gudang Pusat');
+        }
+
+        $coupons = $couponQuery->latest('id')->get();
+
+        $items = $coupons->map(fn ($c) => $this->formatCouponAsProductPayload($c, $location))->values()->all();
+
+        return response()->json([
+            'success' => true,
+            'count' => count($items),
+            'data' => $items,
+        ]);
+    }
+
+    /**
+     * Format a CouponUnit into the standardized POS Product payload format.
+     */
+    public function formatCouponAsProductPayload(CouponUnit $c, ?Location $location = null): array
+    {
+        $categoryInfo = match(strtolower($c->category)) {
+            'bbm' => ['label' => 'BBM & Armada Toko', 'name' => 'Kupon BBM (' . ($c->volume ?: 'Armada') . ')'],
+            'beras' => ['label' => 'Beras Subsidi', 'name' => 'Kupon Beras Subsidi (' . ($c->volume ?: '5kg') . ')'],
+            'galon' => ['label' => 'Galon Air Mineral', 'name' => 'Kupon Galon Air (' . ($c->volume ?: '19L') . ')'],
+            'pulsa' => ['label' => 'Pulsa Operasional', 'name' => 'Kupon Pulsa (' . ($c->volume ?: 'Operasional') . ')'],
+            'produk' => ['label' => 'Produk Khusus', 'name' => 'Kupon Produk (' . ($c->product?->name ?: ($c->volume ?: 'Khusus')) . ')'],
+            default => ['label' => ucfirst($c->category), 'name' => 'Kupon ' . ucfirst($c->category) . ' (' . ($c->volume ?: '1 Unit') . ')']
+        };
+
+        $cleanSerial = preg_replace('/[^A-Za-z0-9\-]/', '', $c->serial_number);
+        $nominal = (float) ($c->nominal_value > 0 ? $c->nominal_value : ($c->product?->price ?? 50000.0));
+        $displayName = $c->notes ? (Str::startsWith($c->notes, 'Kupon') ? $c->notes : 'Kupon ' . $c->notes) : $categoryInfo['name'];
+
+        return [
+            'id' => $c->product_id ?: (900000 + $c->id),
+            'ilp_id' => 'KPN-' . $c->id,
+            'sku' => $cleanSerial,
+            'barcode' => $c->serial_number,
+            'name' => $displayName,
+            'id_produk' => 'KPN-' . $c->id,
+            'kode_barcode' => $c->serial_number,
+            'kode_produk' => $cleanSerial,
+            'qty_produk' => 1,
+            'nama_produk' => $displayName,
+            'satuan_unit' => 'Lembar',
+            'harga_beli' => $nominal,
+            'harga_jual_umum' => $nominal,
+            'harga_jual_member' => $nominal,
+            'produk_disc' => 0,
+            'minimum_stock' => 1,
+            'ppn_out' => 0,
+            'ppn_chk' => 'N',
+            'harga_beli_terakhir' => $nominal,
+            'status_barang' => 'TERSEDIA',
+            'kode_suplier' => 'ILP-KUPON',
+            'manufacturing_date' => null,
+            'exp_date' => null,
+            'brand' => 'Koperasi ILP',
+            'category' => 'Kupon',
+            'unit' => 'Lembar',
+            'cost_price' => $nominal,
+            'last_cost_price' => $nominal,
+            'raw_last_cost_price' => $nominal,
+            'original_price' => $nominal,
+            'original_member_price' => $nominal,
+            'stock' => 1,
+            'master_stock' => 1,
+            'warehouse_stock' => 1,
+            'min_stock' => 1,
+            'is_in_stock' => true,
+            'is_low_stock' => false,
+            'is_out_of_stock' => false,
+            'stock_status' => 'TERSEDIA',
+            'location_id' => $location?->id,
+            'location_code' => $location?->code,
+            'location_name' => $location?->name,
+            'stock_version' => 1,
+            'branch_stock' => [],
+            'allocated_branches' => [],
+            'price' => $nominal,
+            'member_price' => $nominal,
+            'is_taxable' => false,
+            'tax_rate' => 0,
+            'tax_label' => 'Bebas Pajak (Kupon)',
+            'is_consignment' => false,
+            'is_coupon' => true,
+            'coupon_number' => $c->serial_number,
+            'coupon_id' => $c->id,
+            'serial_number' => $c->serial_number,
+            'product_type' => 'KUPON',
+            'product_type_label' => 'Kupon ' . $categoryInfo['label'],
+            'recipient_name' => $c->recipient_name,
+            'recipient_nik' => $c->recipient_nik,
+            'recipient_dept' => $c->recipient_dept,
+            'volume' => $c->volume,
+            'units' => [],
+        ];
     }
 
     /**
@@ -526,7 +796,15 @@ class ProductController extends Controller
         }
 
         if ($category !== '' && $category !== 'all' && $category !== 'Semua') {
-            $query->where('category', $category);
+            if (strtolower($category) === 'kupon' || str_contains(strtolower($category), 'kupon')) {
+                $query->where(function ($sub) {
+                    $sub->where('category', 'like', '%Kupon%')
+                        ->orWhere('category', 'like', '%Voucher%')
+                        ->orWhere('sku', 'like', 'KPN%');
+                });
+            } else {
+                $query->where('category', $category);
+            }
         }
 
         if ($search !== '') {
@@ -680,6 +958,23 @@ class ProductController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        $request->merge([
+            'sku' => $request->input('sku') ?: $request->input('kode_produk') ?: $request->input('SKU'),
+            'barcode' => $request->input('barcode') ?: $request->input('kode_barcode') ?: $request->input('Kode Barcode'),
+            'name' => $request->input('name') ?: $request->input('nama_produk') ?: $request->input('NamaProduk'),
+            'category' => $request->input('category') ?: 'Kebutuhan Pokok',
+            'unit' => $request->input('unit') ?: $request->input('satuan_unit') ?: $request->input('SatuanUnit') ?: 'Pcs',
+            'cost_price' => $request->input('cost_price') ?? $request->input('harga_beli') ?? $request->input('HargaBeli') ?? 0,
+            'price' => $request->input('price') ?? $request->input('harga_jual_umum') ?? $request->input('HargaJualUmum') ?? 0,
+            'member_price' => $request->input('member_price') ?? $request->input('harga_jual_member') ?? $request->input('HargaJualMember') ?? $request->input('price'),
+            'stock' => $request->input('stock') ?? $request->input('qty_produk') ?? $request->input('QtyProduk') ?? 0,
+            'min_stock' => $request->input('min_stock') ?? $request->input('minimum_stock') ?? $request->input('MinimumStock') ?? 5,
+            'tax_rate' => $request->input('tax_rate') ?? $request->input('ppn_out') ?? $request->input('PPNOut') ?? 11,
+            'last_cost_price' => $request->input('last_cost_price') ?? $request->input('harga_beli_terakhir') ?? $request->input('HargaBeliTerakhir') ?? 0,
+            'ko_sup' => $request->input('ko_sup') ?: $request->input('kode_suplier') ?: $request->input('KodeSuplier'),
+            'expired_date' => $request->input('expired_date') ?: $request->input('exp_date') ?: $request->input('ExpDate'),
+        ]);
+
         $validated = $request->validate([
             'sku' => 'nullable|string|max:50|unique:products,sku',
             'ilp_id' => 'nullable|string|max:50',
@@ -713,6 +1008,25 @@ class ProductController extends Controller
             'is_consignment' => 'boolean',
             'supplier_id' => 'nullable|exists:suppliers,id',
             'commission_percent' => 'nullable|numeric|min:0|max:100',
+            // 19 Kolom Standar Master Produk Gudang
+            'id_produk' => 'nullable|string|max:100',
+            'kode_barcode' => 'nullable|string|max:100',
+            'kode_produk' => 'nullable|string|max:100',
+            'qty_produk' => 'nullable|numeric|min:0',
+            'nama_produk' => 'nullable|string|max:255',
+            'satuan_unit' => 'nullable|string|max:50',
+            'harga_beli' => 'nullable|numeric|min:0',
+            'harga_jual_umum' => 'nullable|numeric|min:0',
+            'harga_jual_member' => 'nullable|numeric|min:0',
+            'produk_disc' => 'nullable|numeric|min:0|max:100',
+            'minimum_stock' => 'nullable|integer|min:0',
+            'ppn_out' => 'nullable|numeric|min:0',
+            'ppn_chk' => 'nullable|string|max:10',
+            'harga_beli_terakhir' => 'nullable|numeric|min:0',
+            'status_barang' => 'nullable|string|max:50',
+            'kode_suplier' => 'nullable|string|max:100',
+            'manufacturing_date' => 'nullable|date',
+            'exp_date' => 'nullable|date',
             'units' => 'nullable|array',
             'units.*.unit_name' => 'required|string',
             'units.*.conversion_factor' => 'required|integer|min:2',
@@ -725,8 +1039,29 @@ class ProductController extends Controller
             $initialStock = (int) $validated['stock'];
 
             $product = Product::create([
+                // 19 Kolom Standar
+                'id_produk' => $validated['id_produk'] ?? $validated['ilp_id'] ?? null,
+                'kode_barcode' => $validated['kode_barcode'] ?? $validated['barcode'],
+                'kode_produk' => $validated['kode_produk'] ?? $sku,
+                'qty_produk' => $validated['qty_produk'] ?? $initialStock,
+                'nama_produk' => $validated['nama_produk'] ?? $validated['name'],
+                'satuan_unit' => $validated['satuan_unit'] ?? $validated['unit'],
+                'harga_beli' => $validated['harga_beli'] ?? (float) $validated['cost_price'],
+                'harga_jual_umum' => $validated['harga_jual_umum'] ?? (float) $validated['price'],
+                'harga_jual_member' => $validated['harga_jual_member'] ?? (!empty($validated['member_price']) ? (float) $validated['member_price'] : (float) $validated['price']),
+                'produk_disc' => $validated['produk_disc'] ?? (float) ($validated['clearance_discount_percent'] ?? 0.0),
+                'minimum_stock' => $validated['minimum_stock'] ?? (int) $validated['min_stock'],
+                'ppn_out' => $validated['ppn_out'] ?? (float) ($validated['tax_rate'] ?? 11.0),
+                'ppn_chk' => $validated['ppn_chk'] ?? (!empty($validated['is_taxable']) ? 'Y' : 'N'),
+                'harga_beli_terakhir' => $validated['harga_beli_terakhir'] ?? (!empty($validated['last_cost_price']) ? (float) $validated['last_cost_price'] : (float) $validated['cost_price']),
+                'status_barang' => $validated['status_barang'] ?? ($initialStock <= 0 ? 'HABIS' : ($initialStock <= (int) $validated['min_stock'] ? 'STOK_RENDAH' : 'TERSEDIA')),
+                'kode_suplier' => $validated['kode_suplier'] ?? $validated['ko_sup'] ?? null,
+                'manufacturing_date' => $validated['manufacturing_date'] ?? null,
+                'exp_date' => $validated['exp_date'] ?? $validated['expired_date'] ?? null,
+
+                // Legacy Attributes
                 'sku' => $sku,
-                'ilp_id' => $validated['ilp_id'] ?? null,
+                'ilp_id' => $validated['ilp_id'] ?? $validated['id_produk'] ?? null,
                 'barcode' => $validated['barcode'],
                 'name' => $validated['name'],
                 'category' => $validated['category'],
@@ -812,6 +1147,23 @@ class ProductController extends Controller
             ], 404);
         }
 
+        $request->merge([
+            'sku' => $request->input('sku') ?: $request->input('kode_produk') ?: $request->input('SKU'),
+            'barcode' => $request->input('barcode') ?: $request->input('kode_barcode') ?: $request->input('Kode Barcode'),
+            'name' => $request->input('name') ?: $request->input('nama_produk') ?: $request->input('NamaProduk'),
+            'category' => $request->input('category') ?: ($product->category ?: 'Kebutuhan Pokok'),
+            'unit' => $request->input('unit') ?: $request->input('satuan_unit') ?: $request->input('SatuanUnit') ?: 'Pcs',
+            'cost_price' => $request->input('cost_price') ?? $request->input('harga_beli') ?? $request->input('HargaBeli') ?? $product->cost_price,
+            'price' => $request->input('price') ?? $request->input('harga_jual_umum') ?? $request->input('HargaJualUmum') ?? $product->price,
+            'member_price' => $request->input('member_price') ?? $request->input('harga_jual_member') ?? $request->input('HargaJualMember') ?? ($product->member_price ?? $product->price),
+            'stock' => $request->input('stock') ?? $request->input('qty_produk') ?? $request->input('QtyProduk') ?? $product->stock,
+            'min_stock' => $request->input('min_stock') ?? $request->input('minimum_stock') ?? $request->input('MinimumStock') ?? $product->min_stock,
+            'tax_rate' => $request->input('tax_rate') ?? $request->input('ppn_out') ?? $request->input('PPNOut') ?? ($product->tax_rate ?? 11),
+            'last_cost_price' => $request->input('last_cost_price') ?? $request->input('harga_beli_terakhir') ?? $request->input('HargaBeliTerakhir') ?? $product->last_cost_price,
+            'ko_sup' => $request->input('ko_sup') ?: $request->input('kode_suplier') ?: $request->input('KodeSuplier'),
+            'expired_date' => $request->input('expired_date') ?: $request->input('exp_date') ?: $request->input('ExpDate'),
+        ]);
+
         $validated = $request->validate([
             'sku' => "nullable|string|max:50|unique:products,sku,{$id}",
             'barcode' => "required|string|max:50|unique:products,barcode,{$id}",
@@ -844,9 +1196,43 @@ class ProductController extends Controller
             'is_consignment' => 'boolean',
             'supplier_id' => 'nullable|exists:suppliers,id',
             'commission_percent' => 'nullable|numeric|min:0|max:100',
+            // 19 Kolom Standar Master Produk Gudang
+            'id_produk' => 'nullable|string|max:100',
+            'kode_barcode' => 'nullable|string|max:100',
+            'kode_produk' => 'nullable|string|max:100',
+            'qty_produk' => 'nullable|numeric|min:0',
+            'nama_produk' => 'nullable|string|max:255',
+            'satuan_unit' => 'nullable|string|max:50',
+            'harga_beli' => 'nullable|numeric|min:0',
+            'harga_jual_umum' => 'nullable|numeric|min:0',
+            'harga_jual_member' => 'nullable|numeric|min:0',
+            'produk_disc' => 'nullable|numeric|min:0|max:100',
+            'minimum_stock' => 'nullable|integer|min:0',
+            'ppn_out' => 'nullable|numeric|min:0',
+            'ppn_chk' => 'nullable|string|max:10',
+            'harga_beli_terakhir' => 'nullable|numeric|min:0',
+            'status_barang' => 'nullable|string|max:50',
+            'kode_suplier' => 'nullable|string|max:100',
+            'manufacturing_date' => 'nullable|date',
+            'exp_date' => 'nullable|date',
         ]);
 
         $validated['status'] = (int) $validated['stock'] <= 0 ? 'HABIS' : ((int) $validated['stock'] <= (int) $validated['min_stock'] ? 'STOK_RENDAH' : 'TERSEDIA');
+
+        // Explicitly set 19 columns if not already in validated
+        if (!isset($validated['id_produk']) && !empty($validated['ilp_id'])) $validated['id_produk'] = $validated['ilp_id'];
+        if (!isset($validated['kode_barcode']) && !empty($validated['barcode'])) $validated['kode_barcode'] = $validated['barcode'];
+        if (!isset($validated['kode_produk']) && !empty($validated['sku'])) $validated['kode_produk'] = $validated['sku'];
+        if (!isset($validated['qty_produk']) && isset($validated['stock'])) $validated['qty_produk'] = $validated['stock'];
+        if (!isset($validated['nama_produk']) && !empty($validated['name'])) $validated['nama_produk'] = $validated['name'];
+        if (!isset($validated['satuan_unit']) && !empty($validated['unit'])) $validated['satuan_unit'] = $validated['unit'];
+        if (!isset($validated['harga_beli']) && isset($validated['cost_price'])) $validated['harga_beli'] = $validated['cost_price'];
+        if (!isset($validated['harga_jual_umum']) && isset($validated['price'])) $validated['harga_jual_umum'] = $validated['price'];
+        if (!isset($validated['harga_jual_member']) && isset($validated['member_price'])) $validated['harga_jual_member'] = $validated['member_price'];
+        if (!isset($validated['minimum_stock']) && isset($validated['min_stock'])) $validated['minimum_stock'] = $validated['min_stock'];
+        if (!isset($validated['status_barang']) && isset($validated['status'])) $validated['status_barang'] = $validated['status'];
+        if (!isset($validated['kode_suplier']) && !empty($validated['ko_sup'])) $validated['kode_suplier'] = $validated['ko_sup'];
+        if (!isset($validated['exp_date']) && !empty($validated['expired_date'])) $validated['exp_date'] = $validated['expired_date'];
 
         $product->update($validated);
 
@@ -1077,6 +1463,25 @@ class ProductController extends Controller
             'sku' => $p->sku,
             'barcode' => $p->barcode,
             'name' => $p->name,
+            // 19 Kolom Standar Master Produk ILP
+            'id_produk' => $p->id_produk ?: ($p->ilp_id ?: (string) $p->id),
+            'kode_barcode' => $p->kode_barcode ?: $p->barcode,
+            'kode_produk' => $p->kode_produk ?: $p->sku,
+            'qty_produk' => $p->qty_produk !== null ? (int) $p->qty_produk : (int) $p->stock,
+            'nama_produk' => $p->nama_produk ?: $p->name,
+            'satuan_unit' => $p->satuan_unit ?: ($p->unit ?: 'Pcs'),
+            'harga_beli' => (float) ($p->harga_beli !== null ? $p->harga_beli : $p->cost_price),
+            'harga_jual_umum' => (float) ($p->harga_jual_umum !== null ? $p->harga_jual_umum : $p->price),
+            'harga_jual_member' => (float) ($p->harga_jual_member !== null ? $p->harga_jual_member : ($p->member_price ?? $p->price)),
+            'produk_disc' => (float) ($p->produk_disc !== null ? $p->produk_disc : ($p->discount_percent ?? 0)),
+            'minimum_stock' => (int) ($p->minimum_stock !== null ? $p->minimum_stock : ($p->min_stock ?? 5)),
+            'ppn_out' => (float) ($p->ppn_out !== null ? $p->ppn_out : ($p->tax_rate ?? 11)),
+            'ppn_chk' => $p->ppn_chk ?: ($p->is_taxable ? 'Y' : 'N'),
+            'harga_beli_terakhir' => (float) ($p->harga_beli_terakhir !== null ? $p->harga_beli_terakhir : ($p->last_cost_price ?? $p->cost_price)),
+            'status_barang' => $p->status_barang ?: ($p->status ?? 'TERSEDIA'),
+            'kode_suplier' => $p->kode_suplier ?: ($p->ko_sup ?: ($p->supplier?->code ?? '-')),
+            'manufacturing_date' => $p->manufacturing_date ? (\Carbon\Carbon::parse($p->manufacturing_date)->format('Y-m-d')) : null,
+            'exp_date' => $p->exp_date ? (\Carbon\Carbon::parse($p->exp_date)->format('Y-m-d')) : ($p->expired_date ? $p->expired_date->toDateString() : null),
             'brand' => $p->brand ?: ($p->supplier?->name ?: 'ILP'),
             'category' => $p->category,
             'unit' => $p->unit,

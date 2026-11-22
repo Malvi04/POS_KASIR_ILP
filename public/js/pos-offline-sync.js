@@ -728,12 +728,14 @@
                     window.PosRealtime.broadcast('inventory_updated', { synced: true });
                 }
 
-                const toastMsg = (json.failed_count > 0)
-                    ? `Sinkronisasi parsial: ${json.synced_count} transaksi berhasil, ${json.failed_count} item tertunda di antrean.`
-                    : (json.synced_count > 0
-                        ? `Sinkronisasi Berhasil: ${json.synced_count} transaksi offline berhasil disinkronkan ke server utama!`
-                        : 'Semua aktivitas offline telah diverifikasi & tersinkronkan!');
-                this.showToast(toastMsg, json.failed_count > 0 ? 'warning' : 'success');
+                if (isManual || json.synced_count > 0 || json.failed_count > 0) {
+                    const toastMsg = (json.failed_count > 0)
+                        ? `Sinkronisasi parsial: ${json.synced_count} transaksi berhasil, ${json.failed_count} item tertunda di antrean.`
+                        : (json.synced_count > 0
+                            ? `Sinkronisasi Berhasil: ${json.synced_count} transaksi offline berhasil disinkronkan ke server utama!`
+                            : 'Semua aktivitas offline telah diverifikasi & tersinkronkan!');
+                    this.showToast(toastMsg, json.failed_count > 0 ? 'warning' : 'success');
+                }
 
                 return {
                     success: true,

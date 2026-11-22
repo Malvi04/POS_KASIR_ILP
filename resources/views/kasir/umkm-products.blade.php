@@ -347,13 +347,6 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                 <!-- Breadcrumb & Header Actions -->
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                        <div class="flex items-center gap-2 text-[11px] font-bold text-gray-400 tracking-wider mb-1 uppercase">
-                            <span>OPERASIONAL KASIR</span>
-                            <span class="material-symbols-rounded text-[14px]">chevron_right</span>
-                            <span>PRODUK</span>
-                            <span class="material-symbols-rounded text-[14px]">chevron_right</span>
-                            <span class="text-[#0052cc]">PRODUK MITRA UMKM</span>
-                        </div>
                         <div class="flex items-center gap-3">
                             <h1 class="text-2xl font-black text-gray-900 tracking-tight">Data Produk Mitra UMKM</h1>
                             <span class="px-2.5 py-0.5 rounded-lg bg-blue-50 text-[#0052cc] border border-blue-200 text-xs font-bold"

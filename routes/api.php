@@ -133,6 +133,7 @@ Route::prefix('pos/products')->middleware('auth.api')->group(function () {
     Route::get('/sync', [ProductController::class, 'syncCatalog']);
     Route::get('/barcode/{barcode}', [ProductController::class, 'lookupBarcode']);
     Route::get('/categories', [ProductController::class, 'categories']);
+    Route::get('/coupons', [ProductController::class, 'couponProducts']);
     Route::get('/umkm', [ProductController::class, 'umkmProducts']);
     Route::post('/umkm/load', [ProductController::class, 'loadUmkmProducts']);
 });
@@ -181,6 +182,7 @@ Route::prefix('pos/void')->middleware('auth.api')->group(function () {
 // Master Data Anggota Multi-Cabang
 Route::prefix('members')->middleware('auth.api')->group(function () {
     Route::get('/', [MemberManagementController::class, 'index']);
+    Route::get('/next-code', [MemberManagementController::class, 'nextCode']);
     Route::post('/', [MemberManagementController::class, 'store']);
     Route::post('/bulk-limit', [MemberManagementController::class, 'bulkUpdateLimit']);
 
@@ -206,6 +208,13 @@ Route::prefix('reports/member-debts')->middleware('auth.api:manager')->group(fun
     Route::get('/export-csv', [MemberDebtReportController::class, 'exportCsv']);
     Route::get('/export-excel', [MemberDebtReportController::class, 'exportExcel']);
     Route::post('/payroll-cutoff', [MemberDebtReportController::class, 'processPayrollCutoff']);
+});
+
+// Fitur Monitoring & Daftar Piutang Anggota (Real-time & Over-Limit Detection)
+Route::prefix('manager/debts')->middleware('auth.api:manager')->group(function () {
+    Route::get('/', [\App\Http\Controllers\Api\Manager\MemberDebtManagementController::class, 'index']);
+    Route::get('/members/{id}/transactions', [\App\Http\Controllers\Api\Manager\MemberDebtManagementController::class, 'memberTransactions']);
+    Route::get('/transactions/{idOrInvoice}/receipt', [\App\Http\Controllers\Api\Manager\MemberDebtManagementController::class, 'receipt']);
 });
 
 /*

@@ -22,6 +22,8 @@ class DebtMutation extends Model
         'new_debt',
         'previous_limit',
         'new_limit',
+        'is_over_limit',
+        'debt_status',
         'notes',
         'processed_by',
     ];
@@ -32,6 +34,7 @@ class DebtMutation extends Model
         'new_debt' => 'float',
         'previous_limit' => 'float',
         'new_limit' => 'float',
+        'is_over_limit' => 'boolean',
         'created_at' => 'datetime',
     ];
 

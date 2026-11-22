@@ -280,15 +280,15 @@
                  <!-- Member Details & Plafon Status -->
                  <template x-if="memberValidation.data">
                      <div class="p-4 rounded-xl border space-y-3"
-                          :class="memberValidation.isEligible ? 'bg-emerald-50/60 border-emerald-300' : 'bg-rose-50/60 border-rose-300'">
+                          :class="!memberValidation.data.is_active ? 'bg-rose-50/60 border-rose-300' : ((memberValidation.data.is_over_limit || (memberValidation.data.current_debt + grandTotal > memberValidation.data.credit_limit)) ? 'bg-amber-50/80 border-amber-300' : 'bg-emerald-50/60 border-emerald-300')">
                          <div class="flex justify-between items-start">
                              <div>
                                  <h5 class="font-extrabold text-xs text-gray-900" x-text="memberValidation.data.name"></h5>
                                  <p class="text-[11px] text-gray-600 font-mono" x-text="'NIK: ' + memberValidation.data.nik + ' • ' + (memberValidation.data.department || '-')"></p>
                              </div>
                              <span class="px-2.5 py-1 rounded-full text-[10px] font-extrabold tracking-wide"
-                                   :class="memberValidation.isEligible ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'"
-                                   x-text="memberValidation.isEligible ? 'DISETUJUI (PLAFON CUKUP)' : 'DITOLAK SISTEM'"></span>
+                                   :class="!memberValidation.data.is_active ? 'bg-rose-100 text-rose-800 border border-rose-200' : ((memberValidation.data.is_over_limit || (memberValidation.data.current_debt + grandTotal > memberValidation.data.credit_limit)) ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-emerald-100 text-emerald-800 border border-emerald-200')"
+                                   x-text="!memberValidation.data.is_active ? 'DITOLAK (DIBLOKIR)' : ((memberValidation.data.is_over_limit || (memberValidation.data.current_debt + grandTotal > memberValidation.data.credit_limit)) ? 'MELEBIHI LIMIT PIUTANG' : 'DISETUJUI (PLAFON CUKUP)')"></span>
                          </div>
 
                          <div class="grid grid-cols-3 gap-2 text-center pt-2 border-t border-gray-200/60">
@@ -310,7 +310,7 @@
 
                          <!-- Alert Message -->
                          <div class="text-[11px] font-bold"
-                              :class="memberValidation.isEligible ? 'text-emerald-800' : 'text-rose-700'"
+                              :class="!memberValidation.data.is_active ? 'text-rose-700' : ((memberValidation.data.is_over_limit || (memberValidation.data.current_debt + grandTotal > memberValidation.data.credit_limit)) ? 'text-amber-900 font-extrabold' : 'text-emerald-800')"
                               x-text="memberValidation.message"></div>
                      </div>
                  </template>
@@ -386,7 +386,7 @@
             </button>
             <button type="button"
                     @click="processPayment(paymentModal.method)" 
-                    :disabled="(paymentModal.method === 'tunai' && paymentModal.kembalian < 0) || (paymentModal.method === 'tunai' && !paymentModal.uangDiterima) || (paymentModal.method === 'kredit' && (!memberValidation.data || !memberValidation.isEligible)) || (paymentModal.method === 'campuran' && (paymentModal.splitCash + paymentModal.splitNonCash < grandTotal))"
+                    :disabled="(paymentModal.method === 'tunai' && paymentModal.kembalian < 0) || (paymentModal.method === 'tunai' && !paymentModal.uangDiterima) || (paymentModal.method === 'kredit' && (!memberValidation.data || !memberValidation.data.is_active)) || (paymentModal.method === 'campuran' && (paymentModal.splitCash + paymentModal.splitNonCash < grandTotal))"
                     class="px-6 py-2.5 rounded-xl bg-[#004aad] hover:bg-[#003882] text-white font-bold text-xs flex items-center gap-2 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
                 <span class="material-symbols-rounded text-[18px]">print</span>
                 <span x-text="paymentModal.method === 'kredit' ? 'Konfirmasi Piutang & Cetak Struk' : 'Bayar & Cetak Struk'"></span>

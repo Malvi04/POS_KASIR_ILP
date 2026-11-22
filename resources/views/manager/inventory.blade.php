@@ -167,7 +167,26 @@
                         stock: Number(p.stock) || 0,
                         status: p.stock_status || this.calculateStatus(p.stock, p.min_stock, p.expired_date),
                         batchLot: 'LOT-' + p.sku,
-                        suppliedBy: Array.isArray(p.supplied_by) ? p.supplied_by : []
+                        suppliedBy: Array.isArray(p.supplied_by) ? p.supplied_by : [],
+                        // 19 Kolom Standar Master Produk Gudang
+                        id_produk: p.id_produk || p.ilp_id || String(p.id),
+                        kode_barcode: p.kode_barcode || p.barcode || '',
+                        kode_produk: p.kode_produk || p.sku || '',
+                        qty_produk: p.qty_produk !== undefined ? Number(p.qty_produk) : (Number(p.master_stock !== undefined ? p.master_stock : p.stock) || 0),
+                        nama_produk: p.nama_produk || p.name || '',
+                        satuan_unit: p.satuan_unit || p.unit || 'Pcs',
+                        harga_beli: Number(p.harga_beli ?? p.cost_price) || 0,
+                        harga_jual_umum: Number(p.harga_jual_umum ?? p.price ?? p.original_price) || 0,
+                        harga_jual_member: Number(p.harga_jual_member ?? p.member_price ?? p.original_member_price ?? p.price) || 0,
+                        produk_disc: Number(p.produk_disc ?? p.clearance_discount_percent ?? p.discount_percent ?? 0),
+                        minimum_stock: Number(p.minimum_stock ?? p.min_stock ?? 5),
+                        ppn_out: Number(p.ppn_out ?? p.tax_rate ?? 11),
+                        ppn_chk: p.ppn_chk || ((p.is_taxable !== false && p.ppn_chk !== 'N') ? 'Y' : 'N'),
+                        harga_beli_terakhir: Number(p.harga_beli_terakhir ?? p.last_cost_price ?? p.cost_price) || 0,
+                        status_barang: p.status_barang || p.status || 'TERSEDIA',
+                        kode_suplier: p.kode_suplier || p.ko_sup || (p.supplier_code || '-'),
+                        manufacturing_date: p.manufacturing_date || '',
+                        exp_date: p.exp_date || p.expired_date || ''
                     }));
                     const result = this.deduplicateProducts(mapped);
                     this.products = result.unique;
@@ -279,7 +298,26 @@
                         batchLot: 'LOT-' + p.sku,
                         isConsignment: Boolean(p.is_consignment),
                         supplier: p.supplier || null,
-                        suppliedBy: Array.isArray(p.supplied_by) ? p.supplied_by : []
+                        suppliedBy: Array.isArray(p.supplied_by) ? p.supplied_by : [],
+                        // 19 Kolom Standar Master Produk Gudang
+                        id_produk: p.id_produk || p.ilp_id || String(p.id),
+                        kode_barcode: p.kode_barcode || p.barcode || '',
+                        kode_produk: p.kode_produk || p.sku || '',
+                        qty_produk: p.qty_produk !== undefined ? Number(p.qty_produk) : (Number(p.master_stock !== undefined ? p.master_stock : p.stock) || 0),
+                        nama_produk: p.nama_produk || p.name || '',
+                        satuan_unit: p.satuan_unit || p.unit || 'Pcs',
+                        harga_beli: Number(p.harga_beli ?? p.cost_price) || 0,
+                        harga_jual_umum: Number(p.harga_jual_umum ?? p.price ?? p.original_price) || 0,
+                        harga_jual_member: Number(p.harga_jual_member ?? p.member_price ?? p.original_member_price ?? p.price) || 0,
+                        produk_disc: Number(p.produk_disc ?? p.clearance_discount_percent ?? p.discount_percent ?? 0),
+                        minimum_stock: Number(p.minimum_stock ?? p.min_stock ?? 5),
+                        ppn_out: Number(p.ppn_out ?? p.tax_rate ?? 11),
+                        ppn_chk: p.ppn_chk || ((p.is_taxable !== false && p.ppn_chk !== 'N') ? 'Y' : 'N'),
+                        harga_beli_terakhir: Number(p.harga_beli_terakhir ?? p.last_cost_price ?? p.cost_price) || 0,
+                        status_barang: p.status_barang || p.status || 'TERSEDIA',
+                        kode_suplier: p.kode_suplier || p.ko_sup || (p.supplier_code || '-'),
+                        manufacturing_date: p.manufacturing_date || '',
+                        exp_date: p.exp_date || p.expired_date || ''
                     }));
                     const existingSkus = new Set((this.products || []).map(p => p.sku));
                     const newItems = mapped.filter(p => !existingSkus.has(p.sku));
@@ -318,6 +356,49 @@
     validationErrorDetails: null,
     duplicateAction: 'update',
     importResult: null,
+    importPreviewFilter: 'all', // 'all', 'error', 'existing', 'new'
+    importPreviewPage: 1,
+    importPreviewPerPage: 100,
+    importPreviewSearch: '',
+    showExistingDetailsBox: false,
+
+    getFilteredPreviewRows() {
+        if (!this.validationData || !this.validationData.preview_rows) return [];
+        let rows = this.validationData.preview_rows;
+        if (this.importPreviewFilter === 'error') {
+            rows = rows.filter(r => r.has_error);
+        } else if (this.importPreviewFilter === 'existing') {
+            rows = rows.filter(r => !r.has_error && r.is_existing);
+        } else if (this.importPreviewFilter === 'new') {
+            rows = rows.filter(r => !r.has_error && !r.is_existing);
+        }
+        if (this.importPreviewSearch && this.importPreviewSearch.trim()) {
+            const q = this.importPreviewSearch.toLowerCase().trim();
+            rows = rows.filter(r => 
+                String(r.row).includes(q) ||
+                (r.sku && String(r.sku).toLowerCase().includes(q)) ||
+                (r.nama_produk && String(r.nama_produk).toLowerCase().includes(q)) ||
+                (r.kode_barcode && String(r.kode_barcode).toLowerCase().includes(q)) ||
+                (r.kode_produk && String(r.kode_produk).toLowerCase().includes(q))
+            );
+        }
+        return rows;
+    },
+
+    getPaginatedPreviewRows() {
+        const rows = this.getFilteredPreviewRows();
+        if (this.importPreviewPerPage === 'all') return rows;
+        const perPage = parseInt(this.importPreviewPerPage) || 100;
+        const start = (this.importPreviewPage - 1) * perPage;
+        return rows.slice(start, start + perPage);
+    },
+
+    getTotalPreviewPages() {
+        const rows = this.getFilteredPreviewRows();
+        if (this.importPreviewPerPage === 'all') return 1;
+        const perPage = parseInt(this.importPreviewPerPage) || 100;
+        return Math.max(1, Math.ceil(rows.length / perPage));
+    },
 
     openImportModal() {
         this.showImportModal = true;
@@ -330,6 +411,12 @@
         this.validationErrorDetails = null;
         this.duplicateAction = 'update';
         this.importResult = null;
+        this.importPreviewFilter = 'all';
+        this.importPreviewPage = 1;
+        this.importPreviewPerPage = 100;
+        this.importPreviewSearch = '';
+        this.showExistingDetailsBox = false;
+        this.resetFileInput();
         this.$nextTick(() => {
             const f = document.getElementById('excelFileInput');
             if (f) f.value = '';
@@ -392,11 +479,15 @@
             if (res.ok && json.success) {
                 this.validationData = json.data;
                 this.importStep = 'preview';
-                this.triggerToast('Struktur 25 kolom Excel valid! Menampilkan pratinjau data...', 'success');
+                this.importPreviewFilter = 'all';
+                this.importPreviewPage = 1;
+                this.importPreviewSearch = '';
+                this.showExistingDetailsBox = false;
+                this.triggerToast('Struktur 19 kolom Excel valid! Menampilkan pratinjau data...', 'success');
             } else {
-                this.validationErrorDetails = json.details || { message: json.message || 'Format file tidak sesuai standar ILP.' };
+                this.validationErrorDetails = json.details || { message: json.message || 'Format file tidak sesuai standar Master Produk.' };
                 this.importStep = 'invalid_structure';
-                this.triggerToast(json.message || 'Struktur file Excel tidak sesuai standar ILP (25 Kolom).', 'error');
+                this.triggerToast(json.message || 'Struktur file Excel tidak sesuai standar Master Produk (19 Kolom).', 'error');
             }
         } catch (e) {
             console.error('Validation error:', e);
@@ -459,7 +550,7 @@
 
     downloadILPTemplate() {
         window.location.href = '/manager/products/template';
-        this.triggerToast('Mengunduh Template Excel Master Barang ILP (25 Kolom)...', 'info');
+        this.triggerToast('Mengunduh Template Excel Master Barang (19 Kolom)...', 'info');
     },
 
     get totalItems() {
@@ -583,15 +674,19 @@
     },
 
     onPpnToggle() {
-        if (this.formData.ppnChk === 'N') {
+        if (this.formData.ppn_chk === 'N' || this.formData.ppnChk === 'N') {
+            this.formData.ppn_out = 0;
             this.formData.ppnOut = 0;
-        } else if (this.formData.ppnChk === 'Y' && (!this.formData.ppnOut || Number(this.formData.ppnOut) === 0)) {
+        } else if ((this.formData.ppn_chk === 'Y' || this.formData.ppnChk === 'Y') && (!this.formData.ppn_out || Number(this.formData.ppn_out) === 0)) {
+            this.formData.ppn_out = 11;
             this.formData.ppnOut = 11;
         }
     },
 
     onMinStockChange() {
-        const ms = Number(this.formData.minStock) || 0;
+        const ms = Number(this.formData.minimum_stock ?? this.formData.minStock) || 0;
+        this.formData.minimum_stock = ms;
+        this.formData.minStock = ms;
         if (!this.formData.reorder || Number(this.formData.reorder) <= ms) {
             this.formData.reorder = ms * 2;
         }
@@ -605,7 +700,7 @@
 
         let maxNum = 0;
         this.products.forEach(p => {
-            const m = (p.sku || '').match(/PRD-(\d+)/i);
+            const m = (p.sku || p.kode_produk || '').match(/PRD-(\d+)/i);
             if (m) {
                 const num = parseInt(m[1], 10);
                 if (num > maxNum) maxNum = num;
@@ -614,41 +709,60 @@
         const nextSku = 'PRD-' + String(maxNum + 1).padStart(3, '0');
         const randomBarcode = '899' + Math.floor(1000000000 + Math.random() * 9000000000);
 
+        const todayStr = new Date().toISOString().split('T')[0];
         const oneYearFromNow = new Date();
         oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1);
         const defaultExpDate = oneYearFromNow.toISOString().split('T')[0];
 
         this.formData = {
             id: null,
-            ilp_id: 'ILP-' + String(maxNum + 1).padStart(3, '0'),
+            // 19 Kolom Standar Master Produk Gudang
+            id_produk: nextSku,
             sku: nextSku,
+            kode_barcode: randomBarcode,
+            kode_produk: nextSku,
+            qty_produk: 0,
+            nama_produk: '',
+            satuan_unit: 'Pcs',
+            harga_beli: 0,
+            harga_jual_umum: 0,
+            harga_jual_member: 0,
+            produk_disc: 0,
+            minimum_stock: 5,
+            ppn_out: 11,
+            ppn_chk: 'Y',
+            harga_beli_terakhir: 0,
+            status_barang: 'TERSEDIA',
+            kode_suplier: '',
+            manufacturing_date: todayStr,
+            exp_date: defaultExpDate,
+
+            // Legacy compatibility aliases
+            ilp_id: nextSku,
             barcode: randomBarcode,
             name: '',
             brand: 'Lokal Mandiri',
-            category: (this.availableCategories && this.availableCategories.length > 0) ? this.availableCategories[0] : 'Minuman',
+            category: (this.availableCategories && this.availableCategories.length > 0) ? this.availableCategories[0] : 'Kebutuhan Pokok',
             unit: 'Pcs',
             statusBarang: 'TERSEDIA',
+            status: 'TERSEDIA',
             act: 'Y',
-
             costPrice: 0,
             lastCostPrice: 0,
             ppnChk: 'Y',
             ppnOut: 11,
             up: 0,
             disc: 0,
-
             price: 0,
             memberPrice: 0,
             hargaLevel1: 0,
             minQty1: 1,
             minQty2: '',
             minQty3: '',
-
             stock: 0,
-            minStock: 10,
-            reorder: 20,
+            minStock: 5,
+            reorder: 10,
             rackLocation: 'Display Rak',
-
             koSup: '',
             batchLot: 'BATCH-' + new Date().getFullYear() + String(new Date().getMonth() + 1).padStart(2, '0'),
             expiredDate: defaultExpDate,
@@ -660,17 +774,18 @@
 
     openEditModal(product) {
         this.modalMode = 'edit';
-        this.formSkuOriginal = product.sku;
+        this.formSkuOriginal = product.sku || product.kode_produk || '';
         this.formErrors = {};
         this.duplicateExistingProduct = null;
 
         let expVal = '';
-        if (product.expiredDate) {
-            if (/^\d{4}-\d{2}-\d{2}$/.test(product.expiredDate)) {
-                expVal = product.expiredDate;
+        const rawExp = product.exp_date || product.expiredDate || product.expired_date;
+        if (rawExp) {
+            if (/^\d{4}-\d{2}-\d{2}$/.test(rawExp)) {
+                expVal = rawExp;
             } else {
                 const months = { 'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'Mei': '05', 'May': '05', 'Jun': '06', 'Jul': '07', 'Agu': '08', 'Aug': '08', 'Sep': '09', 'Okt': '10', 'Oct': '10', 'Nov': '11', 'Des': '12', 'Dec': '12' };
-                const parts = product.expiredDate.split(' ');
+                const parts = String(rawExp).split(' ');
                 if (parts.length === 3) {
                     const day = parts[0].padStart(2, '0');
                     const m = months[parts[1]] || '01';
@@ -680,8 +795,30 @@
             }
         }
 
-        const costP = Number(product.costPrice) || 0;
-        const sellP = Number(product.price) || 0;
+        let mfgVal = '';
+        const rawMfg = product.manufacturing_date || product.mfgDate;
+        if (rawMfg && /^\d{4}-\d{2}-\d{2}/.test(rawMfg)) {
+            mfgVal = String(rawMfg).substring(0, 10);
+        }
+
+        const costP = Number(product.harga_beli ?? product.costPrice ?? product.cost_price) || 0;
+        const sellP = Number(product.harga_jual_umum ?? product.price) || 0;
+        const memberP = Number(product.harga_jual_member ?? product.memberPrice ?? product.hargaLevel1 ?? sellP);
+        const lastCostP = Number(product.harga_beli_terakhir ?? product.lastCostPrice ?? product.last_cost_price) || costP;
+        const stockQty = Number(product.qty_produk !== undefined ? product.qty_produk : (product.masterStock ?? product.stock ?? 0));
+        const minStk = Number(product.minimum_stock ?? product.minStock ?? product.stockMin ?? 5);
+        const discVal = Number(product.produk_disc ?? product.disc ?? product.clearance_discount_percent ?? 0);
+        const ppnOutVal = Number(product.ppn_out !== null && product.ppn_out !== undefined ? product.ppn_out : (product.ppnOut ?? product.tax_rate ?? 11));
+        const ppnChkVal = product.ppn_chk || product.ppnChk || (product.is_taxable !== false ? 'Y' : 'N');
+        const statusVal = product.status_barang || product.statusBarang || product.status || 'TERSEDIA';
+        const supplierCode = product.kode_suplier || product.koSup || product.supplier_code || product.ko_sup || '';
+        const prodId = product.id_produk || product.ilp_id || (product.id ? String(product.id) : '');
+        const skuVal = product.sku || product.kode_produk || '';
+        const barcodeVal = product.kode_barcode || product.barcode || '';
+        const kodeProdukVal = product.kode_produk || product.sku || '';
+        const namaProdukVal = product.nama_produk || product.name || '';
+        const unitVal = product.satuan_unit || product.unit || 'Pcs';
+
         let upVal = Number(product.up ?? product.markup_percent ?? 0);
         if (!upVal && costP > 0 && sellP > costP) {
             upVal = Number((((sellP - costP) / costP) * 100).toFixed(1));
@@ -689,46 +826,66 @@
 
         this.formData = {
             id: product.id || null,
-            ilp_id: product.ilp_id || (product.id ? String(product.id) : ''),
-            sku: product.sku || '',
-            barcode: product.barcode || '',
-            name: product.name || '',
-            brand: product.brand || '',
-            category: product.category || 'Minuman',
-            unit: product.unit || 'Pcs',
-            statusBarang: product.statusBarang || product.status || 'TERSEDIA',
+            // 19 Kolom Standar Master Produk Gudang
+            id_produk: prodId,
+            sku: skuVal,
+            kode_barcode: barcodeVal,
+            kode_produk: kodeProdukVal,
+            qty_produk: stockQty,
+            nama_produk: namaProdukVal,
+            satuan_unit: unitVal,
+            harga_beli: costP,
+            harga_jual_umum: sellP,
+            harga_jual_member: memberP,
+            produk_disc: discVal,
+            minimum_stock: minStk,
+            ppn_out: ppnOutVal,
+            ppn_chk: ppnChkVal,
+            harga_beli_terakhir: lastCostP,
+            status_barang: statusVal,
+            kode_suplier: supplierCode,
+            manufacturing_date: mfgVal,
+            exp_date: expVal,
+
+            // Legacy compatibility aliases
+            ilp_id: prodId,
+            barcode: barcodeVal,
+            name: namaProdukVal,
+            brand: product.brand || 'Lokal Mandiri',
+            category: product.category || 'Kebutuhan Pokok',
+            unit: unitVal,
+            statusBarang: statusVal,
+            status: statusVal,
             act: product.act || 'Y',
-
             costPrice: costP,
-            lastCostPrice: Number(product.lastCostPrice ?? product.costPrice) || costP,
-            ppnChk: product.ppnChk || (product.is_taxable !== false ? 'Y' : 'N'),
-            ppnOut: product.ppnOut !== null && product.ppnOut !== undefined ? Number(product.ppnOut) : 11,
+            lastCostPrice: lastCostP,
+            ppnChk: ppnChkVal,
+            ppnOut: ppnOutVal,
             up: upVal,
-            disc: Number(product.disc ?? product.clearance_discount_percent ?? 0),
-
+            disc: discVal,
             price: sellP,
-            memberPrice: Number(product.memberPrice || product.hargaLevel1 || sellP),
-            hargaLevel1: Number(product.hargaLevel1 || product.memberPrice || sellP),
+            memberPrice: memberP,
+            hargaLevel1: memberP,
             minQty1: product.minQty1 !== null && product.minQty1 !== undefined ? Number(product.minQty1) : 1,
             minQty2: product.minQty2 !== null && product.minQty2 !== undefined && product.minQty2 !== '' ? Number(product.minQty2) : '',
             minQty3: product.minQty3 !== null && product.minQty3 !== undefined && product.minQty3 !== '' ? Number(product.minQty3) : '',
-
-            stock: Number(product.stock) || 0,
-            minStock: Number(product.minStock ?? product.stockMin ?? 10),
-            reorder: Number(product.reorder ?? ((product.minStock || 10) * 2)),
-            rackLocation: product.rackLocation || '',
-
-            koSup: product.koSup || product.ko_sup || '',
-            batchLot: product.batchLot || '',
+            stock: stockQty,
+            minStock: minStk,
+            reorder: Number(product.reorder ?? (minStk * 2)),
+            rackLocation: product.rackLocation || product.rack_location || 'Display Rak',
+            koSup: supplierCode,
+            batchLot: product.batchLot || ('LOT-' + skuVal),
             expiredDate: expVal,
-            masa: product.masa || '',
+            masa: product.masa || '30',
             dump: product.dump || ''
         };
         this.showProductModal = true;
     },
 
     generateRandomBarcode() {
-        this.formData.barcode = '899' + Math.floor(1000000000 + Math.random() * 9000000000);
+        const randCode = '899' + Math.floor(1000000000 + Math.random() * 9000000000);
+        this.formData.kode_barcode = randCode;
+        this.formData.barcode = randCode;
     },
 
     async saveProduct() {
@@ -737,21 +894,21 @@
         this.duplicateExistingProduct = null;
         const f = this.formData;
 
-        const cleanSku = (f.sku || '').trim().toUpperCase();
-        const cleanBarcode = (f.barcode || '').trim();
-        const cleanName = (f.name || '').trim();
+        const cleanSku = (f.sku || f.kode_produk || '').trim().toUpperCase();
+        const cleanBarcode = (f.kode_barcode || f.barcode || '').trim();
+        const cleanName = (f.nama_produk || f.name || '').trim();
 
         if (!cleanName) {
-            this.formErrors.name = 'Nama produk wajib diisi.';
+            this.formErrors.name = 'Nama produk (NamaProduk) wajib diisi.';
         }
 
         // 1. Periksa SKU terlebih dahulu
         if (!cleanSku) {
-            this.formErrors.sku = 'SKU produk wajib diisi.';
+            this.formErrors.sku = 'SKU master produk wajib diisi.';
         } else {
             const dupSku = this.products.find(p => 
-                (p.sku || '').trim().toUpperCase() === cleanSku && 
-                (this.modalMode === 'create' || (p.sku || '').trim().toUpperCase() !== (this.formSkuOriginal || '').trim().toUpperCase())
+                ((p.sku || p.kode_produk || '').trim().toUpperCase() === cleanSku) && 
+                (this.modalMode === 'create' || (p.sku || p.kode_produk || '').trim().toUpperCase() !== (this.formSkuOriginal || '').trim().toUpperCase())
             );
             if (dupSku) {
                 this.formErrors.sku = 'SKU sudah terdaftar. Silakan gunakan data produk yang sudah ada.';
@@ -762,8 +919,8 @@
         // 2. Periksa barcode jika diisi
         if (cleanBarcode) {
             const dupBarcode = this.products.find(p => 
-                (p.barcode || '').trim() === cleanBarcode && 
-                (this.modalMode === 'create' || (p.sku || '').trim().toUpperCase() !== (this.formSkuOriginal || '').trim().toUpperCase())
+                ((p.kode_barcode || p.barcode || '').trim() === cleanBarcode) && 
+                (this.modalMode === 'create' || (p.sku || p.kode_produk || '').trim().toUpperCase() !== (this.formSkuOriginal || '').trim().toUpperCase())
             );
             if (dupBarcode) {
                 this.formErrors.barcode = 'Barcode sudah digunakan oleh produk lain.';
@@ -773,16 +930,22 @@
             }
         }
 
-        if (f.price === null || f.price === '' || Number(f.price) < 0) {
-            this.formErrors.price = 'Harga jual umum harus &ge; 0.';
+        const priceVal = Number(f.harga_jual_umum !== undefined ? f.harga_jual_umum : f.price);
+        const memberPriceVal = Number(f.harga_jual_member !== undefined ? f.harga_jual_member : f.memberPrice);
+        const costPriceVal = Number(f.harga_beli !== undefined ? f.harga_beli : f.costPrice);
+        const stockVal = Number(f.qty_produk !== undefined ? f.qty_produk : f.stock);
+        const minStockVal = Number(f.minimum_stock !== undefined ? f.minimum_stock : f.minStock);
+
+        if (priceVal < 0 || isNaN(priceVal)) {
+            this.formErrors.price = 'Harga jual umum harus >= 0.';
         }
-        if (f.memberPrice === null || f.memberPrice === '' || Number(f.memberPrice) < 0) {
-            this.formErrors.memberPrice = 'Harga member harus &ge; 0.';
+        if (memberPriceVal < 0 || isNaN(memberPriceVal)) {
+            this.formErrors.memberPrice = 'Harga member harus >= 0.';
         }
-        if (f.stock === null || f.stock === '' || Number(f.stock) < 0) {
-            this.formErrors.stock = 'Jumlah stok tidak boleh negatif.';
+        if (stockVal < 0 || isNaN(stockVal)) {
+            this.formErrors.stock = 'Jumlah stok (QtyProduk) tidak boleh negatif.';
         }
-        if (f.minStock === null || f.minStock === '' || Number(f.minStock) < 0) {
+        if (minStockVal < 0 || isNaN(minStockVal)) {
             this.formErrors.minStock = 'Minimum stok buffer tidak boleh negatif.';
         }
 
@@ -790,61 +953,106 @@
             return;
         }
 
-        const calculatedStatus = this.calculateStatus(f.stock, f.minStock, f.expiredDate);
+        const calculatedStatus = f.status_barang || this.calculateStatus(stockVal, minStockVal, f.exp_date || f.expiredDate);
 
-        let displayExpDate = f.expiredDate || '-';
-        if (/^\d{4}-\d{2}-\d{2}$/.test(f.expiredDate)) {
+        let displayExpDate = f.exp_date || f.expiredDate || '-';
+        if (/^\d{4}-\d{2}-\d{2}$/.test(displayExpDate)) {
             const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-            const [y, m, d] = f.expiredDate.split('-');
+            const [y, m, d] = displayExpDate.split('-');
             displayExpDate = `${parseInt(d, 10)} ${months[parseInt(m, 10) - 1]} ${y}`;
         }
 
         const payload = {
-            sku: f.sku.trim().toUpperCase(),
-            barcode: f.barcode.trim(),
-            name: f.name.trim(),
-            brand: f.brand.trim() || 'Lokal Mandiri',
-            category: f.category,
-            rackLocation: f.rackLocation.trim() || 'Display Rak',
-            stock: Number(f.stock),
-            minStock: Number(f.minStock),
-            unit: f.unit.trim() || 'Pcs',
-            price: Number(f.price),
-            memberPrice: Number(f.memberPrice),
+            // 19 Kolom Standar Master Produk Gudang
+            id_produk: (f.id_produk || f.ilp_id || cleanSku).trim(),
+            sku: cleanSku,
+            kode_barcode: cleanBarcode,
+            kode_produk: (f.kode_produk || cleanSku).trim().toUpperCase(),
+            qty_produk: stockVal,
+            nama_produk: cleanName,
+            satuan_unit: (f.satuan_unit || f.unit || 'Pcs').trim(),
+            harga_beli: costPriceVal,
+            harga_jual_umum: priceVal,
+            harga_jual_member: memberPriceVal,
+            produk_disc: Number(f.produk_disc !== undefined ? f.produk_disc : f.disc) || 0,
+            minimum_stock: minStockVal,
+            ppn_out: (f.ppn_chk === 'Y' || f.ppnChk === 'Y') ? (Number(f.ppn_out !== undefined ? f.ppn_out : f.ppnOut) || 11) : 0,
+            ppn_chk: f.ppn_chk || f.ppnChk || 'Y',
+            harga_beli_terakhir: Number(f.harga_beli_terakhir !== undefined ? f.harga_beli_terakhir : f.lastCostPrice) || costPriceVal,
+            status_barang: calculatedStatus,
+            kode_suplier: (f.kode_suplier || f.koSup || '').trim(),
+            manufacturing_date: f.manufacturing_date || null,
+            exp_date: f.exp_date || f.expiredDate || null,
+
+            // Legacy compatibility fields
+            ilp_id: (f.id_produk || f.ilp_id || cleanSku).trim(),
+            barcode: cleanBarcode,
+            name: cleanName,
+            brand: (f.brand || 'Lokal Mandiri').trim(),
+            category: f.category || 'Kebutuhan Pokok',
+            unit: (f.satuan_unit || f.unit || 'Pcs').trim(),
+            rackLocation: (f.rackLocation || 'Display Rak').trim(),
+            stock: stockVal,
+            minStock: minStockVal,
+            price: priceVal,
+            memberPrice: memberPriceVal,
+            costPrice: costPriceVal,
+            lastCostPrice: Number(f.harga_beli_terakhir !== undefined ? f.harga_beli_terakhir : f.lastCostPrice) || costPriceVal,
             status: calculatedStatus,
-            batchLot: f.batchLot.trim() || '-',
+            batchLot: f.batchLot || ('LOT-' + cleanSku),
             expiredDate: displayExpDate
         };
 
         const apiPayload = {
+            // 19 Kolom Standar Master Produk Gudang
+            id_produk: payload.id_produk,
             sku: payload.sku,
-            ilp_id: (f.ilp_id || '').trim() || null,
-            barcode: payload.barcode,
-            name: payload.name,
+            kode_barcode: payload.kode_barcode,
+            kode_produk: payload.kode_produk,
+            qty_produk: payload.qty_produk,
+            nama_produk: payload.nama_produk,
+            satuan_unit: payload.satuan_unit,
+            harga_beli: payload.harga_beli,
+            harga_jual_umum: payload.harga_jual_umum,
+            harga_jual_member: payload.harga_jual_member,
+            produk_disc: payload.produk_disc,
+            minimum_stock: payload.minimum_stock,
+            ppn_out: payload.ppn_out,
+            ppn_chk: payload.ppn_chk,
+            harga_beli_terakhir: payload.harga_beli_terakhir,
+            status_barang: payload.status_barang,
+            kode_suplier: payload.kode_suplier || null,
+            manufacturing_date: payload.manufacturing_date,
+            exp_date: payload.exp_date,
+
+            // Legacy attributes
+            ilp_id: payload.id_produk,
+            barcode: payload.kode_barcode,
+            name: payload.nama_produk,
             brand: payload.brand,
             category: payload.category || 'Kebutuhan Pokok',
-            unit: payload.unit || 'Pcs',
-            cost_price: Number(f.costPrice) || 0,
-            last_cost_price: Number(f.lastCostPrice) || Number(f.costPrice) || 0,
-            price: Number(payload.price),
-            member_price: Number(payload.memberPrice || payload.price),
-            harga_level1: Number(f.hargaLevel1 || payload.memberPrice || payload.price),
-            min_qty1: Number(f.minQty1) || 1,
-            min_qty2: f.minQty2 !== '' && f.minQty2 !== null ? Number(f.minQty2) : null,
-            min_qty3: f.minQty3 !== '' && f.minQty3 !== null ? Number(f.minQty3) : null,
-            stock: Number(payload.stock),
-            min_stock: Number(payload.minStock),
-            reorder_point: Number(f.reorder) || (Number(payload.minStock) * 2),
-            markup_percent: Number(f.up) || 0,
-            clearance_discount_percent: Number(f.disc) || 0,
-            is_taxable: f.ppnChk === 'Y',
-            tax_rate: f.ppnChk === 'Y' ? (Number(f.ppnOut) || 11) : 0,
-            ko_sup: (f.koSup || '').trim() || null,
-            act: f.act || 'Y',
-            masa: (f.masa || '').trim() || null,
-            dump: (f.dump || '').trim() || null,
+            unit: payload.satuan_unit || 'Pcs',
+            cost_price: payload.harga_beli,
+            last_cost_price: payload.harga_beli_terakhir,
+            price: payload.harga_jual_umum,
+            member_price: payload.harga_jual_member,
+            harga_level1: payload.harga_jual_member,
+            min_qty1: 1,
+            min_qty2: null,
+            min_qty3: null,
+            stock: payload.qty_produk,
+            min_stock: payload.minimum_stock,
+            reorder_point: payload.minimum_stock * 2,
+            markup_percent: 0,
+            clearance_discount_percent: payload.produk_disc,
+            is_taxable: payload.ppn_chk === 'Y',
+            tax_rate: payload.ppn_out,
+            ko_sup: payload.kode_suplier || null,
+            act: payload.status_barang === 'NONAKTIF' ? 'N' : 'Y',
+            masa: '30',
+            dump: null,
             rack_location: payload.rackLocation || 'Display Rak',
-            expired_date: f.expiredDate || null
+            expired_date: payload.exp_date
         };
 
         payload.ilp_id = apiPayload.ilp_id;
@@ -856,7 +1064,7 @@
         payload.minQty3 = apiPayload.min_qty3;
         payload.up = apiPayload.markup_percent;
         payload.disc = apiPayload.clearance_discount_percent;
-        payload.ppnChk = f.ppnChk;
+        payload.ppnChk = payload.ppn_chk;
         payload.ppnOut = apiPayload.tax_rate;
         payload.is_taxable = apiPayload.is_taxable;
         payload.koSup = apiPayload.ko_sup;
@@ -1424,7 +1632,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <button type="button"
                                 @click.stop="openImportModal()"
                                 class="h-10 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
-                                title="Import data master produk massal dari file Excel ILP (25 Kolom)">
+                                title="Import data master produk massal dari file Excel (19 Kolom, Dukung Ratusan Ribu Data)">
                             <span class="material-symbols-rounded text-[18px]">upload_file</span>
                             <span>Import Excel</span>
                         </button>
@@ -1433,7 +1641,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <button type="button"
                                 @click="exportExcelData()"
                                 class="h-10 px-4 bg-white hover:bg-slate-50 text-slate-700 border border-gray-300 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
-                                title="Export seluruh master produk database ke file Excel 25 kolom ILP">
+                                title="Export seluruh master produk database ke file Excel (19 Kolom Master)">
                             <span class="material-symbols-rounded text-[18px]">download</span>
                             <span>Export Excel</span>
                         </button>
@@ -1492,50 +1700,44 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-[#0052cc]" x-text="getBranchName(selectedBranch)"></span>
                         </div>
                         <div class="flex items-center gap-3">
-                            <!-- Toggle Button: Mode Standar vs Format 25 Kolom Lengkap ILP -->
+                            <!-- Toggle Button: Mode Standar vs Format 19 Kolom Master Produk -->
                             <button type="button" 
                                     @click="tableMode = (tableMode === 'standard' ? 'ilp_25' : 'standard')"
                                     class="px-3 py-1.5 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
                                     :class="tableMode === 'ilp_25' ? 'bg-[#0052cc] text-white border-[#0052cc] shadow-2xs' : 'bg-white text-slate-700 border-gray-300 hover:bg-slate-50'">
                                 <span class="material-symbols-rounded text-[16px]">view_column</span>
-                                <span x-text="tableMode === 'ilp_25' ? 'Format 25 Kolom ILP (Aktif)' : 'Tampilkan 25 Kolom Lengkap'"></span>
+                                <span x-text="tableMode === 'ilp_25' ? 'Format 19 Kolom Master (Aktif)' : 'Tampilkan 19 Kolom Master'"></span>
                             </button>
                             <span class="text-xs text-gray-500 font-medium whitespace-nowrap" x-text="'Menampilkan ' + paginatedProducts.length + ' dari ' + filteredProducts.length + ' produk'"></span>
                         </div>
                     </div>
 
-                    <!-- MODE 1: FORMAT 25 KOLOM STANDAR ILP (Full 25 Columns View) -->
+                    <!-- MODE 1: FORMAT 19 KOLOM STANDAR MASTER PRODUK -->
                     <template x-if="tableMode === 'ilp_25'">
                         <div class="overflow-x-auto min-w-0 w-full">
-                            <table class="w-full text-left border-collapse text-[12px] whitespace-nowrap" style="min-width: 2400px;">
+                            <table class="w-full text-left border-collapse text-[12px] whitespace-nowrap" style="min-width: 2200px;">
                                 <thead>
                                     <tr class="bg-gray-100/80 border-b border-gray-200 text-gray-700 font-bold tracking-wider text-[11px] uppercase">
                                         <th class="px-3 py-3.5 text-center w-12 sticky left-0 bg-gray-100 z-10 shadow-r">NO</th>
-                                        <th class="px-4 py-3.5 text-left font-mono text-[#0052cc]">1. Barang - ID</th>
-                                        <th class="px-4 py-3.5 text-left font-mono">2. Barang - Kode</th>
-                                        <th class="px-4 py-3.5 text-left font-mono">3. Barang - KodeBar</th>
-                                        <th class="px-4 py-3.5 text-left">4. Barang - Kel</th>
-                                        <th class="px-5 py-3.5 text-left">5. Barang - Nama</th>
-                                        <th class="px-3 py-3.5 text-center">6. Barang - Unit1</th>
-                                        <th class="px-4 py-3.5 text-right font-mono">7. Barang - HargaBeli</th>
-                                        <th class="px-4 py-3.5 text-right font-mono text-emerald-700">8. Barang - HargaJualK1</th>
-                                        <th class="px-3 py-3.5 text-center font-mono">9. MinQty1</th>
-                                        <th class="px-3 py-3.5 text-center font-mono">10. MinQty2</th>
-                                        <th class="px-3 py-3.5 text-center font-mono">11. MinQty3</th>
-                                        <th class="px-4 py-3.5 text-right font-mono text-[#0052cc]">12. Barang - HargaLevel1</th>
-                                        <th class="px-3 py-3.5 text-center font-mono">13. Barang - Disc</th>
-                                        <th class="px-3 py-3.5 text-center font-mono text-amber-700">14. Barang - StockMin</th>
-                                        <th class="px-3 py-3.5 text-center font-mono text-blue-700">15. Barang - ReOrder</th>
-                                        <th class="px-3 py-3.5 text-center font-mono">16. Barang - PPN_Out</th>
-                                        <th class="px-3 py-3.5 text-center font-mono">17. Barang - PPNChk</th>
-                                        <th class="px-4 py-3.5 text-right font-mono">18. Barang - HrgBeliTerakhir</th>
-                                        <th class="px-3 py-3.5 text-center">19. Barang - StatusBarang</th>
-                                        <th class="px-3 py-3.5 text-center font-mono">20. Barang - KoSup</th>
-                                        <th class="px-3 py-3.5 text-center font-mono">21. Barang - Act</th>
-                                        <th class="px-3 py-3.5 text-center font-mono">22. Barang - Masa</th>
-                                        <th class="px-3 py-3.5 text-center font-mono">23. Barang - Kadaluarsa</th>
-                                        <th class="px-3 py-3.5 text-center font-mono">24. Barang - Up</th>
-                                        <th class="px-4 py-3.5 text-left">25. Barang - Dump</th>
+                                        <th class="px-4 py-3.5 text-left font-mono text-[#0052cc]">1. IdProduk</th>
+                                        <th class="px-4 py-3.5 text-left font-mono">2. SKU</th>
+                                        <th class="px-4 py-3.5 text-left font-mono">3. Kode Barcode</th>
+                                        <th class="px-4 py-3.5 text-left font-mono">4. KodeProduk</th>
+                                        <th class="px-3 py-3.5 text-center font-mono">5. QtyProduk</th>
+                                        <th class="px-5 py-3.5 text-left">6. NamaProduk</th>
+                                        <th class="px-3 py-3.5 text-center">7. SatuanUnit</th>
+                                        <th class="px-4 py-3.5 text-right font-mono">8. HargaBeli</th>
+                                        <th class="px-4 py-3.5 text-right font-mono text-emerald-700">9. HargaJualUmum</th>
+                                        <th class="px-4 py-3.5 text-right font-mono text-[#0052cc]">10. HargaJualMember</th>
+                                        <th class="px-3 py-3.5 text-center font-mono">11. ProdukDisc</th>
+                                        <th class="px-3 py-3.5 text-center font-mono text-amber-700">12. MinimumStock</th>
+                                        <th class="px-3 py-3.5 text-center font-mono">13. PPNOut</th>
+                                        <th class="px-3 py-3.5 text-center font-mono">14. PPNChk</th>
+                                        <th class="px-4 py-3.5 text-right font-mono">15. HargaBeliTerakhir</th>
+                                        <th class="px-3 py-3.5 text-center">16. StatusBarang</th>
+                                        <th class="px-3 py-3.5 text-center font-mono">17. KodeSuplier</th>
+                                        <th class="px-3 py-3.5 text-center font-mono">18. ManufacturingDate</th>
+                                        <th class="px-3 py-3.5 text-center font-mono">19. ExpDate</th>
                                         <th class="px-4 py-3.5 text-center font-mono bg-blue-50/70 text-[#0052cc]">
                                             <span x-text="selectedBranch === 'all' ? 'STOK GUDANG' : ('STOK ' + getBranchName(selectedBranch).toUpperCase())"></span>
                                         </th>
@@ -1546,35 +1748,29 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     <template x-for="(p, idx) in paginatedProducts" :key="p.sku">
                                         <tr class="hover:bg-blue-50/40 transition-colors">
                                             <td class="px-3 py-3 text-center text-gray-400 font-mono sticky left-0 bg-white" x-text="((currentPage - 1) * pageSize) + idx + 1"></td>
-                                            <td class="px-4 py-3 font-mono font-bold text-[#0052cc]" x-text="p.ilp_id || p.id"></td>
+                                            <td class="px-4 py-3 font-mono font-bold text-[#0052cc]" x-text="p.id_produk || p.ilp_id || p.id"></td>
                                             <td class="px-4 py-3 font-mono font-bold text-gray-900" x-text="p.sku"></td>
-                                            <td class="px-4 py-3 font-mono text-gray-700" x-text="p.barcode || '-'"></td>
-                                            <td class="px-4 py-3 text-gray-800" x-text="p.category || '-'"></td>
-                                            <td class="px-5 py-3 font-bold text-gray-900 max-w-[220px] truncate" :title="p.name" x-text="p.name"></td>
-                                            <td class="px-3 py-3 text-center text-gray-800 font-bold" x-text="p.unit || 'Pcs'"></td>
-                                            <td class="px-4 py-3 text-right font-mono" x-text="formatRupiah(p.costPrice)"></td>
-                                            <td class="px-4 py-3 text-right font-mono font-bold text-emerald-700" x-text="formatRupiah(p.price)"></td>
-                                            <td class="px-3 py-3 text-center font-mono" x-text="p.minQty1 ?? 1"></td>
-                                            <td class="px-3 py-3 text-center font-mono" x-text="p.minQty2 ?? '-'"></td>
-                                            <td class="px-3 py-3 text-center font-mono" x-text="p.minQty3 ?? '-'"></td>
-                                            <td class="px-4 py-3 text-right font-mono font-bold text-[#0052cc]" x-text="formatRupiah(p.hargaLevel1 || p.memberPrice || p.price)"></td>
-                                            <td class="px-3 py-3 text-center font-mono" x-text="(p.disc ?? 0) + '%'"></td>
-                                            <td class="px-3 py-3 text-center font-mono font-bold text-amber-700" x-text="p.minStock ?? p.stockMin ?? 5"></td>
-                                            <td class="px-3 py-3 text-center font-mono font-bold text-blue-700" x-text="p.reorder ?? 10"></td>
-                                            <td class="px-3 py-3 text-center font-mono" x-text="(p.ppnOut ?? 11) + '%'"></td>
-                                            <td class="px-3 py-3 text-center font-mono font-bold" :class="p.ppnChk === 'Y' ? 'text-emerald-700' : 'text-slate-500'" x-text="p.ppnChk || 'Y'"></td>
-                                            <td class="px-4 py-3 text-right font-mono text-slate-800" x-text="formatRupiah(p.lastCostPrice ?? p.costPrice)"></td>
-                                            <td class="px-3 py-3 text-center font-bold" x-text="p.statusBarang || p.status || 'TERSEDIA'"></td>
-                                            <td class="px-3 py-3 text-center font-mono" x-text="p.koSup || '-'"></td>
-                                            <td class="px-3 py-3 text-center font-mono font-bold" :class="p.act === 'Y' ? 'text-emerald-700' : 'text-rose-700'" x-text="p.act || 'Y'"></td>
-                                            <td class="px-3 py-3 text-center font-mono" x-text="p.masa ? p.masa + ' Hari' : '-'"></td>
-                                            <td class="px-3 py-3 text-center font-mono" x-text="p.expiredDate || '-'"></td>
-                                            <td class="px-3 py-3 text-center font-mono" x-text="(p.up ?? 0) + '%'"></td>
-                                            <td class="px-4 py-3 text-slate-500 italic max-w-[150px] truncate" :title="p.dump" x-text="p.dump || '-'"></td>
-                                            <td class="px-4 py-3 text-center font-mono font-black bg-blue-50/40 text-[#0052cc]" x-text="getProductStock(p) + ' ' + (p.unit || 'Pcs')"></td>
+                                            <td class="px-4 py-3 font-mono text-gray-700" x-text="p.kode_barcode || p.barcode || '-'"></td>
+                                            <td class="px-4 py-3 font-mono text-gray-700" x-text="p.kode_produk || p.sku || '-'"></td>
+                                            <td class="px-3 py-3 text-center font-mono font-bold" x-text="p.qty_produk !== undefined ? p.qty_produk : (p.masterStock ?? p.stock ?? 0)"></td>
+                                            <td class="px-5 py-3 font-bold text-gray-900 max-w-[220px] truncate" :title="p.nama_produk || p.name" x-text="p.nama_produk || p.name"></td>
+                                            <td class="px-3 py-3 text-center text-gray-800 font-bold" x-text="p.satuan_unit || p.unit || 'Pcs'"></td>
+                                            <td class="px-4 py-3 text-right font-mono" x-text="formatRupiah(p.harga_beli ?? p.costPrice)"></td>
+                                            <td class="px-4 py-3 text-right font-mono font-bold text-emerald-700" x-text="formatRupiah(p.harga_jual_umum ?? p.price)"></td>
+                                            <td class="px-4 py-3 text-right font-mono font-bold text-[#0052cc]" x-text="formatRupiah(p.harga_jual_member ?? p.memberPrice ?? p.price)"></td>
+                                            <td class="px-3 py-3 text-center font-mono" x-text="(p.produk_disc ?? p.disc ?? 0) + '%'"></td>
+                                            <td class="px-3 py-3 text-center font-mono font-bold text-amber-700" x-text="p.minimum_stock ?? p.minStock ?? p.stockMin ?? 5"></td>
+                                            <td class="px-3 py-3 text-center font-mono" x-text="(p.ppn_out ?? p.ppnOut ?? 11) + '%'"></td>
+                                            <td class="px-3 py-3 text-center font-mono font-bold" :class="(p.ppn_chk || p.ppnChk) === 'Y' ? 'text-emerald-700' : 'text-slate-500'" x-text="p.ppn_chk || p.ppnChk || 'Y'"></td>
+                                            <td class="px-4 py-3 text-right font-mono text-slate-800" x-text="formatRupiah(p.harga_beli_terakhir ?? p.lastCostPrice ?? p.costPrice)"></td>
+                                            <td class="px-3 py-3 text-center font-bold" x-text="p.status_barang || p.statusBarang || p.status || 'TERSEDIA'"></td>
+                                            <td class="px-3 py-3 text-center font-mono" x-text="p.kode_suplier || p.koSup || '-'"></td>
+                                            <td class="px-3 py-3 text-center font-mono" x-text="p.manufacturing_date || p.mfgDate || '-'"></td>
+                                            <td class="px-3 py-3 text-center font-mono" x-text="p.exp_date || p.expiredDate || '-'"></td>
+                                            <td class="px-4 py-3 text-center font-mono font-black bg-blue-50/40 text-[#0052cc]" x-text="getProductStock(p) + ' ' + (p.satuan_unit || p.unit || 'Pcs')"></td>
                                             <td class="px-4 py-3 text-center sticky right-0 bg-white shadow-l">
                                                 <div class="inline-flex items-center justify-center gap-1">
-                                                    <button type="button" @click="openDetail(p)" title="Lihat Tabel Detail Lengkap" class="p-1 text-gray-400 hover:text-[#0052cc] rounded cursor-pointer">
+                                                    <button type="button" @click="openDetail(p)" title="Lihat Tabel Detail Lengkap 19 Kolom" class="p-1 text-gray-400 hover:text-[#0052cc] rounded cursor-pointer">
                                                         <span class="material-symbols-rounded text-[18px]">visibility</span>
                                                     </button>
                                                     <button type="button" @click="openEditModal(p)" title="Edit Produk" class="p-1 text-gray-400 hover:text-amber-600 rounded cursor-pointer">
@@ -1704,7 +1900,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                 <div class="inline-flex items-center justify-center gap-1.5">
                                                     <button type="button"
                                                             @click="openDetail(p)"
-                                                            title="Lihat Tabel Detail Lengkap 25 Kolom"
+                                                            title="Lihat Tabel Detail Lengkap 19 Kolom"
                                                             class="p-1.5 text-gray-400 hover:text-[#0052cc] hover:bg-blue-50 rounded-lg transition-colors cursor-pointer">
                                                         <span class="material-symbols-rounded text-[18px]">visibility</span>
                                                     </button>
@@ -2366,8 +2562,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             <span class="material-symbols-rounded text-[22px]" x-text="modalMode === 'create' ? 'add_circle' : 'edit_document'"></span>
                         </div>
                         <div>
-                            <h3 class="text-base font-black text-gray-900" x-text="modalMode === 'create' ? 'Tambah Master Produk Baru (Standar 25 Kolom ILP)' : 'Edit Informasi & Stok Master Produk (Standar 25 Kolom ILP)'"></h3>
-                            <p class="text-xs text-gray-500 font-medium" x-text="modalMode === 'create' ? 'Daftarkan SKU baru dengan form master lengkap sesuai struktur detail barang.' : 'Perbarui data barang, harga beli/jual, PPN, atau status stok.'"></p>
+                            <h3 class="text-base font-black text-gray-900" x-text="modalMode === 'create' ? 'Tambah Master Produk Baru (Standar 19 Kolom Master)' : 'Edit Informasi & Stok Master Produk (Standar 19 Kolom Master)'"></h3>
+                            <p class="text-xs text-gray-500 font-medium" x-text="modalMode === 'create' ? 'Daftarkan master produk baru sesuai struktur 19 kolom standar master gudang.' : 'Perbarui data barang, harga beli/jual, PPN, dan stok sesuai 19 kolom standar master.'"></p>
                         </div>
                     </div>
                     <button @click="showProductModal = false" class="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer">
@@ -2384,21 +2580,23 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         </div>
                     </template>
 
-                    <!-- SECTION 1: IDENTITAS & MASTER PRODUK -->
+                    <!-- CARD 1: IDENTITAS & KODE BARANG (Kolom 1 - 7) -->
                     <div class="p-4 bg-slate-50/70 rounded-2xl border border-slate-200/80 space-y-3">
                         <div class="flex items-center justify-between border-b border-slate-200/70 pb-2">
                             <span class="text-[11px] font-black uppercase text-slate-800 tracking-wider flex items-center gap-1.5">
                                 <span class="material-symbols-rounded text-[17px] text-[#0052cc]">badge</span>
-                                <span>1. Identitas &amp; Master Barang (ILP)</span>
+                                <span>1. Identitas &amp; Kode Master Barang</span>
                             </span>
-                            <span class="text-[10.5px] font-mono text-slate-400">Kolom 1-6, 19, 21</span>
+                            <span class="text-[10.5px] font-mono text-slate-400">Kolom 1 - 7</span>
                         </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                            <!-- Kolom 6: NamaProduk -->
                             <div class="md:col-span-3">
-                                <label class="block font-bold text-gray-700 mb-1">Nama Produk <span class="text-rose-500">*</span></label>
+                                <label class="block font-bold text-gray-700 mb-1">Nama Produk (NamaProduk) <span class="text-rose-500">*</span></label>
                                 <input type="text"
-                                       x-model="formData.name"
+                                       x-model="formData.nama_produk"
+                                       @input="formData.name = formData.nama_produk"
                                        placeholder="Contoh: Aqua Mineral 600ml Botol"
                                        class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-medium text-xs bg-white">
                                 <template x-if="formErrors.name">
@@ -2406,56 +2604,11 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 </template>
                             </div>
 
-                            <div>
-                                <label class="block font-bold text-gray-700 mb-1">Barcode (EAN-13) <span class="text-rose-500">*</span></label>
-                                <div class="flex gap-2">
-                                    <input type="text"
-                                           x-model="formData.barcode"
-                                           placeholder="899..."
-                                           class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono font-bold text-xs bg-white">
-                                    <button type="button"
-                                            @click="generateRandomBarcode()"
-                                            class="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-gray-700 rounded-xl font-bold text-[11px] shrink-0 cursor-pointer">
-                                        Acak
-                                    </button>
-                                </div>
-                                <template x-if="formErrors.barcode">
-                                    <p class="text-rose-500 text-[11px] font-semibold mt-1" x-text="formErrors.barcode"></p>
-                                </template>
-                            </div>
-
-                            <div>
-                                <label class="block font-bold text-gray-700 mb-1">Kode SKU Toko <span class="text-rose-500">*</span></label>
-                                <input type="text"
-                                       x-model="formData.sku"
-                                       placeholder="PRD-001"
-                                       class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono font-bold text-xs uppercase bg-white">
-                                <template x-if="formErrors.sku">
-                                    <p class="text-rose-500 text-[11px] font-semibold mt-1" x-text="formErrors.sku"></p>
-                                </template>
-                            </div>
-
-                            <div>
-                                <label class="block font-bold text-gray-700 mb-1">Barang - ID (ILP)</label>
-                                <input type="text"
-                                       x-model="formData.ilp_id"
-                                       placeholder="Contoh: ILP-001 / ID Master"
-                                       class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono text-xs bg-white">
-                            </div>
-
-                            <div>
-                                <label class="block font-bold text-gray-700 mb-1">Kategori Produk (Barang - Kel)</label>
-                                <select x-model="formData.category"
-                                        class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-semibold text-xs bg-white">
-                                    <template x-for="cat in availableCategories" :key="cat">
-                                        <option :value="cat" x-text="cat"></option>
-                                    </template>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label class="block font-bold text-gray-700 mb-1">Satuan Unit (Unit1)</label>
-                                <select x-model="formData.unit"
+                            <!-- Kolom 7: SatuanUnit -->
+                            <div class="md:col-span-1">
+                                <label class="block font-bold text-gray-700 mb-1">Satuan Unit (SatuanUnit) <span class="text-rose-500">*</span></label>
+                                <select x-model="formData.satuan_unit"
+                                        @change="formData.unit = formData.satuan_unit"
                                         class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-semibold text-xs bg-white">
                                     <option value="Pcs">Pcs</option>
                                     <option value="Botol">Botol</option>
@@ -2467,20 +2620,241 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     <option value="Kg">Kg</option>
                                     <option value="Gram">Gram</option>
                                     <option value="Liter">Liter</option>
+                                    <option value="Box">Box</option>
+                                    <option value="Bungkus">Bungkus</option>
                                 </select>
                             </div>
 
+                            <!-- Kolom 1: IdProduk -->
                             <div>
-                                <label class="block font-bold text-gray-700 mb-1">Brand / Produsen</label>
+                                <label class="block font-bold text-gray-700 mb-1">ID Produk (IdProduk)</label>
                                 <input type="text"
-                                       x-model="formData.brand"
-                                       placeholder="Contoh: Danone, Unilever, Lokal"
-                                       class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-medium text-xs bg-white">
+                                       x-model="formData.id_produk"
+                                       @input="formData.ilp_id = formData.id_produk"
+                                       placeholder="Auto / ID Master"
+                                       class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono text-xs bg-white">
                             </div>
 
+                            <!-- Kolom 2: SKU -->
                             <div>
-                                <label class="block font-bold text-gray-700 mb-1">Status Barang</label>
-                                <select x-model="formData.statusBarang"
+                                <label class="block font-bold text-gray-700 mb-1">SKU Master (SKU) <span class="text-rose-500">*</span></label>
+                                <input type="text"
+                                       x-model="formData.sku"
+                                       @input="if(!formData.kode_produk || formData.kode_produk === formData.sku) formData.kode_produk = formData.sku"
+                                       placeholder="PRD-001"
+                                       class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono font-bold text-xs uppercase bg-white">
+                                <template x-if="formErrors.sku">
+                                    <p class="text-rose-500 text-[11px] font-semibold mt-1" x-text="formErrors.sku"></p>
+                                </template>
+                            </div>
+
+                            <!-- Kolom 3: Kode Barcode -->
+                            <div>
+                                <label class="block font-bold text-gray-700 mb-1">Kode Barcode (EAN-13) <span class="text-rose-500">*</span></label>
+                                <div class="flex gap-2">
+                                    <input type="text"
+                                           x-model="formData.kode_barcode"
+                                           @input="formData.barcode = formData.kode_barcode"
+                                           placeholder="899..."
+                                           class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono font-bold text-xs bg-white">
+                                    <button type="button"
+                                            @click="generateRandomBarcode()"
+                                            class="px-2.5 py-2 bg-slate-200 hover:bg-slate-300 text-gray-700 rounded-xl font-bold text-[11px] shrink-0 cursor-pointer">
+                                        Acak
+                                    </button>
+                                </div>
+                                <template x-if="formErrors.barcode">
+                                    <p class="text-rose-500 text-[11px] font-semibold mt-1" x-text="formErrors.barcode"></p>
+                                </template>
+                            </div>
+
+                            <!-- Kolom 4: KodeProduk -->
+                            <div>
+                                <label class="block font-bold text-gray-700 mb-1">Kode Produk (KodeProduk)</label>
+                                <input type="text"
+                                       x-model="formData.kode_produk"
+                                       placeholder="PRD-001"
+                                       class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono font-bold text-xs uppercase bg-white">
+                            </div>
+
+                            <!-- Kolom 5: QtyProduk -->
+                            <div class="md:col-span-2">
+                                <label class="block font-bold text-gray-700 mb-1">Stok Master Gudang (QtyProduk) <span class="text-rose-500">*</span></label>
+                                <div class="relative">
+                                    <input type="number"
+                                           min="0"
+                                           x-model.number="formData.qty_produk"
+                                           @input="formData.stock = formData.qty_produk"
+                                           class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono font-bold text-xs bg-white">
+                                    <span class="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold" x-text="formData.satuan_unit || 'Pcs'"></span>
+                                </div>
+                                <template x-if="formErrors.stock">
+                                    <p class="text-rose-500 text-[11px] mt-1 font-semibold" x-text="formErrors.stock"></p>
+                                </template>
+                            </div>
+
+                            <!-- Kategori Produk (Pelengkap Master) -->
+                            <div class="md:col-span-2">
+                                <label class="block font-bold text-gray-700 mb-1">Kategori Produk (Kelompok)</label>
+                                <select x-model="formData.category"
+                                        class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-semibold text-xs bg-white">
+                                    <template x-for="cat in availableCategories" :key="cat">
+                                        <option :value="cat" x-text="cat"></option>
+                                    </template>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CARD 2: PENETAPAN HARGA, DISKON & PPN (Kolom 8 - 15) -->
+                    <div class="p-4 bg-amber-50/40 rounded-2xl border border-amber-200/70 space-y-3">
+                        <div class="flex items-center justify-between border-b border-amber-200/60 pb-2">
+                            <span class="text-[11px] font-black uppercase text-amber-900 tracking-wider flex items-center gap-1.5">
+                                <span class="material-symbols-rounded text-[17px] text-amber-700">payments</span>
+                                <span>2. Penetapan Harga, Diskon &amp; PPN</span>
+                            </span>
+                            <span class="text-[10.5px] font-mono text-amber-700/70">Kolom 8 - 15</span>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                            <!-- Kolom 8: HargaBeli -->
+                            <div class="md:col-span-2">
+                                <label class="block font-bold text-gray-700 mb-1">Harga Beli Pokok / HPP (HargaBeli) <span class="text-rose-500">*</span></label>
+                                <div class="relative">
+                                    <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 font-bold font-mono">Rp</span>
+                                    <input type="number"
+                                           min="0"
+                                           step="100"
+                                           x-model.number="formData.harga_beli"
+                                           @input="formData.costPrice = formData.harga_beli; if(!formData.harga_beli_terakhir) formData.harga_beli_terakhir = formData.harga_beli"
+                                           class="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono font-bold text-xs bg-white">
+                                </div>
+                            </div>
+
+                            <!-- Kolom 15: HargaBeliTerakhir -->
+                            <div class="md:col-span-2">
+                                <label class="block font-bold text-gray-700 mb-1">Harga Beli Terakhir (HargaBeliTerakhir)</label>
+                                <div class="relative">
+                                    <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 font-bold font-mono">Rp</span>
+                                    <input type="number"
+                                           min="0"
+                                           step="100"
+                                           x-model.number="formData.harga_beli_terakhir"
+                                           @input="formData.lastCostPrice = formData.harga_beli_terakhir"
+                                           class="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono font-bold text-xs bg-white">
+                                </div>
+                            </div>
+
+                            <!-- Kolom 9: HargaJualUmum -->
+                            <div class="md:col-span-2">
+                                <label class="block font-bold text-gray-700 mb-1">Harga Jual Konsumen (HargaJualUmum) <span class="text-rose-500">*</span></label>
+                                <div class="relative">
+                                    <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 font-bold font-mono">Rp</span>
+                                    <input type="number"
+                                           min="0"
+                                           step="100"
+                                           x-model.number="formData.harga_jual_umum"
+                                           @input="formData.price = formData.harga_jual_umum; if(!formData.harga_jual_member) formData.harga_jual_member = formData.harga_jual_umum"
+                                           class="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono font-bold text-xs bg-white text-emerald-800">
+                                </div>
+                                <template x-if="formErrors.price">
+                                    <p class="text-rose-500 text-[11px] mt-1 font-semibold" x-text="formErrors.price"></p>
+                                </template>
+                            </div>
+
+                            <!-- Kolom 10: HargaJualMember -->
+                            <div class="md:col-span-2">
+                                <label class="block font-bold text-[#0052cc] mb-1">Harga Member Koperasi (HargaJualMember) <span class="text-rose-500">*</span></label>
+                                <div class="relative">
+                                    <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#0052cc] font-bold font-mono">Rp</span>
+                                    <input type="number"
+                                           min="0"
+                                           step="100"
+                                           x-model.number="formData.harga_jual_member"
+                                           @input="formData.memberPrice = formData.harga_jual_member; formData.hargaLevel1 = formData.harga_jual_member"
+                                           class="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono font-bold text-xs bg-white text-[#0052cc]">
+                                </div>
+                                <template x-if="formErrors.memberPrice">
+                                    <p class="text-rose-500 text-[11px] mt-1 font-semibold" x-text="formErrors.memberPrice"></p>
+                                </template>
+                            </div>
+
+                            <!-- Kolom 11: ProdukDisc -->
+                            <div>
+                                <label class="block font-bold text-gray-700 mb-1">Diskon Produk (ProdukDisc %)</label>
+                                <div class="relative">
+                                    <input type="number"
+                                           min="0"
+                                           max="100"
+                                           step="0.5"
+                                           x-model.number="formData.produk_disc"
+                                           @input="formData.disc = formData.produk_disc"
+                                           placeholder="0"
+                                           class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono font-bold text-xs bg-white">
+                                    <span class="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold">%</span>
+                                </div>
+                            </div>
+
+                            <!-- Kolom 12: MinimumStock -->
+                            <div>
+                                <label class="block font-bold text-gray-700 mb-1">Batas Minimum (MinimumStock) <span class="text-rose-500">*</span></label>
+                                <div class="relative">
+                                    <input type="number"
+                                           min="0"
+                                           x-model.number="formData.minimum_stock"
+                                           @input="formData.minStock = formData.minimum_stock; onMinStockChange()"
+                                           class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono font-bold text-xs bg-white">
+                                    <span class="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold" x-text="formData.satuan_unit || 'Pcs'"></span>
+                                </div>
+                                <template x-if="formErrors.minStock">
+                                    <p class="text-rose-500 text-[11px] mt-1 font-semibold" x-text="formErrors.minStock"></p>
+                                </template>
+                            </div>
+
+                            <!-- Kolom 14: PPNChk -->
+                            <div>
+                                <label class="block font-bold text-gray-700 mb-1">Status Pajak (PPNChk)</label>
+                                <select x-model="formData.ppn_chk"
+                                        @change="formData.ppnChk = formData.ppn_chk; onPpnToggle()"
+                                        class="w-full px-3 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-bold text-xs bg-white">
+                                    <option value="Y">Y - Kena PPN</option>
+                                    <option value="N">N - Non PPN</option>
+                                </select>
+                            </div>
+
+                            <!-- Kolom 13: PPNOut -->
+                            <div>
+                                <label class="block font-bold text-gray-700 mb-1">Tarif PPN (PPNOut %)</label>
+                                <div class="relative">
+                                    <input type="number"
+                                           min="0"
+                                           max="100"
+                                           step="0.5"
+                                           x-model.number="formData.ppn_out"
+                                           @input="formData.ppnOut = formData.ppn_out"
+                                           class="w-full px-3 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono font-bold text-xs bg-white">
+                                    <span class="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold">%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CARD 3: STATUS, PEMASOK & MASA BERLAKU (Kolom 16 - 19) -->
+                    <div class="p-4 bg-purple-50/40 rounded-2xl border border-purple-200/70 space-y-3">
+                        <div class="flex items-center justify-between border-b border-purple-200/60 pb-2">
+                            <span class="text-[11px] font-black uppercase text-purple-900 tracking-wider flex items-center gap-1.5">
+                                <span class="material-symbols-rounded text-[17px] text-purple-700">inventory</span>
+                                <span>3. Status, Pemasok &amp; Masa Berlaku</span>
+                            </span>
+                            <span class="text-[10.5px] font-mono text-purple-700/70">Kolom 16 - 19</span>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                            <!-- Kolom 16: StatusBarang -->
+                            <div>
+                                <label class="block font-bold text-gray-700 mb-1">Status Barang (StatusBarang) <span class="text-rose-500">*</span></label>
+                                <select x-model="formData.status_barang"
+                                        @change="formData.statusBarang = formData.status_barang; formData.status = formData.status_barang"
                                         class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-bold text-xs bg-white">
                                     <option value="TERSEDIA">TERSEDIA</option>
                                     <option value="STOK_RENDAH">STOK_RENDAH</option>
@@ -2489,282 +2863,30 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 </select>
                             </div>
 
+                            <!-- Kolom 17: KodeSuplier -->
                             <div>
-                                <label class="block font-bold text-gray-700 mb-1">Status Aktif (Barang - Act)</label>
-                                <select x-model="formData.act"
-                                        class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-bold text-xs bg-white">
-                                    <option value="Y">Y - Aktif (Dapat Ditransaksikan)</option>
-                                    <option value="N">N - Nonaktif (Arsip)</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- SECTION 2: HARGA BELI, PPN & MARGIN -->
-                    <div class="p-4 bg-amber-50/40 rounded-2xl border border-amber-200/70 space-y-3">
-                        <div class="flex items-center justify-between border-b border-amber-200/60 pb-2">
-                            <span class="text-[11px] font-black uppercase text-amber-900 tracking-wider flex items-center gap-1.5">
-                                <span class="material-symbols-rounded text-[17px] text-amber-700">payments</span>
-                                <span>2. Harga Beli, PPN &amp; Margin (HPP &amp; Pajak)</span>
-                            </span>
-                            <span class="text-[10.5px] font-mono text-amber-700/70">Kolom 7, 16, 17, 18, 24, 13</span>
-                        </div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            <div>
-                                <label class="block font-bold text-gray-700 mb-1">Harga Beli Pokok (HPP) <span class="text-rose-500">*</span></label>
-                                <div class="relative">
-                                    <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 font-bold font-mono">Rp</span>
-                                    <input type="number"
-                                           min="0"
-                                           step="100"
-                                           x-model.number="formData.costPrice"
-                                           @input="onCostOrPriceChange()"
-                                           class="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono font-bold text-xs bg-white">
-                                </div>
-                            </div>
-
-                            <div>
-                                <label class="block font-bold text-gray-700 mb-1">Harga Beli Terakhir (HrgBeliTerakhir)</label>
-                                <div class="relative">
-                                    <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 font-bold font-mono">Rp</span>
-                                    <input type="number"
-                                           min="0"
-                                           step="100"
-                                           x-model.number="formData.lastCostPrice"
-                                           class="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono font-bold text-xs bg-white">
-                                </div>
-                            </div>
-
-                            <div class="grid grid-cols-2 gap-2">
-                                <div>
-                                    <label class="block font-bold text-gray-700 mb-1">PPN (PPNChk)</label>
-                                    <select x-model="formData.ppnChk"
-                                            @change="onPpnToggle()"
-                                            class="w-full px-3 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-bold text-xs bg-white">
-                                        <option value="Y">Y - Kena PPN</option>
-                                        <option value="N">N - Non PPN</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label class="block font-bold text-gray-700 mb-1">Tarif PPN (%)</label>
-                                    <div class="relative">
-                                        <input type="number"
-                                               min="0"
-                                               max="100"
-                                               step="0.5"
-                                               x-model.number="formData.ppnOut"
-                                               class="w-full px-3 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono font-bold text-xs bg-white">
-                                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">%</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div>
-                                <label class="block font-bold text-gray-700 mb-1">Markup Keuntungan (Barang - Up %)</label>
-                                <div class="relative">
-                                    <input type="number"
-                                           step="0.5"
-                                           x-model.number="formData.up"
-                                           @input="onMarkupChange()"
-                                           placeholder="Contoh: 25"
-                                           class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono font-bold text-xs bg-white">
-                                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">%</span>
-                                </div>
-                                <p class="text-[10px] text-gray-400 mt-0.5">Otomatis hitung selisih harga beli &amp; jual</p>
-                            </div>
-
-                            <div>
-                                <label class="block font-bold text-gray-700 mb-1">Diskon Cuci Gudang (Barang - Disc %)</label>
-                                <div class="relative">
-                                    <input type="number"
-                                           min="0"
-                                           max="100"
-                                           step="1"
-                                           x-model.number="formData.disc"
-                                           placeholder="0"
-                                           class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono font-bold text-xs bg-white">
-                                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">%</span>
-                                </div>
-                                <p class="text-[10px] text-gray-400 mt-0.5">Diskon promo mendekati tanggal kadaluarsa</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- SECTION 3: STRUKTUR HARGA JUAL & GROSIR / TINGKAT -->
-                    <div class="p-4 bg-blue-50/50 rounded-2xl border border-blue-200/80 space-y-3">
-                        <div class="flex items-center justify-between border-b border-blue-200/70 pb-2">
-                            <span class="text-[11px] font-black uppercase text-[#0052cc] tracking-wider flex items-center gap-1.5">
-                                <span class="material-symbols-rounded text-[17px]">price_change</span>
-                                <span>3. Struktur Harga Jual &amp; Ketentuan Grosir / Level</span>
-                            </span>
-                            <span class="text-[10.5px] font-mono text-blue-600/70">Kolom 8, 9, 10, 11, 12</span>
-                        </div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div>
-                                <label class="block font-bold text-gray-700 mb-1">Harga Jual Umum (HargaJualK1) <span class="text-rose-500">*</span></label>
-                                <div class="relative">
-                                    <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 font-bold font-mono">Rp</span>
-                                    <input type="number"
-                                           min="0"
-                                           step="100"
-                                           x-model.number="formData.price"
-                                           @input="onCostOrPriceChange()"
-                                           class="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono font-bold text-xs bg-white">
-                                </div>
-                                <template x-if="formErrors.price">
-                                    <p class="text-rose-500 text-[11px] mt-1 font-semibold" x-text="formErrors.price"></p>
-                                </template>
-                            </div>
-
-                            <div>
-                                <label class="block font-bold text-[#0052cc] mb-1">Harga Anggota / Level 1 (HargaLevel1) <span class="text-rose-500">*</span></label>
-                                <div class="relative">
-                                    <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#0052cc] font-bold font-mono">Rp</span>
-                                    <input type="number"
-                                           min="0"
-                                           step="100"
-                                           x-model.number="formData.memberPrice"
-                                           class="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono font-bold text-xs bg-white text-[#0052cc]">
-                                </div>
-                                <template x-if="formErrors.memberPrice">
-                                    <p class="text-rose-500 text-[11px] mt-1 font-semibold" x-text="formErrors.memberPrice"></p>
-                                </template>
-                            </div>
-                        </div>
-
-                        <!-- Grosir Min Qty Tiering (MinQty1, MinQty2, MinQty3) -->
-                        <div class="grid grid-cols-3 gap-3 pt-2 border-t border-blue-100">
-                            <div>
-                                <label class="block font-bold text-gray-600 mb-1">Min Qty 1 (Default)</label>
-                                <input type="number"
-                                       min="1"
-                                       x-model.number="formData.minQty1"
-                                       class="w-full px-3 py-2 rounded-xl border border-gray-300 font-mono font-bold text-xs bg-white">
-                            </div>
-                            <div>
-                                <label class="block font-bold text-gray-600 mb-1">Min Qty 2 (Grosir 2)</label>
-                                <input type="number"
-                                       min="1"
-                                       x-model.number="formData.minQty2"
-                                       placeholder="Opsional"
-                                       class="w-full px-3 py-2 rounded-xl border border-gray-300 font-mono text-xs bg-white">
-                            </div>
-                            <div>
-                                <label class="block font-bold text-gray-600 mb-1">Min Qty 3 (Grosir 3)</label>
-                                <input type="number"
-                                       min="1"
-                                       x-model.number="formData.minQty3"
-                                       placeholder="Opsional"
-                                       class="w-full px-3 py-2 rounded-xl border border-gray-300 font-mono text-xs bg-white">
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- SECTION 4: STOK, BUFFER, REORDER & LOKASI DISPLAY -->
-                    <div class="p-4 bg-emerald-50/40 rounded-2xl border border-emerald-200/70 space-y-3">
-                        <div class="flex items-center justify-between border-b border-emerald-200/60 pb-2">
-                            <span class="text-[11px] font-black uppercase text-emerald-900 tracking-wider flex items-center gap-1.5">
-                                <span class="material-symbols-rounded text-[17px] text-emerald-700">warehouse</span>
-                                <span>4. Inventaris, Buffer Stok &amp; Lokasi Display</span>
-                            </span>
-                            <span class="text-[10.5px] font-mono text-emerald-700/70">Kolom 14, 15 &amp; Rak Display</span>
-                        </div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
-                            <div>
-                                <label class="block font-bold text-gray-700 mb-1">Stok Fisik Aktif <span class="text-rose-500">*</span></label>
-                                <input type="number"
-                                       min="0"
-                                       x-model.number="formData.stock"
-                                       class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono font-bold text-xs bg-white">
-                                <template x-if="formErrors.stock">
-                                    <p class="text-rose-500 text-[11px] mt-1 font-semibold" x-text="formErrors.stock"></p>
-                                </template>
-                            </div>
-
-                            <div>
-                                <label class="block font-bold text-gray-700 mb-1">Buffer Min Stok (StockMin) <span class="text-rose-500">*</span></label>
-                                <input type="number"
-                                       min="0"
-                                       x-model.number="formData.minStock"
-                                       @input="onMinStockChange()"
-                                       class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono font-bold text-xs bg-white">
-                                <template x-if="formErrors.minStock">
-                                    <p class="text-rose-500 text-[11px] mt-1 font-semibold" x-text="formErrors.minStock"></p>
-                                </template>
-                            </div>
-
-                            <div>
-                                <label class="block font-bold text-gray-700 mb-1">Titik ReOrder (Barang - ReOrder)</label>
-                                <input type="number"
-                                       min="0"
-                                       x-model.number="formData.reorder"
-                                       placeholder="20"
-                                       class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono font-bold text-xs bg-white">
-                            </div>
-
-                            <div>
-                                <label class="block font-bold text-gray-700 mb-1">Lokasi Rak Display</label>
+                                <label class="block font-bold text-gray-700 mb-1">Kode Pemasok (KodeSuplier)</label>
                                 <input type="text"
-                                       x-model="formData.rackLocation"
-                                       placeholder="Contoh: Lorong A - Rak 01"
-                                       class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-medium text-xs bg-white">
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- SECTION 5: PEMASOK, BATCH & KEDALUWARSA -->
-                    <div class="p-4 bg-purple-50/40 rounded-2xl border border-purple-200/70 space-y-3">
-                        <div class="flex items-center justify-between border-b border-purple-200/60 pb-2">
-                            <span class="text-[11px] font-black uppercase text-purple-900 tracking-wider flex items-center gap-1.5">
-                                <span class="material-symbols-rounded text-[17px] text-purple-700">inventory</span>
-                                <span>5. Pemasok, Kedaluwarsa &amp; Keterangan Tambahan</span>
-                            </span>
-                            <span class="text-[10.5px] font-mono text-purple-700/70">Kolom 20, 22, 23, 25 &amp; Batch</span>
-                        </div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            <div>
-                                <label class="block font-bold text-gray-700 mb-1">Kode Supplier (Barang - KoSup)</label>
-                                <input type="text"
-                                       x-model="formData.koSup"
-                                       placeholder="Contoh: SUP-001 / UNILEVER"
+                                       x-model="formData.kode_suplier"
+                                       @input="formData.koSup = formData.kode_suplier"
+                                       placeholder="SUP-001 / UNILEVER"
                                        class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono text-xs bg-white">
                             </div>
 
+                            <!-- Kolom 18: ManufacturingDate -->
                             <div>
-                                <label class="block font-bold text-gray-700 mb-1">Nomor Batch / Lot</label>
-                                <input type="text"
-                                       x-model="formData.batchLot"
-                                       placeholder="Contoh: BATCH-202611-01"
-                                       class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono text-xs bg-white">
-                            </div>
-
-                            <div>
-                                <label class="block font-bold text-gray-700 mb-1">Tanggal Kedaluwarsa (Kadaluarsa)</label>
+                                <label class="block font-bold text-gray-700 mb-1">Tgl Produksi (ManufacturingDate)</label>
                                 <input type="date"
-                                       x-model="formData.expiredDate"
+                                       x-model="formData.manufacturing_date"
                                        class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-medium text-xs bg-white">
                             </div>
 
+                            <!-- Kolom 19: ExpDate -->
                             <div>
-                                <label class="block font-bold text-gray-700 mb-1">Masa Garansi / Retur (Hari)</label>
-                                <div class="relative">
-                                    <input type="text"
-                                           x-model="formData.masa"
-                                           placeholder="30"
-                                           class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-mono text-xs bg-white">
-                                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">Hari</span>
-                                </div>
-                            </div>
-
-                            <div class="md:col-span-2">
-                                <label class="block font-bold text-gray-700 mb-1">Keterangan / Dump (Barang - Dump)</label>
-                                <input type="text"
-                                       x-model="formData.dump"
-                                       placeholder="Catatan tambahan spesifikasi, keterangan kartonan, atau varian produk"
+                                <label class="block font-bold text-gray-700 mb-1">Tgl Kedaluwarsa (ExpDate)</label>
+                                <input type="date"
+                                       x-model="formData.exp_date"
+                                       @input="formData.expiredDate = formData.exp_date"
                                        class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 font-medium text-xs bg-white">
                             </div>
                         </div>
@@ -2954,14 +3076,14 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         </div>
                     </div>
 
-                    <!-- 2. TABEL LENGKAP DETAIL BARANG (STANDAR 25 KOLOM MASTER PRODUK ILP) -->
+                    <!-- 2. TABEL LENGKAP DETAIL BARANG (STANDAR 19 KOLOM MASTER PRODUK) -->
                     <div class="border border-gray-200 rounded-xl overflow-hidden shadow-2xs">
                         <div class="px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
                             <span class="text-xs font-black uppercase text-gray-700 tracking-wider flex items-center gap-1.5">
                                 <span class="material-symbols-rounded text-[16px] text-emerald-600">table_rows</span>
-                                <span>Tabel Detail Barang (Struktur 25 Kolom Master Produk)</span>
+                                <span>Tabel Detail Barang (Struktur 19 Kolom Master Produk)</span>
                             </span>
-                            <span class="text-[10.5px] font-mono text-gray-400">25 Kolom Terstandarisasi</span>
+                            <span class="text-[10.5px] font-mono text-gray-400">19 Kolom Terstandarisasi</span>
                         </div>
                         <div class="max-h-72 overflow-y-auto">
                             <table class="w-full text-left text-xs border-collapse">
@@ -2973,31 +3095,25 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-100 font-medium text-slate-800">
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">1</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - ID</td><td class="py-2 px-4 font-mono font-bold text-slate-900" x-text="selectedProduct?.ilp_id || selectedProduct?.id || '-'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">2</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Kode</td><td class="py-2 px-4 font-mono font-bold text-slate-900" x-text="selectedProduct?.sku || '-'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">3</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - KodeBar</td><td class="py-2 px-4 font-mono font-bold text-slate-900" x-text="selectedProduct?.barcode || '-'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">4</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Kel</td><td class="py-2 px-4 text-slate-800" x-text="selectedProduct?.category || '-'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">5</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Nama</td><td class="py-2 px-4 font-bold text-slate-900" x-text="selectedProduct?.name || '-'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">6</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Unit1</td><td class="py-2 px-4 font-bold text-slate-800" x-text="selectedProduct?.unit || 'Pcs'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">7</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - HargaBeli</td><td class="py-2 px-4 font-mono font-bold text-slate-800" x-text="formatRupiah(selectedProduct?.costPrice)"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">8</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - HargaJualK1</td><td class="py-2 px-4 font-mono font-bold text-emerald-700" x-text="formatRupiah(selectedProduct?.price)"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">9</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - MinQty1</td><td class="py-2 px-4 font-mono" x-text="selectedProduct?.minQty1 ?? 1"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">10</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - MinQty2</td><td class="py-2 px-4 font-mono" x-text="selectedProduct?.minQty2 ?? '-'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">11</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - MinQty3</td><td class="py-2 px-4 font-mono" x-text="selectedProduct?.minQty3 ?? '-'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">12</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - HargaLevel1</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]" x-text="formatRupiah(selectedProduct?.hargaLevel1 || selectedProduct?.memberPrice || selectedProduct?.price)"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">13</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Disc</td><td class="py-2 px-4 font-mono" x-text="(selectedProduct?.disc ?? 0) + '%'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">14</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - StockMin</td><td class="py-2 px-4 font-mono font-bold text-amber-700" x-text="(selectedProduct?.minStock ?? selectedProduct?.stockMin ?? 5) + ' ' + (selectedProduct?.unit || 'Pcs')"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">15</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - ReOrder</td><td class="py-2 px-4 font-mono font-bold text-blue-700" x-text="(selectedProduct?.reorder ?? 10) + ' ' + (selectedProduct?.unit || 'Pcs')"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">16</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - PPN_Out</td><td class="py-2 px-4 font-mono" x-text="(selectedProduct?.ppnOut ?? 11) + '%'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">17</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - PPNChk</td><td class="py-2 px-4 font-mono font-bold" :class="selectedProduct?.ppnChk === 'Y' ? 'text-emerald-700' : 'text-slate-500'" x-text="selectedProduct?.ppnChk || 'Y'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">18</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - HrgBeliTerakhir</td><td class="py-2 px-4 font-mono font-bold text-slate-800" x-text="formatRupiah(selectedProduct?.lastCostPrice ?? selectedProduct?.costPrice)"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">19</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - StatusBarang</td><td class="py-2 px-4 font-bold" x-text="selectedProduct?.statusBarang || selectedProduct?.status || 'TERSEDIA'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">20</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - KoSup</td><td class="py-2 px-4 font-mono" x-text="selectedProduct?.koSup || '-'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">21</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Act</td><td class="py-2 px-4 font-mono font-bold" :class="selectedProduct?.act === 'Y' ? 'text-emerald-700' : 'text-rose-700'" x-text="selectedProduct?.act || 'Y'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">22</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Masa</td><td class="py-2 px-4 font-mono" x-text="selectedProduct?.masa ? selectedProduct.masa + ' Hari' : '-'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">23</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Kadaluarsa</td><td class="py-2 px-4 font-mono" x-text="selectedProduct?.expiredDate || '-'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">24</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Up</td><td class="py-2 px-4 font-mono" x-text="(selectedProduct?.up ?? 0) + '%'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">25</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Dump</td><td class="py-2 px-4 text-slate-600 italic" x-text="selectedProduct?.dump || '-'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">1</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">IdProduk</td><td class="py-2 px-4 font-mono font-bold text-slate-900" x-text="selectedProduct?.id_produk || selectedProduct?.ilp_id || selectedProduct?.id || '-'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">2</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">SKU</td><td class="py-2 px-4 font-mono font-bold text-slate-900" x-text="selectedProduct?.sku || '-'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">3</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Kode Barcode</td><td class="py-2 px-4 font-mono font-bold text-slate-900" x-text="selectedProduct?.kode_barcode || selectedProduct?.barcode || '-'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">4</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">KodeProduk</td><td class="py-2 px-4 font-mono font-bold text-slate-900" x-text="selectedProduct?.kode_produk || selectedProduct?.sku || '-'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">5</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">QtyProduk</td><td class="py-2 px-4 font-mono font-bold text-slate-900" x-text="(selectedProduct?.qty_produk !== undefined ? selectedProduct.qty_produk : (selectedProduct?.masterStock ?? selectedProduct?.stock ?? 0)) + ' ' + (selectedProduct?.satuan_unit || selectedProduct?.unit || 'Pcs')"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">6</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">NamaProduk</td><td class="py-2 px-4 font-bold text-slate-900" x-text="selectedProduct?.nama_produk || selectedProduct?.name || '-'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">7</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">SatuanUnit</td><td class="py-2 px-4 font-bold text-slate-800" x-text="selectedProduct?.satuan_unit || selectedProduct?.unit || 'Pcs'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">8</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">HargaBeli</td><td class="py-2 px-4 font-mono font-bold text-slate-800" x-text="formatRupiah(selectedProduct?.harga_beli ?? selectedProduct?.costPrice)"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">9</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">HargaJualUmum</td><td class="py-2 px-4 font-mono font-bold text-emerald-700" x-text="formatRupiah(selectedProduct?.harga_jual_umum ?? selectedProduct?.price)"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">10</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">HargaJualMember</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]" x-text="formatRupiah(selectedProduct?.harga_jual_member ?? selectedProduct?.memberPrice ?? selectedProduct?.price)"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">11</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">ProdukDisc</td><td class="py-2 px-4 font-mono" x-text="(selectedProduct?.produk_disc ?? selectedProduct?.disc ?? 0) + '%'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">12</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">MinimumStock</td><td class="py-2 px-4 font-mono font-bold text-amber-700" x-text="(selectedProduct?.minimum_stock ?? selectedProduct?.minStock ?? selectedProduct?.stockMin ?? 5) + ' ' + (selectedProduct?.satuan_unit || selectedProduct?.unit || 'Pcs')"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">13</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">PPNOut</td><td class="py-2 px-4 font-mono" x-text="(selectedProduct?.ppn_out ?? selectedProduct?.ppnOut ?? 11) + '%'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">14</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">PPNChk</td><td class="py-2 px-4 font-mono font-bold" :class="(selectedProduct?.ppn_chk || selectedProduct?.ppnChk) === 'Y' ? 'text-emerald-700' : 'text-slate-500'" x-text="selectedProduct?.ppn_chk || selectedProduct?.ppnChk || 'Y'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">15</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">HargaBeliTerakhir</td><td class="py-2 px-4 font-mono font-bold text-slate-800" x-text="formatRupiah(selectedProduct?.harga_beli_terakhir ?? selectedProduct?.lastCostPrice ?? selectedProduct?.costPrice)"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">16</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">StatusBarang</td><td class="py-2 px-4 font-bold" x-text="selectedProduct?.status_barang || selectedProduct?.statusBarang || selectedProduct?.status || 'TERSEDIA'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">17</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">KodeSuplier</td><td class="py-2 px-4 font-mono" x-text="selectedProduct?.kode_suplier || selectedProduct?.koSup || '-'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">18</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">ManufacturingDate</td><td class="py-2 px-4 font-mono" x-text="selectedProduct?.manufacturing_date || selectedProduct?.mfgDate || '-'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-gray-400 font-mono">19</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">ExpDate</td><td class="py-2 px-4 font-mono" x-text="selectedProduct?.exp_date || selectedProduct?.expiredDate || '-'"></td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -3288,9 +3404,9 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <div>
                             <div class="flex items-center gap-2">
                                 <h3 class="text-base font-bold text-white">Import Master Produk Excel</h3>
-                                <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 border border-emerald-400/30 text-emerald-300">Format ILP 25 Kolom</span>
+                                <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 border border-emerald-400/30 text-emerald-300">Format 19 Kolom (High-Volume Ready)</span>
                             </div>
-                            <p class="text-xs text-slate-300 mt-0.5">Unggah dan sinkronisasi master barang resmi dari file export tim ILP</p>
+                            <p class="text-xs text-slate-300 mt-0.5">Unggah dan sinkronisasi master barang hingga ratusan ribu data secara cepat dengan format 19 kolom</p>
                         </div>
                     </div>
                     <button type="button" 
@@ -3309,13 +3425,16 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <!-- ============================================== -->
                     <div x-show="importStep === 'upload'" class="space-y-5">
                         
-                        <!-- Panduan Standar ILP Banner -->
+                        <!-- Panduan Standar 19 Kolom Banner -->
                         <div class="p-4 bg-emerald-50/80 border border-emerald-200 rounded-xl text-emerald-950 flex items-start gap-3">
                             <span class="material-symbols-rounded text-emerald-600 text-[22px] shrink-0 mt-0.5">verified</span>
                             <div class="text-xs space-y-1">
-                                <span class="font-bold text-emerald-900 block text-sm">Standar Format Master Barang ILP (25 Kolom)</span>
+                                <div class="flex items-center gap-2">
+                                    <span class="font-bold text-emerald-900 block text-sm">Standar Format Master Barang Gudang (19 Kolom)</span>
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-200 text-emerald-900">Kapasitas Ratusan Ribu Data</span>
+                                </div>
                                 <p class="text-emerald-800 leading-relaxed">
-                                    File Excel wajib memuat tepat <strong>25 kolom terstandarisasi</strong> (Barang - ID, Kode, KodeBar, Kel, Nama, Unit1, HargaBeli, HargaJualK1, MinQty1-3, HargaLevel1, Disc, StockMin, ReOrder, PPN_Out, PPNChk, HrgBeliTerakhir, StatusBarang, KoSup, Act, Masa, Kadaluarsa, Up, Dump).
+                                    File Excel / CSV wajib memuat <strong>19 kolom terstandarisasi</strong>: <code>IdProduk, SKU, Kode Barcode, KodeProduk, QtyProduk, NamaProduk, SatuanUnit, HargaBeli, HargaJualUmum, HargaJualMember, ProdukDisc, MinimumStock, PPNOut, PPNChk, HargaBeliTerakhir, StatusBarang, KodeSuplier, ManufacturingDate, ExpDate</code>.
                                 </p>
                             </div>
                         </div>
@@ -3343,7 +3462,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     </div>
                                     <div>
                                         <p class="text-sm font-bold text-slate-800">Pilih file Excel Master Barang atau tarik file ke sini</p>
-                                        <p class="text-xs text-slate-400 mt-1">Mendukung format .XLSX, .XLS, atau .CSV (Maksimal 25MB)</p>
+                                        <p class="text-xs text-slate-400 mt-1">Mendukung format .XLSX, .XLS, atau .CSV (Maksimal 25MB • Mendukung Ratusan Ribu Data)</p>
                                     </div>
                                     <button type="button" @click.stop="triggerFileInput()" class="pointer-events-auto px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer">
                                         <span class="material-symbols-rounded text-[16px]">folder_open</span>
@@ -3378,13 +3497,13 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-100">
                             <div class="flex items-center gap-2 text-xs text-slate-500">
                                 <span class="material-symbols-rounded text-blue-600 text-[18px]">info</span>
-                                <span>Perlu contoh format struktur 25 kolom?</span>
+                                <span>Perlu contoh format struktur 19 kolom?</span>
                             </div>
                             <button type="button" 
                                     @click="downloadILPTemplate()"
                                     class="text-xs font-bold text-[#0052cc] hover:text-[#0043a8] hover:underline flex items-center gap-1 cursor-pointer">
                                 <span class="material-symbols-rounded text-[16px]">download</span>
-                                <span>Unduh Template Format Master ILP (25 Kolom)</span>
+                                <span>Unduh Template Format Master (19 Kolom)</span>
                             </button>
                         </div>
                     </div>
@@ -3398,11 +3517,11 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <span class="material-symbols-rounded text-[28px]">error</span>
                             </div>
                             <div class="flex-1 space-y-2">
-                                <h4 class="font-bold text-rose-900 text-base">Format Kolom Excel Tidak Sesuai Standar ILP</h4>
-                                <p class="text-xs text-rose-800 leading-relaxed" x-text="validationErrorDetails?.message || 'Jumlah atau nama kolom file yang diunggah tidak sesuai dengan 25 kolom master barang ILP.'"></p>
+                                <h4 class="font-bold text-rose-900 text-base">Format Kolom Excel Tidak Sesuai Standar Master Produk</h4>
+                                <p class="text-xs text-rose-800 leading-relaxed" x-text="validationErrorDetails?.message || 'Jumlah atau nama kolom file yang diunggah tidak sesuai dengan 19 kolom master barang.'"></p>
                                 <div class="flex items-center gap-4 text-xs font-semibold text-rose-700 pt-1">
                                     <span>Kolom Terdeteksi: <strong class="font-mono text-sm" x-text="validationErrorDetails?.actual_count || 0"></strong></span>
-                                    <span>Kolom Wajib ILP: <strong class="font-mono text-sm" x-text="validationErrorDetails?.expected_count || 25"></strong></span>
+                                    <span>Kolom Wajib: <strong class="font-mono text-sm" x-text="validationErrorDetails?.expected_count || 19"></strong></span>
                                 </div>
                             </div>
                         </div>
@@ -3451,39 +3570,132 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     <span class="material-symbols-rounded text-[22px]">check_circle</span>
                                 </div>
                                 <div>
-                                    <h4 class="font-bold text-emerald-950 text-sm">Struktur 25 Kolom Valid & Terverifikasi</h4>
+                                    <div class="flex items-center gap-2">
+                                        <h4 class="font-bold text-emerald-950 text-sm">Struktur 19 Kolom Valid & Terverifikasi</h4>
+                                        <span x-show="validationData?.summary?.is_high_volume" class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-blue-100 text-[#0052cc] border border-blue-200">Mode Bulk Import (Ratusan Ribu Data)</span>
+                                    </div>
                                     <p class="text-xs text-emerald-800" x-text="'File: ' + (validationData?.file_name || importFileName)"></p>
                                 </div>
                             </div>
                             <span class="px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">Siap Diimport</span>
                         </div>
 
-                        <!-- Statistics Grid -->
+                        <!-- Statistics Grid (Interactive Filter Cards) -->
                         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                            <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                            <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 transition-all cursor-pointer hover:border-slate-400"
+                                 @click="importPreviewFilter = 'all'; importPreviewPage = 1"
+                                 :class="importPreviewFilter === 'all' ? 'ring-2 ring-slate-700 bg-white shadow-xs' : ''">
                                 <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Total Baris File</span>
                                 <div class="text-lg font-black text-slate-800 font-mono mt-0.5" x-text="validationData?.summary?.total_rows || 0"></div>
+                                <div class="text-[11px] text-slate-500 mt-1">Semua baris terdeteksi</div>
                             </div>
-                            <div class="bg-emerald-50/70 p-3.5 rounded-xl border border-emerald-200">
+                            <div class="bg-emerald-50/70 p-3.5 rounded-xl border border-emerald-200 transition-all cursor-pointer hover:border-emerald-400"
+                                 @click="importPreviewFilter = 'new'; importPreviewPage = 1"
+                                 :class="importPreviewFilter === 'new' ? 'ring-2 ring-emerald-500 bg-emerald-50 shadow-xs' : ''">
                                 <span class="text-[10px] font-extrabold text-emerald-700 uppercase tracking-wider block">Data Valid</span>
                                 <div class="text-lg font-black text-emerald-700 font-mono mt-0.5" x-text="validationData?.summary?.valid_rows || 0"></div>
+                                <div class="text-[11px] text-emerald-700 mt-1">Siap diproses sistem</div>
                             </div>
-                            <div class="bg-blue-50/70 p-3.5 rounded-xl border border-blue-200">
-                                <span class="text-[10px] font-extrabold text-[#0052cc] uppercase tracking-wider block">Produk Terdaftar</span>
+                            <div class="bg-blue-50/70 p-3.5 rounded-xl border border-blue-200 transition-all cursor-pointer hover:border-[#0052cc]"
+                                 @click="importPreviewFilter = (importPreviewFilter === 'existing' ? 'all' : 'existing'); importPreviewPage = 1"
+                                 :class="importPreviewFilter === 'existing' ? 'ring-2 ring-[#0052cc] bg-blue-100/60 shadow-xs' : ''">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-[10px] font-extrabold text-[#0052cc] uppercase tracking-wider block">Produk Terdaftar</span>
+                                    <span class="text-[10px] px-1.5 py-0.2 rounded bg-blue-200 text-blue-900 font-bold" x-show="(validationData?.summary?.existing_in_db_count || 0) > 0">Klik Filter</span>
+                                </div>
                                 <div class="text-lg font-black text-[#0052cc] font-mono mt-0.5" x-text="validationData?.summary?.existing_in_db_count || 0"></div>
+                                <template x-if="validationData?.existing_rows_list?.length > 0">
+                                    <div class="text-[11px] text-blue-900 font-semibold mt-1 truncate" :title="validationData.existing_rows_list.map(e => 'Baris ' + e.row).join(', ')">
+                                        <span>Baris: </span>
+                                        <span class="font-mono text-[#0052cc]" x-text="validationData.existing_rows_list.slice(0, 4).map(e => e.row).join(', ') + (validationData.existing_rows_list.length > 4 ? ' (+' + (validationData.existing_rows_list.length - 4) + ')' : '')"></span>
+                                    </div>
+                                </template>
+                                <template x-if="!validationData?.existing_rows_list?.length">
+                                    <div class="text-[11px] text-slate-500 mt-1">Semua produk baru</div>
+                                </template>
                             </div>
-                            <div class="bg-rose-50/70 p-3.5 rounded-xl border border-rose-200">
-                                <span class="text-[10px] font-extrabold text-rose-700 uppercase tracking-wider block">Baris Error</span>
+                            <div class="bg-rose-50/70 p-3.5 rounded-xl border border-rose-200 transition-all cursor-pointer hover:border-rose-400"
+                                 @click="importPreviewFilter = (importPreviewFilter === 'error' ? 'all' : 'error'); importPreviewPage = 1"
+                                 :class="importPreviewFilter === 'error' ? 'ring-2 ring-rose-500 bg-rose-100/60 shadow-xs' : ''">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-[10px] font-extrabold text-rose-700 uppercase tracking-wider block">Baris Error</span>
+                                    <span class="text-[10px] px-1.5 py-0.2 rounded bg-rose-200 text-rose-900 font-bold" x-show="(validationData?.summary?.error_rows || 0) > 0">Klik Filter</span>
+                                </div>
                                 <div class="text-lg font-black text-rose-700 font-mono mt-0.5" x-text="validationData?.summary?.error_rows || 0"></div>
+                                <template x-if="validationData?.error_rows_list?.length > 0">
+                                    <div class="text-[11px] text-rose-900 font-semibold mt-1 truncate" :title="validationData.error_rows_list.map(e => 'Baris ' + e.row + ': ' + e.error).join('; ')">
+                                        <span>Baris: </span>
+                                        <span class="font-mono text-rose-700" x-text="validationData.error_rows_list.slice(0, 4).map(e => e.row).join(', ') + (validationData.error_rows_list.length > 4 ? ' (+' + (validationData.error_rows_list.length - 4) + ')' : '')"></span>
+                                    </div>
+                                </template>
+                                <template x-if="!validationData?.error_rows_list?.length">
+                                    <div class="text-[11px] text-emerald-600 font-medium mt-1 flex items-center gap-1">
+                                        <span class="material-symbols-rounded text-[14px]">check_circle</span>
+                                        <span>Tidak ada error</span>
+                                    </div>
+                                </template>
                             </div>
                         </div>
+
+                        <!-- Card Rincian Baris Error (Jika Ada Error) -->
+                        <template x-if="validationData?.error_rows_list?.length > 0">
+                            <div class="bg-rose-50 border border-rose-300 rounded-xl p-3.5 space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-bold text-rose-900 flex items-center gap-1.5">
+                                        <span class="material-symbols-rounded text-rose-600 text-[18px]">error</span>
+                                        <span>Daftar Rincian Baris Error (<span x-text="validationData.error_rows_list.length"></span> Baris Bermasalah):</span>
+                                    </span>
+                                    <button type="button" @click="importPreviewFilter = (importPreviewFilter === 'error' ? 'all' : 'error'); importPreviewPage = 1"
+                                            class="text-[11px] font-bold text-rose-700 hover:text-rose-900 underline cursor-pointer">
+                                        <span x-text="importPreviewFilter === 'error' ? 'Tampilkan Semua Baris' : 'Filter Tabel ke Baris Error Saja'"></span>
+                                    </button>
+                                </div>
+                                <div class="max-h-36 overflow-y-auto space-y-1.5 pr-1 divide-y divide-rose-200">
+                                    <template x-for="err in validationData.error_rows_list" :key="err.row">
+                                        <div class="text-[11px] pt-1.5 flex items-start gap-2">
+                                            <span class="px-2 py-0.5 rounded bg-rose-200 text-rose-900 font-mono font-bold shrink-0" x-text="'Baris ' + err.row"></span>
+                                            <span class="font-bold text-slate-800" x-text="(err.sku !== '-' ? err.sku : (err.nama_produk !== '-' ? err.nama_produk : 'Data Kosong')) + ' — '"></span>
+                                            <span class="text-rose-700 font-semibold" x-text="err.error || (err.messages ? err.messages.join(', ') : 'Format data tidak valid')"></span>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Card Rincian Produk Terdaftar (Jika Ada Produk Terdaftar di Database) -->
+                        <template x-if="validationData?.existing_rows_list?.length > 0">
+                            <div class="bg-blue-50 border border-blue-200 rounded-xl p-3.5 space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-bold text-blue-950 flex items-center gap-1.5">
+                                        <span class="material-symbols-rounded text-[#0052cc] text-[18px]">verified</span>
+                                        <span>Daftar Baris Produk Sudah Terdaftar di Database (<span x-text="validationData.existing_rows_list.length"></span> Produk):</span>
+                                    </span>
+                                    <button type="button" @click="importPreviewFilter = (importPreviewFilter === 'existing' ? 'all' : 'existing'); importPreviewPage = 1"
+                                            class="text-[11px] font-bold text-[#0052cc] hover:underline cursor-pointer">
+                                        <span x-text="importPreviewFilter === 'existing' ? 'Tampilkan Semua Baris' : 'Filter Tabel ke Produk Terdaftar Saja'"></span>
+                                    </button>
+                                </div>
+                                <div class="text-xs text-blue-900 bg-white p-2.5 rounded-lg border border-blue-200 max-h-32 overflow-y-auto leading-relaxed">
+                                    <div class="font-semibold text-slate-600 mb-1">Nomor Baris di File Excel:</div>
+                                    <div class="flex flex-wrap gap-1.5 font-mono text-[11px]">
+                                        <template x-for="ex in validationData.existing_rows_list" :key="ex.row">
+                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-100 text-blue-900 border border-blue-200"
+                                                  :title="ex.nama_produk">
+                                                <strong x-text="'Baris ' + ex.row"></strong>
+                                                <span class="text-blue-600" x-text="'(' + ex.sku + ')'"></span>
+                                            </span>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
 
                         <!-- Stock Protection Alert (CRITICAL REQUIREMENT) -->
                         <div class="p-3.5 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-start gap-2.5">
                             <span class="material-symbols-rounded text-[#0052cc] text-[20px] shrink-0 mt-0.5">lock_clock</span>
                             <div class="space-y-0.5 leading-relaxed">
                                 <strong>Jaminan Keamanan Stok Fisik Toko:</strong>
-                                <span>Import master produk ini hanya memperbarui atribut katalog (nama, barcode, harga, rak, dan satuan). <strong>Stok fisik toko tidak akan diubah atau di-nolkan</strong> pada produk yang sudah berjalan. Produk baru akan dimulai dengan stok 0 hingga barang masuk diterima.</span>
+                                <span>Import master produk ini memperbarui atau mendaftarkan master SKU secara massal via stream processing hemat memori. <strong>Stok fisik toko di cabang tetap aman</strong> dan tersinkronisasi otomatis dengan master gudang.</span>
                             </div>
                         </div>
 
@@ -3496,7 +3708,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     <input type="radio" name="duplicateAction" value="update" x-model="duplicateAction" class="mt-0.5 text-[#0052cc] focus:ring-[#0052cc]">
                                     <div class="text-xs">
                                         <span class="font-bold text-slate-800 block">Perbarui Data (Update)</span>
-                                        <span class="text-slate-500">Perbarui harga, nama, rak, dan satuan multi-konversi. Stok tetap utuh.</span>
+                                        <span class="text-slate-500">Perbarui harga, nama, PPN, dan atribut 19 kolom master. Stok tetap utuh.</span>
                                     </div>
                                 </label>
                                 <label class="flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all"
@@ -3510,58 +3722,153 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             </div>
                         </div>
 
-                        <!-- Preview Table (Up to 25 rows) -->
+                        <!-- Preview Table with High-Volume Pagination and Color-Coded Rows -->
                         <div class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs space-y-0">
-                            <div class="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                                <span class="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                                    <span class="material-symbols-rounded text-[16px] text-slate-500">table_view</span>
-                                    <span>Pratinjau Data (Maks. 25 Baris Pertama)</span>
-                                </span>
-                                <span class="text-[11px] font-mono text-slate-500" x-text="(validationData?.preview_rows?.length || 0) + ' baris ditampilkan'"></span>
+                            <div class="p-3 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                                        <span class="material-symbols-rounded text-[16px] text-slate-500">table_view</span>
+                                        <span>Pratinjau Data (Struktur 19 Kolom Standar)</span>
+                                    </span>
+                                    <span class="text-[11px] font-mono px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 font-bold"
+                                          x-text="(getFilteredPreviewRows().length) + ' dari ' + (validationData?.summary?.total_rows || validationData?.preview_rows?.length || 0) + ' baris'"></span>
+                                </div>
+
+                                <!-- Filter Buttons, Search & Per Page -->
+                                <div class="flex flex-wrap items-center gap-1.5 text-xs">
+                                    <!-- Search input -->
+                                    <div class="relative">
+                                        <input type="text" x-model="importPreviewSearch" @input="importPreviewPage = 1" placeholder="Cari baris/SKU/nama..."
+                                               class="h-7 text-[11px] pl-6 pr-2 bg-white border border-slate-300 rounded-lg text-slate-700 focus:ring-1 focus:ring-[#0052cc] w-36">
+                                        <span class="material-symbols-rounded absolute left-1.5 top-1.5 text-slate-400 text-[14px]">search</span>
+                                    </div>
+
+                                    <!-- Filter tabs -->
+                                    <button type="button" @click="importPreviewFilter = 'all'; importPreviewPage = 1"
+                                            class="px-2 py-1 rounded-lg font-bold text-[11px] transition-colors cursor-pointer"
+                                            :class="importPreviewFilter === 'all' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">
+                                        Semua
+                                    </button>
+                                    <button type="button" @click="importPreviewFilter = 'error'; importPreviewPage = 1"
+                                            class="px-2 py-1 rounded-lg font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
+                                            :class="importPreviewFilter === 'error' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'">
+                                        <span>Baris Error</span>
+                                        <span class="px-1 py-0.2 rounded-full text-[10px]"
+                                              :class="importPreviewFilter === 'error' ? 'bg-rose-800 text-white' : 'bg-rose-200 text-rose-800'"
+                                              x-text="validationData?.summary?.error_rows || 0"></span>
+                                    </button>
+                                    <button type="button" @click="importPreviewFilter = 'existing'; importPreviewPage = 1"
+                                            class="px-2 py-1 rounded-lg font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
+                                            :class="importPreviewFilter === 'existing' ? 'bg-[#0052cc] text-white' : 'bg-blue-50 text-[#0052cc] hover:bg-blue-100'">
+                                        <span>Produk Terdaftar</span>
+                                        <span class="px-1 py-0.2 rounded-full text-[10px]"
+                                              :class="importPreviewFilter === 'existing' ? 'bg-blue-900 text-white' : 'bg-blue-200 text-blue-900'"
+                                              x-text="validationData?.summary?.existing_in_db_count || 0"></span>
+                                    </button>
+                                    <button type="button" @click="importPreviewFilter = 'new'; importPreviewPage = 1"
+                                            class="px-2 py-1 rounded-lg font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
+                                            :class="importPreviewFilter === 'new' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'">
+                                        <span>Baru</span>
+                                    </button>
+
+                                    <!-- Per Page Selector -->
+                                    <div class="flex items-center gap-1 ml-1 text-slate-500 text-[11px]">
+                                        <span>Baris:</span>
+                                        <select x-model="importPreviewPerPage" @change="importPreviewPage = 1"
+                                                class="text-[11px] py-0.5 px-2 bg-white border border-slate-300 rounded-md font-semibold text-slate-700 focus:ring-1 focus:ring-[#0052cc]">
+                                            <option value="50">50</option>
+                                            <option value="100">100</option>
+                                            <option value="250">250</option>
+                                            <option value="500">500</option>
+                                            <option value="all">Semua</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="max-h-60 overflow-y-auto">
-                                <table class="w-full text-left text-xs whitespace-nowrap">
-                                    <thead class="bg-slate-100 text-slate-600 font-bold sticky top-0 border-b border-slate-200">
+
+                            <!-- Table Scroll Container -->
+                            <div class="max-h-80 overflow-x-auto overflow-y-auto">
+                                <table class="w-full text-left text-xs whitespace-nowrap border-collapse">
+                                    <thead class="bg-slate-100 text-slate-600 font-bold sticky top-0 border-b border-slate-200 text-[11px] z-10">
                                         <tr>
                                             <th class="p-2.5 text-center">Baris</th>
-                                            <th class="p-2.5 font-mono text-[#0052cc]">ID</th>
-                                            <th class="p-2.5 font-mono">SKU / Kode</th>
-                                            <th class="p-2.5 font-mono">Barcode</th>
-                                            <th class="p-2.5">Kelompok</th>
-                                            <th class="p-2.5">Nama Produk</th>
-                                            <th class="p-2.5 text-center">Unit1</th>
-                                            <th class="p-2.5 text-right font-mono">Harga Beli</th>
-                                            <th class="p-2.5 text-right font-mono text-emerald-700">Harga Jual K1</th>
-                                            <th class="p-2.5 text-right font-mono text-[#0052cc]">Harga Level 1</th>
-                                            <th class="p-2.5 text-center font-mono">Min Stok</th>
-                                            <th class="p-2.5 text-center font-mono">PPN</th>
-                                            <th class="p-2.5 text-center">Status</th>
+                                            <th class="p-2.5 font-mono text-[#0052cc]">IdProduk</th>
+                                            <th class="p-2.5 font-mono">SKU</th>
+                                            <th class="p-2.5 font-mono">Kode Barcode</th>
+                                            <th class="p-2.5 font-mono">KodeProduk</th>
+                                            <th class="p-2.5 text-center font-mono">QtyProduk</th>
+                                            <th class="p-2.5">NamaProduk</th>
+                                            <th class="p-2.5 text-center">SatuanUnit</th>
+                                            <th class="p-2.5 text-right font-mono">HargaBeli</th>
+                                            <th class="p-2.5 text-right font-mono text-emerald-700">HargaJualUmum</th>
+                                            <th class="p-2.5 text-right font-mono text-[#0052cc]">HargaJualMember</th>
+                                            <th class="p-2.5 text-center font-mono">ProdukDisc</th>
+                                            <th class="p-2.5 text-center font-mono">MinimumStock</th>
+                                            <th class="p-2.5 text-center font-mono">PPNOut</th>
+                                            <th class="p-2.5 text-center font-mono">PPNChk</th>
+                                            <th class="p-2.5 text-right font-mono">HargaBeliTerakhir</th>
+                                            <th class="p-2.5 text-center">StatusBarang</th>
+                                            <th class="p-2.5 text-center font-mono">KodeSuplier</th>
+                                            <th class="p-2.5 text-center font-mono">ManufacturingDate</th>
+                                            <th class="p-2.5 text-center font-mono">ExpDate</th>
+                                            <th class="p-2.5 text-center sticky right-0 bg-slate-100 z-20">Status</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-slate-100">
-                                        <template x-for="pRow in validationData?.preview_rows || []" :key="pRow.row">
-                                            <tr class="hover:bg-slate-50/80 font-medium" :class="pRow.has_error ? 'bg-rose-50/50' : ''">
-                                                <td class="p-2.5 text-center font-mono text-slate-400" x-text="pRow.row"></td>
-                                                <td class="p-2.5 font-mono font-bold text-[#0052cc]" x-text="pRow.ilp_id || '-'"></td>
+                                        <template x-for="pRow in getPaginatedPreviewRows()" :key="pRow.row">
+                                            <tr :class="{
+                                                    'bg-rose-100 text-rose-950 font-bold border-l-4 border-l-rose-600 hover:bg-rose-200': pRow.has_error,
+                                                    'bg-blue-100 text-blue-950 font-semibold border-l-4 border-l-[#0052cc] hover:bg-blue-200': !pRow.has_error && pRow.is_existing,
+                                                    'hover:bg-slate-50/80 font-medium': !pRow.has_error && !pRow.is_existing
+                                                }">
+                                                <td class="p-2.5 text-center font-mono"
+                                                    :class="{
+                                                        'text-rose-900 font-black': pRow.has_error,
+                                                        'text-[#0052cc] font-bold': !pRow.has_error && pRow.is_existing,
+                                                        'text-slate-400': !pRow.has_error && !pRow.is_existing
+                                                    }" x-text="pRow.row"></td>
+                                                <td class="p-2.5 font-mono font-bold text-[#0052cc]" x-text="pRow.id_produk || pRow.ilp_id || '-'"></td>
                                                 <td class="p-2.5 font-mono font-bold text-slate-800" x-text="pRow.sku"></td>
-                                                <td class="p-2.5 font-mono text-slate-600" x-text="pRow.barcode"></td>
-                                                <td class="p-2.5 text-slate-600" x-text="pRow.category"></td>
-                                                <td class="p-2.5 text-slate-800 max-w-[180px] truncate" :title="pRow.name" x-text="pRow.name"></td>
-                                                <td class="p-2.5 text-center text-slate-600 font-bold" x-text="pRow.unit"></td>
-                                                <td class="p-2.5 text-right font-mono" x-text="'Rp ' + (pRow.cost_price || 0).toLocaleString('id-ID')"></td>
-                                                <td class="p-2.5 text-right font-mono font-bold text-emerald-700" x-text="'Rp ' + (pRow.price || 0).toLocaleString('id-ID')"></td>
-                                                <td class="p-2.5 text-right font-mono font-bold text-[#0052cc]" x-text="'Rp ' + (pRow.harga_level1 || pRow.member_price || 0).toLocaleString('id-ID')"></td>
-                                                <td class="p-2.5 text-center font-mono text-slate-600" x-text="pRow.stock_min || 5"></td>
-                                                <td class="p-2.5 text-center font-mono font-bold" :class="pRow.ppn_chk === 'Y' ? 'text-emerald-700' : 'text-slate-400'" x-text="pRow.ppn_chk || 'Y'"></td>
-                                                <td class="p-2.5 text-center">
+                                                <td class="p-2.5 font-mono text-slate-600" x-text="pRow.kode_barcode || pRow.barcode || '-'"></td>
+                                                <td class="p-2.5 font-mono text-slate-600" x-text="pRow.kode_produk || pRow.sku || '-'"></td>
+                                                <td class="p-2.5 text-center font-mono font-bold" x-text="pRow.qty_produk !== undefined ? pRow.qty_produk : (pRow.stock || 0)"></td>
+                                                <td class="p-2.5 max-w-[220px] truncate" :title="pRow.nama_produk || pRow.name" x-text="pRow.nama_produk || pRow.name"></td>
+                                                <td class="p-2.5 text-center text-slate-600 font-bold" x-text="pRow.satuan_unit || pRow.unit || 'Pcs'"></td>
+                                                <td class="p-2.5 text-right font-mono" x-text="'Rp ' + (pRow.harga_beli ?? pRow.cost_price ?? 0).toLocaleString('id-ID')"></td>
+                                                <td class="p-2.5 text-right font-mono font-bold text-emerald-700" x-text="'Rp ' + (pRow.harga_jual_umum ?? pRow.price ?? 0).toLocaleString('id-ID')"></td>
+                                                <td class="p-2.5 text-right font-mono font-bold text-[#0052cc]" x-text="'Rp ' + (pRow.harga_jual_member ?? pRow.member_price ?? 0).toLocaleString('id-ID')"></td>
+                                                <td class="p-2.5 text-center font-mono" x-text="(pRow.produk_disc ?? 0) + '%'"></td>
+                                                <td class="p-2.5 text-center font-mono text-slate-600" x-text="pRow.minimum_stock ?? pRow.stock_min ?? 5"></td>
+                                                <td class="p-2.5 text-center font-mono" x-text="(pRow.ppn_out ?? 11) + '%'"></td>
+                                                <td class="p-2.5 text-center font-mono font-bold" :class="(pRow.ppn_chk || 'Y') === 'Y' ? 'text-emerald-700' : 'text-slate-400'" x-text="pRow.ppn_chk || 'Y'"></td>
+                                                <td class="p-2.5 text-right font-mono" x-text="'Rp ' + (pRow.harga_beli_terakhir ?? pRow.cost_price ?? 0).toLocaleString('id-ID')"></td>
+                                                <td class="p-2.5 text-center font-bold" x-text="pRow.status_barang || 'TERSEDIA'"></td>
+                                                <td class="p-2.5 text-center font-mono" x-text="pRow.kode_suplier || '-'"></td>
+                                                <td class="p-2.5 text-center font-mono" x-text="pRow.manufacturing_date || '-'"></td>
+                                                <td class="p-2.5 text-center font-mono" x-text="pRow.exp_date || '-'"></td>
+                                                <td class="p-2.5 text-center sticky right-0"
+                                                    :class="{
+                                                        'bg-rose-100': pRow.has_error,
+                                                        'bg-blue-100': !pRow.has_error && pRow.is_existing,
+                                                        'bg-white': !pRow.has_error && !pRow.is_existing
+                                                    }">
                                                     <template x-if="pRow.has_error">
-                                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700" :title="pRow.error_message">Error</span>
+                                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-600 text-white shadow-2xs flex items-center gap-1 justify-center" :title="pRow.error_message">
+                                                            <span class="material-symbols-rounded text-[12px]">error</span>
+                                                            <span>Error</span>
+                                                        </span>
                                                     </template>
                                                     <template x-if="!pRow.has_error && pRow.is_existing">
-                                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">Sudah Ada</span>
+                                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#0052cc] text-white shadow-2xs flex items-center gap-1 justify-center" title="Sudah terdaftar di database">
+                                                            <span class="material-symbols-rounded text-[12px]">verified</span>
+                                                            <span>Terdaftar</span>
+                                                        </span>
                                                     </template>
                                                     <template x-if="!pRow.has_error && !pRow.is_existing">
-                                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">Baru</span>
+                                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-600 text-white shadow-2xs flex items-center gap-1 justify-center" title="Produk baru">
+                                                            <span class="material-symbols-rounded text-[12px]">add_circle</span>
+                                                            <span>Baru</span>
+                                                        </span>
                                                     </template>
                                                 </td>
                                             </tr>
@@ -3569,28 +3876,40 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     </tbody>
                                 </table>
                             </div>
-                        </div>
 
-                        <!-- Error details expandable list if any -->
-                        <template x-if="validationData?.errors && validationData.errors.length > 0">
-                            <div class="bg-rose-50 border border-rose-200 rounded-xl p-4 space-y-2">
-                                <div class="flex items-center justify-between text-xs font-bold text-rose-800">
-                                    <span class="flex items-center gap-1.5">
-                                        <span class="material-symbols-rounded text-[18px]">warning</span>
-                                        <span>Catatan Validasi Baris (<span x-text="validationData.errors.length"></span> baris bermasalah):</span>
+                            <!-- Pagination Footer -->
+                            <div class="p-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
+                                <div class="text-slate-500 font-medium text-[11px]">
+                                    <span>Halaman </span>
+                                    <strong class="text-slate-800" x-text="importPreviewPage"></strong>
+                                    <span> dari </span>
+                                    <strong class="text-slate-800" x-text="getTotalPreviewPages()"></strong>
+                                    <span class="ml-1 text-slate-400">
+                                        (Menampilkan baris <span x-text="getFilteredPreviewRows().length ? ((importPreviewPage - 1) * (importPreviewPerPage === 'all' ? getFilteredPreviewRows().length : parseInt(importPreviewPerPage)) + 1) : 0"></span> -
+                                        <span x-text="Math.min(importPreviewPage * (importPreviewPerPage === 'all' ? getFilteredPreviewRows().length : parseInt(importPreviewPerPage)), getFilteredPreviewRows().length)"></span>
+                                        dari <span x-text="getFilteredPreviewRows().length"></span> data)
                                     </span>
                                 </div>
-                                <div class="max-h-36 overflow-y-auto space-y-1.5 pr-1">
-                                    <template x-for="err in validationData.errors" :key="err.row">
-                                        <div class="text-[11px] bg-white p-2 rounded-lg border border-rose-200 text-rose-900 flex items-start gap-2">
-                                            <span class="font-mono font-bold text-rose-700 shrink-0" x-text="'Baris ' + err.row + ':'"></span>
-                                            <span class="font-semibold text-slate-700" x-text="(err.name || err.sku) + ' — '"></span>
-                                            <span class="text-rose-600" x-text="err.messages.join('; ')"></span>
-                                        </div>
-                                    </template>
+                                <div class="flex items-center gap-1.5" x-show="getTotalPreviewPages() > 1">
+                                    <button type="button" @click="importPreviewPage = 1" :disabled="importPreviewPage <= 1"
+                                            class="px-2 py-1 rounded bg-white border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-[11px] cursor-pointer">
+                                        « Awal
+                                    </button>
+                                    <button type="button" @click="importPreviewPage = Math.max(1, importPreviewPage - 1)" :disabled="importPreviewPage <= 1"
+                                            class="px-2.5 py-1 rounded bg-white border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-[11px] cursor-pointer">
+                                        ‹ Sebelumnya
+                                    </button>
+                                    <button type="button" @click="importPreviewPage = Math.min(getTotalPreviewPages(), importPreviewPage + 1)" :disabled="importPreviewPage >= getTotalPreviewPages()"
+                                            class="px-2.5 py-1 rounded bg-white border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-[11px] cursor-pointer">
+                                        Berikutnya ›
+                                    </button>
+                                    <button type="button" @click="importPreviewPage = getTotalPreviewPages()" :disabled="importPreviewPage >= getTotalPreviewPages()"
+                                            class="px-2 py-1 rounded bg-white border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-[11px] cursor-pointer">
+                                        Akhir »
+                                    </button>
                                 </div>
                             </div>
-                        </template>
+                        </div>
                     </div>
 
                     <!-- ============================================== -->
@@ -3665,7 +3984,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                     class="h-10 px-5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-colors cursor-pointer">
                                 <span x-show="isUploading" class="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></span>
                                 <span class="material-symbols-rounded text-[18px]" x-show="!isUploading">fact_check</span>
-                                <span x-text="isUploading ? 'Memvalidasi 25 Kolom...' : 'Periksa & Validasi File'"></span>
+                                <span x-text="isUploading ? 'Memvalidasi 19 Kolom...' : 'Periksa & Validasi File'"></span>
                             </button>
                         </div>
                     </template>

@@ -49,14 +49,14 @@
             <button type="button" 
                     @click.stop="openImportModal()"
                     class="px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs inline-flex items-center gap-2 shadow-2xs transition-all cursor-pointer"
-                    title="Import data master produk dari file Excel ILP (25 Kolom)">
+                    title="Import data master produk dari file Excel (19 Kolom, Dukung Ratusan Ribu Data)">
                 <span class="material-symbols-rounded text-[18px]">upload_file</span>
                 <span>Import Excel</span>
             </button>
             <button type="button" 
                     @click="exportProductCsv()"
                     class="px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs inline-flex items-center gap-2 shadow-2xs transition-all cursor-pointer"
-                    title="Ekspor seluruh katalog master ke file Excel 25 kolom ILP">
+                    title="Ekspor seluruh katalog master ke file Excel (19 Kolom Master)">
                 <span class="material-symbols-rounded text-[18px]">table_chart</span>
                 <span>Ekspor Excel</span>
             </button>
@@ -445,8 +445,8 @@
                             <span class="material-symbols-rounded text-[22px]">add_circle</span>
                         </div>
                         <div>
-                            <h3 class="text-base font-black text-slate-900 tracking-tight">Tambah Master SKU Baru (Standar 25 Kolom ILP)</h3>
-                            <p class="text-xs text-slate-500 mt-0.5">Daftarkan SKU baru dengan form master lengkap sesuai struktur detail barang ILP.</p>
+                            <h3 class="text-base font-black text-slate-900 tracking-tight">Tambah Master SKU Baru (Standar 19 Kolom Master)</h3>
+                            <p class="text-xs text-slate-500 mt-0.5">Daftarkan SKU baru dengan form master lengkap sesuai struktur 19 kolom master produk.</p>
                         </div>
                     </div>
                     <button type="button" @click="showCreateModal = false" class="text-slate-400 hover:text-slate-600 cursor-pointer">
@@ -876,14 +876,14 @@
                         </div>
                     </div>
 
-                    <!-- 2. TABEL LENGKAP DETAIL BARANG (STANDAR 25 KOLOM MASTER PRODUK ILP) -->
+                    <!-- 2. TABEL LENGKAP DETAIL BARANG (STANDAR 19 KOLOM MASTER PRODUK) -->
                     <div class="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
                         <div class="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                             <span class="text-xs font-black uppercase text-slate-700 tracking-wider flex items-center gap-1.5">
                                 <span class="material-symbols-rounded text-[16px] text-emerald-600">table_rows</span>
-                                <span>Tabel Detail Barang (Struktur 25 Kolom Master Produk)</span>
+                                <span>Tabel Detail Barang (Struktur 19 Kolom Master Produk)</span>
                             </span>
-                            <span class="text-[10.5px] font-mono text-slate-400">25 Kolom Terstandarisasi</span>
+                            <span class="text-[10.5px] font-mono text-slate-400">19 Kolom Terstandarisasi</span>
                         </div>
                         <div class="max-h-72 overflow-y-auto">
                             <table class="w-full text-left text-xs border-collapse">
@@ -895,31 +895,25 @@
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-slate-100 font-medium text-slate-800">
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">1</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - ID</td><td class="py-2 px-4 font-mono font-bold text-slate-900" x-text="selectedProduct?.ilp_id || selectedProduct?.id || '-'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">2</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Kode</td><td class="py-2 px-4 font-mono font-bold text-slate-900" x-text="selectedProduct?.sku || '-'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">3</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - KodeBar</td><td class="py-2 px-4 font-mono font-bold text-slate-900" x-text="selectedProduct?.barcode || '-'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">4</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Kel</td><td class="py-2 px-4 text-slate-800" x-text="selectedProduct?.category || '-'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">5</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Nama</td><td class="py-2 px-4 font-bold text-slate-900" x-text="selectedProduct?.name || '-'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">6</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Unit1</td><td class="py-2 px-4 font-bold text-slate-800" x-text="selectedProduct?.unit || 'Pcs'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">7</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - HargaBeli</td><td class="py-2 px-4 font-mono font-bold text-slate-800" x-text="formatRupiah(selectedProduct?.costPrice)"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">8</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - HargaJualK1</td><td class="py-2 px-4 font-mono font-bold text-emerald-700" x-text="formatRupiah(selectedProduct?.price)"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">9</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - MinQty1</td><td class="py-2 px-4 font-mono" x-text="selectedProduct?.minQty1 ?? 1"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">10</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - MinQty2</td><td class="py-2 px-4 font-mono" x-text="selectedProduct?.minQty2 ?? '-'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">11</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - MinQty3</td><td class="py-2 px-4 font-mono" x-text="selectedProduct?.minQty3 ?? '-'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">12</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - HargaLevel1</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]" x-text="formatRupiah(selectedProduct?.hargaLevel1 || selectedProduct?.memberPrice || selectedProduct?.price)"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">13</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Disc</td><td class="py-2 px-4 font-mono" x-text="(selectedProduct?.disc ?? 0) + '%'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">14</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - StockMin</td><td class="py-2 px-4 font-mono font-bold text-amber-700" x-text="(selectedProduct?.minStock ?? selectedProduct?.stockMin ?? 5) + ' ' + (selectedProduct?.unit || 'Pcs')"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">15</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - ReOrder</td><td class="py-2 px-4 font-mono font-bold text-blue-700" x-text="(selectedProduct?.reorder ?? 10) + ' ' + (selectedProduct?.unit || 'Pcs')"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">16</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - PPN_Out</td><td class="py-2 px-4 font-mono" x-text="(selectedProduct?.ppnOut ?? 11) + '%'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">17</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - PPNChk</td><td class="py-2 px-4 font-mono font-bold" :class="selectedProduct?.ppnChk === 'Y' ? 'text-emerald-700' : 'text-slate-500'" x-text="selectedProduct?.ppnChk || 'Y'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">18</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - HrgBeliTerakhir</td><td class="py-2 px-4 font-mono font-bold text-slate-800" x-text="formatRupiah(selectedProduct?.lastCostPrice ?? selectedProduct?.costPrice)"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">19</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - StatusBarang</td><td class="py-2 px-4 font-bold" x-text="selectedProduct?.statusBarang || selectedProduct?.status || 'TERSEDIA'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">20</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - KoSup</td><td class="py-2 px-4 font-mono" x-text="selectedProduct?.koSup || '-'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">21</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Act</td><td class="py-2 px-4 font-mono font-bold" :class="selectedProduct?.act === 'Y' ? 'text-emerald-700' : 'text-rose-700'" x-text="selectedProduct?.act || 'Y'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">22</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Masa</td><td class="py-2 px-4 font-mono" x-text="selectedProduct?.masa ? selectedProduct.masa + ' Hari' : '-'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">23</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Kadaluarsa</td><td class="py-2 px-4 font-mono" x-text="selectedProduct?.expiredDate || '-'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">24</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Up</td><td class="py-2 px-4 font-mono" x-text="(selectedProduct?.up ?? 0) + '%'"></td></tr>
-                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">25</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Barang - Dump</td><td class="py-2 px-4 text-slate-600 italic" x-text="selectedProduct?.dump || '-'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">1</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">IdProduk</td><td class="py-2 px-4 font-mono font-bold text-slate-900" x-text="selectedProduct?.id_produk || selectedProduct?.ilp_id || selectedProduct?.id || '-'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">2</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">SKU</td><td class="py-2 px-4 font-mono font-bold text-slate-900" x-text="selectedProduct?.sku || '-'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">3</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">Kode Barcode</td><td class="py-2 px-4 font-mono font-bold text-slate-900" x-text="selectedProduct?.kode_barcode || selectedProduct?.barcode || '-'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">4</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">KodeProduk</td><td class="py-2 px-4 font-mono font-bold text-slate-900" x-text="selectedProduct?.kode_produk || selectedProduct?.sku || '-'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">5</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">QtyProduk</td><td class="py-2 px-4 font-mono font-bold text-slate-900" x-text="(selectedProduct?.qty_produk !== undefined ? selectedProduct.qty_produk : (selectedProduct?.master_stock ?? selectedProduct?.stock ?? 0)) + ' ' + (selectedProduct?.satuan_unit || selectedProduct?.unit || 'Pcs')"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">6</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">NamaProduk</td><td class="py-2 px-4 font-bold text-slate-900" x-text="selectedProduct?.nama_produk || selectedProduct?.name || '-'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">7</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">SatuanUnit</td><td class="py-2 px-4 font-bold text-slate-800" x-text="selectedProduct?.satuan_unit || selectedProduct?.unit || 'Pcs'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">8</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">HargaBeli</td><td class="py-2 px-4 font-mono font-bold text-slate-800" x-text="formatRupiah(selectedProduct?.harga_beli ?? selectedProduct?.costPrice ?? selectedProduct?.cost_price)"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">9</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">HargaJualUmum</td><td class="py-2 px-4 font-mono font-bold text-emerald-700" x-text="formatRupiah(selectedProduct?.harga_jual_umum ?? selectedProduct?.price)"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">10</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">HargaJualMember</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]" x-text="formatRupiah(selectedProduct?.harga_jual_member ?? selectedProduct?.memberPrice ?? selectedProduct?.member_price ?? selectedProduct?.price)"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">11</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">ProdukDisc</td><td class="py-2 px-4 font-mono" x-text="(selectedProduct?.produk_disc ?? selectedProduct?.disc ?? selectedProduct?.clearance_discount_percent ?? 0) + '%'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">12</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">MinimumStock</td><td class="py-2 px-4 font-mono font-bold text-amber-700" x-text="(selectedProduct?.minimum_stock ?? selectedProduct?.min_stock ?? 5) + ' ' + (selectedProduct?.satuan_unit || selectedProduct?.unit || 'Pcs')"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">13</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">PPNOut</td><td class="py-2 px-4 font-mono" x-text="(selectedProduct?.ppn_out ?? selectedProduct?.tax_rate ?? 11) + '%'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">14</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">PPNChk</td><td class="py-2 px-4 font-mono font-bold" :class="(selectedProduct?.ppn_chk || (selectedProduct?.is_taxable ? 'Y' : 'N')) === 'Y' ? 'text-emerald-700' : 'text-slate-500'" x-text="selectedProduct?.ppn_chk || (selectedProduct?.is_taxable ? 'Y' : 'N')"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">15</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">HargaBeliTerakhir</td><td class="py-2 px-4 font-mono font-bold text-slate-800" x-text="formatRupiah(selectedProduct?.harga_beli_terakhir ?? selectedProduct?.last_cost_price ?? selectedProduct?.cost_price)"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">16</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">StatusBarang</td><td class="py-2 px-4 font-bold" x-text="selectedProduct?.status_barang || selectedProduct?.stock_status || selectedProduct?.status || 'TERSEDIA'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">17</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">KodeSuplier</td><td class="py-2 px-4 font-mono" x-text="selectedProduct?.kode_suplier || selectedProduct?.ko_sup || selectedProduct?.supplier_code || '-'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">18</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">ManufacturingDate</td><td class="py-2 px-4 font-mono" x-text="selectedProduct?.manufacturing_date || '-'"></td></tr>
+                                    <tr class="hover:bg-slate-50"><td class="py-2 px-3 text-center text-slate-400 font-mono">19</td><td class="py-2 px-4 font-mono font-bold text-[#0052cc]">ExpDate</td><td class="py-2 px-4 font-mono" x-text="selectedProduct?.exp_date || selectedProduct?.expired_date || '-'"></td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -961,9 +955,9 @@
                         <div>
                             <div class="flex items-center gap-2">
                                 <h3 class="text-base font-bold text-white">Import Master Produk Excel</h3>
-                                <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 border border-emerald-400/30 text-emerald-300">Format ILP 25 Kolom</span>
+                                <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 border border-emerald-400/30 text-emerald-300">Format 19 Kolom (High-Volume Ready)</span>
                             </div>
-                            <p class="text-xs text-slate-300 mt-0.5">Unggah dan sinkronisasi master barang resmi dari file export tim ILP</p>
+                            <p class="text-xs text-slate-300 mt-0.5">Unggah dan sinkronisasi master barang hingga ratusan ribu data secara cepat dengan format 19 kolom</p>
                         </div>
                     </div>
                     <button type="button" 
@@ -982,9 +976,12 @@
                         <div class="p-4 bg-emerald-50/80 border border-emerald-200 rounded-2xl text-emerald-950 flex items-start gap-3">
                             <span class="material-symbols-rounded text-emerald-600 text-[22px] shrink-0 mt-0.5">verified</span>
                             <div class="text-xs space-y-1">
-                                <span class="font-bold text-emerald-900 block text-sm">Standar Format Master Barang ILP (25 Kolom)</span>
+                                <div class="flex items-center gap-2">
+                                    <span class="font-bold text-emerald-900 block text-sm">Standar Format Master Barang Gudang (19 Kolom)</span>
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-200 text-emerald-900">Kapasitas Ratusan Ribu Data</span>
+                                </div>
                                 <p class="text-emerald-800 leading-relaxed">
-                                    File Excel wajib memuat tepat <strong>25 kolom terstandarisasi</strong> (Barang - ID, Kode, KodeBar, Kel, Nama, Unit1, HargaBeli, HargaJualK1, MinQty1-3, HargaLevel1, Disc, StockMin, ReOrder, PPN_Out, PPNChk, HrgBeliTerakhir, StatusBarang, KoSup, Act, Masa, Kadaluarsa, Up, Dump).
+                                    File Excel / CSV wajib memuat <strong>19 kolom terstandarisasi</strong>: <code>IdProduk, SKU, Kode Barcode, KodeProduk, QtyProduk, NamaProduk, SatuanUnit, HargaBeli, HargaJualUmum, HargaJualMember, ProdukDisc, MinimumStock, PPNOut, PPNChk, HargaBeliTerakhir, StatusBarang, KodeSuplier, ManufacturingDate, ExpDate</code>.
                                 </p>
                             </div>
                         </div>
@@ -1012,7 +1009,7 @@
                                     </div>
                                     <div>
                                         <p class="text-sm font-bold text-slate-800">Pilih file Excel Master Barang atau tarik file ke sini</p>
-                                        <p class="text-xs text-slate-400 mt-1">Mendukung format .XLSX, .XLS, atau .CSV (Maksimal 25MB)</p>
+                                        <p class="text-xs text-slate-400 mt-1">Mendukung format .XLSX, .XLS, atau .CSV (Maksimal 25MB • Mendukung Ratusan Ribu Data)</p>
                                     </div>
                                     <button type="button" @click.stop="triggerFileInput()" class="pointer-events-auto px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer">
                                         <span class="material-symbols-rounded text-[16px]">folder_open</span>
@@ -1047,13 +1044,13 @@
                         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-100">
                             <div class="flex items-center gap-2 text-xs text-slate-500">
                                 <span class="material-symbols-rounded text-blue-600 text-[18px]">info</span>
-                                <span>Perlu contoh format struktur 25 kolom?</span>
+                                <span>Perlu contoh format struktur 19 kolom?</span>
                             </div>
                             <button type="button" 
                                     @click="downloadILPTemplate()"
                                     class="text-xs font-bold text-[#0052cc] hover:text-[#0043a8] hover:underline flex items-center gap-1 cursor-pointer">
                                 <span class="material-symbols-rounded text-[16px]">download</span>
-                                <span>Unduh Template Format Master ILP (25 Kolom)</span>
+                                <span>Unduh Template Format Master (19 Kolom)</span>
                             </button>
                         </div>
                     </div>
@@ -1065,11 +1062,11 @@
                                 <span class="material-symbols-rounded text-[28px]">error</span>
                             </div>
                             <div class="flex-1 space-y-2">
-                                <h4 class="font-bold text-rose-900 text-base">Format Kolom Excel Tidak Sesuai Standar ILP</h4>
-                                <p class="text-xs text-rose-800 leading-relaxed" x-text="validationErrorDetails?.message || 'Jumlah atau nama kolom file yang diunggah tidak sesuai dengan 25 kolom master barang ILP.'"></p>
+                                <h4 class="font-bold text-rose-900 text-base">Format Kolom Excel Tidak Sesuai Standar Master Produk</h4>
+                                <p class="text-xs text-rose-800 leading-relaxed" x-text="validationErrorDetails?.message || 'Jumlah atau nama kolom file yang diunggah tidak sesuai dengan 19 kolom master barang.'"></p>
                                 <div class="flex items-center gap-4 text-xs font-semibold text-rose-700 pt-1">
                                     <span>Kolom Terdeteksi: <strong class="font-mono text-sm" x-text="validationErrorDetails?.actual_count || 0"></strong></span>
-                                    <span>Kolom Wajib ILP: <strong class="font-mono text-sm" x-text="validationErrorDetails?.expected_count || 25"></strong></span>
+                                    <span>Kolom Wajib: <strong class="font-mono text-sm" x-text="validationErrorDetails?.expected_count || 19"></strong></span>
                                 </div>
                             </div>
                         </div>
@@ -1112,32 +1109,125 @@
                                     <span class="material-symbols-rounded text-[22px]">check_circle</span>
                                 </div>
                                 <div>
-                                    <h4 class="font-bold text-emerald-950 text-sm">Struktur 25 Kolom Valid & Terverifikasi</h4>
+                                    <div class="flex items-center gap-2">
+                                        <h4 class="font-bold text-emerald-950 text-sm">Struktur 19 Kolom Valid & Terverifikasi</h4>
+                                        <span x-show="validationData?.summary?.is_high_volume" class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-blue-100 text-[#0052cc] border border-blue-200">Mode Bulk Import (Ratusan Ribu Data)</span>
+                                    </div>
                                     <p class="text-xs text-emerald-800" x-text="'File: ' + (validationData?.file_name || importFileName)"></p>
                                 </div>
                             </div>
                             <span class="px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">Siap Diimport</span>
                         </div>
 
-                        <!-- Statistics Grid -->
+                        <!-- Statistics Grid (Interactive Filter Cards) -->
                         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                            <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                            <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 transition-all cursor-pointer hover:border-slate-400"
+                                 @click="importPreviewFilter = 'all'; importPreviewPage = 1"
+                                 :class="importPreviewFilter === 'all' ? 'ring-2 ring-slate-700 bg-white shadow-xs' : ''">
                                 <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Total Baris File</span>
                                 <div class="text-lg font-black text-slate-800 font-mono mt-0.5" x-text="validationData?.summary?.total_rows || 0"></div>
+                                <div class="text-[11px] text-slate-500 mt-1">Semua baris terdeteksi</div>
                             </div>
-                            <div class="bg-emerald-50/70 p-3.5 rounded-xl border border-emerald-200">
+                            <div class="bg-emerald-50/70 p-3.5 rounded-xl border border-emerald-200 transition-all cursor-pointer hover:border-emerald-400"
+                                 @click="importPreviewFilter = 'new'; importPreviewPage = 1"
+                                 :class="importPreviewFilter === 'new' ? 'ring-2 ring-emerald-500 bg-emerald-50 shadow-xs' : ''">
                                 <span class="text-[10px] font-extrabold text-emerald-700 uppercase tracking-wider block">Data Valid</span>
                                 <div class="text-lg font-black text-emerald-700 font-mono mt-0.5" x-text="validationData?.summary?.valid_rows || 0"></div>
+                                <div class="text-[11px] text-emerald-700 mt-1">Siap diproses sistem</div>
                             </div>
-                            <div class="bg-blue-50/70 p-3.5 rounded-xl border border-blue-200">
-                                <span class="text-[10px] font-extrabold text-[#0052cc] uppercase tracking-wider block">Produk Terdaftar</span>
+                            <div class="bg-blue-50/70 p-3.5 rounded-xl border border-blue-200 transition-all cursor-pointer hover:border-[#0052cc]"
+                                 @click="importPreviewFilter = (importPreviewFilter === 'existing' ? 'all' : 'existing'); importPreviewPage = 1"
+                                 :class="importPreviewFilter === 'existing' ? 'ring-2 ring-[#0052cc] bg-blue-100/60 shadow-xs' : ''">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-[10px] font-extrabold text-[#0052cc] uppercase tracking-wider block">Produk Terdaftar</span>
+                                    <span class="text-[10px] px-1.5 py-0.2 rounded bg-blue-200 text-blue-900 font-bold" x-show="(validationData?.summary?.existing_in_db_count || 0) > 0">Klik Filter</span>
+                                </div>
                                 <div class="text-lg font-black text-[#0052cc] font-mono mt-0.5" x-text="validationData?.summary?.existing_in_db_count || 0"></div>
+                                <template x-if="validationData?.existing_rows_list?.length > 0">
+                                    <div class="text-[11px] text-blue-900 font-semibold mt-1 truncate" :title="validationData.existing_rows_list.map(e => 'Baris ' + e.row).join(', ')">
+                                        <span>Baris: </span>
+                                        <span class="font-mono text-[#0052cc]" x-text="validationData.existing_rows_list.slice(0, 4).map(e => e.row).join(', ') + (validationData.existing_rows_list.length > 4 ? ' (+' + (validationData.existing_rows_list.length - 4) + ')' : '')"></span>
+                                    </div>
+                                </template>
+                                <template x-if="!validationData?.existing_rows_list?.length">
+                                    <div class="text-[11px] text-slate-500 mt-1">Semua produk baru</div>
+                                </template>
                             </div>
-                            <div class="bg-rose-50/70 p-3.5 rounded-xl border border-rose-200">
-                                <span class="text-[10px] font-extrabold text-rose-700 uppercase tracking-wider block">Baris Error</span>
+                            <div class="bg-rose-50/70 p-3.5 rounded-xl border border-rose-200 transition-all cursor-pointer hover:border-rose-400"
+                                 @click="importPreviewFilter = (importPreviewFilter === 'error' ? 'all' : 'error'); importPreviewPage = 1"
+                                 :class="importPreviewFilter === 'error' ? 'ring-2 ring-rose-500 bg-rose-100/60 shadow-xs' : ''">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-[10px] font-extrabold text-rose-700 uppercase tracking-wider block">Baris Error</span>
+                                    <span class="text-[10px] px-1.5 py-0.2 rounded bg-rose-200 text-rose-900 font-bold" x-show="(validationData?.summary?.error_rows || 0) > 0">Klik Filter</span>
+                                </div>
                                 <div class="text-lg font-black text-rose-700 font-mono mt-0.5" x-text="validationData?.summary?.error_rows || 0"></div>
+                                <template x-if="validationData?.error_rows_list?.length > 0">
+                                    <div class="text-[11px] text-rose-900 font-semibold mt-1 truncate" :title="validationData.error_rows_list.map(e => 'Baris ' + e.row + ': ' + e.error).join('; ')">
+                                        <span>Baris: </span>
+                                        <span class="font-mono text-rose-700" x-text="validationData.error_rows_list.slice(0, 4).map(e => e.row).join(', ') + (validationData.error_rows_list.length > 4 ? ' (+' + (validationData.error_rows_list.length - 4) + ')' : '')"></span>
+                                    </div>
+                                </template>
+                                <template x-if="!validationData?.error_rows_list?.length">
+                                    <div class="text-[11px] text-emerald-600 font-medium mt-1 flex items-center gap-1">
+                                        <span class="material-symbols-rounded text-[14px]">check_circle</span>
+                                        <span>Tidak ada error</span>
+                                    </div>
+                                </template>
                             </div>
                         </div>
+
+                        <!-- Card Rincian Baris Error (Jika Ada Error) -->
+                        <template x-if="validationData?.error_rows_list?.length > 0">
+                            <div class="bg-rose-50 border border-rose-300 rounded-xl p-3.5 space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-bold text-rose-900 flex items-center gap-1.5">
+                                        <span class="material-symbols-rounded text-rose-600 text-[18px]">error</span>
+                                        <span>Daftar Rincian Baris Error (<span x-text="validationData.error_rows_list.length"></span> Baris Bermasalah):</span>
+                                    </span>
+                                    <button type="button" @click="importPreviewFilter = (importPreviewFilter === 'error' ? 'all' : 'error'); importPreviewPage = 1"
+                                            class="text-[11px] font-bold text-rose-700 hover:text-rose-900 underline cursor-pointer">
+                                        <span x-text="importPreviewFilter === 'error' ? 'Tampilkan Semua Baris' : 'Filter Tabel ke Baris Error Saja'"></span>
+                                    </button>
+                                </div>
+                                <div class="max-h-36 overflow-y-auto space-y-1.5 pr-1 divide-y divide-rose-200">
+                                    <template x-for="err in validationData.error_rows_list" :key="err.row">
+                                        <div class="text-[11px] pt-1.5 flex items-start gap-2">
+                                            <span class="px-2 py-0.5 rounded bg-rose-200 text-rose-900 font-mono font-bold shrink-0" x-text="'Baris ' + err.row"></span>
+                                            <span class="font-bold text-slate-800" x-text="(err.sku !== '-' ? err.sku : (err.nama_produk !== '-' ? err.nama_produk : 'Data Kosong')) + ' — '"></span>
+                                            <span class="text-rose-700 font-semibold" x-text="err.error || (err.messages ? err.messages.join(', ') : 'Format data tidak valid')"></span>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Card Rincian Produk Terdaftar (Jika Ada Produk Terdaftar di Database) -->
+                        <template x-if="validationData?.existing_rows_list?.length > 0">
+                            <div class="bg-blue-50 border border-blue-200 rounded-xl p-3.5 space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-bold text-blue-950 flex items-center gap-1.5">
+                                        <span class="material-symbols-rounded text-[#0052cc] text-[18px]">verified</span>
+                                        <span>Daftar Baris Produk Sudah Terdaftar di Database (<span x-text="validationData.existing_rows_list.length"></span> Produk):</span>
+                                    </span>
+                                    <button type="button" @click="importPreviewFilter = (importPreviewFilter === 'existing' ? 'all' : 'existing'); importPreviewPage = 1"
+                                            class="text-[11px] font-bold text-[#0052cc] hover:underline cursor-pointer">
+                                        <span x-text="importPreviewFilter === 'existing' ? 'Tampilkan Semua Baris' : 'Filter Tabel ke Produk Terdaftar Saja'"></span>
+                                    </button>
+                                </div>
+                                <div class="text-xs text-blue-900 bg-white p-2.5 rounded-lg border border-blue-200 max-h-32 overflow-y-auto leading-relaxed">
+                                    <div class="font-semibold text-slate-600 mb-1">Nomor Baris di File Excel:</div>
+                                    <div class="flex flex-wrap gap-1.5 font-mono text-[11px]">
+                                        <template x-for="ex in validationData.existing_rows_list" :key="ex.row">
+                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-100 text-blue-900 border border-blue-200"
+                                                  :title="ex.nama_produk">
+                                                <strong x-text="'Baris ' + ex.row"></strong>
+                                                <span class="text-blue-600" x-text="'(' + ex.sku + ')'"></span>
+                                            </span>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
 
                         <!-- Duplicate Handling Selector -->
                         <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-2">
@@ -1148,7 +1238,7 @@
                                     <input type="radio" name="duplicateActionOwner" value="update" x-model="duplicateAction" class="mt-0.5 text-[#0052cc] focus:ring-[#0052cc]">
                                     <div class="text-xs">
                                         <span class="font-bold text-slate-800 block">Perbarui Data (Update)</span>
-                                        <span class="text-slate-500">Perbarui harga, nama, rak, dan satuan multi-konversi. Stok tetap utuh.</span>
+                                        <span class="text-slate-500">Perbarui harga, nama, PPN, dan atribut 19 kolom master. Stok tetap utuh.</span>
                                     </div>
                                 </label>
                                 <label class="flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all"
@@ -1162,64 +1252,192 @@
                             </div>
                         </div>
 
-                        <!-- Preview Table -->
+                        <!-- Preview Table with High-Volume Pagination and Color-Coded Rows -->
                         <div class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs space-y-0">
-                            <div class="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                                <span class="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                                    <span class="material-symbols-rounded text-[16px] text-slate-500">table_view</span>
-                                    <span>Pratinjau Data (Maks. 25 Baris Pertama)</span>
-                                </span>
-                                <span class="text-[11px] font-mono text-slate-500" x-text="(validationData?.preview_rows?.length || 0) + ' baris ditampilkan'"></span>
+                            <div class="p-3 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                                        <span class="material-symbols-rounded text-[16px] text-slate-500">table_view</span>
+                                        <span>Pratinjau Data (Struktur 19 Kolom Standar)</span>
+                                    </span>
+                                    <span class="text-[11px] font-mono px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 font-bold"
+                                          x-text="(getFilteredPreviewRows().length) + ' dari ' + (validationData?.summary?.total_rows || validationData?.preview_rows?.length || 0) + ' baris'"></span>
+                                </div>
+
+                                <!-- Filter Buttons, Search & Per Page -->
+                                <div class="flex flex-wrap items-center gap-1.5 text-xs">
+                                    <!-- Search input -->
+                                    <div class="relative">
+                                        <input type="text" x-model="importPreviewSearch" @input="importPreviewPage = 1" placeholder="Cari baris/SKU/nama..."
+                                               class="h-7 text-[11px] pl-6 pr-2 bg-white border border-slate-300 rounded-lg text-slate-700 focus:ring-1 focus:ring-[#0052cc] w-36">
+                                        <span class="material-symbols-rounded absolute left-1.5 top-1.5 text-slate-400 text-[14px]">search</span>
+                                    </div>
+
+                                    <!-- Filter tabs -->
+                                    <button type="button" @click="importPreviewFilter = 'all'; importPreviewPage = 1"
+                                            class="px-2 py-1 rounded-lg font-bold text-[11px] transition-colors cursor-pointer"
+                                            :class="importPreviewFilter === 'all' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">
+                                        Semua
+                                    </button>
+                                    <button type="button" @click="importPreviewFilter = 'error'; importPreviewPage = 1"
+                                            class="px-2 py-1 rounded-lg font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
+                                            :class="importPreviewFilter === 'error' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'">
+                                        <span>Baris Error</span>
+                                        <span class="px-1 py-0.2 rounded-full text-[10px]"
+                                              :class="importPreviewFilter === 'error' ? 'bg-rose-800 text-white' : 'bg-rose-200 text-rose-800'"
+                                              x-text="validationData?.summary?.error_rows || 0"></span>
+                                    </button>
+                                    <button type="button" @click="importPreviewFilter = 'existing'; importPreviewPage = 1"
+                                            class="px-2 py-1 rounded-lg font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
+                                            :class="importPreviewFilter === 'existing' ? 'bg-[#0052cc] text-white' : 'bg-blue-50 text-[#0052cc] hover:bg-blue-100'">
+                                        <span>Produk Terdaftar</span>
+                                        <span class="px-1 py-0.2 rounded-full text-[10px]"
+                                              :class="importPreviewFilter === 'existing' ? 'bg-blue-900 text-white' : 'bg-blue-200 text-blue-900'"
+                                              x-text="validationData?.summary?.existing_in_db_count || 0"></span>
+                                    </button>
+                                    <button type="button" @click="importPreviewFilter = 'new'; importPreviewPage = 1"
+                                            class="px-2 py-1 rounded-lg font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
+                                            :class="importPreviewFilter === 'new' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'">
+                                        <span>Baru</span>
+                                    </button>
+
+                                    <!-- Per Page Selector -->
+                                    <div class="flex items-center gap-1 ml-1 text-slate-500 text-[11px]">
+                                        <span>Baris:</span>
+                                        <select x-model="importPreviewPerPage" @change="importPreviewPage = 1"
+                                                class="text-[11px] py-0.5 px-2 bg-white border border-slate-300 rounded-md font-semibold text-slate-700 focus:ring-1 focus:ring-[#0052cc]">
+                                            <option value="50">50</option>
+                                            <option value="100">100</option>
+                                            <option value="250">250</option>
+                                            <option value="500">500</option>
+                                            <option value="all">Semua</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="max-h-60 overflow-y-auto">
-                                <table class="w-full text-left text-xs whitespace-nowrap">
-                                    <thead class="bg-slate-100 text-slate-600 font-bold sticky top-0 border-b border-slate-200">
+
+                            <!-- Table Scroll Container -->
+                            <div class="max-h-80 overflow-x-auto overflow-y-auto">
+                                <table class="w-full text-left text-xs whitespace-nowrap border-collapse">
+                                    <thead class="bg-slate-100 text-slate-600 font-bold sticky top-0 border-b border-slate-200 text-[11px] z-10">
                                         <tr>
                                             <th class="p-2.5 text-center">Baris</th>
-                                            <th class="p-2.5 font-mono text-[#0052cc]">ID</th>
-                                            <th class="p-2.5 font-mono">SKU / Kode</th>
-                                            <th class="p-2.5 font-mono">Barcode</th>
-                                            <th class="p-2.5">Kelompok</th>
-                                            <th class="p-2.5">Nama Produk</th>
-                                            <th class="p-2.5 text-center">Unit1</th>
-                                            <th class="p-2.5 text-right font-mono">Harga Beli</th>
-                                            <th class="p-2.5 text-right font-mono text-emerald-700">Harga Jual K1</th>
-                                            <th class="p-2.5 text-right font-mono text-[#0052cc]">Harga Level 1</th>
-                                            <th class="p-2.5 text-center font-mono">Min Stok</th>
-                                            <th class="p-2.5 text-center font-mono">PPN</th>
-                                            <th class="p-2.5 text-center">Status</th>
+                                            <th class="p-2.5 font-mono text-[#0052cc]">IdProduk</th>
+                                            <th class="p-2.5 font-mono">SKU</th>
+                                            <th class="p-2.5 font-mono">Kode Barcode</th>
+                                            <th class="p-2.5 font-mono">KodeProduk</th>
+                                            <th class="p-2.5 text-center font-mono">QtyProduk</th>
+                                            <th class="p-2.5">NamaProduk</th>
+                                            <th class="p-2.5 text-center">SatuanUnit</th>
+                                            <th class="p-2.5 text-right font-mono">HargaBeli</th>
+                                            <th class="p-2.5 text-right font-mono text-emerald-700">HargaJualUmum</th>
+                                            <th class="p-2.5 text-right font-mono text-[#0052cc]">HargaJualMember</th>
+                                            <th class="p-2.5 text-center font-mono">ProdukDisc</th>
+                                            <th class="p-2.5 text-center font-mono">MinimumStock</th>
+                                            <th class="p-2.5 text-center font-mono">PPNOut</th>
+                                            <th class="p-2.5 text-center font-mono">PPNChk</th>
+                                            <th class="p-2.5 text-right font-mono">HargaBeliTerakhir</th>
+                                            <th class="p-2.5 text-center">StatusBarang</th>
+                                            <th class="p-2.5 text-center font-mono">KodeSuplier</th>
+                                            <th class="p-2.5 text-center font-mono">ManufacturingDate</th>
+                                            <th class="p-2.5 text-center font-mono">ExpDate</th>
+                                            <th class="p-2.5 text-center sticky right-0 bg-slate-100 z-20">Status</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-slate-100">
-                                        <template x-for="pRow in validationData?.preview_rows || []" :key="pRow.row">
-                                            <tr class="hover:bg-slate-50/80 font-medium" :class="pRow.has_error ? 'bg-rose-50/50' : ''">
-                                                <td class="p-2.5 text-center font-mono text-slate-400" x-text="pRow.row"></td>
-                                                <td class="p-2.5 font-mono font-bold text-[#0052cc]" x-text="pRow.ilp_id || '-'"></td>
+                                        <template x-for="pRow in getPaginatedPreviewRows()" :key="pRow.row">
+                                            <tr :class="{
+                                                    'bg-rose-100 text-rose-950 font-bold border-l-4 border-l-rose-600 hover:bg-rose-200': pRow.has_error,
+                                                    'bg-blue-100 text-blue-950 font-semibold border-l-4 border-l-[#0052cc] hover:bg-blue-200': !pRow.has_error && pRow.is_existing,
+                                                    'hover:bg-slate-50/80 font-medium': !pRow.has_error && !pRow.is_existing
+                                                }">
+                                                <td class="p-2.5 text-center font-mono"
+                                                    :class="{
+                                                        'text-rose-900 font-black': pRow.has_error,
+                                                        'text-[#0052cc] font-bold': !pRow.has_error && pRow.is_existing,
+                                                        'text-slate-400': !pRow.has_error && !pRow.is_existing
+                                                    }" x-text="pRow.row"></td>
+                                                <td class="p-2.5 font-mono font-bold text-[#0052cc]" x-text="pRow.id_produk || pRow.ilp_id || '-'"></td>
                                                 <td class="p-2.5 font-mono font-bold text-slate-800" x-text="pRow.sku"></td>
-                                                <td class="p-2.5 font-mono text-slate-600" x-text="pRow.barcode"></td>
-                                                <td class="p-2.5 text-slate-600" x-text="pRow.category"></td>
-                                                <td class="p-2.5 text-slate-800 max-w-[180px] truncate" :title="pRow.name" x-text="pRow.name"></td>
-                                                <td class="p-2.5 text-center text-slate-600 font-bold" x-text="pRow.unit"></td>
-                                                <td class="p-2.5 text-right font-mono" x-text="'Rp ' + (pRow.cost_price || 0).toLocaleString('id-ID')"></td>
-                                                <td class="p-2.5 text-right font-mono font-bold text-emerald-700" x-text="'Rp ' + (pRow.price || 0).toLocaleString('id-ID')"></td>
-                                                <td class="p-2.5 text-right font-mono font-bold text-[#0052cc]" x-text="'Rp ' + (pRow.harga_level1 || pRow.member_price || 0).toLocaleString('id-ID')"></td>
-                                                <td class="p-2.5 text-center font-mono text-slate-600" x-text="pRow.stock_min || 5"></td>
-                                                <td class="p-2.5 text-center font-mono font-bold" :class="pRow.ppn_chk === 'Y' ? 'text-emerald-700' : 'text-slate-400'" x-text="pRow.ppn_chk || 'Y'"></td>
-                                                <td class="p-2.5 text-center">
+                                                <td class="p-2.5 font-mono text-slate-600" x-text="pRow.kode_barcode || pRow.barcode || '-'"></td>
+                                                <td class="p-2.5 font-mono text-slate-600" x-text="pRow.kode_produk || pRow.sku || '-'"></td>
+                                                <td class="p-2.5 text-center font-mono font-bold" x-text="pRow.qty_produk !== undefined ? pRow.qty_produk : (pRow.stock || 0)"></td>
+                                                <td class="p-2.5 max-w-[220px] truncate" :title="pRow.nama_produk || pRow.name" x-text="pRow.nama_produk || pRow.name"></td>
+                                                <td class="p-2.5 text-center text-slate-600 font-bold" x-text="pRow.satuan_unit || pRow.unit || 'Pcs'"></td>
+                                                <td class="p-2.5 text-right font-mono" x-text="'Rp ' + (pRow.harga_beli ?? pRow.cost_price ?? 0).toLocaleString('id-ID')"></td>
+                                                <td class="p-2.5 text-right font-mono font-bold text-emerald-700" x-text="'Rp ' + (pRow.harga_jual_umum ?? pRow.price ?? 0).toLocaleString('id-ID')"></td>
+                                                <td class="p-2.5 text-right font-mono font-bold text-[#0052cc]" x-text="'Rp ' + (pRow.harga_jual_member ?? pRow.member_price ?? 0).toLocaleString('id-ID')"></td>
+                                                <td class="p-2.5 text-center font-mono" x-text="(pRow.produk_disc ?? 0) + '%'"></td>
+                                                <td class="p-2.5 text-center font-mono text-slate-600" x-text="pRow.minimum_stock ?? pRow.stock_min ?? 5"></td>
+                                                <td class="p-2.5 text-center font-mono" x-text="(pRow.ppn_out ?? 11) + '%'"></td>
+                                                <td class="p-2.5 text-center font-mono font-bold" :class="(pRow.ppn_chk || 'Y') === 'Y' ? 'text-emerald-700' : 'text-slate-400'" x-text="pRow.ppn_chk || 'Y'"></td>
+                                                <td class="p-2.5 text-right font-mono" x-text="'Rp ' + (pRow.harga_beli_terakhir ?? pRow.cost_price ?? 0).toLocaleString('id-ID')"></td>
+                                                <td class="p-2.5 text-center font-bold" x-text="pRow.status_barang || 'TERSEDIA'"></td>
+                                                <td class="p-2.5 text-center font-mono" x-text="pRow.kode_suplier || '-'"></td>
+                                                <td class="p-2.5 text-center font-mono" x-text="pRow.manufacturing_date || '-'"></td>
+                                                <td class="p-2.5 text-center font-mono" x-text="pRow.exp_date || '-'"></td>
+                                                <td class="p-2.5 text-center sticky right-0"
+                                                    :class="{
+                                                        'bg-rose-100': pRow.has_error,
+                                                        'bg-blue-100': !pRow.has_error && pRow.is_existing,
+                                                        'bg-white': !pRow.has_error && !pRow.is_existing
+                                                    }">
                                                     <template x-if="pRow.has_error">
-                                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700" :title="pRow.error_message">Error</span>
+                                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-600 text-white shadow-2xs flex items-center gap-1 justify-center" :title="pRow.error_message">
+                                                            <span class="material-symbols-rounded text-[12px]">error</span>
+                                                            <span>Error</span>
+                                                        </span>
                                                     </template>
                                                     <template x-if="!pRow.has_error && pRow.is_existing">
-                                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">Sudah Ada</span>
+                                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#0052cc] text-white shadow-2xs flex items-center gap-1 justify-center" title="Sudah terdaftar di database">
+                                                            <span class="material-symbols-rounded text-[12px]">verified</span>
+                                                            <span>Terdaftar</span>
+                                                        </span>
                                                     </template>
                                                     <template x-if="!pRow.has_error && !pRow.is_existing">
-                                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">Baru</span>
+                                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-600 text-white shadow-2xs flex items-center gap-1 justify-center" title="Produk baru">
+                                                            <span class="material-symbols-rounded text-[12px]">add_circle</span>
+                                                            <span>Baru</span>
+                                                        </span>
                                                     </template>
                                                 </td>
                                             </tr>
                                         </template>
                                     </tbody>
                                 </table>
+                            </div>
+
+                            <!-- Pagination Footer -->
+                            <div class="p-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
+                                <div class="text-slate-500 font-medium text-[11px]">
+                                    <span>Halaman </span>
+                                    <strong class="text-slate-800" x-text="importPreviewPage"></strong>
+                                    <span> dari </span>
+                                    <strong class="text-slate-800" x-text="getTotalPreviewPages()"></strong>
+                                    <span class="ml-1 text-slate-400">
+                                        (Menampilkan baris <span x-text="getFilteredPreviewRows().length ? ((importPreviewPage - 1) * (importPreviewPerPage === 'all' ? getFilteredPreviewRows().length : parseInt(importPreviewPerPage)) + 1) : 0"></span> -
+                                        <span x-text="Math.min(importPreviewPage * (importPreviewPerPage === 'all' ? getFilteredPreviewRows().length : parseInt(importPreviewPerPage)), getFilteredPreviewRows().length)"></span>
+                                        dari <span x-text="getFilteredPreviewRows().length"></span> data)
+                                    </span>
+                                </div>
+                                <div class="flex items-center gap-1.5" x-show="getTotalPreviewPages() > 1">
+                                    <button type="button" @click="importPreviewPage = 1" :disabled="importPreviewPage <= 1"
+                                            class="px-2 py-1 rounded bg-white border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-[11px] cursor-pointer">
+                                        « Awal
+                                    </button>
+                                    <button type="button" @click="importPreviewPage = Math.max(1, importPreviewPage - 1)" :disabled="importPreviewPage <= 1"
+                                            class="px-2.5 py-1 rounded bg-white border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-[11px] cursor-pointer">
+                                        ‹ Sebelumnya
+                                    </button>
+                                    <button type="button" @click="importPreviewPage = Math.min(getTotalPreviewPages(), importPreviewPage + 1)" :disabled="importPreviewPage >= getTotalPreviewPages()"
+                                            class="px-2.5 py-1 rounded bg-white border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-[11px] cursor-pointer">
+                                        Berikutnya ›
+                                    </button>
+                                    <button type="button" @click="importPreviewPage = getTotalPreviewPages()" :disabled="importPreviewPage >= getTotalPreviewPages()"
+                                            class="px-2.5 py-1 rounded bg-white border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-[11px] cursor-pointer">
+                                        Akhir »
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1290,7 +1508,7 @@
                                     class="h-10 px-5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-colors cursor-pointer">
                                 <span x-show="isUploading" class="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></span>
                                 <span class="material-symbols-rounded text-[18px]" x-show="!isUploading">fact_check</span>
-                                <span x-text="isUploading ? 'Memvalidasi 25 Kolom...' : 'Periksa & Validasi File'"></span>
+                                <span x-text="isUploading ? 'Memvalidasi 19 Kolom...' : 'Periksa & Validasi File'"></span>
                             </button>
                         </div>
                     </template>
@@ -1302,7 +1520,7 @@
                                     @click="downloadILPTemplate()" 
                                     class="px-4 py-2 rounded-xl text-xs font-bold text-[#0052cc] hover:bg-blue-50 border border-blue-200 transition-colors inline-flex items-center gap-1.5 cursor-pointer">
                                 <span class="material-symbols-rounded text-[16px]">download</span>
-                                <span>Unduh Format Template Resmi ILP</span>
+                                <span>Unduh Format Template Resmi (19 Kolom)</span>
                             </button>
                             <button type="button" 
                                     @click="importStep = 'upload'; resetFileInput();" 
@@ -1423,6 +1641,49 @@ function ownerProductsApp() {
         validationErrorDetails: null,
         duplicateAction: 'update',
         importResult: null,
+        importPreviewFilter: 'all', // 'all', 'error', 'existing', 'new'
+        importPreviewPage: 1,
+        importPreviewPerPage: 100,
+        importPreviewSearch: '',
+        showExistingDetailsBox: false,
+
+        getFilteredPreviewRows() {
+            if (!this.validationData || !this.validationData.preview_rows) return [];
+            let rows = this.validationData.preview_rows;
+            if (this.importPreviewFilter === 'error') {
+                rows = rows.filter(r => r.has_error);
+            } else if (this.importPreviewFilter === 'existing') {
+                rows = rows.filter(r => !r.has_error && r.is_existing);
+            } else if (this.importPreviewFilter === 'new') {
+                rows = rows.filter(r => !r.has_error && !r.is_existing);
+            }
+            if (this.importPreviewSearch && this.importPreviewSearch.trim()) {
+                const q = this.importPreviewSearch.toLowerCase().trim();
+                rows = rows.filter(r => 
+                    String(r.row).includes(q) ||
+                    (r.sku && String(r.sku).toLowerCase().includes(q)) ||
+                    (r.nama_produk && String(r.nama_produk).toLowerCase().includes(q)) ||
+                    (r.kode_barcode && String(r.kode_barcode).toLowerCase().includes(q)) ||
+                    (r.kode_produk && String(r.kode_produk).toLowerCase().includes(q))
+                );
+            }
+            return rows;
+        },
+
+        getPaginatedPreviewRows() {
+            const rows = this.getFilteredPreviewRows();
+            if (this.importPreviewPerPage === 'all') return rows;
+            const perPage = parseInt(this.importPreviewPerPage) || 100;
+            const start = (this.importPreviewPage - 1) * perPage;
+            return rows.slice(start, start + perPage);
+        },
+
+        getTotalPreviewPages() {
+            const rows = this.getFilteredPreviewRows();
+            if (this.importPreviewPerPage === 'all') return 1;
+            const perPage = parseInt(this.importPreviewPerPage) || 100;
+            return Math.max(1, Math.ceil(rows.length / perPage));
+        },
         isSavingProduct: false,
         scannerInput: '',
 
@@ -1926,6 +2187,11 @@ function ownerProductsApp() {
             this.validationErrorDetails = null;
             this.duplicateAction = 'update';
             this.importResult = null;
+            this.importPreviewFilter = 'all';
+            this.importPreviewPage = 1;
+            this.importPreviewPerPage = 100;
+            this.importPreviewSearch = '';
+            this.showExistingDetailsBox = false;
             this.$nextTick(() => {
                 const f = document.getElementById('excelFileInputOwner');
                 if (f) f.value = '';
@@ -1988,11 +2254,15 @@ function ownerProductsApp() {
                 if (res.ok && json.success) {
                     this.validationData = json.data;
                     this.importStep = 'preview';
-                    if (typeof triggerToast === 'function') triggerToast('Struktur 25 kolom Excel valid! Menampilkan pratinjau data...', 'success');
+                    this.importPreviewFilter = 'all';
+                    this.importPreviewPage = 1;
+                    this.importPreviewSearch = '';
+                    this.showExistingDetailsBox = false;
+                    if (typeof triggerToast === 'function') triggerToast('Struktur 19 kolom Excel valid! Menampilkan pratinjau data...', 'success');
                 } else {
-                    this.validationErrorDetails = json.details || { message: json.message || 'Format file tidak sesuai standar ILP.' };
+                    this.validationErrorDetails = json.details || { message: json.message || 'Format file tidak sesuai standar Master Produk.' };
                     this.importStep = 'invalid_structure';
-                    if (typeof triggerToast === 'function') triggerToast(json.message || 'Struktur file Excel tidak sesuai standar ILP (25 Kolom).', 'error');
+                    if (typeof triggerToast === 'function') triggerToast(json.message || 'Struktur file Excel tidak sesuai standar Master Produk (19 Kolom).', 'error');
                 }
             } catch (e) {
                 console.error('Validation error:', e);
@@ -2043,7 +2313,7 @@ function ownerProductsApp() {
 
         downloadILPTemplate() {
             window.location.href = '/manager/products/template';
-            if (typeof triggerToast === 'function') triggerToast('Mengunduh Template Excel Master Barang ILP (25 Kolom)...', 'info');
+            if (typeof triggerToast === 'function') triggerToast('Mengunduh Template Excel Master Barang (19 Kolom)...', 'info');
         },
 
         formatRupiah(num) {
@@ -2052,7 +2322,7 @@ function ownerProductsApp() {
 
         exportProductCsv() {
             window.location.href = '/api/products/export/excel';
-            if (typeof triggerToast === 'function') triggerToast('Mengunduh Master Produk format 25 Kolom ILP...', 'info');
+            if (typeof triggerToast === 'function') triggerToast('Mengunduh Master Produk format 19 Kolom...', 'info');
         }
     };
 }

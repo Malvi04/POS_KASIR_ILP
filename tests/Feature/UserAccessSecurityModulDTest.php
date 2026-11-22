@@ -21,9 +21,9 @@ class UserAccessSecurityModulDTest extends TestCase
         parent::setUp();
 
         foreach ([
-            ['code' => 'LOC-01', 'name' => 'Pusat', 'type' => 'STORE', 'is_active' => true],
-            ['code' => 'LOC-02', 'name' => 'Cabang 1 - Mill / Pabrik', 'type' => 'STORE', 'is_active' => true],
-            ['code' => 'LOC-03', 'name' => 'Cabang 2 - Kebun Barat', 'type' => 'STORE', 'is_active' => true],
+            ['code' => 'CAB-001', 'name' => 'Cabang Pusat', 'type' => 'STORE', 'is_active' => true],
+            ['code' => 'CAB-002', 'name' => 'Cabang A', 'type' => 'STORE', 'is_active' => true],
+            ['code' => 'CAB-003', 'name' => 'Cabang B', 'type' => 'STORE', 'is_active' => true],
         ] as $loc) {
             Location::updateOrCreate(['code' => $loc['code']], $loc);
         }
@@ -168,7 +168,7 @@ class UserAccessSecurityModulDTest extends TestCase
             'type' => 'SUBTRACT',
             'qty' => 3,
             'reason' => 'Kemasan Rusak & Bocor',
-            'branch' => 'Cabang 1 - Mill / Pabrik',
+            'branch' => 'Cabang A',
             'pin' => '333444', // SPV PIN
             'notes' => 'Tumpahan gula saat bongkar muat logistik.',
         ]);
@@ -204,7 +204,7 @@ class UserAccessSecurityModulDTest extends TestCase
             'nik' => '202611019999',
             'role' => 'Kasir',
             'pin' => '654321',
-            'branch' => 'Cabang 2 - Kebun Barat',
+            'branch' => 'Cabang B',
             'password' => 'secret123',
             'is_active' => true,
         ]);
@@ -219,7 +219,7 @@ class UserAccessSecurityModulDTest extends TestCase
             'email' => 'rina.new@minimarket.ilp',
             'nik' => '202611019999',
             'role' => 'Supervisor',
-            'branch' => 'Cabang 2 - Kebun Barat',
+            'branch' => 'Cabang B',
             'is_active' => true,
         ]);
 
@@ -294,8 +294,8 @@ class UserAccessSecurityModulDTest extends TestCase
         // Check 3 Branches Breakdown
         $branches = $response->json('branch_breakdown');
         $this->assertCount(3, $branches);
-        $this->assertEquals('Pusat', $branches[0]['branch_name']);
-        $this->assertEquals('Cabang 1 - Mill / Pabrik', $branches[1]['branch_name']);
-        $this->assertEquals('Cabang 2 - Kebun Barat', $branches[2]['branch_name']);
+        $this->assertEquals('Cabang Pusat', $branches[0]['branch_name']);
+        $this->assertEquals('Cabang A', $branches[1]['branch_name']);
+        $this->assertEquals('Cabang B', $branches[2]['branch_name']);
     }
 }
