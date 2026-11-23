@@ -50,27 +50,66 @@ class MemberExcelService
         'customerid' => 'ID',
         'idanggota' => 'ID',
         'idcustomer' => 'ID',
+        'idkaryawan' => 'ID',
+        'idpegawai' => 'ID',
+        'nomor' => 'ID',
+        'no' => 'ID',
+
         'kode' => 'Kode',
         'membercode' => 'Kode',
         'kodeanggota' => 'Kode',
         'kodecustomer' => 'Kode',
+        'kodekaryawan' => 'Kode',
+        'nokaryawan' => 'Kode',
+        'nopegawai' => 'Kode',
+        'nikkaryawan' => 'Kode',
+        'nomorinduk' => 'Kode',
+        'nomoranggota' => 'Kode',
+        'noanggota' => 'Kode',
+        'badge' => 'Kode',
+        'badgeid' => 'Kode',
+        'kodemember' => 'Kode',
+
         'kodeout' => 'KodeOut',
+        'kode_out' => 'KodeOut',
+
         'nip' => 'Nip',
         'nik' => 'Nip',
         'nipkaryawan' => 'Nip',
-        'nikkaryawan' => 'Nip',
+        'noktp' => 'Nip',
+        'ktp' => 'Nip',
+        'noidentitas' => 'Nip',
+        'nomorktp' => 'Nip',
+        'nomorindukkaryawan' => 'Nip',
+
         'nama' => 'Nama',
         'name' => 'Nama',
         'namakaryawan' => 'Nama',
+        'namalengkap' => 'Nama',
         'namaanggota' => 'Nama',
         'namacustomer' => 'Nama',
+        'namakaryawanlengkap' => 'Nama',
+        'fullname' => 'Nama',
+
         'dept' => 'Dept',
         'departemen' => 'Dept',
         'department' => 'Dept',
+        'unit' => 'Dept',
+        'unitkerja' => 'Dept',
+        'bagian' => 'Dept',
+
         'divisi' => 'Divisi',
         'division' => 'Divisi',
+        'subdepartemen' => 'Divisi',
+        'jabatan' => 'Divisi',
+        'posisi' => 'Divisi',
+        'seksi' => 'Divisi',
+
         'alamat' => 'Alamat',
         'address' => 'Alamat',
+        'domisili' => 'Alamat',
+        'tempattinggal' => 'Alamat',
+
         'tlp' => 'Tlp',
         'telp' => 'Tlp',
         'telepon' => 'Tlp',
@@ -78,25 +117,49 @@ class MemberExcelService
         'nohp' => 'Tlp',
         'hp' => 'Tlp',
         'notelp' => 'Tlp',
+        'handphone' => 'Tlp',
+        'whatsapp' => 'Tlp',
+        'wa' => 'Tlp',
+
         'fax' => 'Fax',
         'faksimile' => 'Fax',
+
         'contact' => 'Contact',
         'kontak' => 'Contact',
+        'pic' => 'Contact',
+
         'tempobayar' => 'TempoBayar',
         'tempo' => 'TempoBayar',
+        'termin' => 'TempoBayar',
+
         'idtk' => 'IDTK',
+
         'plafon' => 'Plafon',
         'creditlimit' => 'Plafon',
         'limit' => 'Plafon',
         'plafonkredit' => 'Plafon',
         'plafonkasbon' => 'Plafon',
+        'limitkasbon' => 'Plafon',
+        'plafonbelanja' => 'Plafon',
+        'limitkredit' => 'Plafon',
+        'maxkasbon' => 'Plafon',
+
         'norekening' => 'NoRekening',
         'rekening' => 'NoRekening',
         'norek' => 'NoRekening',
+        'nomorrekening' => 'NoRekening',
+        'bankaccount' => 'NoRekening',
+        'rekeningbank' => 'NoRekening',
+        'norekbank' => 'NoRekening',
+
         'cabangpenugasan' => 'Cabang Penugasan',
         'cabang' => 'Cabang Penugasan',
         'branch' => 'Cabang Penugasan',
         'lokasicabang' => 'Cabang Penugasan',
+        'lokasi' => 'Cabang Penugasan',
+        'penugasan' => 'Cabang Penugasan',
+        'kantorcabang' => 'Cabang Penugasan',
+        'penempatancabang' => 'Cabang Penugasan',
     ];
 
     /**
@@ -106,8 +169,8 @@ class MemberExcelService
     {
         $clean = preg_replace('/^\xEF\xBB\xBF/', '', $header);
         $clean = strtolower(trim($clean));
-        // Strip optional prefixes like "Customer - ", "Anggota - ", "Member - "
-        $clean = preg_replace('/^(customer|anggota|member)\s*[-_–—:]\s*/u', '', $clean);
+        // Strip optional prefixes like "Customer - ", "Anggota - ", "Member - ", "Karyawan - "
+        $clean = preg_replace('/^(customer|anggota|member|karyawan|pegawai)\s*[-_–—:]\s*/u', '', $clean);
         // Remove all non-alphanumeric characters
         $clean = preg_replace('/[^a-z0-9]/', '', $clean);
         return $clean;
@@ -143,8 +206,9 @@ class MemberExcelService
 
         $tempDir = storage_path('app/temp_imports');
         if (!File::isDirectory($tempDir)) {
-            File::makeDirectory($tempDir, 0755, true);
+            File::makeDirectory($tempDir, 0777, true, true);
         }
+        @chmod($tempDir, 0777);
 
         $token = 'member_import_' . Str::random(24) . '.' . $extension;
         $tempPath = $tempDir . DIRECTORY_SEPARATOR . $token;
@@ -161,7 +225,7 @@ class MemberExcelService
                 ];
             }
 
-            // Auto-detect Header Row within the first 10 rows (handles "Customer" title row on Row 1)
+            // Auto-detect Header Row within the first 10 rows (handles title/header rows)
             $headerRowIdx = null;
             $columnMap = []; // canonicalHeaderName => 0-based col index
             $rawHeadersFound = [];
@@ -187,8 +251,10 @@ class MemberExcelService
                     }
                 }
 
-                // If row matches at least 'Kode' and 'Nama' (or >= 4 known columns), it's our header row
-                if ((isset($candidateMap['Kode']) && isset($candidateMap['Nama'])) || count($candidateMap) >= 4) {
+                // If row matches an identifier (Kode or Nip or ID) AND Nama, OR matches >= 3 known aliases
+                $hasIdentifier = isset($candidateMap['Kode']) || isset($candidateMap['Nip']) || isset($candidateMap['ID']);
+                $hasName = isset($candidateMap['Nama']);
+                if (($hasIdentifier && $hasName) || count($candidateMap) >= 3) {
                     $headerRowIdx = $rIdx;
                     $columnMap = $candidateMap;
                     $rawHeadersFound = $candidateRaw;
@@ -207,31 +273,35 @@ class MemberExcelService
                 }
             }
 
-            // Check required core columns ('Kode' and 'Nama')
-            $requiredCore = ['Kode', 'Nama'];
-            $missingCore = [];
-            foreach ($requiredCore as $reqCol) {
-                if (!isset($columnMap[$reqCol])) {
-                    $missingCore[] = $reqCol;
+            // Smart identifier aliasing: if Kode is missing but Nip or ID exists, map Kode to that column
+            if (!isset($columnMap['Kode'])) {
+                if (isset($columnMap['Nip'])) {
+                    $columnMap['Kode'] = $columnMap['Nip'];
+                } elseif (isset($columnMap['ID'])) {
+                    $columnMap['Kode'] = $columnMap['ID'];
                 }
             }
 
-            if ($headerRowIdx === null || !empty($missingCore)) {
+            // Check essential core columns: Must have Kode/NIP/ID AND Nama
+            $hasEssentialCols = isset($columnMap['Kode']) && isset($columnMap['Nama']);
+
+            if ($headerRowIdx === null || !$hasEssentialCols) {
                 @unlink($tempPath);
 
-                $missingAll = [];
-                foreach (self::EXPECTED_COLUMNS as $expCol) {
-                    if (!isset($columnMap[$expCol])) {
-                        $missingAll[] = $expCol;
-                    }
+                $missingCols = [];
+                if (!isset($columnMap['Kode']) && !isset($columnMap['Nip']) && !isset($columnMap['ID'])) {
+                    $missingCols[] = 'Kode / NIP / NIK';
+                }
+                if (!isset($columnMap['Nama'])) {
+                    $missingCols[] = 'Nama Lengkap / Nama Karyawan';
                 }
 
                 return [
                     'valid' => false,
-                    'message' => 'Format kolom Excel tidak sesuai dengan standar Master Anggota ILP (16 Kolom: ID, Kode, KodeOut, Nip, Nama, Dept, Divisi, Alamat, Tlp, Fax, Contact, TempoBayar, IDTK, Plafon, NoRekening, Cabang Penugasan).',
+                    'message' => 'Format kolom Excel tidak sesuai standar Master Anggota / Karyawan ILP. Kolom wajib yang belum ditemukan: ' . implode(', ', $missingCols) . '. Pastikan file memiliki kolom Kode/NIP dan Nama.',
                     'expected_count' => count(self::EXPECTED_COLUMNS),
                     'actual_count' => count($rawHeadersFound),
-                    'missing_columns' => $missingAll,
+                    'missing_columns' => $missingCols,
                     'unexpected_columns' => [],
                     'expected_headers' => self::EXPECTED_COLUMNS,
                     'actual_headers' => array_values($rawHeadersFound),
@@ -296,18 +366,23 @@ class MemberExcelService
                 $excelRowNum = $rIdx + 1;
                 $rowErrors = [];
 
-                // Fallback between Kode and Nip if one is blank
+                // Fallback between Kode, Nip, and ID if one is blank
                 if ($kode === '' && $nip !== '') {
                     $kode = $nip;
+                } elseif ($kode === '' && $idVal !== '') {
+                    $kode = 'KRY-' . str_pad($idVal, 4, '0', STR_PAD_LEFT);
                 }
                 if ($nip === '' && $kode !== '') {
                     $nip = $kode;
                 }
 
                 $plafon = $this->parseNumeric($plafonRaw);
+                if ($plafon <= 0) {
+                    $plafon = 1000000;
+                }
 
                 if ($kode === '') {
-                    $rowErrors[] = 'Kolom Kode wajib diisi.';
+                    $rowErrors[] = 'Kolom Kode / NIP wajib diisi.';
                 }
                 if ($nama === '') {
                     $rowErrors[] = 'Kolom Nama wajib diisi.';
@@ -395,6 +470,7 @@ class MemberExcelService
                 'error_rows' => $errorRows,
                 'duplicates_in_file' => $duplicateCodesInFile,
             ]));
+            @chmod($cachePath, 0666);
 
             // Remove raw uploaded spreadsheet to save disk space immediately
             @unlink($tempPath);

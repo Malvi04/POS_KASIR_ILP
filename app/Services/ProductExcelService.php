@@ -55,25 +55,25 @@ class ProductExcelService
      * Flexible alias mapping for each canonical column.
      */
     public const COLUMN_ALIASES = [
-        'id_produk' => ['idproduk', 'id_produk', 'id produk', 'ilp_id', 'barang-id', 'id'],
-        'sku' => ['sku', 'barang-kode', 'kode'],
-        'kode_barcode' => ['kode barcode', 'kode_barcode', 'kodebarcode', 'barcode', 'barang-kodebar', 'kodebar'],
-        'kode_produk' => ['kodeproduk', 'kode_produk', 'kode produk'],
-        'qty_produk' => ['qtyproduk', 'qty_produk', 'qty produk', 'qty', 'stock', 'stok', 'jumlah', 'master_stock'],
-        'nama_produk' => ['namaproduk', 'nama_produk', 'nama produk', 'nama barang', 'namabarang', 'barang-nama', 'name', 'nama'],
-        'satuan_unit' => ['satuanunit', 'satuan_unit', 'satuan unit', 'unit', 'satuan', 'barang-unit1', 'unit1'],
-        'harga_beli' => ['hargabeli', 'harga_beli', 'harga beli', 'cost_price', 'costprice', 'hpp', 'barang-hargabeli'],
-        'harga_jual_umum' => ['hargajualumum', 'harga_jual_umum', 'harga jual umum', 'harga_jual', 'harga jual', 'price', 'barang-hargajualk1', 'hargajualk1'],
-        'harga_jual_member' => ['hargajualmember', 'harga_jual_member', 'harga jual member', 'harga_member', 'member_price', 'hargalevel1', 'barang-hargalevel1'],
-        'produk_disc' => ['produkdisc', 'produk_disc', 'produk disc', 'disc', 'diskon', 'discount', 'barang-disc'],
-        'minimum_stock' => ['minimumstock', 'minimum_stock', 'minimum stock', 'min_stock', 'stockmin', 'stock_min', 'barang-stockmin'],
-        'ppn_out' => ['ppnout', 'ppn_out', 'ppn out', 'tax_rate', 'ppn', 'tarif_ppn', 'barang-ppn_out'],
-        'ppn_chk' => ['ppnchk', 'ppn_chk', 'ppn chk', 'is_taxable', 'kena_ppn', 'barang-ppnchk'],
-        'harga_beli_terakhir' => ['hargabeliterakhir', 'harga_beli_terakhir', 'harga beli terakhir', 'last_cost_price', 'hrgbeliterakhir', 'barang-hrgbeliterakhir'],
-        'status_barang' => ['statusbarang', 'status_barang', 'status barang', 'status', 'barang-statusbarang'],
-        'kode_suplier' => ['kodesuplier', 'kode_suplier', 'kode suplier', 'kode_supplier', 'supplier_code', 'kosup', 'ko_sup', 'barang-kosup'],
-        'manufacturing_date' => ['manufacturingdate', 'manufacturing_date', 'manufacturing date', 'mfg_date', 'tgl_produksi', 'tanggal_produksi', 'tgl produksi'],
-        'exp_date' => ['expdate', 'exp_date', 'exp date', 'expired_date', 'expired date', 'kadaluarsa', 'barang-kadaluarsa'],
+        'id_produk' => ['idproduk', 'id_produk', 'id produk', 'ilp_id', 'barang-id', 'id', 'product_id', 'productid', 'idbarang', 'id_barang'],
+        'sku' => ['sku', 'barang-kode', 'kode', 'kodebarang', 'kode_barang', 'kode barang', 'plu', 'item_code', 'itemcode', 'kode_item', 'kodeproduk', 'kode_produk', 'kode produk'],
+        'kode_barcode' => ['kode barcode', 'kode_barcode', 'kodebarcode', 'barcode', 'barang-kodebar', 'kodebar', 'ean', 'upc', 'kode_bar', 'no_barcode', 'nobarcode'],
+        'kode_produk' => ['kodeproduk', 'kode_produk', 'kode produk', 'product_code', 'productcode', 'kodeprod', 'kode_prod', 'kode_item'],
+        'qty_produk' => ['qtyproduk', 'qty_produk', 'qty produk', 'qty', 'stock', 'stok', 'jumlah', 'master_stock', 'kuantitas', 'quantity', 'saldo_stok', 'stok_awal', 'stok_gudang', 'saldo'],
+        'nama_produk' => ['namaproduk', 'nama_produk', 'nama produk', 'nama barang', 'namabarang', 'nama_barang', 'barang-nama', 'name', 'nama', 'item_name', 'itemname', 'deskripsi', 'description', 'produk'],
+        'satuan_unit' => ['satuanunit', 'satuan_unit', 'satuan unit', 'unit', 'satuan', 'barang-unit1', 'unit1', 'uom', 'kemasan', 'satuan_barang'],
+        'harga_beli' => ['hargabeli', 'harga_beli', 'harga beli', 'cost_price', 'costprice', 'hpp', 'barang-hargabeli', 'harga_pokok', 'hargapokok', 'modal', 'harga_modal', 'cost'],
+        'harga_jual_umum' => ['hargajualumum', 'harga_jual_umum', 'harga jual umum', 'harga_jual', 'harga jual', 'hargajual', 'price', 'selling_price', 'sellingprice', 'harga', 'barang-hargajualk1', 'hargajualk1', 'harga_eceran'],
+        'harga_jual_member' => ['hargajualmember', 'harga_jual_member', 'harga jual member', 'harga_member', 'member_price', 'hargalevel1', 'barang-hargalevel1', 'hargakhusus', 'harga_khusus', 'hargagrosir', 'harga_grosir'],
+        'produk_disc' => ['produkdisc', 'produk_disc', 'produk disc', 'disc', 'diskon', 'discount', 'barang-disc', 'diskon_persen', 'potongan'],
+        'minimum_stock' => ['minimumstock', 'minimum_stock', 'minimum stock', 'min_stock', 'stockmin', 'stock_min', 'barang-stockmin', 'stok_minimum', 'stok_min', 'min_stok'],
+        'ppn_out' => ['ppnout', 'ppn_out', 'ppn out', 'tax_rate', 'ppn', 'tarif_ppn', 'barang-ppn_out', 'pajak', 'ppn_persen', 'tarif_pajak'],
+        'ppn_chk' => ['ppnchk', 'ppn_chk', 'ppn chk', 'is_taxable', 'kena_ppn', 'barang-ppnchk', 'kenapajak', 'pajak_chk', 'status_ppn', 'ppn_ya_tidak'],
+        'harga_beli_terakhir' => ['hargabeliterakhir', 'harga_beli_terakhir', 'harga beli terakhir', 'last_cost_price', 'hrgbeliterakhir', 'barang-hrgbeliterakhir', 'beli_terakhir', 'hpp_terakhir'],
+        'status_barang' => ['statusbarang', 'status_barang', 'status barang', 'status', 'barang-statusbarang', 'kondisi', 'status_produk'],
+        'kode_suplier' => ['kodesuplier', 'kode_suplier', 'kode suplier', 'kode_supplier', 'kodesupplier', 'supplier_code', 'kosup', 'ko_sup', 'barang-kosup', 'supplier', 'suplier', 'pemasok'],
+        'manufacturing_date' => ['manufacturingdate', 'manufacturing_date', 'manufacturing date', 'mfg_date', 'mfgdate', 'tgl_produksi', 'tanggal_produksi', 'tgl produksi', 'produksi'],
+        'exp_date' => ['expdate', 'exp_date', 'exp date', 'expired_date', 'expireddate', 'expired date', 'kadaluarsa', 'barang-kadaluarsa', 'tgl_kadaluarsa', 'tanggal_kadaluarsa', 'exp', 'expired'],
     ];
 
     /**
@@ -151,8 +151,9 @@ class ProductExcelService
 
         $tempDir = storage_path('app/temp_imports');
         if (!File::isDirectory($tempDir)) {
-            File::makeDirectory($tempDir, 0755, true);
+            File::makeDirectory($tempDir, 0777, true, true);
         }
+        @chmod($tempDir, 0777);
 
         $token = 'import_' . Str::random(24) . '.' . $extension;
         $tempPath = $tempDir . DIRECTORY_SEPARATOR . $token;
@@ -165,8 +166,12 @@ class ProductExcelService
             $rowIterator = $this->streamRows($tempPath);
             $headerRow = null;
             $headerRowNum = 1;
+            $columnMap = [];
 
+            // Detect header row within first 10 rows
             foreach ($rowIterator as $rowNum => $rowCells) {
+                if ($rowNum > 10) break;
+
                 $hasContent = false;
                 foreach ($rowCells as $cell) {
                     if (trim((string) $cell) !== '') {
@@ -174,9 +179,27 @@ class ProductExcelService
                         break;
                     }
                 }
-                if ($hasContent) {
+                if (!$hasContent) continue;
+
+                $map = $this->resolveColumnMapping($rowCells);
+                $hasIdentifier = isset($map['sku']) || isset($map['kode_produk']) || isset($map['kode_barcode']) || isset($map['id_produk']);
+                $hasName = isset($map['nama_produk']);
+
+                if (($hasIdentifier && $hasName) || count($map) >= 3) {
                     $headerRow = $rowCells;
                     $headerRowNum = $rowNum;
+                    $columnMap = $map;
+                    break;
+                }
+            }
+
+            if (!$headerRow) {
+                // Fallback: try row 1
+                $rowIterator = $this->streamRows($tempPath);
+                foreach ($rowIterator as $rowNum => $rowCells) {
+                    $headerRow = $rowCells;
+                    $headerRowNum = $rowNum;
+                    $columnMap = $this->resolveColumnMapping($rowCells);
                     break;
                 }
             }
@@ -189,46 +212,34 @@ class ProductExcelService
                 ];
             }
 
-            $columnMap = $this->resolveColumnMapping($headerRow);
-
-            // Validate that required 19 standard columns are present
-            $canonicalKeyMap = [
-                'IdProduk' => 'id_produk',
-                'SKU' => 'sku',
-                'Kode Barcode' => 'kode_barcode',
-                'KodeProduk' => 'kode_produk',
-                'QtyProduk' => 'qty_produk',
-                'NamaProduk' => 'nama_produk',
-                'SatuanUnit' => 'satuan_unit',
-                'HargaBeli' => 'harga_beli',
-                'HargaJualUmum' => 'harga_jual_umum',
-                'HargaJualMember' => 'harga_jual_member',
-                'ProdukDisc' => 'produk_disc',
-                'MinimumStock' => 'minimum_stock',
-                'PPNOut' => 'ppn_out',
-                'PPNChk' => 'ppn_chk',
-                'HargaBeliTerakhir' => 'harga_beli_terakhir',
-                'StatusBarang' => 'status_barang',
-                'KodeSuplier' => 'kode_suplier',
-                'ManufacturingDate' => 'manufacturing_date',
-                'ExpDate' => 'exp_date',
-            ];
-
-            $missingColumns = [];
-            foreach ($canonicalKeyMap as $colName => $key) {
-                if (!isset($columnMap[$key])) {
-                    $missingColumns[] = $colName;
+            // Fallback aliasing for sku if missing but other identifier exists
+            if (!isset($columnMap['sku'])) {
+                if (isset($columnMap['kode_produk'])) {
+                    $columnMap['sku'] = $columnMap['kode_produk'];
+                } elseif (isset($columnMap['kode_barcode'])) {
+                    $columnMap['sku'] = $columnMap['kode_barcode'];
+                } elseif (isset($columnMap['id_produk'])) {
+                    $columnMap['sku'] = $columnMap['id_produk'];
                 }
             }
 
-            if (!empty($missingColumns)) {
+            // Check essential core columns: Must have SKU/Kode Barang and Nama Barang
+            $missingCore = [];
+            if (!isset($columnMap['sku']) && !isset($columnMap['kode_produk']) && !isset($columnMap['kode_barcode']) && !isset($columnMap['id_produk'])) {
+                $missingCore[] = 'SKU / Kode Barang / Barcode';
+            }
+            if (!isset($columnMap['nama_produk'])) {
+                $missingCore[] = 'Nama Produk / Nama Barang';
+            }
+
+            if (!empty($missingCore)) {
                 if (file_exists($tempPath)) @unlink($tempPath);
                 return [
                     'valid' => false,
-                    'message' => 'Format kolom Excel tidak sesuai standar Master Produk (19 Kolom). Ada ' . count($missingColumns) . ' kolom wajib yang tidak ditemukan: ' . implode(', ', $missingColumns),
+                    'message' => 'Format kolom Excel tidak sesuai standar Master Produk. Kolom wajib yang belum ditemukan: ' . implode(', ', $missingCore) . '. Pastikan file memiliki kolom SKU / Kode Barang dan Nama Produk.',
                     'expected_count' => count(self::EXPECTED_COLUMNS),
                     'actual_count' => count(array_filter($headerRow, fn($v) => trim((string)$v) !== '')),
-                    'missing_columns' => $missingColumns,
+                    'missing_columns' => $missingCore,
                     'expected_headers' => self::EXPECTED_COLUMNS,
                     'actual_headers' => array_values(array_filter($headerRow, fn($v) => trim((string)$v) !== '')),
                 ];
@@ -434,8 +445,11 @@ class ProductExcelService
             $rowIterator = $this->streamRows($tempPath);
             $headerRow = null;
             $headerRowNum = 1;
+            $columnMap = [];
 
+            // Detect header row within first 10 rows
             foreach ($rowIterator as $rowNum => $rowCells) {
+                if ($rowNum > 10) break;
                 $hasContent = false;
                 foreach ($rowCells as $cell) {
                     if (trim((string) $cell) !== '') {
@@ -443,9 +457,26 @@ class ProductExcelService
                         break;
                     }
                 }
-                if ($hasContent) {
+                if (!$hasContent) continue;
+
+                $map = $this->resolveColumnMapping($rowCells);
+                $hasIdentifier = isset($map['sku']) || isset($map['kode_produk']) || isset($map['kode_barcode']) || isset($map['id_produk']);
+                $hasName = isset($map['nama_produk']);
+
+                if (($hasIdentifier && $hasName) || count($map) >= 3) {
                     $headerRow = $rowCells;
                     $headerRowNum = $rowNum;
+                    $columnMap = $map;
+                    break;
+                }
+            }
+
+            if (!$headerRow) {
+                $rowIterator = $this->streamRows($tempPath);
+                foreach ($rowIterator as $rowNum => $rowCells) {
+                    $headerRow = $rowCells;
+                    $headerRowNum = $rowNum;
+                    $columnMap = $this->resolveColumnMapping($rowCells);
                     break;
                 }
             }
@@ -458,10 +489,20 @@ class ProductExcelService
                 ];
             }
 
-            $columnMap = $this->resolveColumnMapping($headerRow);
+            if (!isset($columnMap['sku'])) {
+                if (isset($columnMap['kode_produk'])) {
+                    $columnMap['sku'] = $columnMap['kode_produk'];
+                } elseif (isset($columnMap['kode_barcode'])) {
+                    $columnMap['sku'] = $columnMap['kode_barcode'];
+                } elseif (isset($columnMap['id_produk'])) {
+                    $columnMap['sku'] = $columnMap['id_produk'];
+                }
+            }
 
             $warehouseLoc = Location::where('type', 'WAREHOUSE')->first()
-                ?? Location::where('code', 'GDG-001')->first();
+                ?? Location::where('code', 'GDG-001')->first()
+                ?? Location::where('type', 'STORE')->first()
+                ?? Location::first();
             $warehouseLocId = $warehouseLoc?->id;
 
             $totalProcessed = 0;
@@ -704,15 +745,22 @@ class ProductExcelService
         }
 
         if ($extension === 'xlsx') {
+            $yielded = false;
             try {
-                yield from $this->streamXlsx($filePath);
-                return;
+                foreach ($this->streamXlsx($filePath) as $rowNum => $row) {
+                    $yielded = true;
+                    yield $rowNum => $row;
+                }
             } catch (\Throwable $e) {
-                // Fallback to PhpSpreadsheet if XML streaming fails
+                $yielded = false;
+            }
+
+            if ($yielded) {
+                return;
             }
         }
 
-        // Fallback for XLS or complex XLSX
+        // Fallback for XLS or complex XLSX or when streamXlsx yielded no rows
         yield from $this->streamPhpSpreadsheet($filePath);
     }
 
@@ -749,25 +797,37 @@ class ProductExcelService
             throw new \Exception("Cannot open zip archive: {$filePath}");
         }
 
-        // 1. Read shared strings if exists
+        // 1. Read shared strings if exists (case-insensitive)
         $sharedStrings = [];
-        $ssXml = $zip->getFromName('xl/sharedStrings.xml');
-        if ($ssXml) {
-            preg_match_all('#<si>(.*?)</si>#s', $ssXml, $siMatches);
-            foreach ($siMatches[1] as $si) {
-                if (preg_match_all('#<t(?:[^>]*)>(.*?)</t>#s', $si, $tMatches)) {
-                    $sharedStrings[] = html_entity_decode(implode('', $tMatches[1]), ENT_QUOTES | ENT_XML1, 'UTF-8');
-                } else {
-                    $sharedStrings[] = '';
+        $ssIndex = $zip->locateName('xl/sharedStrings.xml', ZipArchive::FL_NOCASE);
+        if ($ssIndex !== false) {
+            $ssXml = $zip->getFromIndex($ssIndex);
+            if ($ssXml) {
+                preg_match_all('#<si>(.*?)</si>#s', $ssXml, $siMatches);
+                foreach ($siMatches[1] as $si) {
+                    if (preg_match_all('#<t(?:[^>]*)>(.*?)</t>#s', $si, $tMatches)) {
+                        $sharedStrings[] = html_entity_decode(implode('', $tMatches[1]), ENT_QUOTES | ENT_XML1, 'UTF-8');
+                    } else {
+                        $sharedStrings[] = '';
+                    }
                 }
+                unset($ssXml, $siMatches);
             }
-            unset($ssXml, $siMatches);
         }
 
         // 2. Locate worksheet
-        $sheetIndex = $zip->locateName('xl/worksheets/sheet1.xml', ZipArchive::FL_NODIR);
+        $sheetIndex = $zip->locateName('xl/worksheets/sheet1.xml', ZipArchive::FL_NOCASE);
         if ($sheetIndex === false) {
             $sheetIndex = $zip->locateName('sheet1.xml', ZipArchive::FL_NODIR);
+        }
+        if ($sheetIndex === false) {
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $name = $zip->getNameIndex($i);
+                if (preg_match('#^xl/worksheets/sheet\d+\.xml$#i', $name)) {
+                    $sheetIndex = $i;
+                    break;
+                }
+            }
         }
         if ($sheetIndex === false) {
             $zip->close();
