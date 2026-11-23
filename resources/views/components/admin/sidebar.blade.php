@@ -1,6 +1,34 @@
 @props(['active' => ''])
 
-<aside class="w-64 bg-white border-r border-slate-200/80 flex flex-col justify-between shrink-0 h-screen select-none z-20">
+<div x-data="{
+         isSidebarCollapsed: (function() {
+             try { return localStorage.getItem('pos_sidebar_collapsed') === 'true'; } catch(e) { return false; }
+         })(),
+         toggleSidebar() {
+             this.isSidebarCollapsed = !this.isSidebarCollapsed;
+             try { localStorage.setItem('pos_sidebar_collapsed', this.isSidebarCollapsed ? 'true' : 'false'); } catch(e) {}
+             window.dispatchEvent(new CustomEvent('sidebar-toggled', { detail: { collapsed: this.isSidebarCollapsed } }));
+             setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 60);
+         }
+     }"
+     @toggle-sidebar.window="toggleSidebar()"
+     @storage.window="if ($event.key === 'pos_sidebar_collapsed') { isSidebarCollapsed = ($event.newValue === 'true'); }"
+     @keydown.window="if (($event.ctrlKey || $event.metaKey) && $event.key.toLowerCase() === 'b' && !['INPUT', 'TEXTAREA', 'SELECT'].includes($event.target.tagName)) { $event.preventDefault(); toggleSidebar(); }"
+     class="shrink-0 flex transition-all duration-300 ease-in-out select-none"
+     :class="isSidebarCollapsed ? 'w-0' : 'w-64'">
+
+    <!-- Sidebar Aside Panel -->
+    <aside x-show="!isSidebarCollapsed"
+           x-transition:enter="transition-all ease-out duration-200"
+           x-transition:enter-start="-translate-x-full opacity-0"
+           x-transition:enter-end="translate-x-0 opacity-100"
+           x-transition:leave="transition-all ease-in duration-150"
+           x-transition:leave-start="translate-x-0 opacity-100"
+           x-transition:leave-end="-translate-x-full opacity-0"
+           class="w-64 bg-white border-r border-slate-200/80 h-screen relative select-none z-30">
+
+    <!-- Inner Scrollable Sidebar Content -->
+    <div class="h-full flex flex-col justify-between overflow-y-auto overflow-x-hidden">
     <div class="flex flex-col">
         <!-- Brand & App Identity (Clickable to Owner Dashboard) -->
         <a href="{{ url('/owner') }}" 
@@ -206,4 +234,27 @@
             </div>
         </template>
     </div>
-</aside>
+    </div>
+
+    <!-- Attached Toggle Button (Melekat di Tepi Kanan Sidebar) -->
+    <button type="button"
+            @click="toggleSidebar()"
+            title="Sembunyikan Sidebar (Ctrl+B)"
+            aria-label="Sembunyikan Sidebar"
+            class="sidebar-toggle-btn">
+        <span class="material-symbols-rounded text-[18px]">chevron_left</span>
+    </button>
+    </aside>
+
+    <!-- Floating Show-Sidebar Tab (Hanya muncul saat sidebar di-hide) -->
+    <button type="button"
+            x-cloak
+            x-show="isSidebarCollapsed"
+            @click="toggleSidebar()"
+            title="Tampilkan Sidebar (Ctrl+B)"
+            aria-label="Tampilkan Sidebar"
+            class="sidebar-collapsed-btn">
+        <span class="material-symbols-rounded text-[20px]">menu</span>
+        <span class="text-xs font-bold tracking-wide">Sidebar</span>
+    </button>
+</div>

@@ -30,7 +30,7 @@
 <div x-data="ownerProductsApp()" 
      @ilp-search.window="searchQuery = $event.detail; onSearchInput()"
      @open-add-product-modal.window="openCreateModal()"
-     @pos-inventory-synced.window="initProducts()"
+     @pos-inventory-synced.window="if ($event.detail?.source !== 'owner-products') initProducts()"
      class="space-y-6">
 
     <!-- Page Title & Header Action Row -->
@@ -1851,7 +1851,7 @@ function ownerProductsApp() {
         },
 
         saveProductsToStorage() {
-            window.dispatchEvent(new CustomEvent('pos-inventory-synced', { detail: { count: this.products.length } }));
+            window.dispatchEvent(new CustomEvent('pos-inventory-synced', { detail: { count: this.products.length, source: 'owner-products' } }));
         },
 
         searchTimer: null,

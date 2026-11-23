@@ -249,7 +249,6 @@ class ShiftController extends Controller
         try {
             $now = Carbon::now();
             $today = $now->toDateString();
-            $isLate = ($now->hour > 7 || ($now->hour === 7 && $now->minute > 15));
             $branch = $request->input('branch') ?: ($user?->branch ?: 'Cabang Pusat');
             $staffName = $user?->name ?? $validated['cashier_name'];
 
@@ -274,7 +273,7 @@ class ShiftController extends Controller
                     'date' => $today,
                     'check_in' => $now->format('H:i'),
                     'check_out' => '-',
-                    'status' => $isLate ? 'TERLAMBAT' : 'TEPAT_WAKTU',
+                    'status' => 'HADIR',
                     'notes' => "Sesi {$shift->shift_code} aktif di {$validated['terminal_code']}",
                 ]);
             } else {
@@ -397,26 +396,16 @@ class ShiftController extends Controller
 
         // Update Jam Keluar Absensi Karyawan di PostgreSQL
         try {
-            $attendance = Attendance::whereDate('date', Carbon::today()->toDateString())
-                ->where('terminal', $shift->terminal_code)
-                ->where(function ($q) use ($shift) {
-                    if ($shift->user_id) {
-                        $q->where('user_id', $shift->user_id)
-                          ->orWhere('staff_name', $shift->cashier_name);
-                    } else {
-                        $q->where('staff_name', $shift->cashier_name);
-                    }
-                })
-                ->latest('id')
-                ->first();
+            $closingReason = ($request->input('handover_type') === 'handover' || str_contains($closingNotes ?? '', '[SERAH TERIMA]'))
+                ? "Serah terima shift {$shift->shift_code}"
+                : "Shift {$shift->shift_code} ditutup";
 
-            if ($attendance) {
-                $attendance->check_out = Carbon::now()->format('H:i');
-                $attendance->notes = ($attendance->notes ? $attendance->notes . ' | ' : '') . "Shift {$shift->shift_code} ditutup";
-                $attendance->save();
-
-                event(new AttendanceRecordedEvent($attendance, 'PULANG'));
-            }
+            \App\Services\AttendanceService::recordCashierCheckOut(
+                shift: $shift,
+                staffName: $shift->cashier_name,
+                terminalCode: $shift->terminal_code,
+                noteReason: $closingReason
+            );
         } catch (\Throwable $e) {}
 
         try {

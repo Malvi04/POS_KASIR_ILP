@@ -4,38 +4,64 @@
     $serverRole = $authUser ? ($authUser->isOwnerOrSuperadmin() ? 'Owner' : 'Manager') : null;
 @endphp
 
-<aside x-data="{
-           currentRole: @js($serverRole ?? 'Manager'),
-           userName: @js($authUser?->name ?? 'Manager'),
-           userBranch: @js($authUser?->branch ?? 'Pusat'),
-           openMenus: {
-               persediaan: {{ in_array($active, ['inventory', 'suppliers', 'pembelian_barang', 'stock_opname', 'kirim_barang']) ? 'true' : 'false' }},
-               retur: {{ in_array($active, ['retur', 'retur_masuk']) ? 'true' : 'false' }},
-               anggota: {{ in_array($active, ['members', 'member_detail', 'piutang']) ? 'true' : 'false' }}
-           },
-           isOwner() {
-               return (this.currentRole || '').toLowerCase() === 'owner' || (this.currentRole || '').toLowerCase() === 'superadmin';
-           },
-           getNavUrl(path) {
-               if (this.isOwner()) {
-                   return path + (path.includes('?') ? '&' : '?') + 'role=owner';
-               }
-               return path;
-           }
-       }"
-       class="w-64 bg-[#f1f5f9] border-r border-gray-200 flex flex-col justify-between shrink-0 h-screen overflow-y-auto">
-    <div>
-        <!-- Brand & Role Header -->
-        <a :href="getNavUrl('{{ url('/dashboard') }}')" class="block px-6 py-5 border-b border-gray-200/50 hover:bg-slate-200/40 transition-colors group">
-            <div class="flex items-center justify-between">
-                <h1 class="text-2xl font-black tracking-tight group-hover:scale-105 transition-transform" :class="isOwner() ? 'text-purple-900' : 'text-[#0052cc]'">ILP POS</h1>
-                <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase"
-                      :class="isOwner() ? 'bg-purple-100 text-purple-900 border border-purple-300' : 'bg-blue-100 text-[#0052cc]'"
-                      x-text="isOwner() ? 'Owner' : 'Manager'">Manager</span>
+<div x-data="{
+         isSidebarCollapsed: (function() {
+             try { return localStorage.getItem('pos_sidebar_collapsed') === 'true'; } catch(e) { return false; }
+         })(),
+         toggleSidebar() {
+             this.isSidebarCollapsed = !this.isSidebarCollapsed;
+             try { localStorage.setItem('pos_sidebar_collapsed', this.isSidebarCollapsed ? 'true' : 'false'); } catch(e) {}
+             window.dispatchEvent(new CustomEvent('sidebar-toggled', { detail: { collapsed: this.isSidebarCollapsed } }));
+             setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 60);
+         },
+         currentRole: @js($serverRole ?? 'Manager'),
+         userName: @js($authUser?->name ?? 'Manager'),
+         userBranch: @js($authUser?->branch ?? 'Pusat'),
+         openMenus: {
+             persediaan: {{ in_array($active, ['inventory', 'suppliers', 'pembelian_barang', 'stock_opname', 'kirim_barang']) ? 'true' : 'false' }},
+             retur: {{ in_array($active, ['retur', 'retur_masuk']) ? 'true' : 'false' }},
+             anggota: {{ in_array($active, ['members', 'member_detail', 'piutang']) ? 'true' : 'false' }}
+         },
+         isOwner() {
+             return (this.currentRole || '').toLowerCase() === 'owner' || (this.currentRole || '').toLowerCase() === 'superadmin';
+         },
+         getNavUrl(path) {
+             if (this.isOwner()) {
+                 return path + (path.includes('?') ? '&' : '?') + 'role=owner';
+             }
+             return path;
+         }
+     }"
+     @toggle-sidebar.window="toggleSidebar()"
+     @storage.window="if ($event.key === 'pos_sidebar_collapsed') { isSidebarCollapsed = ($event.newValue === 'true'); }"
+     @keydown.window="if (($event.ctrlKey || $event.metaKey) && $event.key.toLowerCase() === 'b' && !['INPUT', 'TEXTAREA', 'SELECT'].includes($event.target.tagName)) { $event.preventDefault(); toggleSidebar(); }"
+     class="shrink-0 flex transition-all duration-300 ease-in-out select-none"
+     :class="isSidebarCollapsed ? 'w-0' : 'w-64'">
+
+    <!-- Sidebar Aside Panel -->
+    <aside x-show="!isSidebarCollapsed"
+           x-transition:enter="transition-all ease-out duration-200"
+           x-transition:enter-start="-translate-x-full opacity-0"
+           x-transition:enter-end="translate-x-0 opacity-100"
+           x-transition:leave="transition-all ease-in duration-150"
+           x-transition:leave-start="translate-x-0 opacity-100"
+           x-transition:leave-end="-translate-x-full opacity-0"
+           class="w-64 bg-[#f1f5f9] border-r border-gray-200 h-screen relative select-none z-30">
+
+    <!-- Inner Scrollable Sidebar Content -->
+    <div class="h-full flex flex-col justify-between overflow-y-auto overflow-x-hidden">
+        <div>
+            <!-- Brand & Role Header -->
+            <div class="px-6 py-5 border-b border-gray-200/50 bg-white/40">
+                <div class="flex items-center justify-between">
+                    <h1 class="text-xl font-black tracking-tight group-hover:scale-105 transition-transform" :class="isOwner() ? 'text-purple-900' : 'text-[#0052cc]'">ILP POS</h1>
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase"
+                          :class="isOwner() ? 'bg-purple-100 text-purple-900 border border-purple-300' : 'bg-blue-100 text-[#0052cc]'"
+                          x-text="isOwner() ? 'Owner' : 'Manager'">Manager</span>
+                </div>
+                <p class="text-[11px] text-gray-500 mt-1 font-medium"
+                   x-text="isOwner() ? 'Konsolidasi 3 Cabang' : userBranch">Minimarket Pusat</p>
             </div>
-            <p class="text-[11px] text-gray-500 mt-0.5 font-medium"
-               x-text="isOwner() ? 'Konsolidasi 3 Cabang' : userBranch">Minimarket Pusat</p>
-        </a>
 
         <!-- Navigation Items -->
         <nav class="mt-2 flex flex-col gap-1 px-3">
@@ -215,4 +241,27 @@
             <span>Keluar ke Portal</span>
         </a>
     </div>
-</aside>
+    </div>
+
+    <!-- Attached Toggle Button (Melekat di Tepi Kanan Sidebar) -->
+    <button type="button"
+            @click="toggleSidebar()"
+            title="Sembunyikan Sidebar (Ctrl+B)"
+            aria-label="Sembunyikan Sidebar"
+            class="sidebar-toggle-btn">
+        <span class="material-symbols-rounded text-[18px]">chevron_left</span>
+    </button>
+    </aside>
+
+    <!-- Floating Show-Sidebar Tab (Hanya muncul saat sidebar di-hide) -->
+    <button type="button"
+            x-cloak
+            x-show="isSidebarCollapsed"
+            @click="toggleSidebar()"
+            title="Tampilkan Sidebar (Ctrl+B)"
+            aria-label="Tampilkan Sidebar"
+            class="sidebar-collapsed-btn">
+        <span class="material-symbols-rounded text-[20px]">menu</span>
+        <span class="text-xs font-bold tracking-wide">Sidebar</span>
+    </button>
+</div>

@@ -198,10 +198,6 @@
         return this.attendanceList.filter(a => a.checkIn && a.checkIn !== '-').length;
     },
 
-    get lateToday() {
-        return this.attendanceList.filter(a => a.status === 'TERLAMBAT').length;
-    },
-
     get onLeaveCount() {
         return this.leaveRequests.filter(l => l.status === 'DISETUJUI').length;
     },
@@ -212,10 +208,6 @@
             alert('Silakan masukkan nama staf!');
             return;
         }
-
-        const now = new Date();
-        const timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
-        const isLate = now.getHours() > 7 || (now.getHours() === 7 && now.getMinutes() > 10);
 
         this.isSubmittingAttendance = true;
         const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('att-' + Date.now());
@@ -446,7 +438,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
             </div>
 
             <!-- Metric Cards -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
                 <!-- Card 1: Total Staf -->
                 <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-xs flex items-center gap-4">
                     <div class="w-12 h-12 rounded-xl bg-[#eef2ff] text-[#0052cc] flex items-center justify-center shrink-0">
@@ -469,18 +461,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
                 </div>
 
-                <!-- Card 3: Terlambat -->
-                <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-xs flex items-center gap-4">
-                    <div class="w-12 h-12 rounded-xl bg-red-50 text-red-500 flex items-center justify-center shrink-0">
-                        <span class="material-symbols-rounded text-[24px]">schedule</span>
-                    </div>
-                    <div>
-                        <span class="text-[10px] font-bold text-gray-500 tracking-wider uppercase">TERLAMBAT</span>
-                        <h3 class="text-2xl font-black text-red-500 mt-0.5" x-text="lateToday"></h3>
-                    </div>
-                </div>
-
-                <!-- Card 4: Izin / Cuti -->
+                <!-- Card 3: Izin / Cuti -->
                 <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-xs flex items-center gap-4">
                     <div class="w-12 h-12 rounded-xl bg-orange-50 text-orange-500 flex items-center justify-center shrink-0">
                         <span class="material-symbols-rounded text-[24px]">event_busy</span>
@@ -582,8 +563,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                             </td>
                                             <td class="py-3.5 px-6 text-gray-600 whitespace-nowrap" x-text="row.branch"></td>
                                             <td class="py-3.5 px-6 font-bold text-[#0052cc] whitespace-nowrap" x-text="row.terminal"></td>
-                                            <td class="py-3.5 px-6 text-center font-mono font-bold whitespace-nowrap"
-                                                :class="row.status === 'TERLAMBAT' ? 'text-red-600' : 'text-gray-800'"
+                                            <td class="py-3.5 px-6 text-center font-mono font-bold whitespace-nowrap text-gray-800"
                                                 x-text="row.checkIn"></td>
                                             <td class="py-3.5 px-6 text-center font-mono font-bold text-gray-800 whitespace-nowrap" x-text="row.checkOut"></td>
                                         </tr>

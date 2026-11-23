@@ -2,6 +2,19 @@
 
 @section('title', 'Pelaporan, Akuntansi Dasar & Konsolidasi - ILP POS')
 
+@php
+    $registeredCashiers = \App\Models\User::query()
+        ->where(function ($q) {
+            $q->whereRaw('LOWER(role) LIKE ?', ['%kasir%'])
+              ->orWhereRaw('LOWER(role) LIKE ?', ['%cashier%']);
+        })
+        ->whereNotNull('username')
+        ->where('username', '!=', '')
+        ->orderBy('name')
+        ->get(['id', 'name', 'username', 'nik', 'branch'])
+        ->toArray();
+@endphp
+
 @section('content')
 <div x-data="{
     activeTab: (new URLSearchParams(window.location.search).get('tab') || 'sales_accounting'), // 'sales_accounting' | 'profit_loss' | 'fast_moving' | 'cash_reconciliation' | 'product_taxes' | 'payroll_debt' | 'consolidated_3branches'
@@ -91,10 +104,33 @@
     cashierYear: '{{ date('Y') }}',
     cashierBranch: 'all',
     cashierSearch: '',
+    cashierUsernameFilter: 'all',
+    registeredCashiers: @js($registeredCashiers),
     isLoadingCashier: false,
     cashierData: {
         summary: {},
         cashiers_breakdown: []
+    },
+
+    get filteredRegisteredCashiers() {
+        if (!this.cashierBranch || this.cashierBranch === 'all') {
+            return this.registeredCashiers || [];
+        }
+        const b = String(this.cashierBranch).toLowerCase();
+        return (this.registeredCashiers || []).filter(c => {
+            if (!c.branch) return true;
+            const cb = String(c.branch).toLowerCase();
+            return cb.includes(b) || cb.includes('pusat');
+        });
+    },
+
+    onCashierBranchChange() {
+        // Reset cashier username if not available in current branch
+        const availableUsernames = this.filteredRegisteredCashiers.map(c => c.username);
+        if (this.cashierUsernameFilter !== 'all' && !availableUsernames.includes(this.cashierUsernameFilter)) {
+            this.cashierUsernameFilter = 'all';
+        }
+        this.loadCashierReport();
     },
 
     // ==========================================
@@ -296,6 +332,7 @@
                 date: this.cashierDate,
                 month: this.cashierMonth,
                 year: this.cashierYear,
+                cashier_username: this.cashierUsernameFilter || 'all',
                 search: this.cashierSearch
             });
             const res = await fetch(`/api/reports/sales?${params.toString()}`, {
@@ -305,6 +342,9 @@
                 const json = await res.json();
                 if (json.success) {
                     this.cashierData = json;
+                    if (json.available_cashiers && Array.isArray(json.available_cashiers)) {
+                        this.registeredCashiers = json.available_cashiers;
+                    }
                 }
             }
         } catch (e) {
@@ -1036,16 +1076,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             :class="activeTab === 'payroll_debt' ? 'bg-white text-purple-700 shadow-xs font-black' : 'text-gray-600 hover:text-gray-900 font-bold'"
                             class="px-3.5 py-2 rounded-lg text-xs transition-all flex items-center gap-1.5 cursor-pointer">
                         <span class="material-symbols-rounded text-[17px]">credit_card</span>
-                        <span>Piutang Anggota (Payroll)</span>
-                    </button>
-
-                    <!-- Tab 7: Konsolidasi 3 Cabang & P&L (Akses Owner) -->
-                    <button type="button"
-                            @click="activeTab = 'consolidated_3branches'; loadConsolidatedReport()"
-                            :class="activeTab === 'consolidated_3branches' ? 'bg-purple-900 text-white shadow-xs font-black' : 'text-purple-800 hover:text-purple-950 font-bold bg-purple-50/70'"
-                            class="px-3.5 py-2 rounded-lg text-xs transition-all flex items-center gap-1.5 cursor-pointer border border-purple-200">
-                        <span class="material-symbols-rounded text-[17px]">hub</span>
-                        <span>Konsolidasi 3 Cabang (Owner)</span>
+                        <span>8. Piutang Anggota (Payroll)</span>
                     </button>
                 </div>
             </div>
@@ -1523,13 +1554,25 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             </template>
 
                             <!-- Filter Cabang -->
-                            <select x-model="cashierBranch" @change="loadCashierReport()"
-                                    class="bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 shadow-2xs cursor-pointer">
+                            <select x-model="cashierBranch" @change="onCashierBranchChange()"
+                                    class="bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 shadow-2xs cursor-pointer focus:border-emerald-600 outline-none">
                                 <option value="all">Semua Cabang (Konsolidasi)</option>
                                 <option value="Pusat">Cabang Pusat</option>
                                 <option value="Cabang A">Cabang A</option>
                                 <option value="Cabang B">Cabang B</option>
                             </select>
+
+                            <!-- Filter Akun Kasir Terdaftar (Berdasarkan Username) -->
+                            <div class="relative">
+                                <select x-model="cashierUsernameFilter"
+                                        @change="loadCashierReport()"
+                                        class="bg-white border border-emerald-300 text-emerald-800 rounded-xl px-3 py-2 text-xs font-bold shadow-2xs cursor-pointer focus:ring-1 focus:ring-emerald-500 focus:border-emerald-600 outline-none pr-8">
+                                    <option value="all">Semua Username Kasir</option>
+                                    <template x-for="c in filteredRegisteredCashiers" :key="c.id || c.username">
+                                        <option :value="c.username" x-text="'@' + c.username + ' (' + c.name + ')'"></option>
+                                    </template>
+                                </select>
+                            </div>
 
                             <button type="button" @click="loadCashierReport()"
                                     class="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-2xs transition-colors cursor-pointer"

@@ -133,6 +133,57 @@
         .material-symbols-rounded.filled {
             font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
         }
+
+        /* Sidebar Attached Toggle Buttons */
+        .sidebar-toggle-btn {
+            position: absolute;
+            right: -14px;
+            top: 76px;
+            z-index: 50;
+            width: 28px;
+            height: 28px;
+            background-color: #ffffff;
+            color: #475569;
+            border: 1px solid #cbd5e1;
+            border-radius: 9999px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.12), 0 2px 4px -2px rgba(0, 0, 0, 0.08);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            user-select: none;
+        }
+        .sidebar-toggle-btn:hover {
+            background-color: #eff6ff;
+            color: #0052cc;
+            border-color: #93c5fd;
+            transform: scale(1.1);
+        }
+        .sidebar-collapsed-btn {
+            position: fixed;
+            left: 0;
+            top: 76px;
+            z-index: 50;
+            background-color: #0052cc;
+            color: #ffffff;
+            padding: 8px 12px 8px 8px;
+            border-top-right-radius: 12px;
+            border-bottom-right-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 82, 204, 0.35);
+            border: 1px solid #2563eb;
+            border-left: 0;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            user-select: none;
+        }
+        .sidebar-collapsed-btn:hover {
+            background-color: #0043a8;
+            padding-left: 11px;
+        }
     </style>
 
     <!-- Application CSS & Realtime Echo/Reverb JS -->
@@ -294,5 +345,8 @@
 
     <!-- Global Offline Sync Modal -->
     <x-offline-sync-modal />
+
+    <!-- Global Floating Fullscreen Button & Shortcuts -->
+    <x-fullscreen-toggle />
 </body>
 </html>

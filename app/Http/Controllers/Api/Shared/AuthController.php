@@ -86,6 +86,23 @@ class AuthController extends Controller
         }
 
         if (in_array($targetRole, self::ROLE_SLOTS, true)) {
+            // Jika role kasir yang logout, pastikan absensi pulang kasir otomatis tercatat real-time
+            if ($targetRole === 'kasir') {
+                try {
+                    $kasirUid = ($request->hasSession() ? $request->session()->get('pos_auth_uid_kasir') : null)
+                        ?? $request->cookie('pos_auth_uid_kasir')
+                        ?? (Auth::check() && Auth::user()?->isKasir() ? Auth::id() : null);
+
+                    $kasirUser = $kasirUid ? User::find((int) $kasirUid) : null;
+                    if ($kasirUser) {
+                        \App\Services\AttendanceService::recordCashierCheckOut(
+                            user: $kasirUser,
+                            noteReason: 'Kasir logout portal'
+                        );
+                    }
+                } catch (\Throwable $e) {}
+            }
+
             if ($request->hasSession()) {
                 $request->session()->forget("pos_auth_uid_{$targetRole}");
             }

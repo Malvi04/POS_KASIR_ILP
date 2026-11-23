@@ -718,7 +718,7 @@ class ProductExcelService
                 $qty = (int) ($r['qty_produk'] ?? 0);
                 $minStock = (int) ($r['minimum_stock'] ?? 5);
 
-                // 1. Gudang Pusat (Warehouse)
+                // 1. Gudang Pusat (Warehouse / Master Stok Fisik Gudang)
                 if ($warehouseLoc) {
                     $stockBatch[] = [
                         'product_id' => $pId,
@@ -732,23 +732,13 @@ class ProductExcelService
                     ];
                 }
 
-                // 2. Toko Pusat (CAB-001) gets initial stock from import so POS can transact immediately
-                if ($mainStoreLoc && (!$warehouseLoc || $mainStoreLoc->id !== $warehouseLoc->id)) {
-                    $stockBatch[] = [
-                        'product_id' => $pId,
-                        'location_id' => $mainStoreLoc->id,
-                        'stock' => $qty,
-                        'min_stock' => $minStock,
-                        'is_active' => true,
-                        'version' => 1,
-                        'created_at' => $now,
-                        'updated_at' => $now,
-                    ];
-                }
-
-                // 3. Other store locations registered in catalog
+                // 2. Retail store branches (Toko Pusat, Cabang A, Cabang B):
+                // Sesuai SOP sistem, stok hasil import master produk murni masuk ke Gudang Pusat (GDG-001).
+                // Stok TIDAK boleh otomatis masuk ke cabang toko manapun. Manager harus mengirimkan barang
+                // terlebih dahulu (Kirim Barang), dan kasir di cabang tujuan melakukan Approve (Goods In)
+                // agar stok toko di cabang tersebut resmi bertambah.
                 foreach ($allLocations as $loc) {
-                    if (($warehouseLoc && $loc->id === $warehouseLoc->id) || ($mainStoreLoc && $loc->id === $mainStoreLoc->id)) {
+                    if ($warehouseLoc && $loc->id === $warehouseLoc->id) {
                         continue;
                     }
                     $stockBatch[] = [

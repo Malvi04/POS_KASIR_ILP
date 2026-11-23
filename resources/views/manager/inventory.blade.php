@@ -261,7 +261,8 @@
     },
 
     saveProductsToStorage() {
-        window.dispatchEvent(new CustomEvent('pos-inventory-synced', { detail: { count: this.totalItems } }));
+        // Broadcast to other components without self-triggering loop
+        window.dispatchEvent(new CustomEvent('pos-inventory-synced', { detail: { count: this.totalItems, source: 'inventory-manager' } }));
     },
 
     get filteredProducts() {
@@ -1424,7 +1425,7 @@
     }
 }"
 x-init="initOpening(); initProducts(); initReturnStock();"
-@pos-inventory-synced.window="initProducts()"
+@pos-inventory-synced.window="if ($event.detail?.source !== 'inventory-manager') initProducts();"
 @pos-return-stock-synced.window="initReturnStock()"
 class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden relative">
 

@@ -930,6 +930,21 @@ class TransactionController extends Controller
                     $shift->save();
                 }
 
+                // Update Jam Keluar Absensi Karyawan saat sync offline closing
+                try {
+                    $closingNotes = $shiftData['closing_notes'] ?? '';
+                    $closingReason = (str_contains($closingNotes, '[SERAH TERIMA]'))
+                        ? "Serah terima shift {$shift->shift_code}"
+                        : "Shift {$shift->shift_code} ditutup";
+
+                    \App\Services\AttendanceService::recordCashierCheckOut(
+                        shift: $shift,
+                        staffName: $shift->cashier_name,
+                        terminalCode: $shift->terminal_code,
+                        noteReason: $closingReason
+                    );
+                } catch (\Throwable $e) {}
+
                 return [
                     'offline_id' => $offlineId,
                     'shift_code' => $shift->shift_code,

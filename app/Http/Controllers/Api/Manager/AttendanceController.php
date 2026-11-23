@@ -94,7 +94,6 @@ class AttendanceController extends Controller
                 ], 422);
             }
 
-            $isLate = Carbon::now()->hour > 7 || (Carbon::now()->hour === 7 && Carbon::now()->minute > 5);
             $attendance = Attendance::create([
                 'user_id' => $matchedUser?->id,
                 'staff_name' => $validated['staffName'],
@@ -103,7 +102,7 @@ class AttendanceController extends Controller
                 'date' => $date,
                 'check_in' => $timeNow,
                 'check_out' => '-',
-                'status' => $isLate ? 'TERLAMBAT' : 'TEPAT_WAKTU',
+                'status' => 'HADIR',
                 'notes' => $validated['notes'] ?? null,
             ]);
         } else {
@@ -117,7 +116,7 @@ class AttendanceController extends Controller
                     'date' => $date,
                     'check_in' => '-',
                     'check_out' => $timeNow,
-                    'status' => 'TEPAT_WAKTU',
+                    'status' => 'HADIR',
                     'notes' => $validated['notes'] ?? null,
                 ]);
             } else {

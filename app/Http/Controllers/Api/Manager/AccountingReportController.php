@@ -71,6 +71,7 @@ class AccountingReportController extends Controller
         $locationIdFilter = $request->integer('location_id') ?: null;
         $shiftId = $request->query('shift_id');
         $cashierNik = $request->query('cashier_nik');
+        $cashierUsername = trim((string) $request->query('cashier_username', $request->query('username', '')));
         $terminalCode = $request->query('terminal_code', $request->query('terminal'));
         $search = trim((string) $request->query('search', $request->query('q', '')));
 
@@ -93,6 +94,14 @@ class AccountingReportController extends Controller
         if ($cashierNik) {
             $query->where('user_id', function ($q) use ($cashierNik) {
                 $q->select('id')->from('users')->where('nik', $cashierNik);
+            });
+        }
+
+        if ($cashierUsername !== '' && $cashierUsername !== 'all') {
+            $query->where(function ($cq) use ($cashierUsername) {
+                $cq->whereHas('user', function ($uq) use ($cashierUsername) {
+                    $uq->where('username', $cashierUsername);
+                })->orWhere('cashier_name', $cashierUsername);
             });
         }
 
@@ -255,6 +264,27 @@ class AccountingReportController extends Controller
             ];
         })->values();
 
+        // 5. Registered Cashiers (for Cashier Account Filter)
+        $availableCashiers = User::query()
+            ->where(function ($q) {
+                $q->whereRaw('LOWER(role) LIKE ?', ['%kasir%'])
+                  ->orWhereRaw('LOWER(role) LIKE ?', ['%cashier%']);
+            })
+            ->whereNotNull('username')
+            ->where('username', '!=', '')
+            ->orderBy('name')
+            ->get(['id', 'name', 'username', 'nik', 'branch'])
+            ->map(function ($u) {
+                return [
+                    'id' => $u->id,
+                    'name' => $u->name,
+                    'username' => $u->username,
+                    'nik' => $u->nik,
+                    'branch' => $u->branch,
+                ];
+            })
+            ->values();
+
         return response()->json([
             'success' => true,
             'filters' => [
@@ -265,6 +295,7 @@ class AccountingReportController extends Controller
                 'location_id' => $locationIdFilter,
                 'shift_id' => $shiftId,
                 'terminal_code' => $terminalCode,
+                'cashier_username' => $cashierUsername,
                 'search' => $search,
             ],
             'summary' => [
@@ -283,6 +314,7 @@ class AccountingReportController extends Controller
             ],
             'terminals_breakdown' => $terminalsBreakdown,
             'cashiers_breakdown' => $cashiersBreakdown,
+            'available_cashiers' => $availableCashiers,
             'shifts_breakdown' => $shiftsData,
             'branch_breakdown' => $branchBreakdown,
             'excluded_warehouse_transactions' => $stockService->summarizeExcludedTransactions($partitioned['warehouse_transactions']),
