@@ -94,6 +94,84 @@
 
     products: [],
 
+    totalProductsServer: 0,
+    totalPagesServer: 1,
+    kpiSummary: {
+        total_products: 0,
+        low_stock_count: 0,
+        out_of_stock_count: 0,
+        critical_expired_count: 0,
+        warning_expired_count: 0,
+        total_inventory_value: 0
+    },
+    isLoadingProducts: false,
+    availableCategories: ['Minuman', 'Snack', 'Kebutuhan Pokok', 'Pembersih', 'Makanan', 'Obat & Kesehatan'],
+
+    mapProductItem(p) {
+        if (!p) return {};
+        return {
+            id: p.id,
+            ilp_id: p.ilp_id || p.id_produk || String(p.id),
+            sku: p.sku,
+            barcode: p.barcode || p.kode_barcode || '',
+            name: p.name || p.nama_produk || '',
+            brand: p.brand || p.supplier_name || 'Lokal',
+            category: p.category || 'Umum',
+            unit: p.unit || p.satuan_unit || 'Pcs',
+            costPrice: Number(p.cost_price ?? p.harga_beli) || 0,
+            lastCostPrice: Number(p.last_cost_price ?? p.harga_beli_terakhir ?? p.cost_price ?? p.harga_beli) || 0,
+            price: Number(p.price ?? p.harga_jual_umum ?? p.original_price) || 0,
+            memberPrice: Number(p.member_price ?? p.harga_jual_member ?? p.original_member_price ?? p.price) || 0,
+            minQty1: p.min_qty1 !== null && p.min_qty1 !== undefined ? Number(p.min_qty1) : 1,
+            minQty2: p.min_qty2 !== null && p.min_qty2 !== undefined ? Number(p.min_qty2) : null,
+            minQty3: p.min_qty3 !== null && p.min_qty3 !== undefined ? Number(p.min_qty3) : null,
+            hargaLevel1: Number(p.harga_level1 ?? p.member_price ?? p.price) || 0,
+            disc: Number(p.clearance_discount_percent ?? p.produk_disc) || 0,
+            minStock: Number(p.min_stock ?? p.minimum_stock) || 5,
+            stockMin: Number(p.min_stock ?? p.minimum_stock) || 5,
+            reorder: Number(p.reorder_point ?? (((Number(p.min_stock ?? p.minimum_stock) || 5)) * 2)),
+            ppnOut: Number(p.tax_rate ?? p.ppn_out) || 11,
+            ppnChk: (p.is_taxable !== false && p.ppn_chk !== 'N') ? 'Y' : 'N',
+            statusBarang: p.status_barang || p.status || 'TERSEDIA',
+            koSup: p.ko_sup || p.kode_suplier || (p.supplier_code || ''),
+            act: p.act || 'Y',
+            masa: p.masa || '',
+            expiredDate: p.exp_date || p.expired_date || '',
+            up: Number(p.markup_percent) || 0,
+            dump: p.dump || '',
+            rackLocation: p.rack_location || 'Lorong Toko',
+            branchStock: (p.branch_stock && typeof p.branch_stock === 'object') ? p.branch_stock : {},
+            allocatedBranches: Array.isArray(p.allocated_branches) ? p.allocated_branches : Object.keys(p.branch_stock || {}),
+            masterStock: Number(p.master_stock !== undefined ? p.master_stock : (p.qty_produk !== undefined ? p.qty_produk : p.stock)) || 0,
+            warehouseStock: Number(p.warehouse_stock !== undefined ? p.warehouse_stock : (p.branch_stock && p.branch_stock['GDG-001'] !== undefined ? p.branch_stock['GDG-001'] : (p.qty_produk !== undefined ? p.qty_produk : p.stock))) || 0,
+            stock: Number(p.stock !== undefined ? p.stock : (p.qty_produk !== undefined ? p.qty_produk : 0)) || 0,
+            status: p.stock_status || this.calculateStatus(p.stock, p.min_stock, p.expired_date),
+            batchLot: 'LOT-' + p.sku,
+            suppliedBy: Array.isArray(p.supplied_by) ? p.supplied_by : [],
+            isConsignment: Boolean(p.is_consignment),
+            supplier: p.supplier || null,
+            // 19 Kolom Standar Master Produk Gudang
+            id_produk: p.id_produk || p.ilp_id || String(p.id),
+            kode_barcode: p.kode_barcode || p.barcode || '',
+            kode_produk: p.kode_produk || p.sku || '',
+            qty_produk: p.qty_produk !== undefined ? Number(p.qty_produk) : (Number(p.master_stock !== undefined ? p.master_stock : p.stock) || 0),
+            nama_produk: p.nama_produk || p.name || '',
+            satuan_unit: p.satuan_unit || p.unit || 'Pcs',
+            harga_beli: Number(p.harga_beli ?? p.cost_price) || 0,
+            harga_jual_umum: Number(p.harga_jual_umum ?? p.price ?? p.original_price) || 0,
+            harga_jual_member: Number(p.harga_jual_member ?? p.member_price ?? p.original_member_price ?? p.price) || 0,
+            produk_disc: Number(p.produk_disc ?? p.clearance_discount_percent ?? p.discount_percent ?? 0),
+            minimum_stock: Number(p.minimum_stock ?? p.min_stock ?? 5),
+            ppn_out: Number(p.ppn_out ?? p.tax_rate ?? 11),
+            ppn_chk: p.ppn_chk || ((p.is_taxable !== false && p.ppn_chk !== 'N') ? 'Y' : 'N'),
+            harga_beli_terakhir: Number(p.harga_beli_terakhir ?? p.last_cost_price ?? p.cost_price) || 0,
+            status_barang: p.status_barang || p.status || 'TERSEDIA',
+            kode_suplier: p.kode_suplier || p.ko_sup || (p.supplier_code || '-'),
+            manufacturing_date: p.manufacturing_date || '',
+            exp_date: p.exp_date || p.expired_date || ''
+        };
+    },
+
     deduplicateProducts(items) {
         if (!Array.isArray(items)) return { unique: [], hasDuplicates: false };
         const unique = [];
@@ -122,227 +200,109 @@
         return { unique, hasDuplicates };
     },
 
-    async initProducts() {
+    async fetchProducts(page = 1) {
+        this.isLoadingProducts = true;
+        this.currentPage = page;
         try {
-            const res = await fetch('/api/products?per_page=100', { headers: { 'Accept': 'application/json' } });
+            const params = new URLSearchParams({
+                page: String(page),
+                per_page: String(this.pageSize || 15)
+            });
+            if (this.selectedBranch && this.selectedBranch !== 'all') {
+                params.set('branch', this.selectedBranch);
+            }
+            if (this.selectedCategory && this.selectedCategory !== 'all' && this.selectedCategory !== 'Semua') {
+                params.set('category', this.selectedCategory);
+            }
+            if (this.searchQuery && this.searchQuery.trim()) {
+                params.set('search', this.searchQuery.trim());
+            }
+
+            const res = await fetch('/api/products?' + params.toString(), {
+                headers: { 'Accept': 'application/json' }
+            });
+
             if (res.ok) {
                 const json = await res.json();
                 const items = json.data || (Array.isArray(json) ? json : []);
+                if (json.summary) {
+                    this.kpiSummary = json.summary;
+                    this.totalProductsServer = Number(json.summary.total_products) || Number(json.meta?.total) || items.length;
+                } else if (json.meta) {
+                    this.totalProductsServer = Number(json.meta.total) || items.length;
+                }
+                if (json.meta) {
+                    this.totalPagesServer = Number(json.meta.last_page) || 1;
+                } else {
+                    this.totalPagesServer = Math.ceil(this.totalProductsServer / (this.pageSize || 15)) || 1;
+                }
+                if (Array.isArray(json.categories) && json.categories.length > 0) {
+                    const filteredCats = json.categories.filter(c => c && c !== 'Semua' && c !== 'all');
+                    if (filteredCats.length > 0) {
+                        this.availableCategories = filteredCats;
+                    }
+                }
+
                 if (Array.isArray(items)) {
-                    const mapped = items.map(p => ({
-                        id: p.id,
-                        ilp_id: p.ilp_id || String(p.id),
-                        sku: p.sku,
-                        barcode: p.barcode,
-                        name: p.name,
-                        brand: p.supplier_name || 'Lokal',
-                        category: p.category || 'Umum',
-                        unit: p.unit || 'Pcs',
-                        costPrice: Number(p.cost_price) || 0,
-                        lastCostPrice: Number(p.last_cost_price ?? p.cost_price) || 0,
-                        price: Number(p.price ?? p.original_price) || 0,
-                        memberPrice: Number(p.member_price ?? p.original_member_price ?? p.price) || 0,
-                        minQty1: p.min_qty1 !== null && p.min_qty1 !== undefined ? Number(p.min_qty1) : 1,
-                        minQty2: p.min_qty2 !== null && p.min_qty2 !== undefined ? Number(p.min_qty2) : null,
-                        minQty3: p.min_qty3 !== null && p.min_qty3 !== undefined ? Number(p.min_qty3) : null,
-                        hargaLevel1: Number(p.harga_level1 ?? p.member_price ?? p.price) || 0,
-                        disc: Number(p.clearance_discount_percent) || 0,
-                        minStock: Number(p.min_stock) || 5,
-                        stockMin: Number(p.min_stock) || 5,
-                        reorder: Number(p.reorder_point ?? ((p.min_stock || 5) * 2)),
-                        ppnOut: Number(p.tax_rate) || 11,
-                        ppnChk: (p.is_taxable !== false && p.ppn_chk !== 'N') ? 'Y' : 'N',
-                        statusBarang: p.status || 'TERSEDIA',
-                        koSup: p.ko_sup || (p.supplier_code || ''),
-                        act: p.act || 'Y',
-                        masa: p.masa || '',
-                        expiredDate: p.expired_date || '',
-                        up: Number(p.markup_percent) || 0,
-                        dump: p.dump || '',
-                        rackLocation: p.rack_location || 'Lorong Toko',
-                        branchStock: (p.branch_stock && typeof p.branch_stock === 'object') ? p.branch_stock : {},
-                        allocatedBranches: Array.isArray(p.allocated_branches) ? p.allocated_branches : Object.keys(p.branch_stock || {}),
-                        masterStock: Number(p.master_stock !== undefined ? p.master_stock : p.stock) || 0,
-                        warehouseStock: Number(p.warehouse_stock !== undefined ? p.warehouse_stock : (p.branch_stock && p.branch_stock['GDG-001'] !== undefined ? p.branch_stock['GDG-001'] : p.stock)) || 0,
-                        stock: Number(p.stock) || 0,
-                        status: p.stock_status || this.calculateStatus(p.stock, p.min_stock, p.expired_date),
-                        batchLot: 'LOT-' + p.sku,
-                        suppliedBy: Array.isArray(p.supplied_by) ? p.supplied_by : [],
-                        // 19 Kolom Standar Master Produk Gudang
-                        id_produk: p.id_produk || p.ilp_id || String(p.id),
-                        kode_barcode: p.kode_barcode || p.barcode || '',
-                        kode_produk: p.kode_produk || p.sku || '',
-                        qty_produk: p.qty_produk !== undefined ? Number(p.qty_produk) : (Number(p.master_stock !== undefined ? p.master_stock : p.stock) || 0),
-                        nama_produk: p.nama_produk || p.name || '',
-                        satuan_unit: p.satuan_unit || p.unit || 'Pcs',
-                        harga_beli: Number(p.harga_beli ?? p.cost_price) || 0,
-                        harga_jual_umum: Number(p.harga_jual_umum ?? p.price ?? p.original_price) || 0,
-                        harga_jual_member: Number(p.harga_jual_member ?? p.member_price ?? p.original_member_price ?? p.price) || 0,
-                        produk_disc: Number(p.produk_disc ?? p.clearance_discount_percent ?? p.discount_percent ?? 0),
-                        minimum_stock: Number(p.minimum_stock ?? p.min_stock ?? 5),
-                        ppn_out: Number(p.ppn_out ?? p.tax_rate ?? 11),
-                        ppn_chk: p.ppn_chk || ((p.is_taxable !== false && p.ppn_chk !== 'N') ? 'Y' : 'N'),
-                        harga_beli_terakhir: Number(p.harga_beli_terakhir ?? p.last_cost_price ?? p.cost_price) || 0,
-                        status_barang: p.status_barang || p.status || 'TERSEDIA',
-                        kode_suplier: p.kode_suplier || p.ko_sup || (p.supplier_code || '-'),
-                        manufacturing_date: p.manufacturing_date || '',
-                        exp_date: p.exp_date || p.expired_date || ''
-                    }));
-                    const result = this.deduplicateProducts(mapped);
-                    this.products = result.unique;
+                    this.products = items.map(p => this.mapProductItem(p));
                     this.saveProductsToStorage();
                     return;
                 }
             }
         } catch (e) {
-            console.warn('API products fetch fallback:', e);
+            console.warn('API products fetch error:', e);
+        } finally {
+            this.isLoadingProducts = false;
         }
-        this.products = [];
+    },
+
+    async initProducts() {
+        await this.fetchProducts(1);
     },
 
     saveProductsToStorage() {
-        window.dispatchEvent(new CustomEvent('pos-inventory-synced', { detail: { count: this.products.length } }));
-    },
-
-    get availableCategories() {
-        const standard = ['Minuman', 'Snack', 'Kebutuhan Pokok', 'Pembersih', 'Makanan', 'Obat & Kesehatan'];
-        const catMap = new Map();
-        standard.forEach(c => catMap.set(c.trim().toLowerCase(), c.trim()));
-        (this.products || []).forEach(p => {
-            if (p && p.category) {
-                const label = String(p.category).trim();
-                if (label && !catMap.has(label.toLowerCase())) {
-                    catMap.set(label.toLowerCase(), label);
-                }
-            }
-        });
-        return Array.from(catMap.values());
+        window.dispatchEvent(new CustomEvent('pos-inventory-synced', { detail: { count: this.totalItems } }));
     },
 
     get filteredProducts() {
-        return this.branchProducts.filter(p => {
-            if (this.selectedCategory !== 'all' && p.category !== this.selectedCategory) return false;
-            if (this.searchQuery.trim() !== '') {
-                const q = this.searchQuery.toLowerCase();
-                const matchName = (p.name || '').toLowerCase().includes(q);
-                const matchBrand = (p.brand || '').toLowerCase().includes(q);
-                const matchBarcode = (p.barcode || '').includes(q);
-                const matchSku = (p.sku || '').toLowerCase().includes(q);
-                const matchIlpId = (p.ilp_id || '').toLowerCase().includes(q);
-                const matchRack = (p.rackLocation || '').toLowerCase().includes(q);
-                const matchKoSup = (p.koSup || '').toLowerCase().includes(q);
-                return matchName || matchBrand || matchBarcode || matchSku || matchIlpId || matchRack || matchKoSup;
-            }
-            return true;
-        });
+        return this.products || [];
     },
 
     searchTimer: null,
     onSearchInput() {
         this.currentPage = 1;
-        const q = (this.searchQuery || '').trim();
         if (this.searchTimer) clearTimeout(this.searchTimer);
-        if (q.length >= 2) {
-            this.searchTimer = setTimeout(() => {
-                this.fetchServerSearch(q);
-            }, 300);
-        }
-    },
-    async fetchServerSearch(q) {
-        if (!q || q.length < 2) return;
-        try {
-            const res = await fetch(`/api/products?search=${encodeURIComponent(q)}&per_page=100`, {
-                headers: { 'Accept': 'application/json' }
-            });
-            if (res.ok) {
-                const json = await res.json();
-                const items = json.data || (Array.isArray(json) ? json : []);
-                if (Array.isArray(items)) {
-                    const mapped = items.map(p => ({
-                        id: p.id,
-                        ilp_id: p.ilp_id || String(p.id),
-                        sku: p.sku,
-                        barcode: p.barcode,
-                        name: p.name,
-                        brand: p.supplier_name || p.brand || p.category || 'Lokal',
-                        category: p.category || 'Kebutuhan Pokok',
-                        unit: p.unit || 'Pcs',
-                        costPrice: Number(p.cost_price) || 0,
-                        lastCostPrice: Number(p.last_cost_price ?? p.cost_price) || 0,
-                        price: Number(p.price ?? p.original_price) || 0,
-                        memberPrice: Number(p.member_price ?? p.original_member_price ?? p.price) || 0,
-                        minQty1: p.min_qty1 !== null && p.min_qty1 !== undefined ? Number(p.min_qty1) : 1,
-                        minQty2: p.min_qty2 !== null && p.min_qty2 !== undefined ? Number(p.min_qty2) : null,
-                        minQty3: p.min_qty3 !== null && p.min_qty3 !== undefined ? Number(p.min_qty3) : null,
-                        hargaLevel1: Number(p.harga_level1 ?? p.member_price ?? p.price) || 0,
-                        disc: Number(p.clearance_discount_percent) || 0,
-                        minStock: Number(p.min_stock) || 5,
-                        stockMin: Number(p.min_stock) || 5,
-                        reorder: Number(p.reorder_point ?? ((p.min_stock || 5) * 2)),
-                        ppnOut: Number(p.tax_rate) || 11,
-                        ppnChk: (p.is_taxable !== false && p.ppn_chk !== 'N') ? 'Y' : 'N',
-                        statusBarang: p.status || 'TERSEDIA',
-                        koSup: p.ko_sup || (p.supplier_code || ''),
-                        act: p.act || 'Y',
-                        masa: p.masa || '',
-                        expiredDate: p.expired_date || '',
-                        up: Number(p.markup_percent) || 0,
-                        dump: p.dump || '',
-                        rackLocation: p.rack_location || 'Lorong Toko',
-                        branchStock: (p.branch_stock && typeof p.branch_stock === 'object') ? p.branch_stock : {},
-                        allocatedBranches: Array.isArray(p.allocated_branches) ? p.allocated_branches : Object.keys(p.branch_stock || {}),
-                        masterStock: Number(p.master_stock !== undefined ? p.master_stock : p.stock) || 0,
-                        warehouseStock: Number(p.warehouse_stock !== undefined ? p.warehouse_stock : (p.branch_stock && p.branch_stock['GDG-001'] !== undefined ? p.branch_stock['GDG-001'] : p.stock)) || 0,
-                        stock: Number(p.stock) || 0,
-                        status: p.stock_status || this.calculateStatus(p.stock, p.min_stock, p.expired_date),
-                        batchLot: 'LOT-' + p.sku,
-                        isConsignment: Boolean(p.is_consignment),
-                        supplier: p.supplier || null,
-                        suppliedBy: Array.isArray(p.supplied_by) ? p.supplied_by : [],
-                        // 19 Kolom Standar Master Produk Gudang
-                        id_produk: p.id_produk || p.ilp_id || String(p.id),
-                        kode_barcode: p.kode_barcode || p.barcode || '',
-                        kode_produk: p.kode_produk || p.sku || '',
-                        qty_produk: p.qty_produk !== undefined ? Number(p.qty_produk) : (Number(p.master_stock !== undefined ? p.master_stock : p.stock) || 0),
-                        nama_produk: p.nama_produk || p.name || '',
-                        satuan_unit: p.satuan_unit || p.unit || 'Pcs',
-                        harga_beli: Number(p.harga_beli ?? p.cost_price) || 0,
-                        harga_jual_umum: Number(p.harga_jual_umum ?? p.price ?? p.original_price) || 0,
-                        harga_jual_member: Number(p.harga_jual_member ?? p.member_price ?? p.original_member_price ?? p.price) || 0,
-                        produk_disc: Number(p.produk_disc ?? p.clearance_discount_percent ?? p.discount_percent ?? 0),
-                        minimum_stock: Number(p.minimum_stock ?? p.min_stock ?? 5),
-                        ppn_out: Number(p.ppn_out ?? p.tax_rate ?? 11),
-                        ppn_chk: p.ppn_chk || ((p.is_taxable !== false && p.ppn_chk !== 'N') ? 'Y' : 'N'),
-                        harga_beli_terakhir: Number(p.harga_beli_terakhir ?? p.last_cost_price ?? p.cost_price) || 0,
-                        status_barang: p.status_barang || p.status || 'TERSEDIA',
-                        kode_suplier: p.kode_suplier || p.ko_sup || (p.supplier_code || '-'),
-                        manufacturing_date: p.manufacturing_date || '',
-                        exp_date: p.exp_date || p.expired_date || ''
-                    }));
-                    const existingSkus = new Set((this.products || []).map(p => p.sku));
-                    const newItems = mapped.filter(p => !existingSkus.has(p.sku));
-                    if (newItems.length > 0) {
-                        this.products = [...newItems, ...this.products];
-                    }
-                }
-            }
-        } catch (err) {}
+        this.searchTimer = setTimeout(() => {
+            this.fetchProducts(1);
+        }, 300);
     },
 
     currentPage: 1,
     pageSize: 15,
     get paginatedProducts() {
-        const start = (this.currentPage - 1) * this.pageSize;
-        return this.filteredProducts.slice(start, start + this.pageSize);
+        return this.products || [];
     },
     get totalPages() {
-        return Math.ceil(this.filteredProducts.length / this.pageSize) || 1;
+        return this.totalPagesServer || 1;
     },
     nextPage() {
-        if (this.currentPage < this.totalPages) this.currentPage++;
+        if (this.currentPage < this.totalPages) {
+            this.currentPage++;
+            this.fetchProducts(this.currentPage);
+        }
     },
     prevPage() {
-        if (this.currentPage > 1) this.currentPage--;
+        if (this.currentPage > 1) {
+            this.currentPage--;
+            this.fetchProducts(this.currentPage);
+        }
+    },
+    goToPage(p) {
+        const pageNum = parseInt(p);
+        if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= this.totalPages) {
+            this.currentPage = pageNum;
+            this.fetchProducts(pageNum);
+        }
     },
 
     // Import & Export Excel Feature State
@@ -554,23 +514,23 @@
     },
 
     get totalItems() {
-        return this.branchProducts.length;
+        return this.totalProductsServer || (this.products ? this.products.length : 0);
     },
 
     get lowStockCount() {
-        return this.branchProducts.filter(p => this.getProductStatus(p) === 'STOK_RENDAH').length;
+        return Number(this.kpiSummary?.low_stock_count) || 0;
     },
 
     get nearExpiredCount() {
-        return this.branchProducts.filter(p => p.status === 'NEAR_EXPIRED').length;
+        return (Number(this.kpiSummary?.critical_expired_count) || 0) + (Number(this.kpiSummary?.warning_expired_count) || 0);
     },
 
     get outOfStockCount() {
-        return this.branchProducts.filter(p => this.getProductStatus(p) === 'HABIS').length;
+        return Number(this.kpiSummary?.out_of_stock_count) || 0;
     },
 
     get totalInventoryValue() {
-        return this.branchProducts.reduce((acc, p) => acc + (this.getProductStock(p) * (Number(p.costPrice || p.price) || 0)), 0);
+        return Number(this.kpiSummary?.total_inventory_value) || 0;
     },
 
     calculateStatus(stock, minStock, expiredDate) {
@@ -1509,7 +1469,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <span>Master Produk &amp; Stok</span>
                         <span :class="inventoryTab === 'normal' ? 'bg-white text-[#0052cc]' : 'bg-slate-200 text-slate-700'"
                               class="text-[10.5px] font-extrabold px-2 py-0.5 rounded-full"
-                              x-text="totalItems + ' Produk'"></span>
+                              x-text="Number(totalItems).toLocaleString('id-ID') + ' Produk'"></span>
                     </button>
 
                     <!-- Tab 2 Button -->
@@ -1546,7 +1506,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                 <div class="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden">
                     <div class="px-5 pt-3.5 border-b border-gray-100 flex items-center gap-2 overflow-x-auto bg-slate-50/70">
                         <button type="button" 
-                                @click="selectedBranch = 'all'; currentPage = 1;"
+                                @click="selectedBranch = 'all'; currentPage = 1; fetchProducts(1);"
                                 class="px-4 py-2.5 text-xs font-bold transition-all border-b-2 inline-flex items-center gap-2 whitespace-nowrap cursor-pointer"
                                 :class="selectedBranch === 'all' ? 'border-[#0052cc] text-[#0052cc] bg-white rounded-t-xl shadow-2xs' : 'border-transparent text-slate-600 hover:text-slate-900'">
                             <span class="material-symbols-rounded text-[16px]">warehouse</span>
@@ -1554,7 +1514,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         </button>
 
                         <button type="button" 
-                                @click="selectedBranch = 'CAB-001'; currentPage = 1;"
+                                @click="selectedBranch = 'CAB-001'; currentPage = 1; fetchProducts(1);"
                                 class="px-4 py-2.5 text-xs font-bold transition-all border-b-2 inline-flex items-center gap-2 whitespace-nowrap cursor-pointer"
                                 :class="selectedBranch === 'CAB-001' ? 'border-[#0052cc] text-[#0052cc] bg-white rounded-t-xl shadow-2xs' : 'border-transparent text-slate-600 hover:text-slate-900'">
                             <span class="material-symbols-rounded text-[16px]">storefront</span>
@@ -1562,7 +1522,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         </button>
 
                         <button type="button" 
-                                @click="selectedBranch = 'CAB-002'; currentPage = 1;"
+                                @click="selectedBranch = 'CAB-002'; currentPage = 1; fetchProducts(1);"
                                 class="px-4 py-2.5 text-xs font-bold transition-all border-b-2 inline-flex items-center gap-2 whitespace-nowrap cursor-pointer"
                                 :class="selectedBranch === 'CAB-002' ? 'border-[#0052cc] text-[#0052cc] bg-white rounded-t-xl shadow-2xs' : 'border-transparent text-slate-600 hover:text-slate-900'">
                             <span class="material-symbols-rounded text-[16px]">storefront</span>
@@ -1570,7 +1530,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         </button>
 
                         <button type="button" 
-                                @click="selectedBranch = 'CAB-003'; currentPage = 1;"
+                                @click="selectedBranch = 'CAB-003'; currentPage = 1; fetchProducts(1);"
                                 class="px-4 py-2.5 text-xs font-bold transition-all border-b-2 inline-flex items-center gap-2 whitespace-nowrap cursor-pointer"
                                 :class="selectedBranch === 'CAB-003' ? 'border-[#0052cc] text-[#0052cc] bg-white rounded-t-xl shadow-2xs' : 'border-transparent text-slate-600 hover:text-slate-900'">
                             <span class="material-symbols-rounded text-[16px]">storefront</span>
@@ -1615,7 +1575,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <!-- Category Select -->
                         <div class="relative w-full sm:w-56 shrink-0">
                             <select x-model="selectedCategory"
-                                    @change="currentPage = 1"
+                                    @change="currentPage = 1; fetchProducts(1)"
                                     class="appearance-none w-full bg-slate-50/50 border border-gray-200 rounded-xl px-4 py-2.5 pr-10 text-[13px] text-gray-700 focus:outline-none focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/20 shadow-xs transition-all font-semibold cursor-pointer">
                                 <option value="all">Semua Kategori</option>
                                 <template x-for="cat in availableCategories" :key="cat">
@@ -1661,15 +1621,15 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs flex flex-col justify-between">
                         <span class="text-[11px] font-bold text-gray-500 tracking-wider uppercase">TOTAL SKU (<span x-text="selectedBranch === 'all' ? 'STOK GUDANG' : getBranchName(selectedBranch)"></span>)</span>
                         <div class="flex items-center justify-between mt-3">
-                            <span class="text-3xl font-black text-gray-800 tracking-tight" x-text="totalItems">0</span>
-                            <span class="bg-[#dbeafe] text-[#0052cc] text-[11px] font-bold px-2.5 py-1 rounded-md" x-text="totalItems + ' Aktif'"></span>
+                            <span class="text-3xl font-black text-gray-800 tracking-tight" x-text="Number(totalItems).toLocaleString('id-ID')">0</span>
+                            <span class="bg-[#dbeafe] text-[#0052cc] text-[11px] font-bold px-2.5 py-1 rounded-md" x-text="Number(totalItems).toLocaleString('id-ID') + ' Aktif'"></span>
                         </div>
                     </div>
 
                     <div class="bg-white rounded-2xl border border-amber-200 p-5 shadow-xs flex flex-col justify-between relative overflow-hidden border-l-4 border-l-amber-500">
                         <span class="text-[11px] font-bold text-amber-700 tracking-wider uppercase">STOK RENDAH (<span x-text="selectedBranch === 'all' ? 'GUDANG' : getBranchName(selectedBranch)"></span>)</span>
                         <div class="flex items-center justify-between mt-3 relative z-10">
-                            <span class="text-3xl font-black text-amber-500 tracking-tight" x-text="lowStockCount">0</span>
+                            <span class="text-3xl font-black text-amber-500 tracking-tight" x-text="Number(lowStockCount).toLocaleString('id-ID')">0</span>
                             <span class="material-symbols-rounded text-amber-500 text-[26px]">warning</span>
                         </div>
                     </div>
@@ -1677,7 +1637,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <div class="bg-white rounded-2xl border border-red-200 p-5 shadow-xs flex flex-col justify-between border-l-4 border-l-[#e11d48] relative overflow-hidden">
                         <span class="text-[11px] font-bold text-[#e11d48] tracking-wider uppercase">MENDEKATI EXPIRED</span>
                         <div class="flex items-center justify-between mt-3 relative z-10">
-                            <span class="text-3xl font-black text-[#e11d48] tracking-tight" x-text="nearExpiredCount">0</span>
+                            <span class="text-3xl font-black text-[#e11d48] tracking-tight" x-text="Number(nearExpiredCount).toLocaleString('id-ID')">0</span>
                             <span class="material-symbols-rounded text-[#e11d48] text-[26px]">event_busy</span>
                         </div>
                     </div>
@@ -1708,7 +1668,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 <span class="material-symbols-rounded text-[16px]">view_column</span>
                                 <span x-text="tableMode === 'ilp_25' ? 'Format 19 Kolom Master (Aktif)' : 'Tampilkan 19 Kolom Master'"></span>
                             </button>
-                            <span class="text-xs text-gray-500 font-medium whitespace-nowrap" x-text="'Menampilkan ' + paginatedProducts.length + ' dari ' + filteredProducts.length + ' produk'"></span>
+                            <span class="text-xs text-gray-500 font-medium whitespace-nowrap" x-text="'Menampilkan ' + paginatedProducts.length + ' dari ' + Number(totalItems).toLocaleString('id-ID') + ' produk'"></span>
                         </div>
                     </div>
 
@@ -1954,11 +1914,29 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
                     <!-- Pagination Footer -->
                     <div class="border-t border-gray-200 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3 bg-white text-xs text-gray-500">
-                        <span x-text="'Halaman ' + currentPage + ' dari ' + totalPages + ' (' + filteredProducts.length + ' total produk)'"></span>
+                        <div class="flex items-center gap-3">
+                            <span x-text="'Halaman ' + currentPage + ' dari ' + totalPages + ' (' + Number(totalItems).toLocaleString('id-ID') + ' total produk)'"></span>
+                            <div class="flex items-center gap-1.5 ml-2">
+                                <span class="text-[11px] text-gray-400">Tampilkan:</span>
+                                <select x-model="pageSize" @change="currentPage = 1; fetchProducts(1)" class="text-xs py-1 px-2 bg-slate-50 border border-gray-200 rounded-lg font-bold text-gray-700 cursor-pointer">
+                                    <option value="15">15</option>
+                                    <option value="25">25</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                </select>
+                            </div>
+                        </div>
                         <div class="flex items-center gap-1.5">
                             <button type="button"
+                                    @click="goToPage(1)"
+                                    :disabled="currentPage <= 1 || isLoadingProducts"
+                                    :class="currentPage <= 1 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100 cursor-pointer'"
+                                    class="px-2.5 py-1.5 rounded-lg border border-gray-200 font-bold text-gray-700 flex items-center transition-all" title="Halaman Pertama">
+                                <span class="material-symbols-rounded text-[16px]">first_page</span>
+                            </button>
+                            <button type="button"
                                     @click="prevPage()"
-                                    :disabled="currentPage <= 1"
+                                    :disabled="currentPage <= 1 || isLoadingProducts"
                                     :class="currentPage <= 1 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100 cursor-pointer'"
                                     class="px-3 py-1.5 rounded-lg border border-gray-200 font-bold text-gray-700 flex items-center gap-1 transition-all">
                                 <span class="material-symbols-rounded text-[16px]">chevron_left</span>
@@ -1967,11 +1945,18 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             <span class="px-3 py-1.5 rounded-lg bg-blue-50 text-[#0052cc] font-black font-mono" x-text="currentPage">1</span>
                             <button type="button"
                                     @click="nextPage()"
-                                    :disabled="currentPage >= totalPages"
+                                    :disabled="currentPage >= totalPages || isLoadingProducts"
                                     :class="currentPage >= totalPages ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100 cursor-pointer'"
                                     class="px-3 py-1.5 rounded-lg border border-gray-200 font-bold text-gray-700 flex items-center gap-1 transition-all">
                                 <span>Selanjutnya</span>
                                 <span class="material-symbols-rounded text-[16px]">chevron_right</span>
+                            </button>
+                            <button type="button"
+                                    @click="goToPage(totalPages)"
+                                    :disabled="currentPage >= totalPages || isLoadingProducts"
+                                    :class="currentPage >= totalPages ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100 cursor-pointer'"
+                                    class="px-2.5 py-1.5 rounded-lg border border-gray-200 font-bold text-gray-700 flex items-center transition-all" title="Halaman Terakhir">
+                                <span class="material-symbols-rounded text-[16px]">last_page</span>
                             </button>
                         </div>
                     </div>
@@ -3967,19 +3952,19 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-2xl mx-auto text-left">
                             <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
                                 <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Total Diproses</span>
-                                <div class="text-xl font-black text-slate-800 font-mono mt-0.5" x-text="importResult?.summary?.total_processed || 0"></div>
+                                <div class="text-xl font-black text-slate-800 font-mono mt-0.5" x-text="Number(importResult?.summary?.total_processed || 0).toLocaleString('id-ID')"></div>
                             </div>
                             <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
                                 <span class="text-[10px] font-extrabold text-emerald-700 uppercase tracking-wider block">Produk Baru Dibuat</span>
-                                <div class="text-xl font-black text-emerald-700 font-mono mt-0.5" x-text="importResult?.summary?.created || 0"></div>
+                                <div class="text-xl font-black text-emerald-700 font-mono mt-0.5" x-text="Number(importResult?.summary?.created || 0).toLocaleString('id-ID')"></div>
                             </div>
                             <div class="bg-blue-50 p-4 rounded-xl border border-blue-200">
                                 <span class="text-[10px] font-extrabold text-[#0052cc] uppercase tracking-wider block">Produk Diperbarui</span>
-                                <div class="text-xl font-black text-[#0052cc] font-mono mt-0.5" x-text="importResult?.summary?.updated || 0"></div>
+                                <div class="text-xl font-black text-[#0052cc] font-mono mt-0.5" x-text="Number(importResult?.summary?.updated || 0).toLocaleString('id-ID')"></div>
                             </div>
                             <div class="bg-amber-50 p-4 rounded-xl border border-amber-200">
                                 <span class="text-[10px] font-extrabold text-amber-700 uppercase tracking-wider block">Dilewati (Skip)</span>
-                                <div class="text-xl font-black text-amber-700 font-mono mt-0.5" x-text="importResult?.summary?.skipped || 0"></div>
+                                <div class="text-xl font-black text-amber-700 font-mono mt-0.5" x-text="Number(importResult?.summary?.skipped || 0).toLocaleString('id-ID')"></div>
                             </div>
                         </div>
 

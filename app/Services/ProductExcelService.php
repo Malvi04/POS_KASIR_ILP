@@ -613,9 +613,11 @@ class ProductExcelService
                 @unlink($tempPath);
             }
 
-            // Clear catalog cache
+            // Clear catalog and KPI caches
             Cache::forget('products_catalog');
             Cache::forget('products_kpi_summary');
+            Cache::forget('products_kpi_summary_' . today()->toDateString());
+            Cache::forget('products_categories_distinct');
 
             return [
                 'success' => true,
@@ -699,35 +701,75 @@ class ProductExcelService
                 DB::table('products')->upsert($records, ['sku'], $updateColumns);
             }
 
-            // Sync warehouse location stock if warehouse exists
-            if ($warehouseLocId) {
-                $skus = array_column($records, 'sku');
-                $skuToId = DB::table('products')->whereIn('sku', $skus)->pluck('id', 'sku');
+            // Sync product stocks across Gudang Pusat and retail store branches
+            $skus = array_column($records, 'sku');
+            $skuToId = DB::table('products')->whereIn('sku', $skus)->pluck('id', 'sku');
 
-                $stockBatch = [];
-                $now = now();
-                foreach ($records as $r) {
-                    $pId = $skuToId[$r['sku']] ?? null;
-                    if ($pId) {
-                        $stockBatch[] = [
-                            'product_id' => $pId,
-                            'location_id' => $warehouseLocId,
-                            'stock' => (int) ($r['qty_produk'] ?? 0),
-                            'min_stock' => (int) ($r['minimum_stock'] ?? 5),
-                            'is_active' => true,
-                            'created_at' => $now,
-                            'updated_at' => $now,
-                        ];
+            $allLocations = DB::table('locations')->where('is_active', true)->get(['id', 'code', 'type']);
+            $warehouseLoc = $allLocations->firstWhere('code', 'GDG-001') ?? $allLocations->firstWhere('type', 'WAREHOUSE');
+            $mainStoreLoc = $allLocations->firstWhere('code', 'CAB-001');
+
+            $stockBatch = [];
+            $now = now();
+            foreach ($records as $r) {
+                $pId = $skuToId[$r['sku']] ?? null;
+                if (!$pId) continue;
+
+                $qty = (int) ($r['qty_produk'] ?? 0);
+                $minStock = (int) ($r['minimum_stock'] ?? 5);
+
+                // 1. Gudang Pusat (Warehouse)
+                if ($warehouseLoc) {
+                    $stockBatch[] = [
+                        'product_id' => $pId,
+                        'location_id' => $warehouseLoc->id,
+                        'stock' => $qty,
+                        'min_stock' => $minStock,
+                        'is_active' => true,
+                        'version' => 1,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ];
+                }
+
+                // 2. Toko Pusat (CAB-001) gets initial stock from import so POS can transact immediately
+                if ($mainStoreLoc && (!$warehouseLoc || $mainStoreLoc->id !== $warehouseLoc->id)) {
+                    $stockBatch[] = [
+                        'product_id' => $pId,
+                        'location_id' => $mainStoreLoc->id,
+                        'stock' => $qty,
+                        'min_stock' => $minStock,
+                        'is_active' => true,
+                        'version' => 1,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ];
+                }
+
+                // 3. Other store locations registered in catalog
+                foreach ($allLocations as $loc) {
+                    if (($warehouseLoc && $loc->id === $warehouseLoc->id) || ($mainStoreLoc && $loc->id === $mainStoreLoc->id)) {
+                        continue;
                     }
+                    $stockBatch[] = [
+                        'product_id' => $pId,
+                        'location_id' => $loc->id,
+                        'stock' => 0,
+                        'min_stock' => $minStock,
+                        'is_active' => true,
+                        'version' => 1,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ];
                 }
+            }
 
-                if (!empty($stockBatch)) {
-                    DB::table('product_stocks')->upsert(
-                        $stockBatch,
-                        ['product_id', 'location_id'],
-                        ['stock', 'min_stock', 'is_active', 'updated_at']
-                    );
-                }
+            if (!empty($stockBatch)) {
+                DB::table('product_stocks')->upsert(
+                    $stockBatch,
+                    ['product_id', 'location_id'],
+                    ['stock', 'min_stock', 'is_active', 'updated_at']
+                );
             }
         });
     }

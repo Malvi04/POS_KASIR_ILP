@@ -137,23 +137,46 @@ class ProductController extends Controller
             $query->where('supplier_id', $supplierId);
         }
 
-        $kpi = \Illuminate\Support\Facades\Cache::remember('products_kpi_summary_' . $today->toDateString(), 60, function () use ($today) {
-            $raw = Product::selectRaw(
-                'COUNT(*) as total_products,'
-                . ' COALESCE(SUM(CASE WHEN stock <= min_stock AND stock > 0 THEN 1 ELSE 0 END), 0) as low_stock_count,'
-                . ' COALESCE(SUM(CASE WHEN stock <= 0 THEN 1 ELSE 0 END), 0) as out_of_stock_count,'
-                . ' COALESCE(SUM(CASE WHEN expired_date IS NOT NULL AND expired_date BETWEEN ? AND ? THEN 1 ELSE 0 END), 0) as critical_expired_count,'
-                . ' COALESCE(SUM(CASE WHEN expired_date IS NOT NULL AND expired_date BETWEEN ? AND ? THEN 1 ELSE 0 END), 0) as warning_expired_count,'
-                . ' COALESCE(SUM(CASE WHEN is_consignment THEN 1 ELSE 0 END), 0) as consignment_count,'
-                . ' COALESCE(SUM(stock), 0) as total_stock_units,'
-                . ' COALESCE(SUM(stock * cost_price), 0) as total_inventory_value',
-                [
-                    $today->toDateString(),
-                    $today->copy()->addDays(14)->toDateString(),
-                    $today->copy()->addDays(15)->toDateString(),
-                    $today->copy()->addDays(30)->toDateString(),
-                ]
-            )->first();
+        $kpiKey = 'products_kpi_summary_' . ($targetLocation ? $targetLocation->id : 'all') . '_' . $today->toDateString();
+        $kpi = \Illuminate\Support\Facades\Cache::remember($kpiKey, 60, function () use ($today, $targetLocation) {
+            if ($targetLocation) {
+                $raw = ProductStock::where('location_id', $targetLocation->id)
+                    ->where('is_active', true)
+                    ->join('products', 'products.id', '=', 'product_stocks.product_id')
+                    ->selectRaw(
+                        'COUNT(*) as total_products,'
+                        . ' COALESCE(SUM(CASE WHEN product_stocks.stock <= product_stocks.min_stock AND product_stocks.stock > 0 THEN 1 ELSE 0 END), 0) as low_stock_count,'
+                        . ' COALESCE(SUM(CASE WHEN product_stocks.stock <= 0 THEN 1 ELSE 0 END), 0) as out_of_stock_count,'
+                        . ' COALESCE(SUM(CASE WHEN products.expired_date IS NOT NULL AND products.expired_date BETWEEN ? AND ? THEN 1 ELSE 0 END), 0) as critical_expired_count,'
+                        . ' COALESCE(SUM(CASE WHEN products.expired_date IS NOT NULL AND products.expired_date BETWEEN ? AND ? THEN 1 ELSE 0 END), 0) as warning_expired_count,'
+                        . ' COALESCE(SUM(CASE WHEN products.is_consignment THEN 1 ELSE 0 END), 0) as consignment_count,'
+                        . ' COALESCE(SUM(product_stocks.stock), 0) as total_stock_units,'
+                        . ' COALESCE(SUM(product_stocks.stock * products.cost_price), 0) as total_inventory_value',
+                        [
+                            $today->toDateString(),
+                            $today->copy()->addDays(14)->toDateString(),
+                            $today->copy()->addDays(15)->toDateString(),
+                            $today->copy()->addDays(30)->toDateString(),
+                        ]
+                    )->first();
+            } else {
+                $raw = Product::selectRaw(
+                    'COUNT(*) as total_products,'
+                    . ' COALESCE(SUM(CASE WHEN stock <= min_stock AND stock > 0 THEN 1 ELSE 0 END), 0) as low_stock_count,'
+                    . ' COALESCE(SUM(CASE WHEN stock <= 0 THEN 1 ELSE 0 END), 0) as out_of_stock_count,'
+                    . ' COALESCE(SUM(CASE WHEN expired_date IS NOT NULL AND expired_date BETWEEN ? AND ? THEN 1 ELSE 0 END), 0) as critical_expired_count,'
+                    . ' COALESCE(SUM(CASE WHEN expired_date IS NOT NULL AND expired_date BETWEEN ? AND ? THEN 1 ELSE 0 END), 0) as warning_expired_count,'
+                    . ' COALESCE(SUM(CASE WHEN is_consignment THEN 1 ELSE 0 END), 0) as consignment_count,'
+                    . ' COALESCE(SUM(stock), 0) as total_stock_units,'
+                    . ' COALESCE(SUM(stock * cost_price), 0) as total_inventory_value',
+                    [
+                        $today->toDateString(),
+                        $today->copy()->addDays(14)->toDateString(),
+                        $today->copy()->addDays(15)->toDateString(),
+                        $today->copy()->addDays(30)->toDateString(),
+                    ]
+                )->first();
+            }
 
             return $raw ? [
                 'total_products' => (int) $raw->total_products,
