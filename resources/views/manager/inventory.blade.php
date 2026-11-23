@@ -3392,7 +3392,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
              x-cloak
              class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-xs"
              style="display: none;">
-            <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+            <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150"
                  @click.away="if (importStep !== 'processing') showImportModal = false">
                 
                 <!-- Modal Header -->
@@ -3724,70 +3724,93 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
                         <!-- Preview Table with High-Volume Pagination and Color-Coded Rows -->
                         <div class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs space-y-0">
-                            <div class="p-3 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
-                                <div class="flex items-center gap-2">
-                                    <span class="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                                        <span class="material-symbols-rounded text-[16px] text-slate-500">table_view</span>
+                            <!-- Table Card Header (Row 1: Title, Badge & Per Page) -->
+                            <div class="px-4 py-3 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div class="flex items-center gap-2.5 flex-wrap">
+                                    <span class="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                                        <span class="material-symbols-rounded text-[18px] text-[#0052cc]">table_view</span>
                                         <span>Pratinjau Data (Struktur 19 Kolom Standar)</span>
                                     </span>
-                                    <span class="text-[11px] font-mono px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 font-bold"
-                                          x-text="(getFilteredPreviewRows().length) + ' dari ' + (validationData?.summary?.total_rows || validationData?.preview_rows?.length || 0) + ' baris'"></span>
+                                    <span class="text-xs font-mono px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-700 font-bold whitespace-nowrap"
+                                          x-text="(getFilteredPreviewRows().length.toLocaleString('id-ID')) + ' dari ' + ((validationData?.summary?.total_rows || validationData?.preview_rows?.length || 0).toLocaleString('id-ID')) + ' baris'"></span>
                                 </div>
 
-                                <!-- Filter Buttons, Search & Per Page -->
-                                <div class="flex flex-wrap items-center gap-1.5 text-xs">
-                                    <!-- Search input -->
-                                    <div class="relative">
-                                        <input type="text" x-model="importPreviewSearch" @input="importPreviewPage = 1" placeholder="Cari baris/SKU/nama..."
-                                               class="h-7 text-[11px] pl-6 pr-2 bg-white border border-slate-300 rounded-lg text-slate-700 focus:ring-1 focus:ring-[#0052cc] w-36">
-                                        <span class="material-symbols-rounded absolute left-1.5 top-1.5 text-slate-400 text-[14px]">search</span>
-                                    </div>
+                                <!-- Per Page Selector -->
+                                <div class="flex items-center gap-2 text-xs shrink-0">
+                                    <span class="text-[11px] text-slate-500 font-medium whitespace-nowrap">Tampilkan:</span>
+                                    <select x-model="importPreviewPerPage" @change="importPreviewPage = 1"
+                                            class="text-xs py-1 px-2.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-700 shadow-2xs focus:ring-2 focus:ring-[#0052cc] focus:border-transparent cursor-pointer">
+                                        <option value="50">50 baris</option>
+                                        <option value="100">100 baris</option>
+                                        <option value="250">250 baris</option>
+                                        <option value="500">500 baris</option>
+                                        <option value="all">Semua baris</option>
+                                    </select>
+                                </div>
+                            </div>
 
-                                    <!-- Filter tabs -->
+                            <!-- Table Controls Toolbar (Row 2: Filter Tabs & Search Bar) -->
+                            <div class="p-3 bg-white border-b border-slate-200 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                                <!-- Filter Tabs (Pills) -->
+                                <div class="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0">
+                                    <!-- Tab: Semua -->
                                     <button type="button" @click="importPreviewFilter = 'all'; importPreviewPage = 1"
-                                            class="px-2 py-1 rounded-lg font-bold text-[11px] transition-colors cursor-pointer"
-                                            :class="importPreviewFilter === 'all' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">
-                                        Semua
-                                    </button>
-                                    <button type="button" @click="importPreviewFilter = 'error'; importPreviewPage = 1"
-                                            class="px-2 py-1 rounded-lg font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
-                                            :class="importPreviewFilter === 'error' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'">
-                                        <span>Baris Error</span>
-                                        <span class="px-1 py-0.2 rounded-full text-[10px]"
-                                              :class="importPreviewFilter === 'error' ? 'bg-rose-800 text-white' : 'bg-rose-200 text-rose-800'"
-                                              x-text="validationData?.summary?.error_rows || 0"></span>
-                                    </button>
-                                    <button type="button" @click="importPreviewFilter = 'existing'; importPreviewPage = 1"
-                                            class="px-2 py-1 rounded-lg font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
-                                            :class="importPreviewFilter === 'existing' ? 'bg-[#0052cc] text-white' : 'bg-blue-50 text-[#0052cc] hover:bg-blue-100'">
-                                        <span>Produk Terdaftar</span>
-                                        <span class="px-1 py-0.2 rounded-full text-[10px]"
-                                              :class="importPreviewFilter === 'existing' ? 'bg-blue-900 text-white' : 'bg-blue-200 text-blue-900'"
-                                              x-text="validationData?.summary?.existing_in_db_count || 0"></span>
-                                    </button>
-                                    <button type="button" @click="importPreviewFilter = 'new'; importPreviewPage = 1"
-                                            class="px-2 py-1 rounded-lg font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
-                                            :class="importPreviewFilter === 'new' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'">
-                                        <span>Baru</span>
+                                            class="px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 shrink-0"
+                                            :class="importPreviewFilter === 'all' ? 'bg-slate-900 text-white shadow-2xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">
+                                        <span>Semua</span>
+                                        <span class="px-1.5 py-0.5 rounded-full text-[10px] font-mono"
+                                              :class="importPreviewFilter === 'all' ? 'bg-slate-700 text-slate-200' : 'bg-slate-200 text-slate-700'"
+                                              x-text="(validationData?.preview_rows?.length || 0).toLocaleString('id-ID')"></span>
                                     </button>
 
-                                    <!-- Per Page Selector -->
-                                    <div class="flex items-center gap-1 ml-1 text-slate-500 text-[11px]">
-                                        <span>Baris:</span>
-                                        <select x-model="importPreviewPerPage" @change="importPreviewPage = 1"
-                                                class="text-[11px] py-0.5 px-2 bg-white border border-slate-300 rounded-md font-semibold text-slate-700 focus:ring-1 focus:ring-[#0052cc]">
-                                            <option value="50">50</option>
-                                            <option value="100">100</option>
-                                            <option value="250">250</option>
-                                            <option value="500">500</option>
-                                            <option value="all">Semua</option>
-                                        </select>
-                                    </div>
+                                    <!-- Tab: Baru -->
+                                    <button type="button" @click="importPreviewFilter = 'new'; importPreviewPage = 1"
+                                            class="px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 shrink-0"
+                                            :class="importPreviewFilter === 'new' ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'">
+                                        <span class="material-symbols-rounded text-[14px]">add_circle</span>
+                                        <span>Baru</span>
+                                        <span class="px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold"
+                                              :class="importPreviewFilter === 'new' ? 'bg-emerald-800 text-emerald-100' : 'bg-emerald-200 text-emerald-900'"
+                                              x-text="Math.max(0, (validationData?.summary?.valid_rows || 0) - (validationData?.summary?.existing_in_db_count || 0)).toLocaleString('id-ID')"></span>
+                                    </button>
+
+                                    <!-- Tab: Produk Terdaftar -->
+                                    <button type="button" @click="importPreviewFilter = 'existing'; importPreviewPage = 1"
+                                            class="px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 shrink-0"
+                                            :class="importPreviewFilter === 'existing' ? 'bg-[#0052cc] text-white shadow-2xs' : 'bg-blue-50 text-[#0052cc] hover:bg-blue-100 border border-blue-200'">
+                                        <span class="material-symbols-rounded text-[14px]">verified</span>
+                                        <span>Terdaftar di DB</span>
+                                        <span class="px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold"
+                                              :class="importPreviewFilter === 'existing' ? 'bg-blue-900 text-blue-100' : 'bg-blue-200 text-blue-950'"
+                                              x-text="(validationData?.summary?.existing_in_db_count || 0).toLocaleString('id-ID')"></span>
+                                    </button>
+
+                                    <!-- Tab: Baris Error -->
+                                    <button type="button" @click="importPreviewFilter = 'error'; importPreviewPage = 1"
+                                            class="px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 shrink-0"
+                                            :class="importPreviewFilter === 'error' ? 'bg-rose-600 text-white shadow-2xs' : 'bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-200'">
+                                        <span class="material-symbols-rounded text-[14px]">error</span>
+                                        <span>Baris Error</span>
+                                        <span class="px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold"
+                                              :class="importPreviewFilter === 'error' ? 'bg-rose-800 text-rose-100' : 'bg-rose-200 text-rose-900'"
+                                              x-text="(validationData?.summary?.error_rows || 0).toLocaleString('id-ID')"></span>
+                                    </button>
+                                </div>
+
+                                <!-- Search Input (Clean & Centered Icon) -->
+                                <div class="relative w-full lg:w-72 shrink-0">
+                                    <span class="material-symbols-rounded absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[18px] pointer-events-none">search</span>
+                                    <input type="text" x-model="importPreviewSearch" @input="importPreviewPage = 1" placeholder="Cari baris, SKU, nama barang..."
+                                           class="w-full h-9 pl-9 pr-8 text-xs bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0052cc] focus:border-transparent transition-all shadow-2xs">
+                                    <button type="button" x-show="importPreviewSearch" @click="importPreviewSearch = ''; importPreviewPage = 1"
+                                            class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-0.5 rounded cursor-pointer">
+                                        <span class="material-symbols-rounded text-[16px]">close</span>
+                                    </button>
                                 </div>
                             </div>
 
                             <!-- Table Scroll Container -->
-                            <div class="max-h-80 overflow-x-auto overflow-y-auto">
+                            <div class="max-h-[460px] overflow-x-auto overflow-y-auto">
                                 <table class="w-full text-left text-xs whitespace-nowrap border-collapse">
                                     <thead class="bg-slate-100 text-slate-600 font-bold sticky top-0 border-b border-slate-200 text-[11px] z-10">
                                         <tr>
