@@ -3,6 +3,11 @@
 @section('title', 'Barang Masuk (Transfer Gudang) - ILP POS')
 
 @section('content')
+@php
+    $currentUser = auth()->user();
+    $activeBranches = $currentUser ? $currentUser->getActiveAssignedBranches() : ['Pusat'];
+    $defaultBranch = !empty($activeBranches) ? $activeBranches[0] : 'Pusat';
+@endphp
 <div x-data="{
     ...cashierOpeningData(),
     searchQuery: '',
@@ -14,21 +19,53 @@
     toastMessage: '',
     showToast: false,
 
+    userAssignedBranches: @js($activeBranches),
+    defaultCashierBranch: @js($defaultBranch),
+    selectedBranch: (function() {
+        try {
+            const s = localStorage.getItem('pos_kasir_branch');
+            if (s) return s;
+        } catch(e) {}
+        return @js($defaultBranch);
+    })(),
+    isLoadingDocs: false,
+
     documents: [],
+
+    isAssignedToBranch(branchName) {
+        if (!branchName) return false;
+        const norm = this.normalizeBranchName(branchName);
+        if (!this.userAssignedBranches || !this.userAssignedBranches.length) return true;
+        return this.userAssignedBranches.some(b => this.normalizeBranchName(b) === norm);
+    },
 
     getActiveCashierBranch() {
         if (this.activeSession && this.activeSession.storeLocation && this.activeSession.status === 'OPEN') {
             return this.normalizeBranchName(this.activeSession.storeLocation);
         }
-        if (this.selectedBranch) {
+        if (this.selectedBranch && this.isAssignedToBranch(this.selectedBranch)) {
             return this.normalizeBranchName(this.selectedBranch);
         }
         const stored = localStorage.getItem('pos_kasir_branch');
-        if (stored) {
+        if (stored && this.isAssignedToBranch(stored)) {
             return this.normalizeBranchName(stored);
+        }
+        if (this.defaultCashierBranch) {
+            return this.normalizeBranchName(this.defaultCashierBranch);
         }
         const userBranch = '{{ auth()->user()?->branch ?? "" }}';
         return this.normalizeBranchName(userBranch || 'Pusat');
+    },
+
+    selectCashierBranch(branchName) {
+        const norm = this.normalizeBranchName(branchName);
+        this.selectedBranch = norm;
+        this.selectedLocation = norm;
+        try {
+            localStorage.setItem('pos_kasir_branch', norm);
+            localStorage.setItem('pos_kasir_location', norm);
+        } catch(e) {}
+        this.refreshDocsFromServer(true);
     },
 
     isDocForCurrentBranch(doc, targetBranch) {
@@ -36,19 +73,22 @@
         const b = (targetBranch || this.getActiveCashierBranch() || 'Pusat').toLowerCase();
         const dest = (doc.destinationStore || '').toLowerCase();
         if (b.includes('pusat')) {
-            return dest.includes('pusat') || dest.includes('minimarket');
+            return dest.includes('pusat') || dest.includes('minimarket') || doc.to_location_id === 2;
         }
         if (b.includes('cabang a') || b.includes('sektor a') || b.includes('cabang 1')) {
-            return dest.includes('cabang a') || dest.includes('sektor a') || dest.includes('cabang 1');
+            return dest.includes('cabang a') || dest.includes('sektor a') || dest.includes('cabang 1') || doc.to_location_id === 3;
         }
         if (b.includes('cabang b') || b.includes('sektor b') || b.includes('cabang 2')) {
-            return dest.includes('cabang b') || dest.includes('sektor b') || dest.includes('cabang 2');
+            return dest.includes('cabang b') || dest.includes('sektor b') || dest.includes('cabang 2') || doc.to_location_id === 4;
         }
-        return dest === b;
+        return dest === b || (doc.destinationStore && doc.destinationStore.toLowerCase() === b);
     },
 
     async initGoodsIn() {
         const branch = this.getActiveCashierBranch();
+        this.selectedBranch = branch;
+        try { localStorage.setItem('pos_kasir_branch', branch); } catch(e) {}
+
         const storageKey = 'pos_ilp_goods_in_docs_v1_' + branch;
         let localDocs = [];
         const stored = localStorage.getItem(storageKey);
@@ -81,14 +121,22 @@
             this.refreshDocsFromServer();
         });
 
+        window.addEventListener('pos:branch-synced', () => {
+            this.refreshDocsFromServer();
+        });
+
         window.addEventListener('pos:sync-all', () => {
             this.refreshDocsFromServer();
         });
     },
 
-    async refreshDocsFromServer() {
+    async refreshDocsFromServer(showFeedback = false) {
+        this.isLoadingDocs = true;
         try {
             const branch = this.getActiveCashierBranch();
+            this.selectedBranch = branch;
+            try { localStorage.setItem('pos_kasir_branch', branch); } catch(e) {}
+
             const res = await fetch('/api/goods-receipts?branch=' + encodeURIComponent(branch), {
                 headers: { 'Accept': 'application/json' }
             });
@@ -97,10 +145,20 @@
                 if (json.success && Array.isArray(json.data)) {
                     this.documents = json.data.filter(d => this.isDocForCurrentBranch(d, branch));
                     this.saveDocs();
+                    if (showFeedback) {
+                        this.showToastNotice(`Data barang masuk ${branch} berhasil dimuat (${this.documents.length} dokumen).`);
+                    }
                 }
+            } else if (showFeedback) {
+                this.showToastNotice('Gagal memuat data barang masuk dari server.');
             }
         } catch(e) {
             console.warn('API goods-receipts fetch error:', e);
+            if (showFeedback) {
+                this.showToastNotice('Terjadi kesalahan jaringan saat memuat data barang masuk.');
+            }
+        } finally {
+            this.isLoadingDocs = false;
         }
     },
 
@@ -401,7 +459,21 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             </div>
                             <div class="flex flex-col">
                                 <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">GERAI PENERIMA</span>
-                                <span class="text-xs font-black text-[#0052cc]" x-text="getActiveCashierBranch()">Pusat</span>
+                                <template x-if="userAssignedBranches && userAssignedBranches.length > 1">
+                                    <div class="relative mt-0.5">
+                                        <select :value="getActiveCashierBranch()" 
+                                                @change="selectCashierBranch($event.target.value)"
+                                                class="text-xs font-black text-[#0052cc] bg-transparent border-none pr-5 py-0 focus:outline-none cursor-pointer appearance-none font-sans">
+                                            <template x-for="b in userAssignedBranches" :key="b">
+                                                <option :value="normalizeBranchName(b)" x-text="normalizeBranchName(b)" :selected="getActiveCashierBranch() === normalizeBranchName(b)"></option>
+                                            </template>
+                                        </select>
+                                        <span class="material-symbols-rounded text-[14px] text-[#0052cc] absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none">expand_more</span>
+                                    </div>
+                                </template>
+                                <template x-if="!userAssignedBranches || userAssignedBranches.length <= 1">
+                                    <span class="text-xs font-black text-[#0052cc]" x-text="getActiveCashierBranch()">Pusat</span>
+                                </template>
                             </div>
                         </div>
 
@@ -509,6 +581,16 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                             </select>
                             <span class="material-symbols-rounded absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-[20px]">expand_more</span>
                         </div>
+
+                        <!-- Tombol Muat Ulang / Segarkan Data -->
+                        <button type="button" 
+                                @click="refreshDocsFromServer(true)" 
+                                :disabled="isLoadingDocs"
+                                title="Segarkan dan muat ulang data pengiriman dari Gudang Pusat"
+                                class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-blue-50 hover:bg-blue-100 text-[#0052cc] rounded-xl text-[13px] font-bold border border-blue-200 transition-colors shadow-xs cursor-pointer disabled:opacity-50">
+                            <span class="material-symbols-rounded text-[18px]" :class="{ 'animate-spin': isLoadingDocs }">sync</span>
+                            <span x-text="isLoadingDocs ? 'Memuat...' : 'Muat Data'"></span>
+                        </button>
                     </div>
                 </div>
 
@@ -670,7 +752,20 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 </template>
                                 <tr x-show="!filteredDocuments || filteredDocuments.length === 0">
                                     <td colspan="14" class="py-12 text-center text-slate-400 font-medium">
-                                        Belum ada dokumen penerimaan barang.
+                                        <div class="flex flex-col items-center justify-center gap-2 max-w-md mx-auto">
+                                            <div class="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mb-1">
+                                                <span class="material-symbols-rounded text-2xl">inbox</span>
+                                            </div>
+                                            <p class="text-sm font-bold text-gray-700">Belum ada dokumen penerimaan barang untuk <span class="text-[#0052cc]" x-text="getActiveCashierBranch()"></span>.</p>
+                                            <p class="text-xs text-gray-500">Pastikan Manager telah mengirimkan barang ke cabang ini dari menu <strong>Kirim Barang</strong>.</p>
+                                            <button type="button" 
+                                                    @click="refreshDocsFromServer(true)" 
+                                                    :disabled="isLoadingDocs"
+                                                    class="mt-2 inline-flex items-center gap-1.5 px-4 py-2 bg-[#0052cc] hover:bg-[#0043a8] text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50">
+                                                <span class="material-symbols-rounded text-[16px]" :class="{ 'animate-spin': isLoadingDocs }">sync</span>
+                                                <span x-text="isLoadingDocs ? 'Memuat...' : 'Muat Ulang Data Barang Masuk'"></span>
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             </tbody>

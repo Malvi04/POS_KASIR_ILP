@@ -361,7 +361,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 :disabled="isSyncingToPos"
                                 class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50">
                             <span class="material-symbols-rounded text-[18px]"
-                                  :class="isSyncingToPos ? 'animate-spin' : ''">cloud_download</span>
+                                  :class="isSyncingToPos ? 'animate-spin' : ''">sync</span>
                             <span x-text="isSyncingToPos ? 'Memuat Data Produk UMKM...' : 'Load Data Produk UMKM'"></span>
                         </button>
 
@@ -500,9 +500,11 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                             <p class="text-xs text-gray-500 mt-1">Produk UMKM dari Gudang Pusat harus dikirim terlebih dahulu ke cabang ini melalui menu <strong>Kirim Barang</strong> di akun Manager, lalu klik <strong>Load Data Produk UMKM</strong>.</p>
                                             <button type="button"
                                                     @click="loadDataProdukUmkm(false)"
-                                                    class="mt-4 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer">
-                                                <span class="material-symbols-rounded text-[16px]">cloud_download</span>
-                                                <span>Load Data Produk UMKM Cabang Ini</span>
+                                                    :disabled="isSyncingToPos"
+                                                    class="mt-4 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer active:scale-95 disabled:opacity-50">
+                                                <span class="material-symbols-rounded text-[16px]"
+                                                      :class="isSyncingToPos ? 'animate-spin' : ''">sync</span>
+                                                <span x-text="isSyncingToPos ? 'Memuat Data Produk UMKM...' : 'Load Data Produk UMKM Cabang Ini'"></span>
                                             </button>
                                         </td>
                                     </tr>

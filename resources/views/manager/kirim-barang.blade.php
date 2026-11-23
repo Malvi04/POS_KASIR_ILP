@@ -131,10 +131,28 @@
         this.availableProducts = [];
     },
 
-    saveDocuments() {
+    saveDocuments(targetBranch = null) {
         if (window.PosRealtime) {
-            window.PosRealtime.broadcast('goods_in_updated', { documents: this.documents });
+            window.PosRealtime.broadcast('goods_in_updated', { 
+                branch: targetBranch, 
+                documents: this.documents 
+            });
         }
+        try {
+            // Sinkronkan dokumen lokal ke localStorage cabang tujuan (jika di browser yang sama)
+            const branchesToSync = targetBranch ? [targetBranch] : ['Cabang A', 'Cabang B', 'Toko Pusat', 'Pusat'];
+            branchesToSync.forEach(b => {
+                const bNorm = b.toLowerCase();
+                const branchDocs = this.documents.filter(d => {
+                    const dest = (d.destinationStore || '').toLowerCase();
+                    if (bNorm.includes('pusat')) return dest.includes('pusat');
+                    if (bNorm.includes('cabang a')) return dest.includes('cabang a');
+                    if (bNorm.includes('cabang b')) return dest.includes('cabang b');
+                    return dest === bNorm;
+                });
+                localStorage.setItem('pos_ilp_goods_in_docs_v1_' + b, JSON.stringify(branchDocs));
+            });
+        } catch (e) {}
     },
 
     get filteredDocuments() {
@@ -383,7 +401,7 @@
 
             // Simpan dokumen pengiriman
             this.documents.unshift(newDoc);
-            this.saveDocuments();
+            this.saveDocuments(newDoc.destinationStore);
             await this.loadAvailableProducts();
 
             this.showCreateModal = false;
@@ -476,7 +494,7 @@
         doc.sentAt = `${dateStr} • ${timeStr}`;
 
         await this.loadAvailableProducts();
-        this.saveDocuments();
+        this.saveDocuments(doc.destinationStore);
 
         if (this.selectedDoc && this.selectedDoc.id === doc.id) {
             this.selectedDoc = JSON.parse(JSON.stringify(doc));
@@ -509,7 +527,7 @@
         }
 
         doc.status = 'DIBATALKAN';
-        this.saveDocuments();
+        this.saveDocuments(doc.destinationStore);
 
         if (this.selectedDoc && this.selectedDoc.id === doc.id) {
             this.selectedDoc = JSON.parse(JSON.stringify(doc));

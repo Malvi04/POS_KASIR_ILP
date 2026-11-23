@@ -45,20 +45,33 @@ class GoodsReceiptController extends Controller
         $reqLocationId = $request->integer('location_id') ?: null;
 
         $targetLoc = null;
-        if ($reqLocationId || $reqBranch) {
+        if ($user && $user->isKasir()) {
+            $userActiveBranches = $user->getActiveAssignedBranches();
+            $resolvedBranch = null;
+            if ($reqBranch) {
+                foreach ($userActiveBranches as $ab) {
+                    if (strcasecmp($ab, $reqBranch) === 0 || str_contains(strtolower($reqBranch), strtolower($ab)) || str_contains(strtolower($ab), strtolower($reqBranch))) {
+                        $resolvedBranch = $ab;
+                        break;
+                    }
+                }
+            }
+            if (!$resolvedBranch && !empty($userActiveBranches)) {
+                $resolvedBranch = $userActiveBranches[0];
+            }
+            $targetLoc = $this->stockService->resolveLocation(
+                $reqLocationId,
+                $resolvedBranch ?: $user->branch,
+                null,
+                $user,
+                'STORE'
+            );
+        } elseif ($reqLocationId || $reqBranch) {
             $targetLoc = $this->stockService->resolveLocation(
                 $reqLocationId,
                 $reqBranch,
                 null,
                 null,
-                'STORE'
-            );
-        } elseif ($user && $user->isKasir()) {
-            $targetLoc = $this->stockService->resolveLocation(
-                null,
-                $user->branch,
-                null,
-                $user,
                 'STORE'
             );
         }

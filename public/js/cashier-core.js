@@ -104,8 +104,20 @@
 
             return {
                 selectedShift: 'POS-01',
-                selectedBranch: 'Pusat',
-                selectedLocation: 'Pusat',
+                selectedBranch: (function() {
+                    try {
+                        const stored = localStorage.getItem('pos_kasir_branch');
+                        if (stored) return stored;
+                    } catch(e) {}
+                    return 'Pusat';
+                })(),
+                selectedLocation: (function() {
+                    try {
+                        const stored = localStorage.getItem('pos_kasir_location') || localStorage.getItem('pos_kasir_branch');
+                        if (stored) return stored;
+                    } catch(e) {}
+                    return 'Pusat';
+                })(),
                 branchAssignmentError: '',
                 terminalInactiveNotice: '',
                 businessDayDate: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
@@ -659,6 +671,9 @@
                         this.selectedLocation = targetBranch;
                         localStorage.setItem('pos_kasir_branch', targetBranch);
                         localStorage.setItem('pos_kasir_location', targetBranch);
+                        try {
+                            window.dispatchEvent(new CustomEvent('pos:branch-synced', { detail: { branch: targetBranch } }));
+                        } catch(e) {}
                     } else {
                         this.selectedBranch = currentBranchNorm;
                         this.selectedLocation = currentBranchNorm;
