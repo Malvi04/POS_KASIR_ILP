@@ -112,7 +112,7 @@ class User extends Authenticatable
                 [
                     'branch' => 'Pusat',
                     'status' => 'AKTIF',
-                    'assignedAt' => $this->created_at ? $this->created_at->format('Y-m-d') : 'Otomatis'
+                    'assignedAt' => $this->created_at ? ($this->created_at instanceof \Carbon\CarbonInterface ? $this->created_at->format('Y-m-d') : substr((string) $this->created_at, 0, 10)) : 'Otomatis'
                 ]
             ];
         }
@@ -127,7 +127,7 @@ class User extends Authenticatable
             $list[] = [
                 'branch' => $p,
                 'status' => 'AKTIF',
-                'assignedAt' => $this->created_at ? $this->created_at->format('Y-m-d') : 'Otomatis'
+                'assignedAt' => $this->created_at ? ($this->created_at instanceof \Carbon\CarbonInterface ? $this->created_at->format('Y-m-d') : substr((string) $this->created_at, 0, 10)) : 'Otomatis'
             ];
         }
 
