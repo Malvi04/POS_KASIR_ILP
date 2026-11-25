@@ -32,7 +32,7 @@ class AuthController extends Controller
         foreach (self::ROLE_SLOTS as $s) {
             $key = "pos_auth_uid_{$s}";
             $val = ($request->hasSession() ? $request->session()->get($key) : null) ?? $request->cookie($key);
-            if ($val) {
+            if ($val && is_numeric($val)) {
                 $existingSlots[$key] = (int) $val;
             }
         }
@@ -93,7 +93,7 @@ class AuthController extends Controller
                         ?? $request->cookie('pos_auth_uid_kasir')
                         ?? (Auth::check() && Auth::user()?->isKasir() ? Auth::id() : null);
 
-                    $kasirUser = $kasirUid ? User::find((int) $kasirUid) : null;
+                    $kasirUser = ($kasirUid && is_numeric($kasirUid)) ? User::find((int) $kasirUid) : null;
                     if ($kasirUser) {
                         \App\Services\AttendanceService::recordCashierCheckOut(
                             user: $kasirUser,
@@ -115,7 +115,7 @@ class AuthController extends Controller
                 }
                 $uid = ($request->hasSession() ? $request->session()->get("pos_auth_uid_{$s}") : null)
                     ?? $request->cookie("pos_auth_uid_{$s}");
-                if ($uid) {
+                if ($uid && is_numeric($uid)) {
                     $candidate = User::where('id', (int) $uid)->where('is_active', true)->first();
                     if ($candidate) {
                         $remainingUser = $candidate;

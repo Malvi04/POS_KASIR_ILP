@@ -20,7 +20,7 @@ class EnsureApiAuthenticated
         $getSlotUser = function (string $slot) use ($request): ?User {
             $uid = ($request->hasSession() ? $request->session()->get("pos_auth_uid_{$slot}") : null)
                 ?? $request->cookie("pos_auth_uid_{$slot}");
-            if (!$uid) {
+            if (!$uid || !is_numeric($uid)) {
                 return null;
             }
             $found = User::find((int) $uid);
