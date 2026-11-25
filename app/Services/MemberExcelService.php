@@ -568,6 +568,7 @@ class MemberExcelService
                 }
 
                 $rowPayload = [
+                    'uuid' => (string) Str::uuid7(),
                     'customer_id' => $r['customer_id'],
                     'member_code' => $r['member_code'],
                     'kode_out' => $r['kode_out'],

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\HasUuidV7;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,9 +10,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Transaction extends Model
 {
-    use HasFactory;
+    use HasFactory, HasUuidV7;
 
     protected $fillable = [
+        'uuid',
         'invoice_number',
         'offline_id',
         'shift_id',
@@ -41,6 +43,8 @@ class Transaction extends Model
         'voided_at',
         'voided_by',
         'void_reason',
+        'synced_at',
+        'sync_error',
     ];
 
     protected $casts = [
@@ -54,6 +58,7 @@ class Transaction extends Model
         'split_non_cash' => 'float',
         'is_over_limit' => 'boolean',
         'voided_at' => 'datetime',
+        'synced_at' => 'datetime',
     ];
 
     public function shift(): BelongsTo

@@ -455,3 +455,22 @@ Route::prefix('notifications')->middleware('auth.api')->group(function () {
     Route::delete('/{id}', [NotificationController::class, 'destroy']);
 });
 
+/*
+|--------------------------------------------------------------------------
+| Modul F: Background Sync Receiver (Local Cashier Nodes -> Central Server)
+|--------------------------------------------------------------------------
+| Idempotent & Atomic Stock Decrement receiver using Dual-Key UUIDv7 mapping.
+*/
+Route::prefix('v1/sync')->middleware(\App\Http\Middleware\VerifyCentralSyncToken::class)->group(function () {
+    Route::post('/transactions', [\App\Http\Controllers\Api\V1\TransactionSyncController::class, 'syncTransactions']);
+
+    // Master Data Pull Sync Provider (Central Server -> Local Cashier Nodes)
+    Route::prefix('master')->group(function () {
+        Route::get('/categories', [\App\Http\Controllers\Api\V1\MasterDataSyncController::class, 'categories']);
+        Route::get('/locations', [\App\Http\Controllers\Api\V1\MasterDataSyncController::class, 'locations']);
+        Route::get('/suppliers', [\App\Http\Controllers\Api\V1\MasterDataSyncController::class, 'suppliers']);
+        Route::get('/products', [\App\Http\Controllers\Api\V1\MasterDataSyncController::class, 'products']);
+        Route::get('/employees', [\App\Http\Controllers\Api\V1\MasterDataSyncController::class, 'employees']);
+    });
+});
+

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\HasUuidV7;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,12 +11,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Supplier extends Model
 {
-    use HasFactory;
+    use HasFactory, HasUuidV7;
 
     public const TYPE_REGULAR = 'REGULAR';
     public const TYPE_CONSIGNMENT = 'CONSIGNMENT';
 
     protected $fillable = [
+        'uuid',
         'code',
         'name',
         'company_name',

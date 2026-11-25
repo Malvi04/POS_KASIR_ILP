@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\HasUuidV7;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,9 +10,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CashierShift extends Model
 {
-    use HasFactory;
+    use HasFactory, HasUuidV7;
 
     protected $fillable = [
+        'uuid',
         'shift_code',
         'offline_id',
         'terminal_code',
@@ -36,6 +38,8 @@ class CashierShift extends Model
         'status',
         'opened_at',
         'closed_at',
+        'synced_at',
+        'sync_error',
     ];
 
     protected $casts = [
@@ -52,6 +56,7 @@ class CashierShift extends Model
         'variance' => 'float',
         'opened_at' => 'datetime',
         'closed_at' => 'datetime',
+        'synced_at' => 'datetime',
     ];
 
     public function user(): BelongsTo

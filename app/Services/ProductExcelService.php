@@ -553,6 +553,7 @@ class ProductExcelService
 
                 // Build upsert payload with BOTH 19 standard columns AND legacy columns
                 $batchProducts[$sku] = [
+                    'uuid' => (string) Str::uuid7(),
                     'sku' => $sku,
                     'id_produk' => $idProduk,
                     'kode_barcode' => $barcode,

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\HasUuidV7;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -9,9 +10,10 @@ use Illuminate\Support\Facades\DB;
 
 class Member extends Model
 {
-    use HasFactory;
+    use HasFactory, HasUuidV7;
 
     protected $fillable = [
+        'uuid',
         'customer_id',
         'member_code',
         'kode_out',

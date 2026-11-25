@@ -2,18 +2,21 @@
 
 namespace App\Models;
 
+use App\Traits\HasUuidV7;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Product extends Model
 {
-    use HasFactory;
+    use HasFactory, HasUuidV7, SoftDeletes;
 
     protected $fillable = [
+        'uuid',
         'id_produk',
         'sku',
         'kode_barcode',
@@ -38,6 +41,7 @@ class Product extends Model
         'name',
         'brand',
         'category',
+        'category_id',
         'unit',
         'cost_price',
         'last_cost_price',
@@ -118,6 +122,11 @@ class Product extends Model
     public function supplier(): BelongsTo
     {
         return $this->belongsTo(Supplier::class);
+    }
+
+    public function productCategory(): BelongsTo
+    {
+        return $this->belongsTo(ProductCategory::class, 'category_id');
     }
 
     protected static function booted(): void

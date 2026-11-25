@@ -2,15 +2,17 @@
 
 namespace App\Models;
 
+use App\Traits\HasUuidV7;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class TransactionItem extends Model
 {
-    use HasFactory;
+    use HasFactory, HasUuidV7;
 
     protected $fillable = [
+        'uuid',
         'transaction_id',
         'product_id',
         'stock_batch_id',

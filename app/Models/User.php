@@ -2,8 +2,10 @@
 
 namespace App\Models;
 
+use App\Traits\HasUuidV7;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -14,9 +16,10 @@ use Illuminate\Support\Facades\Log;
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable;
+    use HasFactory, HasUuidV7, Notifiable;
 
     protected $fillable = [
+        'uuid',
         'name',
         'email',
         'username',
@@ -24,9 +27,11 @@ class User extends Authenticatable
         'role',
         'pin',
         'branch',
+        'location_id',
         'assigned_branches',
         'is_active',
         'password',
+        'deleted_at',
     ];
 
     protected $hidden = [
@@ -42,7 +47,13 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_active' => 'boolean',
             'assigned_branches' => 'array',
+            'deleted_at' => 'datetime',
         ];
+    }
+
+    public function location(): BelongsTo
+    {
+        return $this->belongsTo(Location::class, 'location_id');
     }
 
     protected static function booted(): void
