@@ -4,10 +4,12 @@
             return 'Rp ' + Number(num || 0).toLocaleString('id-ID');
         },
         get pendingItems() {
-            return $store.offlineSync?.pendingTransactions || [];
+            return ($store.offlineSync?.allPendingItems && $store.offlineSync?.allPendingItems.length > 0)
+                ? $store.offlineSync.allPendingItems
+                : ($store.offlineSync?.pendingTransactions || []);
         },
         get totalAmount() {
-            return this.pendingItems.reduce((acc, it) => acc + Number(it.grand_total || it.total || 0), 0);
+            return this.pendingItems.reduce((acc, it) => acc + Number(it.amount || it.grand_total || it.total || 0), 0);
         }
      }"
      x-cloak
@@ -22,7 +24,7 @@
      x-transition:leave-end="opacity-0">
 
     <div @click.outside="$store.offlineSync?.closeModal()"
-         class="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-3xl flex flex-col max-h-[90vh] overflow-hidden transform transition-all"
+         class="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-4xl flex flex-col max-h-[90vh] overflow-hidden transform transition-all"
          x-transition:enter="transition ease-out duration-200"
          x-transition:enter-start="opacity-0 scale-95"
          x-transition:enter-end="opacity-100 scale-100"
@@ -38,7 +40,7 @@
                 </div>
                 <div>
                     <h3 class="text-base font-bold text-white tracking-tight">Pusat Sinkronisasi & Resiliensi Offline</h3>
-                    <p class="text-xs text-slate-400">Pengelolaan transaksi lokal kasir & sinkronisasi database server</p>
+                    <p class="text-xs text-slate-400">Pengelolaan data offline lokal (sesi kasir, kas laci & transaksi) pada peramban ini</p>
                 </div>
             </div>
             <button type="button"
@@ -90,7 +92,7 @@
                 <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">NOMINAL BELUM SYNC</span>
                 <span class="text-xl font-black text-gray-900 font-mono block"
                       x-text="formatRupiah(totalAmount)">Rp 0</span>
-                <span class="text-[11px] text-gray-500 mt-0.5 block">Total omzet belum terkirim</span>
+                <span class="text-[11px] text-gray-500 mt-0.5 block">Total omzet / kas belum terkirim</span>
             </div>
         </div>
 
@@ -99,16 +101,26 @@
             <div class="flex items-center justify-between">
                 <h4 class="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
                     <span class="material-symbols-rounded text-[16px] text-[#0052cc]">receipt_long</span>
-                    <span>Daftar Transaksi Kasir Belum Tersinkron</span>
+                    <span>Daftar Data Antrean Offline di Laci Peramban</span>
                 </h4>
-                <template x-if="pendingItems.length > 0">
-                    <button type="button"
-                            @click="$store.offlineSync?.exportBackup()"
-                            class="text-xs font-bold text-[#0052cc] hover:text-[#0043a8] flex items-center gap-1 cursor-pointer">
-                        <span class="material-symbols-rounded text-[15px]">download</span>
-                        <span>Unduh File Cadangan JSON</span>
-                    </button>
-                </template>
+                <div class="flex items-center gap-3">
+                    <template x-if="pendingItems.length > 0">
+                        <button type="button"
+                                @click="$store.offlineSync?.clearAll()"
+                                class="text-xs font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1 cursor-pointer">
+                            <span class="material-symbols-rounded text-[15px]">delete_sweep</span>
+                            <span>Bersihkan Semua Data Uji</span>
+                        </button>
+                    </template>
+                    <template x-if="pendingItems.length > 0">
+                        <button type="button"
+                                @click="$store.offlineSync?.exportBackup()"
+                                class="text-xs font-bold text-[#0052cc] hover:text-[#0043a8] flex items-center gap-1 cursor-pointer">
+                            <span class="material-symbols-rounded text-[15px]">download</span>
+                            <span>Unduh Cadangan JSON</span>
+                        </button>
+                    </template>
+                </div>
             </div>
 
             <!-- Empty State -->
@@ -117,9 +129,9 @@
                     <div class="w-14 h-14 mx-auto rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3">
                         <span class="material-symbols-rounded text-[32px]">cloud_done</span>
                     </div>
-                    <h5 class="text-sm font-bold text-gray-800">Semua Transaksi Tersinkronisasi</h5>
+                    <h5 class="text-sm font-bold text-gray-800">Semua Data Offline Telah Bersih & Tersinkronkan</h5>
                     <p class="text-xs text-gray-500 max-w-md mx-auto mt-1">
-                        Tidak ada transaksi penjualan kasir yang tertunda. Seluruh data transaksi, mutasi laci, dan stok telah tersimpan aman di server pusat.
+                        Tidak ada transaksi penjualan, sesi kasir, maupun mutasi laci yang tertunda di peramban ini. Seluruh data telah aman tersimpan di database server.
                     </p>
                 </div>
             </template>
@@ -130,37 +142,56 @@
                     <table class="w-full text-left text-xs">
                         <thead class="bg-gray-100 text-gray-600 uppercase text-[10px] font-bold tracking-wider">
                             <tr>
-                                <th class="px-4 py-3">No. Faktur Offline</th>
-                                <th class="px-4 py-3">Waktu Transaksi</th>
+                                <th class="px-4 py-3">Tipe & Identitas Data</th>
+                                <th class="px-4 py-3">Waktu Input</th>
                                 <th class="px-4 py-3">Terminal / Kasir</th>
                                 <th class="px-4 py-3">Metode</th>
-                                <th class="px-4 py-3 text-right">Total</th>
+                                <th class="px-4 py-3 text-right">Nominal</th>
                                 <th class="px-4 py-3 text-center">Aksi</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100 bg-white">
                             <template x-for="item in pendingItems" :key="item.offline_id">
                                 <tr class="hover:bg-slate-50 transition-colors">
-                                    <td class="px-4 py-3 font-mono font-bold text-[#0052cc]" x-text="item.invoice_number"></td>
-                                    <td class="px-4 py-3 text-gray-500" x-text="new Date(item.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB'"></td>
+                                    <td class="px-4 py-3">
+                                        <div class="flex items-center gap-1.5 mb-0.5">
+                                            <span class="px-1.5 py-0.5 rounded text-[9px] font-bold border"
+                                                  :class="item.badge_color || 'bg-blue-50 text-blue-700 border-blue-200'"
+                                                  x-text="item.type_label || (item.item_type === 'shift' ? 'Sesi Shift' : (item.item_type === 'movement' ? 'Kas Laci' : 'Transaksi'))"></span>
+                                        </div>
+                                        <div class="font-mono font-bold text-[#0052cc]" x-text="item.title || item.invoice_number"></div>
+                                        <template x-if="item.last_error">
+                                            <div class="text-[10px] text-rose-600 font-medium truncate max-w-xs" x-text="'Catatan: ' + item.last_error"></div>
+                                        </template>
+                                    </td>
+                                    <td class="px-4 py-3 text-gray-500" x-text="new Date(item.created_at || Date.now()).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB'"></td>
                                     <td class="px-4 py-3 font-medium text-gray-800">
-                                        <div x-text="item.terminal_code"></div>
-                                        <div class="text-[10px] text-gray-400" x-text="item.cashier_name"></div>
+                                        <div x-text="item.subtitle || (item.terminal_code + ' • ' + (item.cashier_name || 'Kasir'))"></div>
                                     </td>
                                     <td class="px-4 py-3">
                                         <span class="px-2 py-0.5 rounded text-[10px] font-bold"
                                               :class="item.payment_method === 'TUNAI' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'"
-                                              x-text="item.payment_method"></span>
+                                              x-text="item.payment_method || '-'"></span>
                                     </td>
-                                    <td class="px-4 py-3 text-right font-mono font-bold text-gray-900" x-text="formatRupiah(item.grand_total)"></td>
+                                    <td class="px-4 py-3 text-right font-mono font-bold text-gray-900" x-text="formatRupiah(item.amount || item.grand_total || item.total)"></td>
                                     <td class="px-4 py-3 text-center">
-                                        <button type="button"
-                                                @click="$store.offlineSync?.syncSingle(item.offline_id)"
-                                                :disabled="!($store.network && $store.network.isOnline) || $store.offlineSync?.isSyncing"
-                                                class="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 disabled:opacity-40 text-[#0052cc] rounded-lg text-[11px] font-bold transition-all cursor-pointer inline-flex items-center gap-1">
-                                            <span class="material-symbols-rounded text-[14px]">send</span>
-                                            <span>Kirim</span>
-                                        </button>
+                                        <div class="inline-flex items-center gap-1">
+                                            <template x-if="item.item_type === 'transaction'">
+                                                <button type="button"
+                                                        @click="$store.offlineSync?.syncSingle(item.offline_id)"
+                                                        :disabled="!($store.network && $store.network.isOnline) || $store.offlineSync?.isSyncing"
+                                                        class="px-2 py-1 bg-blue-50 hover:bg-blue-100 disabled:opacity-40 text-[#0052cc] rounded-lg text-[11px] font-bold transition-all cursor-pointer inline-flex items-center gap-1">
+                                                    <span class="material-symbols-rounded text-[13px]">send</span>
+                                                    <span>Kirim</span>
+                                                </button>
+                                            </template>
+                                            <button type="button"
+                                                    @click="$store.offlineSync?.deleteItem(item.item_type || 'transaction', item.offline_id)"
+                                                    class="p-1 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                                    title="Hapus dari antrean lokal">
+                                                <span class="material-symbols-rounded text-[16px]">delete</span>
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             </template>
@@ -173,6 +204,30 @@
         <!-- Modal Footer Actions -->
         <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
             <div class="flex items-center gap-2 text-xs text-gray-500">
+                <span class="material-symbols-rounded text-[16px] text-emerald-600">verified</span>
+                <span>Otomatis sinkron saat koneksi internet / server pulih.</span>
+            </div>
+
+            <div class="flex items-center gap-2 w-full sm:w-auto">
+                <button type="button"
+                        @click="$store.offlineSync?.closeModal()"
+                        class="flex-1 sm:flex-none px-4 py-2 border border-gray-300 hover:bg-gray-100 text-gray-700 rounded-xl text-xs font-bold transition-all cursor-pointer">
+                    Tutup
+                </button>
+
+                <button type="button"
+                        @click="$store.offlineSync?.syncNow()"
+                        :disabled="!($store.network && $store.network.isOnline) || $store.offlineSync?.isSyncing || pendingItems.length === 0"
+                        class="flex-1 sm:flex-none px-5 py-2 bg-[#0052cc] hover:bg-[#0043a8] disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer">
+                    <span class="material-symbols-rounded text-[16px]"
+                          :class="$store.offlineSync?.isSyncing ? 'animate-spin' : ''">sync</span>
+                    <span x-text="$store.offlineSync?.isSyncing ? 'Sedang Menyinkronkan...' : 'Sinkronkan Semua Sekarang'">Sinkronkan Semua Sekarang</span>
+                </button>
+            </div>
+        </div>
+
+    </div>
+</div>
                 <span class="material-symbols-rounded text-[16px] text-emerald-600">verified</span>
                 <span>Otomatis sinkron saat koneksi internet / server pulih.</span>
             </div>

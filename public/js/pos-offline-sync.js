@@ -848,6 +848,113 @@
         },
 
         /**
+         * Delete a single pending item from Dexie and localStorage queues
+         */
+        async deleteSingle(type, offlineId) {
+            if (!offlineId) return;
+
+            if (type === 'transaction') {
+                if (window.PosDb && typeof window.PosDb.transactions?.removeSynced === 'function') {
+                    await window.PosDb.transactions.removeSynced([offlineId]);
+                }
+                state.cachedTransactions = state.cachedTransactions.filter(t => t.offline_id !== offlineId);
+                safeSetJson(STORAGE_KEYS.OFFLINE_TRANSACTIONS, state.cachedTransactions);
+            } else if (type === 'movement') {
+                if (window.PosDb && typeof window.PosDb.movements?.removeSynced === 'function') {
+                    await window.PosDb.movements.removeSynced([offlineId]);
+                }
+                state.cachedMovements = state.cachedMovements.filter(m => m.offline_id !== offlineId);
+                safeSetJson(STORAGE_KEYS.OFFLINE_MOVEMENTS, state.cachedMovements);
+            } else if (type === 'shift') {
+                if (window.PosDb && typeof window.PosDb.shifts?.removeSynced === 'function') {
+                    await window.PosDb.shifts.removeSynced([offlineId]);
+                }
+                state.cachedShifts = state.cachedShifts.filter(s => s.offline_id !== offlineId);
+                safeSetJson(STORAGE_KEYS.OFFLINE_SHIFTS, state.cachedShifts);
+            }
+
+            refreshCounts();
+            if (window.Alpine && window.Alpine.store && window.Alpine.store('offlineSync')) {
+                window.Alpine.store('offlineSync').allPendingItems = this.getAllPendingItems();
+            }
+            this.showToast('Data antrean offline berhasil dihapus dari peramban.', 'info');
+        },
+
+        /**
+         * Clear all pending offline queues from Dexie and localStorage
+         */
+        async clearAllPending() {
+            if (window.PosDb) {
+                if (typeof window.PosDb.transactions?.removeSynced === 'function') {
+                    await window.PosDb.transactions.removeSynced(state.cachedTransactions.map(t => t.offline_id));
+                }
+                if (typeof window.PosDb.movements?.removeSynced === 'function') {
+                    await window.PosDb.movements.removeSynced(state.cachedMovements.map(m => m.offline_id));
+                }
+                if (typeof window.PosDb.shifts?.removeSynced === 'function') {
+                    await window.PosDb.shifts.removeSynced(state.cachedShifts.map(s => s.offline_id));
+                }
+            }
+            state.cachedTransactions = [];
+            state.cachedMovements = [];
+            state.cachedShifts = [];
+            safeSetJson(STORAGE_KEYS.OFFLINE_TRANSACTIONS, []);
+            safeSetJson(STORAGE_KEYS.OFFLINE_MOVEMENTS, []);
+            safeSetJson(STORAGE_KEYS.OFFLINE_SHIFTS, []);
+            refreshCounts();
+            if (window.Alpine && window.Alpine.store && window.Alpine.store('offlineSync')) {
+                window.Alpine.store('offlineSync').allPendingItems = [];
+            }
+            this.showToast('Seluruh antrean data offline berhasil dibersihkan.', 'success');
+        },
+
+        /**
+         * Get formatted list of all pending items (transactions, shifts, and cash movements)
+         */
+        getAllPendingItems() {
+            const trxs = (state.cachedTransactions || []).map(t => ({
+                offline_id: t.offline_id,
+                item_type: 'transaction',
+                type_label: 'Transaksi POS',
+                badge_color: 'bg-blue-50 text-blue-700 border-blue-200',
+                title: t.invoice_number || 'TRX-OFFLINE',
+                subtitle: `${t.terminal_code || 'POS-01'} • ${t.cashier_name || 'Kasir'} (${t.cashier_nik || '-'})`,
+                payment_method: t.payment_method || 'TUNAI',
+                amount: Number(t.grand_total || t.total || 0),
+                created_at: t.created_at,
+                last_error: t.last_error || null
+            }));
+
+            const movs = (state.cachedMovements || []).map(m => ({
+                offline_id: m.offline_id,
+                item_type: 'movement',
+                type_label: 'Kas Laci',
+                badge_color: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                title: `Mutasi Kas: ${m.type || 'KAS_MASUK'}`,
+                subtitle: `${m.terminal_code || 'POS-01'} • ${m.reason || 'Modal Awal Kasir'} (${m.cashier_nik || '-'})`,
+                payment_method: 'TUNAI',
+                amount: Number(m.amount || 0),
+                created_at: m.created_at,
+                last_error: m.last_error || null
+            }));
+
+            const shifts = (state.cachedShifts || []).map(s => ({
+                offline_id: s.offline_id,
+                item_type: 'shift',
+                type_label: 'Sesi Shift',
+                badge_color: 'bg-purple-50 text-purple-700 border-purple-200',
+                title: `Sesi: ${s.action || 'OPEN'} (${s.shift_code || '-'})`,
+                subtitle: `${s.terminal_code || 'POS-01'} • ${s.cashier_name || 'Kasir'} (${s.cashier_nik || '-'})`,
+                payment_method: '-',
+                amount: Number(s.opening_cash || 0),
+                created_at: s.opened_at || s.created_at,
+                last_error: s.last_error || null
+            }));
+
+            return [...trxs, ...movs, ...shifts];
+        },
+
+        /**
          * Export unsynced offline transactions to a downloadable JSON backup
          */
         exportBackup() {
@@ -925,9 +1032,12 @@
                 lastSyncTime: state.lastSyncTime,
                 modalOpen: false,
                 pendingTransactions: state.cachedTransactions,
+                allPendingItems: [],
 
                 refresh() {
-                    reloadFromDexie();
+                    reloadFromDexie().then(() => {
+                        this.allPendingItems = PosOfflineSync.getAllPendingItems();
+                    });
                 },
 
                 syncNow() {
@@ -938,8 +1048,19 @@
                     return PosOfflineSync.syncSingle(offlineId);
                 },
 
+                deleteItem(type, offlineId) {
+                    return PosOfflineSync.deleteSingle(type, offlineId);
+                },
+
+                clearAll() {
+                    if (confirm('Hapus seluruh antrean offline dari laci peramban ini? Tindakan ini tidak dapat dibatalkan.')) {
+                        return PosOfflineSync.clearAllPending();
+                    }
+                },
+
                 openModal() {
                     this.pendingTransactions = PosOfflineSync.getPendingTransactions();
+                    this.allPendingItems = PosOfflineSync.getAllPendingItems();
                     this.modalOpen = true;
                 },
 

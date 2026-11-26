@@ -1611,8 +1611,8 @@ class="flex w-full h-full relative text-gray-800">
                 <div class="flex items-center gap-2.5">
                     <span class="material-symbols-rounded text-[20px] text-amber-100">cloud_upload</span>
                     <div>
-                        <span class="font-black text-amber-100">Koneksi Pulih:</span>
-                        <span class="text-white ml-1">Terdapat <span class="underline font-black" x-text="$store.offlineSync.totalPending"></span> transaksi offline yang siap disinkronkan ke server utama.</span>
+                        <span class="font-black text-amber-100">Data Offline Tersimpan:</span>
+                        <span class="text-white ml-1">Terdapat <span class="underline font-black" x-text="$store.offlineSync.totalPending"></span> data antrean offline di peramban ini (sesi kasir/kas laci/transaksi).</span>
                     </div>
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
