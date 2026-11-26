@@ -610,7 +610,22 @@ class AuthController extends Controller
 
         app()->terminating(function () {
             try {
-                config(['pos_sync.timeout_seconds' => 5, 'pos_sync.retry_times' => 1]);
+                $phpBin = PHP_BINARY ?: 'php';
+                $artisan = base_path('artisan');
+
+                if (DIRECTORY_SEPARATOR === '\\' && function_exists('popen')) {
+                    $cmd = 'start /B "" ' . escapeshellarg($phpBin) . ' ' . escapeshellarg($artisan) . ' pos:sync-transactions > NUL 2>&1';
+                    $proc = @popen($cmd, 'r');
+                    if (is_resource($proc)) {
+                        @pclose($proc);
+                        return;
+                    }
+                } elseif (DIRECTORY_SEPARATOR !== '\\' && function_exists('exec')) {
+                    @exec(escapeshellarg($phpBin) . ' ' . escapeshellarg($artisan) . ' pos:sync-transactions >/dev/null 2>&1 &');
+                    return;
+                }
+
+                config(['pos_sync.timeout_seconds' => 4, 'pos_sync.retry_times' => 1]);
                 app(\App\Services\PosPushSyncService::class)->sync(maxBatches: 1);
             } catch (\Throwable $e) {
                 // Silent fallback: background scheduler retries automatically every minute
