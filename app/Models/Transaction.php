@@ -71,6 +71,21 @@ class Transaction extends Model
         return $this->belongsTo(Location::class, 'location_id');
     }
 
+    public function branchLocation(): BelongsTo
+    {
+        return $this->belongsTo(Location::class, 'location_id');
+    }
+
+    public function getBranchIdAttribute(): ?int
+    {
+        return $this->attributes['location_id'] ?? null;
+    }
+
+    public function setBranchIdAttribute(?int $value): void
+    {
+        $this->attributes['location_id'] = $value;
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);

@@ -11,8 +11,8 @@
  *  - Versi cache dinaikkan agar cache lama yang rusak otomatis dihapus.
  */
 
-const CACHE_NAME = 'pos-ilp-cache-v4.4';
-const PAGES_CACHE = 'pos-ilp-pages-v4.4';
+const CACHE_NAME = 'pos-ilp-cache-v4.5';
+const PAGES_CACHE = 'pos-ilp-pages-v4.5';
 
 const PRECACHE_STATIC = [
     '/fonts/material-symbols-rounded.woff2',
@@ -23,8 +23,8 @@ const PRECACHE_STATIC = [
     '/js/db/pos-migration.js?v=3.0.3',
     '/js/alpine.min.js',
     '/js/cashier-core.js?v=3.0.3',
-    '/js/pos-realtime.js?v=3.0.3',
-    '/js/pos-offline-sync.js?v=3.0.3',
+    '/js/pos-realtime.js?v=3.2.0',
+    '/js/pos-offline-sync.js?v=3.2.0',
     '/js/excel-export.js',
     '/manifest.json',
     '/favicon.ico'

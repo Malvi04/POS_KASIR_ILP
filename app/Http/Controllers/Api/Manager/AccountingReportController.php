@@ -377,7 +377,19 @@ class AccountingReportController extends Controller
         $umkmPartnerShare = 0.0;
         $cooperativeCommission = 0.0;
 
-        $allProducts = Product::all()->keyBy('id');
+        $soldProductIds = $transactions
+            ->flatMap(fn ($tx) => $tx->items->pluck('product_id'))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $allProducts = !empty($soldProductIds)
+            ? Product::withTrashed()
+                ->whereIn('id', $soldProductIds)
+                ->get(['id', 'cost_price', 'is_consignment', 'category', 'commission_percent'])
+                ->keyBy('id')
+            : collect();
 
         foreach ($transactions as $tx) {
             foreach ($tx->items as $item) {

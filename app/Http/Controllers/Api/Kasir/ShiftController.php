@@ -142,6 +142,16 @@ class ShiftController extends Controller
      */
     public function open(Request $request): JsonResponse
     {
+        if (
+            strtolower((string) config('pos_sync.node_role', 'central')) === 'local'
+            && !$request->filled('terminal_code')
+            && trim((string) config('pos_sync.terminal_code', '')) !== ''
+        ) {
+            $request->merge([
+                'terminal_code' => strtoupper(trim((string) config('pos_sync.terminal_code'))),
+            ]);
+        }
+
         $validated = $request->validate([
             'terminal_code' => 'required|string|max:50',
             'cashier_nik' => 'required|string|max:50',
@@ -155,13 +165,14 @@ class ShiftController extends Controller
         $authUser = Auth::user();
         $stockService = app(LocationStockService::class);
         $terminalExpected = $stockService->resolveExpectedLocationForTerminal($validated['terminal_code']);
-        $resolvedLoc = $stockService->resolveLocation(
+        $localIdentity = app(\App\Services\PosInvoiceGeneratorService::class)->resolveLocalIdentity(
+            $stockService,
             $validated['location_id'] ?? null,
             $validated['branch'] ?? null,
             $validated['terminal_code'],
-            $authUser,
-            'STORE'
+            $authUser
         );
+        $resolvedLoc = $localIdentity['location'];
 
         // Validate terminal vs explicit requested location mismatch
         if ((!empty($validated['location_id']) || !empty($validated['branch'])) && $terminalExpected && $resolvedLoc && $terminalExpected->id !== $resolvedLoc->id) {
@@ -247,45 +258,29 @@ class ShiftController extends Controller
 
         // Pencatatan Absensi Karyawan Otomatis ke PostgreSQL saat sesi kasir dimulai
         try {
-            $now = Carbon::now();
-            $today = $now->toDateString();
-            $branch = $request->input('branch') ?: ($user?->branch ?: 'Cabang Pusat');
+            $branch = $request->input('branch') ?: ($resolvedLoc?->name ?: ($user?->branch ?: 'Cabang Pusat'));
             $staffName = $user?->name ?? $validated['cashier_name'];
 
-            $attendance = Attendance::whereDate('date', $today)
-                ->where('terminal', $validated['terminal_code'])
-                ->where(function ($q) use ($user, $staffName) {
-                    if ($user) {
-                        $q->where('user_id', $user->id)
-                          ->orWhere('staff_name', $user->name);
-                    } else {
-                        $q->where('staff_name', $staffName);
-                    }
-                })
-                ->first();
+            \App\Services\AttendanceService::recordCashierCheckIn(
+                user: $user,
+                staffName: $staffName,
+                terminalCode: $validated['terminal_code'],
+                branch: $branch,
+                notes: "Sesi {$shift->shift_code} aktif di {$validated['terminal_code']}"
+            );
 
-            if (!$attendance) {
-                $attendance = Attendance::create([
-                    'staff_name' => $staffName,
-                    'user_id' => $user?->id,
-                    'terminal' => $validated['terminal_code'],
-                    'branch' => $branch,
-                    'date' => $today,
-                    'check_in' => $now->format('H:i'),
-                    'check_out' => '-',
-                    'status' => 'HADIR',
-                    'notes' => "Sesi {$shift->shift_code} aktif di {$validated['terminal_code']}",
-                ]);
-            } else {
-                if ($attendance->check_in === '-' || empty($attendance->check_in)) {
-                    $attendance->check_in = $now->format('H:i');
-                }
-                $attendance->terminal = $validated['terminal_code'];
-                $attendance->branch = $branch;
-                $attendance->save();
-            }
-
-            event(new AttendanceRecordedEvent($attendance, 'MASUK'));
+            \App\Models\AuditLog::record([
+                'user_id' => $user?->id,
+                'user_name' => $staffName,
+                'user_role' => $user?->role ?? 'Kasir',
+                'location' => $shift->branch ?: $branch,
+                'category' => 'Sesi Kasir',
+                'action_name' => 'Buka Sesi Shift Kasir',
+                'description' => "Kasir {$staffName} membuka sesi {$shift->shift_code} di {$shift->terminal_code} dengan modal awal Rp " . number_format($shift->opening_cash, 0, ',', '.'),
+                'reference' => $shift->shift_code,
+                'status' => 'BERHASIL',
+                'source' => $request->ip() . ' / ' . $shift->terminal_code,
+            ]);
         } catch (\Throwable $e) {}
 
         try {
@@ -299,8 +294,20 @@ class ShiftController extends Controller
                 color: 'blue',
                 referenceId: $shift->shift_code
             );
+            NotificationController::notify(
+                role: 'OWNER',
+                title: "Shift Kasir Aktif: {$shift->terminal_code}",
+                message: "Kasir {$shift->cashier_name} ({$shift->branch}) membuka sesi {$shift->shift_code} dengan modal awal Rp " . number_format($shift->opening_cash, 0, ',', '.') . '.',
+                category: 'CASHIER',
+                link: '/owner',
+                icon: 'point_of_sale',
+                color: 'blue',
+                referenceId: $shift->shift_code
+            );
             event(new \App\Events\CashierShiftEvent($shift, 'opened'));
         } catch (\Throwable $e) {}
+
+        \App\Http\Controllers\Api\Shared\AuthController::dispatchBackgroundOperationalSync();
 
         return response()->json([
             'success' => true,
@@ -393,6 +400,7 @@ class ShiftController extends Controller
         }
 
         $shift->closeShift((float) $validated['actual_cash'], $closingNotes);
+        $shift->update(['synced_at' => null]);
 
         // Update Jam Keluar Absensi Karyawan di PostgreSQL
         try {
@@ -406,6 +414,19 @@ class ShiftController extends Controller
                 terminalCode: $shift->terminal_code,
                 noteReason: $closingReason
             );
+
+            \App\Models\AuditLog::record([
+                'user_id' => $shift->user_id ?? $authUser?->id,
+                'user_name' => $shift->cashier_name,
+                'user_role' => $authUser?->role ?? 'Kasir',
+                'location' => $shift->branch ?: 'Cabang Pusat',
+                'category' => 'Sesi Kasir',
+                'action_name' => 'Tutup Sesi Shift Kasir',
+                'description' => "Sesi {$shift->shift_code} ({$shift->terminal_code}) ditutup. Kas fisik: Rp " . number_format((float) $shift->actual_cash, 0, ',', '.') . " ({$shift->variance_status}).",
+                'reference' => $shift->shift_code,
+                'status' => 'BERHASIL',
+                'source' => $request->ip() . ' / ' . $shift->terminal_code,
+            ]);
         } catch (\Throwable $e) {}
 
         try {
@@ -432,6 +453,8 @@ class ShiftController extends Controller
             );
             event(new \App\Events\CashierShiftEvent($shift, 'closed'));
         } catch (\Throwable $e) {}
+
+        \App\Http\Controllers\Api\Shared\AuthController::dispatchBackgroundOperationalSync();
 
         return response()->json([
             'success' => true,
@@ -541,10 +564,12 @@ class ShiftController extends Controller
             }
 
             $lockedShift->expected_cash = $lockedShift->calculateExpectedCash();
+            $lockedShift->synced_at = null;
             $lockedShift->save();
         });
 
         $shift->refresh();
+        \App\Http\Controllers\Api\Shared\AuthController::dispatchBackgroundOperationalSync();
 
         return response()->json([
             'success' => true,

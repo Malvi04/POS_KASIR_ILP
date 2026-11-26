@@ -67,17 +67,25 @@ class AuditLogController extends Controller
             }
         }
 
-        // Order
+        // Order & cap at 300 latest matching rows to keep response fast
         $sortOrder = strtolower($request->get('sort', 'desc')) === 'asc' ? 'asc' : 'desc';
-        $logs = $query->orderBy('created_at', $sortOrder)->get();
+        $logs = $query->orderBy('created_at', $sortOrder)->limit(300)->get();
 
-        // Calculate summary counters
-        $allLogs = AuditLog::all();
+        // Calculate summary counters via single SQL aggregate query
         $todayStr = Carbon::today()->toDateString();
-        $todayCount = $allLogs->filter(fn($l) => $l->created_at && $l->created_at->toDateString() === $todayStr)->count();
-        $dataChangesCount = $allLogs->whereIn('category', ['Stok & Persediaan', 'Barang Masuk / Distribusi / Mutasi', 'Anggota & Plafon', 'Pengaturan Sistem', 'User & Hak Akses'])->count();
-        $trxCount = $allLogs->whereIn('category', ['Transaksi Penjualan', 'Void / Pembatalan', 'Refund / Retur'])->count();
-        $secCount = $allLogs->whereIn('category', ['Login & Logout', 'User & Hak Akses', 'Sesi Kasir'])->count();
+        $agg = AuditLog::selectRaw("
+            COUNT(*) as total_count,
+            COALESCE(SUM(CASE WHEN DATE(created_at) = ? THEN 1 ELSE 0 END), 0) as today_count,
+            COALESCE(SUM(CASE WHEN category IN ('Stok & Persediaan', 'Barang Masuk / Distribusi / Mutasi', 'Anggota & Plafon', 'Pengaturan Sistem', 'User & Hak Akses') THEN 1 ELSE 0 END), 0) as data_changes_count,
+            COALESCE(SUM(CASE WHEN category IN ('Transaksi Penjualan', 'Void / Pembatalan', 'Refund / Retur') THEN 1 ELSE 0 END), 0) as trx_count,
+            COALESCE(SUM(CASE WHEN category IN ('Login & Logout', 'User & Hak Akses', 'Sesi Kasir') THEN 1 ELSE 0 END), 0) as sec_count
+        ", [$todayStr])->first();
+
+        $todayCount = (int) ($agg->today_count ?? 0);
+        $dataChangesCount = (int) ($agg->data_changes_count ?? 0);
+        $trxCount = (int) ($agg->trx_count ?? 0);
+        $secCount = (int) ($agg->sec_count ?? 0);
+        $totalLogsCount = (int) ($agg->total_count ?? 0);
 
         $formatted = $logs->map(function ($l) {
             return [
@@ -104,7 +112,7 @@ class AuditLogController extends Controller
                 'data_changes_count' => $dataChangesCount,
                 'transaction_count' => $trxCount,
                 'security_count' => $secCount,
-                'total_count' => $allLogs->count(),
+                'total_count' => $totalLogsCount,
             ],
             'data' => $formatted,
         ]);

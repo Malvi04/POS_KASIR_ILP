@@ -2,14 +2,16 @@
 
 namespace App\Models;
 
+use App\Traits\HasUuidV7;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class AuditLog extends Model
 {
-    use HasFactory;
+    use HasFactory, HasUuidV7;
 
     protected $fillable = [
+        'uuid',
         'log_id',
         'user_id',
         'user_name',
@@ -22,10 +24,13 @@ class AuditLog extends Model
         'status',
         'source',
         'changes',
+        'synced_at',
+        'sync_error',
     ];
 
     protected $casts = [
         'changes' => 'array',
+        'synced_at' => 'datetime',
     ];
 
     /**

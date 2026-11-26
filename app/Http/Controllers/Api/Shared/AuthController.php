@@ -99,6 +99,19 @@ class AuthController extends Controller
                             user: $kasirUser,
                             noteReason: 'Kasir logout portal'
                         );
+                        \App\Models\AuditLog::record([
+                            'user_id' => $kasirUser->id,
+                            'user_name' => $kasirUser->name,
+                            'user_role' => $kasirUser->role,
+                            'location' => $kasirUser->branch ?: 'Cabang Pusat',
+                            'category' => 'Login & Logout',
+                            'action_name' => 'Logout Portal Kasir',
+                            'description' => "Petugas kasir {$kasirUser->name} keluar (logout) dari portal POS.",
+                            'reference' => $kasirUser->nik ?: $kasirUser->username,
+                            'status' => 'BERHASIL',
+                            'source' => $request->ip() . ' / Portal POS',
+                        ]);
+                        self::dispatchBackgroundOperationalSync();
                     }
                 } catch (\Throwable $e) {}
             }
@@ -180,6 +193,7 @@ class AuthController extends Controller
                 ? 'owner'
                 : ($user->isSupervisorOrManager() ? 'manager' : 'kasir');
             self::bindRoleSlot($request, $user, $pinSlot);
+            self::recordLoginActivity($request, $user, $pinSlot);
 
             return response()->json([
                 'success' => true,
@@ -206,10 +220,14 @@ class AuthController extends Controller
         $identifier = trim($validated['identifier']);
         $password = (string) $validated['password'];
 
-        $user = User::where(function ($q) use ($identifier) {
-            $q->where('username', $identifier)
-              ->orWhere('nik', $identifier)
-              ->orWhere('email', $identifier);
+        $lowerIdentifier = strtolower($identifier);
+        $user = User::where(function ($q) use ($identifier, $lowerIdentifier) {
+            $q->whereRaw('LOWER(username) = ?', [$lowerIdentifier])
+              ->orWhereRaw('LOWER(nik) = ?', [$lowerIdentifier])
+              ->orWhereRaw('LOWER(email) = ?', [$lowerIdentifier])
+              ->orWhereRaw('LOWER(name) = ?', [$lowerIdentifier])
+              ->orWhere('username', $identifier)
+              ->orWhere('nik', $identifier);
         })->first();
 
         if (!$user) {
@@ -295,6 +313,7 @@ class AuthController extends Controller
             $credSlot = $user->isKasir() ? 'kasir' : ($user->isOwnerOrSuperadmin() ? 'owner' : 'manager');
         }
         self::bindRoleSlot($request, $user, $credSlot);
+        self::recordLoginActivity($request, $user, $credSlot);
 
         return response()->json([
             'success' => true,
@@ -490,5 +509,112 @@ class AuthController extends Controller
             'success' => true,
             'data' => $formatted,
         ]);
+    }
+
+    /**
+     * Record cashier check-in attendance, audit log, and manager/owner notifications upon portal login,
+     * then queue a non-blocking terminating push sync when running on a local cashier node.
+     */
+    public static function recordLoginActivity(Request $request, User $user, string $slot): void
+    {
+        try {
+            $primaryBranch = $user->branch ? trim(explode(',', $user->branch)[0]) : 'Cabang Pusat';
+            $configuredTerminal = strtoupper(trim((string) config('pos_sync.terminal_code', '')));
+
+            if ($slot === 'kasir' || $user->isKasir()) {
+                \App\Services\AttendanceService::recordCashierCheckIn(
+                    user: $user,
+                    staffName: $user->name,
+                    terminalCode: $configuredTerminal !== '' ? $configuredTerminal : null,
+                    branch: $primaryBranch,
+                    notes: 'Login portal kasir'
+                );
+
+                \App\Models\AuditLog::record([
+                    'user_id' => $user->id,
+                    'user_name' => $user->name,
+                    'user_role' => $user->role,
+                    'location' => $primaryBranch,
+                    'category' => 'Login & Logout',
+                    'action_name' => 'Login Portal Kasir',
+                    'description' => "Petugas kasir {$user->name} ({$user->username}) login ke portal POS di {$primaryBranch}.",
+                    'reference' => $user->nik ?: $user->username,
+                    'status' => 'BERHASIL',
+                    'source' => $request->ip() . ' / Portal POS',
+                ]);
+
+                $notifDedupeKey = 'kasir_login_notif_' . $user->id . '_' . now()->format('YmdHi');
+                if (!\Illuminate\Support\Facades\Cache::has($notifDedupeKey)) {
+                    \Illuminate\Support\Facades\Cache::put($notifDedupeKey, true, 300);
+                    NotificationController::notify(
+                        role: 'MANAGER',
+                        title: "Kasir Login: {$user->name}",
+                        message: "Petugas kasir {$user->name} ({$primaryBranch}) baru saja masuk ke sistem POS.",
+                        category: 'CASHIER',
+                        link: '/dashboard',
+                        icon: 'login',
+                        color: 'emerald',
+                        referenceId: 'LOGIN-' . $user->id . '-' . now()->format('YmdHi')
+                    );
+                    NotificationController::notify(
+                        role: 'OWNER',
+                        title: "Aktivitas Kasir: {$user->name}",
+                        message: "Petugas kasir {$user->name} ({$primaryBranch}) login ke portal POS.",
+                        category: 'CASHIER',
+                        link: '/owner/audit-log',
+                        icon: 'verified_user',
+                        color: 'blue',
+                        referenceId: 'LOGIN-' . $user->id . '-' . now()->format('YmdHi')
+                    );
+                }
+
+                self::dispatchBackgroundOperationalSync();
+            } else {
+                $roleLabel = $slot === 'owner' ? 'Owner' : 'Manager';
+                \App\Models\AuditLog::record([
+                    'user_id' => $user->id,
+                    'user_name' => $user->name,
+                    'user_role' => $user->role,
+                    'location' => $primaryBranch ?: 'Pusat',
+                    'category' => 'Login & Logout',
+                    'action_name' => "Login Portal {$roleLabel}",
+                    'description' => "{$roleLabel} {$user->name} ({$user->username}) login ke konsol {$roleLabel}.",
+                    'reference' => $user->nik ?: $user->username,
+                    'status' => 'BERHASIL',
+                    'source' => $request->ip() . ' / Web Portal',
+                ]);
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('AuthController::recordLoginActivity warning: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Trigger non-blocking background push sync after HTTP response finishes on local cashier nodes.
+     */
+    public static function dispatchBackgroundOperationalSync(): void
+    {
+        if (
+            app()->runningUnitTests()
+            || app()->environment('testing')
+            || strtolower((string) config('pos_sync.node_role', 'central')) !== 'local'
+        ) {
+            return;
+        }
+
+        static $registered = false;
+        if ($registered) {
+            return;
+        }
+        $registered = true;
+
+        app()->terminating(function () {
+            try {
+                config(['pos_sync.timeout_seconds' => 5, 'pos_sync.retry_times' => 1]);
+                app(\App\Services\PosPushSyncService::class)->sync(maxBatches: 1);
+            } catch (\Throwable $e) {
+                // Silent fallback: background scheduler retries automatically every minute
+            }
+        });
     }
 }

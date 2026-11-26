@@ -710,7 +710,8 @@ class ProductExcelService
             $warehouseLoc = $allLocations->firstWhere('code', 'GDG-001') ?? $allLocations->firstWhere('type', 'WAREHOUSE');
             $mainStoreLoc = $allLocations->firstWhere('code', 'CAB-001');
 
-            $stockBatch = [];
+            $warehouseStockBatch = [];
+            $storeStockBatch = [];
             $now = now();
             foreach ($records as $r) {
                 $pId = $skuToId[$r['sku']] ?? null;
@@ -721,7 +722,7 @@ class ProductExcelService
 
                 // 1. Gudang Pusat (Warehouse / Master Stok Fisik Gudang)
                 if ($warehouseLoc) {
-                    $stockBatch[] = [
+                    $warehouseStockBatch[] = [
                         'product_id' => $pId,
                         'location_id' => $warehouseLoc->id,
                         'stock' => $qty,
@@ -735,14 +736,13 @@ class ProductExcelService
 
                 // 2. Retail store branches (Toko Pusat, Cabang A, Cabang B):
                 // Sesuai SOP sistem, stok hasil import master produk murni masuk ke Gudang Pusat (GDG-001).
-                // Stok TIDAK boleh otomatis masuk ke cabang toko manapun. Manager harus mengirimkan barang
-                // terlebih dahulu (Kirim Barang), dan kasir di cabang tujuan melakukan Approve (Goods In)
-                // agar stok toko di cabang tersebut resmi bertambah.
+                // Jika baris product_stocks di cabang sudah ada (mis. sudah pernah terima Kirim Barang),
+                // JANGAN timpa kolom stock kembali ke 0 saat re-import Excel!
                 foreach ($allLocations as $loc) {
                     if ($warehouseLoc && $loc->id === $warehouseLoc->id) {
                         continue;
                     }
-                    $stockBatch[] = [
+                    $storeStockBatch[] = [
                         'product_id' => $pId,
                         'location_id' => $loc->id,
                         'stock' => 0,
@@ -755,11 +755,19 @@ class ProductExcelService
                 }
             }
 
-            if (!empty($stockBatch)) {
+            if (!empty($warehouseStockBatch)) {
                 DB::table('product_stocks')->upsert(
-                    $stockBatch,
+                    $warehouseStockBatch,
                     ['product_id', 'location_id'],
                     ['stock', 'min_stock', 'is_active', 'updated_at']
+                );
+            }
+
+            if (!empty($storeStockBatch)) {
+                DB::table('product_stocks')->upsert(
+                    $storeStockBatch,
+                    ['product_id', 'location_id'],
+                    ['min_stock', 'is_active', 'updated_at']
                 );
             }
         });

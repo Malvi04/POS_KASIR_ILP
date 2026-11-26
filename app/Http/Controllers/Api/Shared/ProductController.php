@@ -322,6 +322,12 @@ class ProductController extends Controller
         }
 
         if ($q === '') {
+            if ($strictStoreMode && $location) {
+                $query->orderByRaw(
+                    'CASE WHEN EXISTS (SELECT 1 FROM product_stocks ps_ord WHERE ps_ord.product_id = products.id AND ps_ord.location_id = ? AND ps_ord.stock > 0) THEN 0 ELSE 1 END ASC',
+                    [$location->id]
+                );
+            }
             $paginated = $query->orderBy('name', 'asc')->paginate($limit);
             $items = collect($paginated->items())->map(
                 fn ($p) => $this->formatProductPayload($p, $strictStoreMode ? $location?->id : null, $location)
@@ -488,7 +494,9 @@ class ProductController extends Controller
         }
 
         $paginated = $query->orderBy('id', 'asc')->paginate($perPage);
-        $items = collect($paginated->items())->map(
+        $rawProductItems = $paginated->items();
+        $lastProductId = !empty($rawProductItems) ? end($rawProductItems)->id : null;
+        $items = collect($rawProductItems)->map(
             fn ($p) => $this->formatProductPayload($p, $location->id, $location)
         )->values()->all();
 
@@ -522,7 +530,7 @@ class ProductController extends Controller
             ],
             'server_time' => now()->toIso8601String(),
             'has_more' => $paginated->hasMorePages(),
-            'next_after_id' => !empty($items) && $paginated->hasMorePages() ? end($items)['id'] : null,
+            'next_after_id' => $lastProductId && $paginated->hasMorePages() ? $lastProductId : null,
             'total_store_sku' => $paginated->total(),
             'data' => $items,
             'meta' => [

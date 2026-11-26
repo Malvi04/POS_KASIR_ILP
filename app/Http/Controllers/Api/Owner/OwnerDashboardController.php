@@ -80,34 +80,130 @@ class OwnerDashboardController extends Controller
                 ];
             }
 
-            // 3. Critical Products (Location-aware ProductStock when active, fallback to Stock Master when empty)
+            // 3. Active Cashiers & Terminals across all branches (Open Shifts + Today's Portal Logins)
+            $openShifts = \App\Models\CashierShift::with('location')
+                ->where('status', 'OPEN')
+                ->orderByDesc('opened_at')
+                ->get();
+
+            $activeCashiers = [];
+            $seenUserIds = [];
+            $seenNames = [];
+
+            if ($openShifts->isNotEmpty()) {
+                $salesByShift = Transaction::whereIn('shift_id', $openShifts->pluck('id'))
+                    ->whereIn('status', ['SUCCESS', 'COMPLETED'])
+                    ->groupBy('shift_id')
+                    ->selectRaw('shift_id, SUM(grand_total) as total')
+                    ->pluck('total', 'shift_id');
+
+                foreach ($openShifts as $shift) {
+                    if ($shift->user_id) {
+                        $seenUserIds[$shift->user_id] = true;
+                    }
+                    $name = $shift->cashier_name ?: ('Kasir ' . $shift->terminal_code);
+                    $seenNames[strtolower(trim($name))] = true;
+                    $shiftSales = (float) ($salesByShift[$shift->id] ?? 0);
+
+                    $activeCashiers[] = [
+                        'id' => $shift->id,
+                        'name' => $name,
+                        'terminal' => $shift->terminal_code,
+                        'branch' => $shift->location?->name ?? $shift->branch ?? 'Cabang Pusat',
+                        'location_id' => $shift->location_id,
+                        'opened_at' => $shift->opened_at ? $shift->opened_at->format('H:i') : '-',
+                        'opening_cash' => (float) $shift->opening_cash,
+                        'sales_today' => $shiftSales,
+                        'status' => 'SESI AKTIF',
+                    ];
+                }
+            }
+
+            $todayAttendances = \App\Models\Attendance::with('user')
+                ->whereDate('date', Carbon::today())
+                ->where('status', 'HADIR')
+                ->where(function ($q) {
+                    $q->whereNull('check_out')->orWhere('check_out', '')->orWhere('check_out', '-');
+                })
+                ->orderByDesc('id')
+                ->get();
+
+            foreach ($todayAttendances as $att) {
+                if ($att->user && !$att->user->isKasir()) {
+                    continue;
+                }
+                if ($att->user_id && isset($seenUserIds[$att->user_id])) {
+                    continue;
+                }
+                $normName = strtolower(trim((string) $att->staff_name));
+                if ($normName !== '' && isset($seenNames[$normName])) {
+                    continue;
+                }
+                if ($att->user_id) {
+                    $seenUserIds[$att->user_id] = true;
+                }
+                if ($normName !== '') {
+                    $seenNames[$normName] = true;
+                }
+
+                $attLoc = $att->branch ? $stockService->resolveLocation(null, $att->branch, null, null, 'STORE') : null;
+                $activeCashiers[] = [
+                    'id' => 'att-' . $att->id,
+                    'name' => $att->staff_name ?: 'Kasir',
+                    'terminal' => ($att->terminal && $att->terminal !== '-') ? $att->terminal : 'Login Portal',
+                    'branch' => $attLoc?->name ?? ($att->branch ?: 'Cabang Pusat'),
+                    'location_id' => $attLoc?->id,
+                    'opened_at' => $att->check_in ?: '-',
+                    'opening_cash' => 0,
+                    'sales_today' => 0,
+                    'status' => 'ONLINE PORTAL',
+                ];
+            }
+
+            // 4. Critical Products (Location-aware ProductStock via fast SQL, fallback to Stock Master when empty)
             $totalProductsCount = Product::count();
             $hasLocStocks = ProductStock::exists();
             if ($hasLocStocks) {
-                $criticalStocksQuery = ProductStock::with(['product', 'location'])
-                    ->whereHas('product')
-                    ->whereHas('location')
-                    ->where(function ($q) {
-                        $q->where('stock', '<=', 0)
-                          ->orWhereRaw('stock <= COALESCE(min_stock, (SELECT min_stock FROM products WHERE products.id = product_stocks.product_id), 10)');
+                $lowCondSql = '(product_stocks.stock <= 0 OR product_stocks.stock <= COALESCE(product_stocks.min_stock, products.min_stock, 10))';
+                $lowStockCount = (int) \Illuminate\Support\Facades\DB::table('product_stocks')
+                    ->join('products', function ($join) {
+                        $join->on('products.id', '=', 'product_stocks.product_id')
+                            ->whereNull('products.deleted_at');
                     })
-                    ->orderBy('stock', 'asc');
-                $lowStockCount = (clone $criticalStocksQuery)->count();
-                $criticalItems = (clone $criticalStocksQuery)->take(5)->get()->map(function ($ps) {
-                    $p = $ps->product;
-                    $minStock = (int) ($ps->min_stock ?? $p->min_stock ?? 10);
-                    return [
-                        'sku' => $p->sku,
-                        'nama' => $p->name,
-                        'location' => $ps->location?->name ?? '-',
-                        'location_code' => $ps->location?->code ?? '-',
-                        'vendor' => $p->category ?? 'Vendor Utama',
-                        'stok' => (int) $ps->stock,
-                        'min' => $minStock,
-                        'unit' => $p->unit ?? 'Pcs',
-                        'status' => (int) $ps->stock <= 0 ? 'Habis' : 'Menipis',
-                    ];
-                })->values();
+                    ->join('locations', 'locations.id', '=', 'product_stocks.location_id')
+                    ->where('product_stocks.is_active', true)
+                    ->whereRaw($lowCondSql)
+                    ->count();
+
+                $criticalItems = ProductStock::query()
+                    ->select('product_stocks.*')
+                    ->join('products', function ($join) {
+                        $join->on('products.id', '=', 'product_stocks.product_id')
+                            ->whereNull('products.deleted_at');
+                    })
+                    ->join('locations', 'locations.id', '=', 'product_stocks.location_id')
+                    ->where('product_stocks.is_active', true)
+                    ->whereRaw($lowCondSql)
+                    ->with(['product', 'location'])
+                    ->orderBy('product_stocks.stock', 'asc')
+                    ->orderBy('product_stocks.id', 'asc')
+                    ->limit(5)
+                    ->get()
+                    ->map(function ($ps) {
+                        $p = $ps->product;
+                        $minStock = (int) ($ps->min_stock ?? $p->min_stock ?? 10);
+                        return [
+                            'sku' => $p->sku,
+                            'nama' => $p->name,
+                            'location' => $ps->location?->name ?? '-',
+                            'location_code' => $ps->location?->code ?? '-',
+                            'vendor' => $p->category ?? 'Vendor Utama',
+                            'stok' => (int) $ps->stock,
+                            'min' => $minStock,
+                            'unit' => $p->unit ?? 'Pcs',
+                            'status' => (int) $ps->stock <= 0 ? 'Habis' : 'Menipis',
+                        ];
+                    })->values();
             } else {
                 $criticalQuery = Product::where(function ($q) {
                     $q->whereColumn('stock', '<=', 'min_stock')
@@ -156,6 +252,8 @@ class OwnerDashboardController extends Controller
                 'low_stock_count' => $lowStockCount,
                 'total_products' => $totalProductsCount,
                 'total_branches' => $stores->count(),
+                'active_cashiers_count' => count($activeCashiers),
+                'active_cashiers' => $activeCashiers,
             ];
         };
 

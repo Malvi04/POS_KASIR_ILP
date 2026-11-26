@@ -400,7 +400,9 @@ class GoodsReceiptController extends Controller
             }
 
             $receipt->status = $targetStatus;
+            $receipt->synced_at = null;
             $receipt->save();
+            \App\Http\Controllers\Api\Shared\AuthController::dispatchBackgroundOperationalSync();
 
             try {
                 if ($targetStatus === 'APPROVED') {
@@ -530,7 +532,9 @@ class GoodsReceiptController extends Controller
             $receipt->verified_at = $now;
             $receipt->received_by = $user?->id;
             $receipt->notes = $validated['notes'] ?? $receipt->notes;
+            $receipt->synced_at = null;
             $receipt->save();
+            \App\Http\Controllers\Api\Shared\AuthController::dispatchBackgroundOperationalSync();
 
             try {
                 event(new StockUpdatedEvent([

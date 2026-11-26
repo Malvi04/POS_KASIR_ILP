@@ -20,17 +20,31 @@ class BranchController extends Controller
     {
         $locations = Location::all();
 
-        $allProducts = Product::all();
-        $totalStockMaster = (int) $allProducts->sum('stock');
-        $totalSkuCount = $allProducts->count();
+        $prodAgg = Product::selectRaw('
+            COUNT(*) as sku_count,
+            COALESCE(SUM(stock), 0) as total_stock,
+            COALESCE(AVG(CASE WHEN price > 0 THEN ((price - cost_price) / price) * 100 ELSE 0 END), 0) as avg_margin
+        ')->first();
 
-        // Real sales aggregation per product from transaction_items
-        $salesByProduct = \App\Models\TransactionItem::selectRaw('product_id, SUM(qty) as total_sold, SUM(total_price) as total_revenue')
-            ->groupBy('product_id')
-            ->get()
-            ->keyBy('product_id');
+        $totalStockMaster = (int) ($prodAgg->total_stock ?? 0);
+        $totalSkuCount = (int) ($prodAgg->sku_count ?? 0);
+        $avgMarginPct = round((float) ($prodAgg->avg_margin ?? 0), 1);
 
-        $topProducts = Product::orderByDesc('stock')->take(5)->get()->map(function ($p, $idx) use ($salesByProduct) {
+        $topProductModels = Product::orderByDesc('stock')->take(5)->get();
+        $topProductIds = $topProductModels->pluck('id')->all();
+
+        // Real sales aggregation scoped to top products + overall revenue
+        $salesByProduct = !empty($topProductIds)
+            ? \App\Models\TransactionItem::whereIn('product_id', $topProductIds)
+                ->selectRaw('product_id, SUM(qty) as total_sold, SUM(total_price) as total_revenue')
+                ->groupBy('product_id')
+                ->get()
+                ->keyBy('product_id')
+            : collect();
+
+        $totalRev = (float) \App\Models\TransactionItem::sum('total_price');
+
+        $topProducts = $topProductModels->map(function ($p, $idx) use ($salesByProduct) {
             $stat = $salesByProduct->get($p->id);
             return [
                 'rank' => $idx + 1,
@@ -64,11 +78,6 @@ class BranchController extends Controller
         $storeActiveCount = $data->where('facilityType', 'store')->where('status', 'AKTIF')->count();
         $warehouseCount = $data->where('facilityType', 'warehouse')->count();
 
-        $totalRev = (float) $salesByProduct->sum('total_revenue');
-        $avgMarginPct = $allProducts->count() > 0
-            ? round((float) $allProducts->avg(fn ($p) => $p->price > 0 ? (($p->price - $p->cost_price) / $p->price) * 100 : 0), 1)
-            : 0.0;
-
         return response()->json([
             'success' => true,
             'summary' => [
@@ -76,7 +85,7 @@ class BranchController extends Controller
                 'store_active_count' => $storeActiveCount,
                 'warehouse_count' => $warehouseCount,
                 'total_stok_master' => $totalStockMaster,
-                'avg_profitability' => ($totalRev > 0 || $allProducts->count() > 0) ? ($avgMarginPct . '%') : '0%',
+                'avg_profitability' => ($totalRev > 0 || $totalSkuCount > 0) ? ($avgMarginPct . '%') : '0%',
             ],
             'data' => $data,
         ]);

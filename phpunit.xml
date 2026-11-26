@@ -37,5 +37,9 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <env name="POS_NODE_ROLE" value="central" force="true"/>
+        <env name="POS_BRANCH_CODE" value="" force="true"/>
+        <env name="POS_TERMINAL_CODE" value="" force="true"/>
+        <env name="POS_BRANCH_UUID" value="" force="true"/>
     </php>
 </phpunit>

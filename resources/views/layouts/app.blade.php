@@ -202,8 +202,8 @@
 
     <!-- Modular Cacheable Scripts (Non-blocking & Defer) -->
     <script src="/js/excel-export.js" defer></script>
-    <script src="/js/pos-realtime.js?v=3.0.3" defer></script>
-    <script src="/js/pos-offline-sync.js?v=3.0.3" defer></script>
+    <script src="/js/pos-realtime.js?v=3.2.0" defer></script>
+    <script src="/js/pos-offline-sync.js?v=3.2.0" defer></script>
     <script src="/js/cashier-core.js?v={{ file_exists(public_path('js/cashier-core.js')) ? filemtime(public_path('js/cashier-core.js')) : '3.1.0' }}" defer></script>
 
     <!-- Local Alpine.js -->

@@ -337,6 +337,45 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Panel Aktivitas Kasir & Terminal Aktif Lintas Cabang -->
+            <div class="pt-3 border-t border-slate-100 space-y-2.5">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-rounded text-emerald-600 text-[19px]">point_of_sale</span>
+                        <h4 class="text-xs font-black text-slate-800 uppercase tracking-wide">Aktivitas Kasir &amp; Terminal Aktif</h4>
+                    </div>
+                    <span class="px-2.5 py-0.5 rounded-full text-[10.5px] font-extrabold border"
+                          :class="activeCashiers.length > 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'"
+                          x-text="activeCashiers.length + ' Kasir Aktif'"></span>
+                </div>
+
+                <template x-if="activeCashiers.length === 0">
+                    <div class="py-4 text-center text-xs text-slate-400 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                        Belum ada kasir yang login atau membuka sesi hari ini.
+                    </div>
+                </template>
+
+                <template x-if="activeCashiers.length > 0">
+                    <div class="divide-y divide-slate-100 rounded-xl border border-slate-200/80 overflow-hidden">
+                        <template x-for="c in activeCashiers" :key="c.id">
+                            <div class="px-3.5 py-2.5 bg-white flex items-center justify-between gap-3 text-xs">
+                                <div class="flex items-center gap-2.5 min-w-0">
+                                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+                                    <div class="min-w-0">
+                                        <div class="font-bold text-slate-900 truncate" x-text="c.name"></div>
+                                        <div class="text-[11px] text-slate-500 font-mono truncate" x-text="c.terminal + ' • ' + c.branch + ' • Jam ' + c.opened_at"></div>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-2 shrink-0">
+                                    <span class="font-mono font-bold text-slate-700" x-text="c.sales_today > 0 ? formatRupiah(c.sales_today) : (c.opening_cash > 0 ? ('Modal ' + formatRupiah(c.opening_cash)) : 'Siap Bertugas')"></span>
+                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200" x-text="c.status"></span>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+            </div>
         </div>
 
         <!-- Right 1 Col: Peringatan Stok Rendah & Tombol Buka Panel Products & Stok -->
@@ -416,6 +455,7 @@ function ownerDashboardApp() {
 
         criticalItems: [],
         branchSalesData: [],
+        activeCashiers: [],
 
         async init() {
             const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
@@ -449,6 +489,7 @@ function ownerDashboardApp() {
                         }
                         this.criticalItems = d.critical_items || [];
                         this.branchSalesData = d.branches || [];
+                        this.activeCashiers = d.active_cashiers || [];
                         this.isRealtimeSource = true;
                         return;
                     }

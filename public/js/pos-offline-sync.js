@@ -128,15 +128,22 @@
         reloadFromDexie: reloadFromDexie,
 
         isOnline() {
+            const isLocalHost = typeof window !== 'undefined' && ['127.0.0.1', 'localhost'].includes(window.location.hostname);
             if (window.Alpine && window.Alpine.store && window.Alpine.store('network')) {
                 const net = window.Alpine.store('network');
+                if (isLocalHost) {
+                    return net.isServerConnected !== false;
+                }
                 // Fully online ONLY when browser has network AND server is reachable
                 return !!(net.isOnline && (net.isServerConnected !== false));
             }
             if (window.posNetworkHealth && typeof window.posNetworkHealth.isServerConnected === 'boolean') {
+                if (isLocalHost) {
+                    return window.posNetworkHealth.isServerConnected !== false;
+                }
                 return !!(window.posNetworkHealth.isBrowserOnline && window.posNetworkHealth.isServerConnected);
             }
-            return typeof navigator !== 'undefined' ? navigator.onLine : true;
+            return isLocalHost ? true : (typeof navigator !== 'undefined' ? navigator.onLine : true);
         },
 
         getPendingTransactions() {
@@ -503,10 +510,11 @@
             await reloadFromDexie();
 
             // 1. Check Connectivity
+            const isLocalHost = typeof window !== 'undefined' && ['127.0.0.1', 'localhost'].includes(window.location.hostname);
             if (!this.isOnline()) {
-                if (typeof navigator !== 'undefined' && navigator.onLine) {
+                if (isLocalHost || (typeof navigator !== 'undefined' && navigator.onLine)) {
                     const probeCtrl = new AbortController();
-                    const probeTimeout = setTimeout(() => probeCtrl.abort(), 1500);
+                    const probeTimeout = setTimeout(() => probeCtrl.abort(), 3000);
                     try {
                         const probe = await fetch('/api/health?_t=' + Date.now(), {
                             method: 'GET',
@@ -539,15 +547,32 @@
                 }
             }
 
-            const pendingTrxs = state.cachedTransactions;
-            const pendingMovs = state.cachedMovements;
-            const pendingShifts = state.cachedShifts;
+            const activeNik = (localStorage.getItem('pos_portal_logged_in_nik') || '').trim();
+            const activeUsername = (localStorage.getItem('pos_portal_logged_in_username') || '').trim();
+            const matchesActiveCashier = (item) => {
+                if (!item || !item.cashier_nik) return true;
+                if (!activeNik && !activeUsername) return true;
+                const itemNik = String(item.cashier_nik).trim();
+                return itemNik === activeNik || itemNik === activeUsername;
+            };
+
+            const pendingTrxs = state.cachedTransactions.filter(matchesActiveCashier);
+            const deferredTrxs = state.cachedTransactions.filter(it => !matchesActiveCashier(it));
+            const pendingMovs = state.cachedMovements.filter(matchesActiveCashier);
+            const deferredMovs = state.cachedMovements.filter(it => !matchesActiveCashier(it));
+            const pendingShifts = state.cachedShifts.filter(matchesActiveCashier);
+            const deferredShifts = state.cachedShifts.filter(it => !matchesActiveCashier(it));
 
             if (pendingTrxs.length === 0 && pendingMovs.length === 0 && pendingShifts.length === 0) {
                 if (isManual) {
-                    this.showToast('Semua transaksi dan aktivitas kasir sudah tersinkronisasi 100% dengan server.', 'success');
+                    const deferredTotal = deferredTrxs.length + deferredMovs.length + deferredShifts.length;
+                    if (deferredTotal > 0) {
+                        this.showToast(`Terdapat ${deferredTotal} data offline milik sesi akun kasir lain. Login dengan akun kasir terkait untuk menyinkronkannya.`, 'info');
+                    } else {
+                        this.showToast('Semua transaksi dan aktivitas kasir sudah tersinkronisasi 100% dengan server.', 'success');
+                    }
                 }
-                return { success: true, syncedCount: 0, remaining: 0 };
+                return { success: true, syncedCount: 0, remaining: deferredTrxs.length + deferredMovs.length + deferredShifts.length };
             }
 
             state.isSyncing = true;
@@ -671,15 +696,19 @@
                     await window.PosDb.logs.addLog('SYNC_BATCH', 'batch_' + Date.now(), 'SUCCESS', `Synced: ${json.synced_count}, Failed: ${json.failed_count || 0}`);
                 }
 
-                // 5. Update In-Memory Queues
-                state.cachedTransactions = failedTrxList;
-                state.cachedMovements = failedMovList;
-                state.cachedShifts = failedShiftList;
+                // 5. Update In-Memory Queues (preserve deferred items from any other cashier session)
+                const remainingTrxs = [...failedTrxList, ...deferredTrxs];
+                const remainingMovs = [...failedMovList, ...deferredMovs];
+                const remainingShifts = [...failedShiftList, ...deferredShifts];
+
+                state.cachedTransactions = remainingTrxs;
+                state.cachedMovements = remainingMovs;
+                state.cachedShifts = remainingShifts;
 
                 // Sync fallback mirror in localStorage
-                safeSetJson(STORAGE_KEYS.OFFLINE_TRANSACTIONS, failedTrxList);
-                safeSetJson(STORAGE_KEYS.OFFLINE_MOVEMENTS, failedMovList);
-                safeSetJson(STORAGE_KEYS.OFFLINE_SHIFTS, failedShiftList);
+                safeSetJson(STORAGE_KEYS.OFFLINE_TRANSACTIONS, remainingTrxs);
+                safeSetJson(STORAGE_KEYS.OFFLINE_MOVEMENTS, remainingMovs);
+                safeSetJson(STORAGE_KEYS.OFFLINE_SHIFTS, remainingShifts);
 
                 // 6. Update local history status
                 const historyList = safeGetJson(STORAGE_KEYS.TRANSACTIONS, []);
@@ -700,7 +729,7 @@
                 }
 
                 // 7. Reset active session counters
-                const totalRemaining = failedTrxList.length + failedMovList.length + failedShiftList.length;
+                const totalRemaining = remainingTrxs.length + remainingMovs.length + remainingShifts.length;
                 try {
                     const sessionRaw = localStorage.getItem(STORAGE_KEYS.ACTIVE_SESSION);
                     if (sessionRaw) {

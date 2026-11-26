@@ -52,35 +52,43 @@ class ManagerDashboardController extends Controller
         $trxCountToday = $todayStoreTxs->count();
         $salesToday = round((float) $todayStoreTxs->sum('grand_total'), 2);
 
-        // 2. Low Stock & Per-Location Stock Breakdown (using product_stocks, never global Stock Master as store stock)
+        // 2. Low Stock & Per-Location Stock Breakdown (SQL-aggregated on PostgreSQL — zero memory bloat on 60k+ rows)
         $hasLocationStocks = ProductStock::exists();
         $warehouseStockSummary = null;
         $storeStocksSummary = [];
 
         if ($hasLocationStocks) {
-            $allPs = ProductStock::with(['product', 'location'])
-                ->where('is_active', true)
-                ->whereHas('product')
-                ->whereHas('location')
-                ->get();
+            $lowCondSql = '(product_stocks.stock <= COALESCE(product_stocks.min_stock, products.min_stock, 10) OR product_stocks.stock <= 10)';
 
-            $isPsLow = function (ProductStock $ps): bool {
-                $min = (int) ($ps->min_stock ?? $ps->product?->min_stock ?? 10);
-                return (int) $ps->stock <= $min || (int) $ps->stock <= 10;
-            };
+            $aggByLocation = DB::table('product_stocks')
+                ->join('products', function ($join) {
+                    $join->on('products.id', '=', 'product_stocks.product_id')
+                        ->whereNull('products.deleted_at');
+                })
+                ->join('locations', 'locations.id', '=', 'product_stocks.location_id')
+                ->where('product_stocks.is_active', true)
+                ->groupBy('product_stocks.location_id')
+                ->selectRaw(
+                    "product_stocks.location_id,
+                    COUNT(*) as total_skus,
+                    COALESCE(SUM(product_stocks.stock), 0) as total_units,
+                    COALESCE(SUM(CASE WHEN product_stocks.stock <= 0 THEN 1 ELSE 0 END), 0) as out_of_stock_count,
+                    COALESCE(SUM(CASE WHEN {$lowCondSql} THEN 1 ELSE 0 END), 0) as low_stock_count"
+                )
+                ->get()
+                ->keyBy('location_id');
 
-            $buildLocSummary = function (Location $loc) use ($allPs, $isPsLow): array {
-                $locRows = $allPs->where('location_id', $loc->id);
-                $lowRows = $locRows->filter($isPsLow)->sortBy('stock')->values();
+            $buildLocSummary = function (Location $loc) use ($aggByLocation): array {
+                $row = $aggByLocation->get($loc->id);
                 return [
                     'location_id' => $loc->id,
                     'location_code' => $loc->code,
                     'location_name' => $loc->name,
                     'location_type' => $loc->type,
-                    'total_skus' => $locRows->count(),
-                    'total_units' => (int) $locRows->sum('stock'),
-                    'out_of_stock_count' => $locRows->where('stock', '<=', 0)->count(),
-                    'low_stock_count' => $lowRows->count(),
+                    'total_skus' => (int) ($row->total_skus ?? 0),
+                    'total_units' => (int) ($row->total_units ?? 0),
+                    'out_of_stock_count' => (int) ($row->out_of_stock_count ?? 0),
+                    'low_stock_count' => (int) ($row->low_stock_count ?? 0),
                 ];
             };
 
@@ -91,37 +99,59 @@ class ManagerDashboardController extends Controller
                 $storeStocksSummary[] = $buildLocSummary($sLoc);
             }
 
-            $filteredPs = $allPs;
-            if ($filterRequested) {
-                $filteredPs = $filterLoc
-                    ? $allPs->where('location_id', $filterLoc->id)
-                    : collect();
-            }
+            if ($filterRequested && !$filterLoc) {
+                $lowStockCount = 0;
+                $lowStockItems = collect();
+            } else {
+                if ($filterRequested && $filterLoc) {
+                    $lowStockCount = (int) ($aggByLocation->get($filterLoc->id)->low_stock_count ?? 0);
+                } else {
+                    $lowStockCount = (int) $aggByLocation->sum('low_stock_count');
+                }
 
-            $lowStocksAll = $filteredPs->filter($isPsLow)->sortBy('stock')->values();
-            $lowStockCount = $lowStocksAll->count();
-            $lowStockItems = $lowStocksAll->take(5)->map(function (ProductStock $ps) {
-                $p = $ps->product;
-                $loc = $ps->location;
-                $isZero = (int) $ps->stock === 0;
-                $minStock = (int) ($ps->min_stock ?? $p->min_stock ?? 10);
-                return [
-                    'id' => $p->id,
-                    'product_stock_id' => $ps->id,
-                    'location_id' => $loc->id,
-                    'location_code' => $loc->code,
-                    'location_name' => $loc->name,
-                    'location_type' => $loc->type,
-                    'nama' => $p->name,
-                    'stok' => (int) $ps->stock,
-                    'min_stock' => $minStock,
-                    'kategori' => $p->category,
-                    'statusText' => $isZero ? 'STOK KOSONG' : 'STOK KRITIS',
-                    'desc' => $isZero
-                        ? "[{$loc->name}] Stok habis — segera lakukan distribusi/re-order."
-                        : "[{$loc->name}] Tersisa " . (int) $ps->stock . ' ' . $p->unit . '.',
-                ];
-            })->values();
+                $lowQuery = ProductStock::query()
+                    ->select('product_stocks.*')
+                    ->join('products', function ($join) {
+                        $join->on('products.id', '=', 'product_stocks.product_id')
+                            ->whereNull('products.deleted_at');
+                    })
+                    ->join('locations', 'locations.id', '=', 'product_stocks.location_id')
+                    ->where('product_stocks.is_active', true)
+                    ->whereRaw($lowCondSql);
+
+                if ($filterRequested && $filterLoc) {
+                    $lowQuery->where('product_stocks.location_id', $filterLoc->id);
+                }
+
+                $lowStockItems = $lowQuery
+                    ->with(['product', 'location'])
+                    ->orderBy('product_stocks.stock', 'asc')
+                    ->orderBy('product_stocks.id', 'asc')
+                    ->limit(5)
+                    ->get()
+                    ->map(function (ProductStock $ps) {
+                        $p = $ps->product;
+                        $loc = $ps->location;
+                        $isZero = (int) $ps->stock === 0;
+                        $minStock = (int) ($ps->min_stock ?? $p->min_stock ?? 10);
+                        return [
+                            'id' => $p->id,
+                            'product_stock_id' => $ps->id,
+                            'location_id' => $loc->id,
+                            'location_code' => $loc->code,
+                            'location_name' => $loc->name,
+                            'location_type' => $loc->type,
+                            'nama' => $p->name,
+                            'stok' => (int) $ps->stock,
+                            'min_stock' => $minStock,
+                            'kategori' => $p->category,
+                            'statusText' => $isZero ? 'STOK KOSONG' : 'STOK KRITIS',
+                            'desc' => $isZero
+                                ? "[{$loc->name}] Stok habis — segera lakukan distribusi/re-order."
+                                : "[{$loc->name}] Tersisa " . (int) $ps->stock . ' ' . $p->unit . '.',
+                        ];
+                    })->values();
+            }
         } else {
             // Legacy compatibility fallback ONLY when no product_stocks rows have been distributed yet
             $lowStockQuery = Product::where(function ($q) {
@@ -159,7 +189,7 @@ class ManagerDashboardController extends Controller
             'definition' => 'Agregat Stock Master seluruh lokasi (Gudang Pusat + semua Toko); bukan stok tersedia di masing-masing toko.',
         ];
 
-        // 3. Active Cashiers & Terminals
+        // 3. Active Cashiers & Terminals (Open Shifts + Cashiers Logged Into Portal Today)
         $openShiftsQuery = CashierShift::with('location')
             ->where('status', 'OPEN')
             ->orderBy('opened_at', 'desc');
@@ -169,6 +199,9 @@ class ManagerDashboardController extends Controller
         $openShifts = $openShiftsQuery->get();
 
         $cashierList = [];
+        $representedUserIds = [];
+        $representedNames = [];
+
         if ($openShifts->count() > 0) {
             $salesByShift = Transaction::whereIn('shift_id', $openShifts->pluck('id'))
                 ->whereIn('status', ['SUCCESS', 'COMPLETED'])
@@ -185,18 +218,78 @@ class ManagerDashboardController extends Controller
                     ->take(2)
                     ->join('');
 
+                if ($shift->user_id) {
+                    $representedUserIds[$shift->user_id] = true;
+                }
+                $representedNames[strtolower(trim($name))] = true;
+
                 $cashierList[] = [
                     'id' => $shift->id,
                     'name' => $name,
                     'initial' => $initials ?: 'KS',
-                    'terminal' => $shift->terminal_code,
+                    'terminal' => $shift->terminal_code . ' • ' . ($shift->location?->name ?? $shift->branch ?? 'Toko Pusat'),
                     'location_id' => $shift->location_id,
                     'branch' => $shift->location?->name ?? $shift->branch,
-                    'total' => 'Rp ' . number_format($shiftSales ?: (float) $shift->opening_cash, 0, ',', '.'),
+                    'total' => 'Rp ' . number_format($shiftSales, 0, ',', '.') . ($shiftSales <= 0 && (float) $shift->opening_cash > 0 ? ' (Modal Rp ' . number_format((float) $shift->opening_cash, 0, ',', '.') . ')' : ''),
                     'status' => 'Aktif',
                     'color' => 'bg-green-500',
                 ];
             }
+        }
+
+        // Include cashiers who logged in today (active check-in without check-out) even before opening a shift
+        $activeAttendances = \App\Models\Attendance::with('user')
+            ->whereDate('date', $today)
+            ->where('status', 'HADIR')
+            ->where(function ($q) {
+                $q->whereNull('check_out')->orWhere('check_out', '')->orWhere('check_out', '-');
+            })
+            ->orderByDesc('id')
+            ->get();
+
+        foreach ($activeAttendances as $att) {
+            if ($att->user && !$att->user->isKasir()) {
+                continue;
+            }
+            if ($att->user_id && isset($representedUserIds[$att->user_id])) {
+                continue;
+            }
+            $normName = strtolower(trim((string) $att->staff_name));
+            if ($normName !== '' && isset($representedNames[$normName])) {
+                continue;
+            }
+
+            $attLoc = $att->branch ? $stockService->resolveLocation(null, $att->branch, null, null, 'STORE') : null;
+            if ($filterRequested && $filterLoc && $attLoc && $attLoc->id !== $filterLoc->id) {
+                continue;
+            }
+
+            if ($att->user_id) {
+                $representedUserIds[$att->user_id] = true;
+            }
+            if ($normName !== '') {
+                $representedNames[$normName] = true;
+            }
+
+            $name = $att->staff_name ?: 'Kasir';
+            $initials = collect(explode(' ', $name))
+                ->map(fn ($w) => strtoupper(substr($w, 0, 1)))
+                ->take(2)
+                ->join('');
+            $termDisplay = ($att->terminal && $att->terminal !== '-') ? $att->terminal : 'Login Portal';
+            $branchDisplay = $attLoc?->name ?? ($att->branch ?: 'Cabang Pusat');
+
+            $cashierList[] = [
+                'id' => 'att-' . $att->id,
+                'name' => $name,
+                'initial' => $initials ?: 'KS',
+                'terminal' => $termDisplay . ' • ' . $branchDisplay,
+                'location_id' => $attLoc?->id,
+                'branch' => $branchDisplay,
+                'total' => 'Masuk ' . ($att->check_in ?: '-') . ' WIB',
+                'status' => 'Aktif',
+                'color' => 'bg-emerald-500',
+            ];
         }
 
         // 4. Weekly Sales Chart (authoritative store partitioning)

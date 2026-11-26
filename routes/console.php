@@ -31,3 +31,8 @@ Schedule::command('pos:pull-master')
     ->everyFiveMinutes()
     ->withoutOverlapping()
     ->when(fn () => strtolower((string) config('pos_sync.node_role', 'central')) === 'local');
+
+Schedule::command('pos:pull-master --entity=goods_receipts')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->when(fn () => strtolower((string) config('pos_sync.node_role', 'central')) === 'local');

@@ -2,6 +2,7 @@
 
 use App\Models\CashierShift;
 use App\Models\Location;
+use App\Models\PosTerminal;
 use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Models\Supplier;
@@ -20,6 +21,25 @@ use Illuminate\Support\Str;
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
+    $defaultBranch = Location::firstOrCreate(
+        ['code' => 'CAB-001'],
+        [
+            'name' => 'Toko Pusat',
+            'type' => 'STORE',
+            'status' => 'AKTIF',
+            'is_active' => true,
+        ]
+    );
+
+    PosTerminal::updateOrCreate(
+        ['branch_id' => $defaultBranch->id, 'terminal_code' => 'KSR01'],
+        [
+            'name' => 'Kasir 1 Toko Pusat',
+            'api_token_hash' => PosTerminal::hashToken('secret-central-sync-token-2026'),
+            'is_active' => true,
+        ]
+    );
+
     config([
         'pos_sync.node_role' => 'local',
         'pos_sync.central_api_url' => 'https://central.pos-ilp.test',

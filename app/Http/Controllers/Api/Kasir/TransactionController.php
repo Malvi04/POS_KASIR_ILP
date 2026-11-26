@@ -28,6 +28,16 @@ class TransactionController extends Controller
      */
     public function checkout(Request $request): JsonResponse
     {
+        if (
+            strtolower((string) config('pos_sync.node_role', 'central')) === 'local'
+            && !$request->filled('terminal_code')
+            && trim((string) config('pos_sync.terminal_code', '')) !== ''
+        ) {
+            $request->merge([
+                'terminal_code' => strtoupper(trim((string) config('pos_sync.terminal_code'))),
+            ]);
+        }
+
         $validated = $request->validate([
             'offline_id' => 'nullable|string|max:120',
             'shift_id' => 'nullable|integer|exists:cashier_shifts,id',
@@ -129,14 +139,18 @@ class TransactionController extends Controller
                 : ($validated['cashier_name'] ?? $shift->cashier_name);
 
             $stockService = app(LocationStockService::class);
-            $terminalExpected = $stockService->resolveExpectedLocationForTerminal($shift->terminal_code);
-            $storeLocation = $stockService->resolveLocation(
+            $invoiceService = app(\App\Services\PosInvoiceGeneratorService::class);
+            $localIdentity = $invoiceService->resolveLocalIdentity(
+                $stockService,
                 $validated['location_id'] ?? $shift->location_id,
                 $validated['branch'] ?? $shift->branch,
                 $shift->terminal_code,
-                $user,
-                'STORE'
+                $user
             );
+            $isLocalNode = $localIdentity['is_local'];
+            $effectiveTerminalCode = $localIdentity['terminal_code'];
+            $terminalExpected = $stockService->resolveExpectedLocationForTerminal($shift->terminal_code);
+            $storeLocation = $localIdentity['location'];
 
             if ((!empty($validated['location_id']) || !empty($validated['branch'])) && $terminalExpected && $storeLocation && $terminalExpected->id !== $storeLocation->id) {
                 return response()->json([
@@ -262,11 +276,14 @@ class TransactionController extends Controller
                             $product->refresh();
                         }
                     } elseif ($useStoreStock && $storeLocation) {
+                        $allowNegativeLocal = $isLocalNode && (bool) config('pos_sync.allow_negative_local_stock', true);
                         $deductRes = $stockService->deductStock($product->id, $storeLocation->id, $baseQtyToDeduct, [
                             'movement_type' => 'SALE_OUT',
+                            'allow_negative' => $allowNegativeLocal,
+                            'preserve_negative_balance' => $allowNegativeLocal,
                             'reference_type' => Transaction::class,
                             'user_id' => $user?->id,
-                            'notes' => "Penjualan POS {$shift->terminal_code} ({$storeLocation->name})",
+                            'notes' => "Penjualan POS {$effectiveTerminalCode} ({$storeLocation->name})",
                         ]);
 
                         if (!$deductRes['success']) {
@@ -282,7 +299,8 @@ class TransactionController extends Controller
                         $product->refresh();
                     } else {
                         // Legacy compatibility mode (no Stock Toko rows initialized yet)
-                        if ($product->stock < $baseQtyToDeduct) {
+                        $allowNegativeLocal = $isLocalNode && (bool) config('pos_sync.allow_negative_local_stock', true);
+                        if (!$allowNegativeLocal && $product->stock < $baseQtyToDeduct) {
                             return response()->json([
                                 'success' => false,
                                 'error_code' => 'STOCK_INSUFFICIENT',
@@ -459,16 +477,8 @@ class TransactionController extends Controller
                 }
             }
 
-            // 5. Generate Collision-Resistant Unique Invoice Number
-            $datePrefix = date('Ymd');
-            $maxId = (int) (Transaction::max('id') ?? 0);
-            $randomSuffix = Str::upper(Str::random(3));
-            $invoiceNumber = "TRX-{$datePrefix}-" . Str::padLeft((string) ($maxId + 1), 4, '0') . "-{$randomSuffix}";
-            while (Transaction::where('invoice_number', $invoiceNumber)->exists()) {
-                $maxId++;
-                $randomSuffix = Str::upper(Str::random(4));
-                $invoiceNumber = "TRX-{$datePrefix}-" . Str::padLeft((string) $maxId, 4, '0') . "-{$randomSuffix}";
-            }
+            // 5. Generate Collision-Resistant Unique Invoice Number (INV-{BRANCH}-{TERMINAL}-{YYYYMMDD}-{SEQ} on local nodes)
+            $invoiceNumber = $invoiceService->generate($storeLocation, $effectiveTerminalCode);
 
             $transaction = Transaction::create([
                 'invoice_number' => $invoiceNumber,
@@ -476,7 +486,7 @@ class TransactionController extends Controller
                 'shift_id' => $shift->id,
                 'user_id' => $user?->id,
                 'cashier_name' => $cashierName,
-                'terminal_code' => $shift->terminal_code,
+                'terminal_code' => $effectiveTerminalCode,
                 'location_id' => $storeLocation?->id,
                 'branch' => $storeLocation?->name ?? $shift->branch,
                 'member_id' => $member?->id,
@@ -596,6 +606,8 @@ class TransactionController extends Controller
                     'items_count' => count($processedItems),
                 ]));
             } catch (\Throwable $e) {}
+
+            \App\Http\Controllers\Api\Shared\AuthController::dispatchBackgroundOperationalSync();
 
             return response()->json([
                 'success' => true,
@@ -747,6 +759,10 @@ class TransactionController extends Controller
                     referenceId: 'SYNC-' . date('YmdHis')
                 );
             } catch (\Throwable $e) {}
+        }
+
+        if ($syncedCount > 0 || count($shiftResults) > 0 || count($movResults) > 0) {
+            \App\Http\Controllers\Api\Shared\AuthController::dispatchBackgroundOperationalSync();
         }
 
         return response()->json([

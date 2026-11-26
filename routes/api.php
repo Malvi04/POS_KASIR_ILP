@@ -63,29 +63,28 @@ Route::get('/health', function () {
 
     $isOk = ($dbStatus === 'connected');
 
-    // Cached internet probe (TTL 15s) so health checks never stall the single-threaded PHP worker
-    static $lastInternetCheck = null;
-    static $lastCheckTime = 0;
-    $now = time();
+    // Cached internet probe (TTL 30s on disk) so health checks never stall PHP workers across requests
+    $hasInternet = true;
+    if (config('pos_sync.node_role') !== 'local') {
+        $cacheFile = storage_path('framework/cache/pos_health_net.json');
+        $now = time();
+        $cached = null;
+        if (is_file($cacheFile)) {
+            $raw = @file_get_contents($cacheFile);
+            $cached = $raw ? json_decode($raw, true) : null;
+        }
 
-    if ($lastInternetCheck !== null && ($now - $lastCheckTime) < 15) {
-        $hasInternet = $lastInternetCheck;
-    } else {
-        $hasInternet = false;
-        // Non-blocking fast socket check with short 0.2s timeout
-        $fp = @fsockopen('1.1.1.1', 53, $errno, $errstr, 0.2);
-        if ($fp) {
-            fclose($fp);
-            $hasInternet = true;
+        if (is_array($cached) && isset($cached['t'], $cached['ok']) && ($now - (int) $cached['t']) < 30) {
+            $hasInternet = (bool) $cached['ok'];
         } else {
-            $fp2 = @fsockopen('8.8.8.8', 53, $errno, $errstr, 0.2);
-            if ($fp2) {
-                fclose($fp2);
+            $hasInternet = false;
+            $fp = @fsockopen('1.1.1.1', 53, $errno, $errstr, 0.15);
+            if ($fp) {
+                fclose($fp);
                 $hasInternet = true;
             }
+            @file_put_contents($cacheFile, json_encode(['t' => $now, 'ok' => $hasInternet]));
         }
-        $lastInternetCheck = $hasInternet;
-        $lastCheckTime = $now;
     }
 
     return response()->json([
@@ -459,10 +458,11 @@ Route::prefix('notifications')->middleware('auth.api')->group(function () {
 |--------------------------------------------------------------------------
 | Modul F: Background Sync Receiver (Local Cashier Nodes -> Central Server)
 |--------------------------------------------------------------------------
-| Idempotent & Atomic Stock Decrement receiver using Dual-Key UUIDv7 mapping.
+| Multi-Branch & Multi-Terminal authenticated sync using PosTerminal SHA-256 tokens.
 */
-Route::prefix('v1/sync')->middleware(\App\Http\Middleware\VerifyCentralSyncToken::class)->group(function () {
+Route::prefix('v1/sync')->middleware(\App\Http\Middleware\AuthenticatePosTerminal::class)->group(function () {
     Route::post('/transactions', [\App\Http\Controllers\Api\V1\TransactionSyncController::class, 'syncTransactions']);
+    Route::post('/operational', [\App\Http\Controllers\Api\V1\TransactionSyncController::class, 'syncOperational']);
 
     // Master Data Pull Sync Provider (Central Server -> Local Cashier Nodes)
     Route::prefix('master')->group(function () {
@@ -471,6 +471,7 @@ Route::prefix('v1/sync')->middleware(\App\Http\Middleware\VerifyCentralSyncToken
         Route::get('/suppliers', [\App\Http\Controllers\Api\V1\MasterDataSyncController::class, 'suppliers']);
         Route::get('/products', [\App\Http\Controllers\Api\V1\MasterDataSyncController::class, 'products']);
         Route::get('/employees', [\App\Http\Controllers\Api\V1\MasterDataSyncController::class, 'employees']);
+        Route::get('/goods-receipts', [\App\Http\Controllers\Api\V1\MasterDataSyncController::class, 'goodsReceipts']);
     });
 });
 

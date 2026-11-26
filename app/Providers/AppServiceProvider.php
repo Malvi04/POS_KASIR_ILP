@@ -74,6 +74,30 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('api', function (Request $request) {
             return Limit::perMinute(300)->by($request->user()?->id ?: $request->ip());
         });
+
+        // Fast non-blocking guard: if Reverb broadcaster is configured on a local cashier PC
+        // where the Reverb WebSocket daemon is not running, fall back to 'log' immediately
+        // instead of stalling single-threaded PHP workers for 2+ seconds per broadcast event.
+        if (!app()->runningUnitTests() && config('broadcasting.default') === 'reverb') {
+            static $reverbReachable = null;
+            static $reverbCheckedAt = 0;
+            $nowTs = time();
+            if ($reverbReachable === null || ($nowTs - $reverbCheckedAt) > 30) {
+                $host = (string) config('broadcasting.connections.reverb.options.host', '127.0.0.1');
+                $port = (int) config('broadcasting.connections.reverb.options.port', 8080);
+                $fp = @fsockopen($host, $port, $errno, $errstr, 0.03);
+                if ($fp) {
+                    fclose($fp);
+                    $reverbReachable = true;
+                } else {
+                    $reverbReachable = false;
+                }
+                $reverbCheckedAt = $nowTs;
+            }
+            if (!$reverbReachable) {
+                config(['broadcasting.default' => 'log']);
+            }
+        }
     }
 }
 

@@ -134,45 +134,63 @@
         }
 
         // 2. Online Fetch: Initial view strictly capped at 100 items from Stock Toko of active branch
-        const isOffline = (window.Alpine && window.Alpine.store && window.Alpine.store('network') && !window.Alpine.store('network').isOnline)
-            || (window.PosOfflineSync && typeof window.PosOfflineSync.isOnline === 'function' && !window.PosOfflineSync.isOnline())
-            || !navigator.onLine;
+        const isLocalHost = ['127.0.0.1', 'localhost'].includes(window.location.hostname);
+        const isOffline = !isLocalHost && (
+            (window.Alpine && window.Alpine.store && window.Alpine.store('network') && window.Alpine.store('network').isServerConnected === false)
+            || !navigator.onLine
+        );
 
         if (!isOffline) {
-            try {
+            const fetchInitialCatalog = async (timeoutMs = 12000) => {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 2500);
-                const params = new URLSearchParams({
-                    branch: branch,
-                    terminal_code: terminal,
-                    limit: '100'
-                });
-                if (this.activeSession?.locationId) {
-                    params.set('location_id', String(this.activeSession.locationId));
-                }
-
-                const res = await fetch('/api/pos/products/search?' + params.toString(), {
-                    headers: { 'Accept': 'application/json' },
-                    signal: controller.signal
-                });
-                clearTimeout(timeoutId);
-
-                if (res.ok) {
-                    const json = await res.json();
-                    if (json.success && Array.isArray(json.data)) {
-                        const result = this.deduplicateProducts(json.data);
-                        this.products = result.unique.slice(0, 100);
-                        if (json.location && json.location.id && this.activeSession) {
-                            this.activeSession.locationId = json.location.id;
-                        }
-                        // Incremental paginated sync of full Stock Toko for offline readiness
-                        this.syncStoreCatalogIncremental(branch, terminal, json.location || null);
+                const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+                try {
+                    const params = new URLSearchParams({
+                        branch: branch,
+                        terminal_code: terminal,
+                        limit: '100'
+                    });
+                    if (this.activeSession?.locationId) {
+                        params.set('location_id', String(this.activeSession.locationId));
                     }
+
+                    const res = await fetch('/api/pos/products/search?' + params.toString(), {
+                        headers: { 'Accept': 'application/json' },
+                        signal: controller.signal
+                    });
+                    clearTimeout(timeoutId);
+
+                    if (res.ok) {
+                        const json = await res.json();
+                        if (json.success && Array.isArray(json.data)) {
+                            const result = this.deduplicateProducts(json.data);
+                            this.products = result.unique.slice(0, 100);
+                            if (json.location && json.location.id && this.activeSession) {
+                                this.activeSession.locationId = json.location.id;
+                            }
+                            // Incremental paginated sync of Stock Toko for offline readiness
+                            this.syncStoreCatalogIncremental(branch, terminal, json.location || null);
+                            return true;
+                        }
+                    }
+                    return false;
+                } catch (err) {
+                    clearTimeout(timeoutId);
+                    throw err;
                 }
+            };
+
+            try {
+                await fetchInitialCatalog(12000);
                 // Preload available coupon units for POS cashier
                 this.loadCouponProductsInPos(false);
             } catch (e) {
-                // Silent fallback to branch cache
+                // Retry once after brief yield if showcase is still empty (e.g. single-worker startup queue)
+                if (!this.products || this.products.length === 0) {
+                    setTimeout(() => {
+                        fetchInitialCatalog(15000).catch(() => {});
+                    }, 700);
+                }
             }
         }
     },
@@ -184,10 +202,11 @@
             let afterId = 0;
             let hasMore = true;
             let pageGuard = 0;
+            let maxPages = ['127.0.0.1', 'localhost'].includes(window.location.hostname) ? 3 : 20;
             const accumulated = [];
             let resolvedLoc = initialLocation;
 
-            while (hasMore && pageGuard < 200) {
+            while (hasMore && pageGuard < maxPages) {
                 pageGuard++;
                 if (this.getActiveBranch() !== expectedBranch) {
                     // Branch switched mid-sync: abort without overwriting cache
@@ -218,9 +237,16 @@
                 if (json.location) {
                     resolvedLoc = json.location;
                 }
+                if (Number(json.total_store_sku) > 500 && maxPages > 3) {
+                    maxPages = 3;
+                }
                 accumulated.push(...json.data);
                 hasMore = Boolean(json.has_more && json.next_after_id);
                 afterId = json.next_after_id || 0;
+
+                if (hasMore && pageGuard < maxPages) {
+                    await new Promise(r => setTimeout(r, 150));
+                }
             }
 
             // Verify branch didn't change before swapping cache
@@ -237,7 +263,7 @@
                 location_code: resolvedLoc?.code || null,
                 location_name: resolvedLoc?.name || expectedBranch,
                 total: deduped.length,
-                partial: false,
+                partial: Boolean(hasMore),
                 quota_exceeded: false,
                 synced_at: new Date().toISOString()
             };
@@ -245,7 +271,7 @@
             // 1. Primary Storage: Dexie.js (IndexedDB)
             if (window.PosDb && typeof window.PosDb.products?.bulkUpsert === 'function') {
                 try {
-                    if (window.PosDb.db && window.PosDb.db.product_cache) {
+                    if (!hasMore && window.PosDb.db && window.PosDb.db.product_cache) {
                         const validIds = new Set(deduped.map(p => String(p.id || p.product_id)));
                         const existingInLoc = await window.PosDb.db.product_cache.where('location_id').equals(Number(locId)).toArray();
                         const staleAutoIds = existingInLoc
@@ -276,7 +302,9 @@
             } catch (storageErr) {
                 // Non-fatal because Dexie is storing the authoritative offline catalog
             }
-            this.products = deduped.slice(0, 100);
+            if ((!this.products || this.products.length === 0) && deduped.length > 0) {
+                this.products = deduped.slice(0, 100);
+            }
         } catch (e) {
             console.warn('[StockTokoSync] Incremental sync paused, keeping previous verified cache:', e);
         } finally {
@@ -439,8 +467,9 @@
     },
     async searchServerProducts(q) {
         if (!q || q.length < 2) return;
+        const isLocalHost = ['127.0.0.1', 'localhost'].includes(window.location.hostname);
         // Skip server search if offline to prevent lag; search Dexie IndexedDB cache instead
-        if ((window.Alpine && window.Alpine.store && window.Alpine.store('network') && !window.Alpine.store('network').isOnline) || !navigator.onLine) {
+        if (!isLocalHost && ((window.Alpine && window.Alpine.store && window.Alpine.store('network') && window.Alpine.store('network').isServerConnected === false) || !navigator.onLine)) {
             if (window.PosDb && typeof window.PosDb.products?.search === 'function') {
                 const locId = this.activeSession?.locationId || 1;
                 const localMatches = await window.PosDb.products.search(locId, q, this.selectedCategory, 50);
@@ -457,7 +486,7 @@
 
         this.isSearchingServer = true;
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 1500);
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
 
         try {
             const branch = this.getActiveBranch();
@@ -1402,9 +1431,12 @@
         };
 
         // 1. Offline Detection: If network or server is offline, immediately checkout offline with zero downtime
-        const isOffline = (window.Alpine && window.Alpine.store && window.Alpine.store('network') && !window.Alpine.store('network').isOnline)
+        const isLocalHost = ['127.0.0.1', 'localhost'].includes(window.location.hostname);
+        const isOffline = !isLocalHost && (
+            (window.Alpine && window.Alpine.store && window.Alpine.store('network') && window.Alpine.store('network').isServerConnected === false)
             || (window.PosOfflineSync && !window.PosOfflineSync.isOnline())
-            || !navigator.onLine;
+            || !navigator.onLine
+        );
 
         if (isOffline) {
             this.executeOfflineCheckout(payload, method);
@@ -1413,7 +1445,7 @@
 
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3500); // 3.5s fast timeout
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s resilient timeout
 
             const res = await fetch('/api/pos/checkout', {
                 method: 'POST',
@@ -1531,11 +1563,11 @@
     }
 }"
 x-init="initOpening(); initProducts(); initCart(); initHeldBills(); initPromotions();"
-@pos-session-sync.window="initOpening()"
+@pos-session-sync.window="initOpening(); if (!products || products.length === 0) initProducts();"
 @pos-inventory-synced.window="initProducts()"
 @pos:inventory_updated.window="initProducts()"
 @pos:held_bills_updated.window="initHeldBills()"
-@pos:session_updated.window="initOpening()"
+@pos:session_updated.window="initOpening(); if (!products || products.length === 0) initProducts();"
 @pos:sync-all.window="initOpening(); initProducts(); initHeldBills();"
 @keydown.f2.window.prevent="$refs.searchInput.focus()"
 @keydown.f3.window.prevent="showHoldModal = true"

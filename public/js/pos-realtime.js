@@ -293,10 +293,13 @@
         }
     }
 
+    const isLocalNodeHost = typeof window !== 'undefined'
+        && ['127.0.0.1', 'localhost'].includes(window.location.hostname);
+
     async function checkNetworkHealth(trigger = 'timer') {
         const browserOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
 
-        if (!browserOnline) {
+        if (!browserOnline && !isLocalNodeHost) {
             if (activeCheckController) {
                 try { activeCheckController.abort(); } catch (e) {}
                 activeCheckController = null;
@@ -314,7 +317,6 @@
             window.Alpine.store('network').isChecking = true;
         }
 
-        const startTime = performance.now();
         activeCheckController = new AbortController();
         const timeoutMs = 5000;
         const timeoutId = setTimeout(() => {
@@ -351,7 +353,7 @@
             })();
 
             const [clientInternetRes, serverRes] = await Promise.allSettled([
-                probeInternet(1500),
+                isLocalNodeHost ? Promise.resolve(true) : probeInternet(1500),
                 serverProbe
             ]);
 
@@ -379,16 +381,19 @@
         }
 
         const currentBrowserOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
-        const overallInternet = currentBrowserOnline && (clientHasInternet || serverHasInternet);
+        const effectiveBrowserOnline = isLocalNodeHost ? true : currentBrowserOnline;
+        const overallInternet = isLocalNodeHost
+            ? true
+            : (currentBrowserOnline && (clientHasInternet || serverHasInternet || serverOk));
 
-        if (serverOk && currentBrowserOnline && overallInternet) {
+        if (serverOk && effectiveBrowserOnline) {
             consecutiveFailures = 0;
             applyConnectionState(true, true, 'connected', null, httpLatency, true);
             scheduleNextHealthCheck(8000);
             return true;
         } else {
             consecutiveFailures++;
-            if (!currentBrowserOnline) {
+            if (!effectiveBrowserOnline) {
                 applyConnectionState(false, false, 'offline', 'wifi_offline', null, false);
                 scheduleNextHealthCheck(3000);
                 return false;
@@ -397,7 +402,7 @@
             if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
                 const reason = !overallInternet ? 'no_internet' : 'server_offline';
                 const opStatus = !overallInternet ? 'offline' : 'server_unavailable';
-                applyConnectionState(currentBrowserOnline, false, opStatus, reason, null, overallInternet);
+                applyConnectionState(effectiveBrowserOnline, false, opStatus, reason, null, overallInternet);
                 scheduleNextHealthCheck(4000);
             } else {
                 scheduleNextHealthCheck(1500);
@@ -429,6 +434,10 @@
 
     // Browser Physical Online / Offline Event Handlers
     window.addEventListener('offline', () => {
+        if (isLocalNodeHost) {
+            checkNetworkHealth('offline_event_local_probe');
+            return;
+        }
         console.warn('[PosRealtime] Physical network disconnected (offline event).');
         if (activeCheckController) {
             try { activeCheckController.abort(); } catch (e) {}

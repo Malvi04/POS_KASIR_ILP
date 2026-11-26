@@ -60,6 +60,41 @@ class AuthRealFlowTest extends TestCase
             ->assertJsonPath('user.username', 'test_kasir_flow');
     }
 
+    public function test_cashier_login_case_insensitive_and_by_nik_or_name(): void
+    {
+        // Test with uppercase
+        $resUpper = $this->postJson('/api/auth/login', [
+            'role' => 'kasir',
+            'identifier' => 'TEST_KASIR_FLOW',
+            'password' => 'kasirpass123',
+        ]);
+        $resUpper->assertStatus(200)->assertJsonPath('success', true);
+
+        // Test with mixed case
+        $resMixed = $this->postJson('/api/auth/login', [
+            'role' => 'kasir',
+            'identifier' => 'Test_Kasir_Flow',
+            'password' => 'kasirpass123',
+        ]);
+        $resMixed->assertStatus(200)->assertJsonPath('success', true);
+
+        // Test with NIK
+        $resNik = $this->postJson('/api/auth/login', [
+            'role' => 'kasir',
+            'identifier' => '20249999001',
+            'password' => 'kasirpass123',
+        ]);
+        $resNik->assertStatus(200)->assertJsonPath('success', true);
+
+        // Test with Name
+        $resName = $this->postJson('/api/auth/login', [
+            'role' => 'kasir',
+            'identifier' => 'Kasir Flow Test',
+            'password' => 'kasirpass123',
+        ]);
+        $resName->assertStatus(200)->assertJsonPath('success', true);
+    }
+
     public function test_cashier_login_fails_with_invalid_password(): void
     {
         $response = $this->postJson('/api/auth/login', [

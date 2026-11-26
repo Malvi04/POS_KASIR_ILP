@@ -63,6 +63,11 @@ class Location extends Model
         return $this->hasMany(StockMovement::class);
     }
 
+    public function terminals(): HasMany
+    {
+        return $this->hasMany(PosTerminal::class, 'branch_id');
+    }
+
     public function scopeStores($query)
     {
         return $query->where('type', '!=', 'WAREHOUSE');
