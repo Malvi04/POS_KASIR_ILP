@@ -1134,7 +1134,8 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
                     <!-- Tabel Item Barang yang Perlu Dikembalikan -->
                     <div class="border border-gray-200 rounded-xl overflow-hidden bg-white">
-                        <table class="w-full text-left border-collapse text-xs">
+                        <div class="overflow-x-auto min-w-0 w-full">
+                        <table class="w-full text-left border-collapse text-xs min-w-[520px]">
                             <thead class="bg-gray-50/80 border-b border-gray-200 text-gray-600 font-bold uppercase tracking-wider text-[11px]">
                                 <tr>
                                     <th class="px-4 py-2.5">PRODUK / ALASAN PENOLAKAN</th>
@@ -1170,6 +1171,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 </template>
                             </tbody>
                         </table>
+                        </div>
                     </div>
 
                     <!-- Detail Informasi Pengiriman -->
@@ -1268,6 +1270,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
 
                     <!-- Tabel Item Hasil Pemeriksaan -->
                     <div class="border border-gray-200 rounded-xl overflow-hidden bg-white">
+                        <div class="overflow-x-auto min-w-0 w-full">
                         <table class="w-full text-left border-collapse text-xs min-w-[550px]">
                             <thead class="bg-gray-50/80 border-b border-gray-200 font-bold text-gray-600 uppercase tracking-wider text-[11px]">
                                 <tr>
@@ -1300,6 +1303,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 </template>
                             </tbody>
                         </table>
+                        </div>
                     </div>
 
                     <!-- Riwayat Pengembalian Barang Ditolak jika ada -->

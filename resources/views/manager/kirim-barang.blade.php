@@ -1003,8 +1003,9 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     </div>
 
                     <!-- Tabel Item Form -->
-                    <div class="border border-gray-200 rounded-xl overflow-hidden">
-                        <table class="w-full text-left border-collapse text-xs">
+                    <div class="border border-gray-200 rounded-xl overflow-hidden bg-white">
+                        <div class="overflow-x-auto min-w-0 w-full">
+                        <table class="w-full text-left border-collapse text-xs min-w-[580px]">
                             <thead class="bg-gray-50 border-b border-gray-200 text-gray-600 font-bold uppercase text-[10.5px] whitespace-nowrap">
                                 <tr>
                                     <th class="px-3.5 py-2.5">Pilih Produk</th>
@@ -1086,6 +1087,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                 </template>
                             </tbody>
                         </table>
+                        </div>
                     </div>
                 </div>
 
@@ -1139,7 +1141,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
          @click.self="showDetailModal = false"
          class="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
         <div @click.stop
-             class="bg-white rounded-2xl border border-gray-200 shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+             class="bg-white rounded-2xl border border-gray-200 shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
 
             <!-- Modal Header -->
             <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-slate-50/50">
@@ -1201,8 +1203,9 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                     <!-- Tabel Rincian Barang Dikirim -->
                     <div>
                         <h3 class="font-bold text-gray-900 text-xs uppercase tracking-wider mb-2">Rincian Barang Dikirim</h3>
-                        <div class="border border-gray-200 rounded-xl overflow-hidden">
-                            <table class="w-full text-left border-collapse text-xs">
+                        <div class="border border-gray-200 rounded-xl overflow-hidden bg-white">
+                            <div class="overflow-x-auto min-w-0 w-full">
+                            <table class="w-full text-left border-collapse text-xs min-w-[660px]">
                                 <thead class="bg-gray-50 border-b border-gray-200 text-gray-600 font-bold uppercase text-[10.5px] whitespace-nowrap">
                                     <tr>
                                         <th class="px-3.5 py-2.5">No</th>
@@ -1245,15 +1248,16 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                     <span x-show="it.supplier_name" class="text-[10px] text-amber-700 font-medium" x-text="'Mitra: ' + it.supplier_name"></span>
                                                 </div>
                                             </td>
-                                            <td class="px-3.5 py-2.5 text-gray-500" x-text="it.category || '-'"></td>
-                                            <td class="px-3.5 py-2.5 text-center font-mono font-bold text-blue-700 bg-blue-50/30" x-text="it.qtySent + ' ' + (it.unit || 'Pcs')"></td>
-                                            <td class="px-3.5 py-2.5 text-center font-mono font-bold"
+                                            <td class="px-3.5 py-2.5 text-gray-500 whitespace-nowrap" x-text="it.category || '-'"></td>
+                                            <td class="px-3.5 py-2.5 text-center font-mono font-bold text-blue-700 bg-blue-50/30 whitespace-nowrap" x-text="it.qtySent + ' ' + (it.unit || 'Pcs')"></td>
+                                            <td class="px-3.5 py-2.5 text-center font-mono font-bold whitespace-nowrap"
                                                 :class="selectedDoc.status.includes('DITERIMA') || selectedDoc.status === 'APPROVED' ? (it.qtyReceived === it.qtySent ? 'text-emerald-700 bg-emerald-50/30' : 'text-rose-700 bg-rose-50/30') : 'text-gray-400'"
                                                 x-text="(selectedDoc.status.includes('DITERIMA') || selectedDoc.status === 'APPROVED') ? (it.qtyReceived + ' ' + (it.unit || 'Pcs')) : '-'"></td>
                                         </tr>
                                     </template>
                                 </tbody>
                             </table>
+                            </div>
                         </div>
                     </div>
 
