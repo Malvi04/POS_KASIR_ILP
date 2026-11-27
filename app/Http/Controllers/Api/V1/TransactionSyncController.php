@@ -821,13 +821,17 @@ class TransactionSyncController extends Controller
         }
 
         $grResults = [];
+        $servedLocationIds = \App\Http\Controllers\Api\V1\MasterDataSyncController::resolveServedStoreLocationIds(
+            $request->input('served_location_uuids', []),
+            $authoritativeBranchId
+        );
         foreach ($validated['goods_receipts'] ?? [] as $grPayload) {
             $grUuid = (string) $grPayload['uuid'];
             try {
-                DB::transaction(function () use ($grPayload, $grUuid, $authoritativeBranchId, $now, &$grResults) {
+                DB::transaction(function () use ($grPayload, $grUuid, $servedLocationIds, $now, &$grResults) {
                     $receipt = \App\Models\GoodsReceipt::with('items.product')
                         ->where('uuid', $grUuid)
-                        ->where('to_location_id', $authoritativeBranchId)
+                        ->whereIn('to_location_id', $servedLocationIds)
                         ->lockForUpdate()
                         ->first();
 
@@ -856,7 +860,7 @@ class TransactionSyncController extends Controller
                             $item->save();
 
                             if ($qtyRec > 0) {
-                                $stockService->addStock($item->product_id, $authoritativeBranchId, $qtyRec, [
+                                $stockService->addStock($item->product_id, (int) $receipt->to_location_id, $qtyRec, [
                                     'movement_type' => 'TRANSFER_IN',
                                     'unit_cost' => (float) $item->actual_unit_cost,
                                     'expired_date' => $item->expired_date?->toDateString(),

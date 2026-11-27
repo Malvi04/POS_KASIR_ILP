@@ -527,6 +527,10 @@ class PosPushSyncService
                     'notes' => $it->notes,
                 ])->filter(fn ($it) => !empty($it['product_uuid']))->values()->all(),
             ])->values()->all(),
+            'served_location_uuids' => $goodsReceipts->isNotEmpty()
+                ? \App\Models\Location::whereIn('id', $goodsReceipts->pluck('to_location_id')->filter()->unique()->all())
+                    ->pluck('uuid')->filter()->values()->all()
+                : [],
         ];
 
         try {

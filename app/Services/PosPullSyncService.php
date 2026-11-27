@@ -198,6 +198,14 @@ class PosPullSyncService
                 if ($updatedSince !== null) {
                     $queryParams['updated_since'] = $updatedSince;
                 }
+                if ($entity === 'goods_receipts') {
+                    // This node may serve several store branches (cashier selects branch at login)
+                    $queryParams['location_uuids'] = implode(',', Location::query()
+                        ->where('type', '!=', 'WAREHOUSE')
+                        ->whereNotNull('uuid')
+                        ->pluck('uuid')
+                        ->all());
+                }
 
                 $endpointSlug = $entity === 'goods_receipts' ? 'goods-receipts' : $entity;
                 $endpoint = "{$centralUrl}/api/v1/sync/master/{$endpointSlug}";

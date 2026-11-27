@@ -322,10 +322,14 @@ class MasterDataSyncController extends Controller
         $serverTime = now()->utc()->toIso8601String();
         $perPage = $this->resolvePerPage($request);
 
+        // A single local POS node may serve multiple store branches (cashier picks branch at login).
+        // Allow the node to request receipts for additional STORE locations via `location_uuids`.
+        $servedLocationIds = self::resolveServedStoreLocationIds($request->query('location_uuids'), $branchId);
+
         $query = \App\Models\GoodsReceipt::query()
             ->with(['items.product', 'fromLocation', 'toLocation', 'sender', 'receiver'])
             ->whereNull('purchase_id')
-            ->where('to_location_id', $branchId);
+            ->whereIn('to_location_id', $servedLocationIds);
 
         $this->applyUpdatedSince($query, $request, false);
         $query->orderBy('updated_at', 'asc')->orderBy('uuid', 'asc');
@@ -379,6 +383,32 @@ class MasterDataSyncController extends Controller
         ])->saveQuietly();
 
         return $terminal;
+    }
+
+    /**
+     * Resolve the set of STORE location ids a local node serves: the terminal's own branch
+     * plus any additional STORE locations explicitly requested (warehouses are never allowed).
+     *
+     * @param  mixed  $rawUuids  comma-separated string or array of location UUIDs
+     * @return array<int>
+     */
+    public static function resolveServedStoreLocationIds(mixed $rawUuids, int $terminalBranchId): array
+    {
+        $uuids = is_array($rawUuids) ? $rawUuids : explode(',', (string) $rawUuids);
+        $uuids = array_values(array_filter(array_map(fn ($u) => trim((string) $u), $uuids)));
+
+        $ids = [$terminalBranchId];
+        if (!empty($uuids)) {
+            $extra = Location::query()
+                ->whereIn('uuid', array_slice($uuids, 0, 50))
+                ->where('type', '!=', 'WAREHOUSE')
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+            $ids = array_merge($ids, $extra);
+        }
+
+        return array_values(array_unique(array_filter($ids)));
     }
 
     protected function resolvePerPage(Request $request): int
