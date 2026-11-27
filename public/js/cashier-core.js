@@ -2111,6 +2111,50 @@
 
                 // === OPSI A: CLOSING & HANDOVER WIZARD ===
                 openClosingWizard() {
+                    // Pastikan activeSession terisi dengan aman jika null/belum tersimpan
+                    if (!this.activeSession) {
+                        try {
+                            const saved = localStorage.getItem('pos_ilp_active_session_v1');
+                            if (saved) this.activeSession = JSON.parse(saved);
+                        } catch(e) {}
+                    }
+                    if (!this.activeSession) {
+                        const termId = this.selectedShift || localStorage.getItem('pos_kasir_shift') || 'POS-01';
+                        const termLabel = typeof this.formatShiftLabel === 'function' ? this.formatShiftLabel(termId) : termId;
+                        const cashierName = (this.activeOperator && this.activeOperator.name) || localStorage.getItem('pos_user_name') || 'Kasir';
+                        const cashierNik = localStorage.getItem('pos_user_nik') || localStorage.getItem('pos_kasir_staff_id') || 'KASIR01';
+                        this.activeSession = {
+                            sessionId: 'CS-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + termLabel.replace(/[^A-Za-z0-9]/g, '') + '-001',
+                            businessDayId: this.businessDayId || ('BD-' + new Date().toISOString().slice(0, 10).replace(/-/g, '')),
+                            businessDayDate: this.businessDayDate || new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+                            storeLocation: this.selectedBranch || localStorage.getItem('pos_kasir_branch') || 'Pusat',
+                            terminalId: termId,
+                            terminalLabel: termLabel,
+                            cashierId: cashierNik,
+                            cashierName: cashierName,
+                            cashierNik: cashierNik,
+                            cashierRole: 'Kasir Operasional',
+                            startedAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':'),
+                            openingCash: Number(localStorage.getItem('pos_kas_opening')) || 0,
+                            isHandoverOpening: false,
+                            prevVarianceLocked: 0,
+                            cashSalesNet: 0,
+                            qrisSales: 0,
+                            creditSales: 0,
+                            splitCashPortion: 0,
+                            splitNonCashPortion: 0,
+                            cashIn: 0,
+                            cashOut: 0,
+                            cashReturn: 0,
+                            cashDrop: 0,
+                            trxCount: 0,
+                            heldBillsCount: 0,
+                            status: 'OPEN',
+                            isOffline: false,
+                            pendingSyncCount: 0
+                        };
+                    }
+
                     this.closingWizard.open = true;
                     this.closingWizard.step = 1;
                     this.closingWizard.isSubmitting = false;
@@ -2121,7 +2165,9 @@
                     this.closingWizard.handoverNote = '';
                     this.closingWizard.errorMsg = '';
                     this.closingWizard.handoverType = 'handover';
-                    this.denomListIdr.forEach(item => item.count = 0);
+                    if (Array.isArray(this.denomListIdr)) {
+                        this.denomListIdr.forEach(item => item.count = 0);
+                    }
                     this.denomTotal = 0;
                     this.recalcClosingFigures();
                 },
@@ -2170,170 +2216,223 @@
                     this.closingWizard.errorMsg = '';
                     this.closingWizard.isSubmitting = true;
 
-                    const nowTime = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
-                    const s = this.activeSession;
+                    try {
+                        const nowTime = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
+                        const s = this.activeSession || {};
+                        const termId = s.terminalId || this.selectedShift || localStorage.getItem('pos_kasir_shift') || 'POS-01';
 
-                    const isHandoverSelected = (this.closingWizard.handoverType === 'handover' || this.closingWizard.handoverType === 'pending');
-                    const notePrefix = isHandoverSelected ? '[SERAH TERIMA] ' : '';
-                    const baseNote = (this.closingWizard.handoverNote && this.closingWizard.handoverNote.trim())
-                        ? this.closingWizard.handoverNote.trim()
-                        : (isHandoverSelected ? 'Serah terima shift (saldo fisik laci sesuai sistem).' : 'Saldo fisik sesuai perhitungan sistem.');
-                    const finalCloseNote = notePrefix + (diff === 0 ? baseNote : `[${this.closingWizard.varianceCategory}] ${this.closingWizard.varianceNote}`);
+                        // Declare & resolve term SEBELUM digunakan agar tidak terjadi ReferenceError TDZ
+                        const term = (this.terminals || []).find(t => 
+                            t.id === termId || 
+                            t.label === s.terminalLabel || 
+                            (t.code && t.code === termId) || 
+                            (t.id === 'POS-01' && (termId === 'kasir_1' || (s.terminalLabel && s.terminalLabel.includes('POS-01'))))
+                        );
 
-                    const closedRecord = {
-                        sessionId: s.sessionId,
-                        shift_code: s.sessionId,
-                        businessDay: s.businessDayDate,
-                        terminalId: s.terminalId,
-                        terminal_id: s.terminalId,
-                        terminal_code: s.terminalLabel || s.terminalId || 'POS-01',
-                        terminalLabel: s.terminalLabel || (term ? term.label : this.formatShiftLabel(s.terminalId)),
-                        cashierId: s.cashierId,
-                        cashier_nik: s.cashierNik || s.cashierId,
-                        cashierName: s.cashierName,
-                        cashier_name: s.cashierName,
-                        startedAt: s.startedAt,
-                        endedAt: nowTime,
-                        closed_at: new Date().toISOString(),
-                        openingCash: s.openingCash,
-                        opening_cash: s.openingCash,
-                        cashSalesNet: (Number(s.cashSalesNet) || 0) + (Number(s.splitCashPortion) || 0),
-                        qrisSales: (Number(s.qrisSales) || 0) + (Number(s.splitNonCashPortion) || 0),
-                        creditSales: Number(s.creditSales) || 0,
-                        cashIn: Number(s.cashIn) || 0,
-                        cashOut: Number(s.cashOut) || 0,
-                        cashReturn: Number(s.cashReturn) || 0,
-                        cashDrop: Number(s.cashDrop) || 0,
-                        expectedClosingCash: exp,
-                        expected_cash: exp,
-                        actualClosingCash: act,
-                        actual_cash: act,
-                        cashVariance: diff,
-                        variance: diff,
-                        varianceStatus: diff === 0 ? 'SESUAI' : (diff > 0 ? 'LEBIH' : 'KURANG'),
-                        variance_status: diff === 0 ? 'SESUAI' : (diff > 0 ? 'LEBIH' : 'KURANG'),
-                        status: diff === 0 ? 'CLOSED' : 'PENDING_REVIEW',
-                        reviewStatus: diff === 0 ? 'VERIFIED' : 'PENDING_REVIEW',
-                        closeNote: finalCloseNote,
-                        closing_notes: finalCloseNote,
-                        isHandover: isHandoverSelected,
-                        is_handover: isHandoverSelected,
-                        handoverType: isHandoverSelected ? 'handover' : 'close_only',
-                        handover_type: isHandoverSelected ? 'handover' : 'close_only',
-                        handoverToName: isHandoverSelected
-                            ? 'Menunggu Kasir Berikutnya'
-                            : 'Tutup Kasir Selesai (Tanpa Serah Terima)',
-                        trxCount: s.trxCount || 0,
-                        syncStatus: s.isOffline ? 'PENDING_SYNC' : 'SYNCED'
-                    };
+                        const termLabel = s.terminalLabel || (term ? term.label : (typeof this.formatShiftLabel === 'function' ? this.formatShiftLabel(termId) : termId)) || 'POS-01';
+                        const cashierName = s.cashierName || (this.activeOperator && this.activeOperator.name) || localStorage.getItem('pos_user_name') || 'Kasir';
+                        const cashierNik = s.cashierNik || s.cashierId || localStorage.getItem('pos_user_nik') || localStorage.getItem('pos_kasir_staff_id') || 'KASIR01';
+                        const sessionId = s.sessionId || ('CS-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + termLabel.replace(/[^A-Za-z0-9]/g, '') + '-001');
 
-                    // Prevent duplicate entries in session history
-                    const existingIdx = this.sessionHistory.findIndex(h => h.sessionId === closedRecord.sessionId);
-                    if (existingIdx >= 0) {
-                        this.sessionHistory[existingIdx] = closedRecord;
-                    } else {
-                        this.sessionHistory.unshift(closedRecord);
-                    }
-                    this.closingWizard.lastClosedRecord = closedRecord;
+                        const isHandoverSelected = (this.closingWizard.handoverType === 'handover' || this.closingWizard.handoverType === 'pending');
+                        const notePrefix = isHandoverSelected ? '[SERAH TERIMA] ' : '';
+                        const baseNote = (this.closingWizard.handoverNote && this.closingWizard.handoverNote.trim())
+                            ? this.closingWizard.handoverNote.trim()
+                            : (isHandoverSelected ? 'Serah terima shift (saldo fisik laci sesuai sistem).' : 'Saldo fisik sesuai perhitungan sistem.');
+                        const finalCloseNote = notePrefix + (diff === 0 ? baseNote : `[${this.closingWizard.varianceCategory}] ${this.closingWizard.varianceNote}`);
 
-                    // Update Terminal state accurately
-                    const term = this.terminals.find(t => t.id === s.terminalId || t.label === s.terminalLabel || (t.code && t.code === s.terminalId) || (t.id === 'POS-01' && (s.terminalId === 'kasir_1' || (s.terminalLabel && s.terminalLabel.includes('POS-01')))));
-                    if (term) {
-                        term.sessionsTodayCount = (term.sessionsTodayCount || 0) + 1;
-                        term.activeCashierName = null;
-                        term.activeCashierId = null;
-                        term.activeStartedAt = null;
-                        term.activeSessionId = null; // Reset activeSessionId so terminal is not treated as in-use!
+                        const closedRecord = {
+                            sessionId: sessionId,
+                            shift_code: sessionId,
+                            businessDay: s.businessDayDate || this.businessDayDate || new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+                            terminalId: termId,
+                            terminal_id: termId,
+                            terminal_code: termLabel,
+                            terminalLabel: termLabel,
+                            cashierId: cashierNik,
+                            cashier_nik: cashierNik,
+                            cashierName: cashierName,
+                            cashier_name: cashierName,
+                            startedAt: s.startedAt || nowTime,
+                            endedAt: nowTime,
+                            closed_at: new Date().toISOString(),
+                            openingCash: Number(s.openingCash) || 0,
+                            opening_cash: Number(s.openingCash) || 0,
+                            cashSalesNet: (Number(s.cashSalesNet) || 0) + (Number(s.splitCashPortion) || 0),
+                            qrisSales: (Number(s.qrisSales) || 0) + (Number(s.splitNonCashPortion) || 0),
+                            creditSales: Number(s.creditSales) || 0,
+                            cashIn: Number(s.cashIn) || 0,
+                            cashOut: Number(s.cashOut) || 0,
+                            cashReturn: Number(s.cashReturn) || 0,
+                            cashDrop: Number(s.cashDrop) || 0,
+                            expectedClosingCash: exp,
+                            expected_cash: exp,
+                            actualClosingCash: act,
+                            actual_cash: act,
+                            cashVariance: diff,
+                            variance: diff,
+                            varianceStatus: diff === 0 ? 'SESUAI' : (diff > 0 ? 'LEBIH' : 'KURANG'),
+                            variance_status: diff === 0 ? 'SESUAI' : (diff > 0 ? 'LEBIH' : 'KURANG'),
+                            status: diff === 0 ? 'CLOSED' : 'PENDING_REVIEW',
+                            reviewStatus: diff === 0 ? 'VERIFIED' : 'PENDING_REVIEW',
+                            closeNote: finalCloseNote,
+                            closing_notes: finalCloseNote,
+                            isHandover: isHandoverSelected,
+                            is_handover: isHandoverSelected,
+                            handoverType: isHandoverSelected ? 'handover' : 'close_only',
+                            handover_type: isHandoverSelected ? 'handover' : 'close_only',
+                            handoverToName: isHandoverSelected
+                                ? 'Menunggu Kasir Berikutnya'
+                                : 'Tutup Kasir Selesai (Tanpa Serah Terima)',
+                            trxCount: Number(s.trxCount) || 0,
+                            syncStatus: s.isOffline ? 'PENDING_SYNC' : 'SYNCED'
+                        };
 
-                        if (isHandoverSelected) {
-                            term.status = 'HANDOVER_PENDING';
-                            term.lastCashierName = closedRecord.cashierName;
-                            term.handover = {
-                                fromSessionId: closedRecord.sessionId,
-                                fromCashierId: closedRecord.cashierId,
-                                fromCashierNik: closedRecord.cashier_nik,
-                                fromCashierName: closedRecord.cashierName,
-                                endedAt: nowTime,
-                                closedAt: new Date().toISOString(),
-                                expectedCash: exp,
-                                actualCash: act,
-                                variance: diff,
-                                varianceStatus: diff === 0 ? 'SESUAI' : (diff > 0 ? 'LEBIH' : 'KURANG'),
-                                varianceNote: finalCloseNote,
-                                heldBillsCount: this.closingWizard.holdAction === 'inherit' ? (s.heldBillsCount || 0) : 0
-                            };
-                            closedRecord.handover = term.handover;
+                        // Prevent duplicate entries in session history
+                        if (!Array.isArray(this.sessionHistory)) {
+                            this.sessionHistory = [];
+                        }
+                        const existingIdx = this.sessionHistory.findIndex(h => h.sessionId === closedRecord.sessionId);
+                        if (existingIdx >= 0) {
+                            this.sessionHistory[existingIdx] = closedRecord;
                         } else {
-                            term.status = 'AVAILABLE';
-                            term.handover = null;
+                            this.sessionHistory.unshift(closedRecord);
                         }
-                    }
+                        this.closingWizard.lastClosedRecord = closedRecord;
 
-                    // Update activeSession state to reflect closed status
-                    this.activeSession.status = diff === 0 ? 'CLOSED' : 'PENDING_REVIEW';
-                    this.activeSession.endedAt = nowTime;
-                    this.activeSession.actualClosingCash = act;
-                    this.activeSession.cashVariance = diff;
+                        // Update Terminal state accurately
+                        if (term) {
+                            term.sessionsTodayCount = (term.sessionsTodayCount || 0) + 1;
+                            term.activeCashierName = null;
+                            term.activeCashierId = null;
+                            term.activeStartedAt = null;
+                            term.activeSessionId = null; // Reset activeSessionId so terminal is not treated as in-use!
 
-                    // Sync Shift Closing Audit ke PostgreSQL API (atau antrean offline jika jaringan terputus)
-                    const closePayload = {
-                        shift_code: s.sessionId,
-                        terminal_code: s.terminalLabel || s.terminalId || 'POS-01',
-                        location_id: s.locationId || null,
-                        branch: s.storeLocation || null,
-                        cashier_nik: s.cashierNik || null,
-                        cashier_name: s.cashierName || null,
-                        actual_cash: act,
-                        closing_notes: finalCloseNote,
-                        handover_type: isHandoverSelected ? 'handover' : 'close_only',
-                        closed_at: new Date().toISOString()
-                    };
-                    const isCloseOffline = (typeof navigator !== 'undefined' && !navigator.onLine)
-                        || (window.Alpine && window.Alpine.store && window.Alpine.store('network') && !window.Alpine.store('network').isOnline);
-
-                    const queueShiftCloseOffline = () => {
-                        if (window.PosOfflineSync && typeof window.PosOfflineSync.processOfflineShiftClose === 'function') {
-                            window.PosOfflineSync.processOfflineShiftClose(closePayload);
-                            closedRecord.syncStatus = 'PENDING_SYNC';
-                        } else if (window.PosDb && typeof window.PosDb.shifts?.enqueue === 'function') {
-                            window.PosDb.shifts.enqueue({
-                                offline_id: 'shf_close_' + Date.now(),
-                                action: 'CLOSE',
-                                ...closePayload,
-                                sync_status: 'PENDING_SYNC',
-                                retry_count: 0
-                            }).catch(() => {});
-                            closedRecord.syncStatus = 'PENDING_SYNC';
+                            if (isHandoverSelected) {
+                                term.status = 'HANDOVER_PENDING';
+                                term.lastCashierName = closedRecord.cashierName;
+                                term.handover = {
+                                    fromSessionId: closedRecord.sessionId,
+                                    fromCashierId: closedRecord.cashierId,
+                                    fromCashierNik: closedRecord.cashier_nik,
+                                    fromCashierName: closedRecord.cashierName,
+                                    endedAt: nowTime,
+                                    closedAt: new Date().toISOString(),
+                                    expectedCash: exp,
+                                    actualCash: act,
+                                    variance: diff,
+                                    varianceStatus: diff === 0 ? 'SESUAI' : (diff > 0 ? 'LEBIH' : 'KURANG'),
+                                    varianceNote: finalCloseNote,
+                                    heldBillsCount: this.closingWizard.holdAction === 'inherit' ? (s.heldBillsCount || 0) : 0
+                                };
+                                closedRecord.handover = term.handover;
+                            } else {
+                                term.status = 'AVAILABLE';
+                                term.handover = null;
+                            }
                         }
-                    };
 
-                    if (isCloseOffline) {
-                        queueShiftCloseOffline();
-                    } else {
-                        try {
-                            const ctrl = new AbortController();
-                            const tid = setTimeout(() => ctrl.abort(), 2500);
-                            const closeRes = await fetch('/api/shift/close', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                                signal: ctrl.signal,
-                                body: JSON.stringify(closePayload)
-                            });
-                            clearTimeout(tid);
-                            if (!closeRes.ok && closeRes.status >= 500) {
+                        // Update activeSession state to reflect closed status
+                        if (this.activeSession) {
+                            this.activeSession.status = diff === 0 ? 'CLOSED' : 'PENDING_REVIEW';
+                            this.activeSession.endedAt = nowTime;
+                            this.activeSession.actualClosingCash = act;
+                            this.activeSession.cashVariance = diff;
+                        }
+
+                        // Sync Shift Closing Audit ke PostgreSQL API (atau antrean offline jika jaringan terputus)
+                        const closePayload = {
+                            shift_code: sessionId,
+                            terminal_code: termLabel,
+                            location_id: s.locationId || null,
+                            branch: s.storeLocation || this.selectedBranch || null,
+                            cashier_nik: cashierNik,
+                            cashier_name: cashierName,
+                            actual_cash: act,
+                            closing_notes: finalCloseNote,
+                            handover_type: isHandoverSelected ? 'handover' : 'close_only',
+                            closed_at: new Date().toISOString()
+                        };
+                        const isCloseOffline = (typeof navigator !== 'undefined' && !navigator.onLine)
+                            || (window.Alpine && window.Alpine.store && window.Alpine.store('network') && !window.Alpine.store('network').isOnline);
+
+                        const queueShiftCloseOffline = () => {
+                            if (window.PosOfflineSync && typeof window.PosOfflineSync.processOfflineShiftClose === 'function') {
+                                window.PosOfflineSync.processOfflineShiftClose(closePayload);
+                                closedRecord.syncStatus = 'PENDING_SYNC';
+                            } else if (window.PosDb && typeof window.PosDb.shifts?.enqueue === 'function') {
+                                window.PosDb.shifts.enqueue({
+                                    offline_id: 'shf_close_' + Date.now(),
+                                    action: 'CLOSE',
+                                    ...closePayload,
+                                    sync_status: 'PENDING_SYNC',
+                                    retry_count: 0
+                                }).catch(() => {});
+                                closedRecord.syncStatus = 'PENDING_SYNC';
+                            }
+                        };
+
+                        if (isCloseOffline) {
+                            queueShiftCloseOffline();
+                        } else {
+                            try {
+                                const ctrl = new AbortController();
+                                const tid = setTimeout(() => ctrl.abort(), 3500);
+                                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+                                const closeRes = await fetch('/api/shift/close', {
+                                    method: 'POST',
+                                    credentials: 'same-origin',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'Accept': 'application/json',
+                                        'X-CSRF-TOKEN': csrfToken,
+                                        'X-Requested-With': 'XMLHttpRequest'
+                                    },
+                                    signal: ctrl.signal,
+                                    body: JSON.stringify(closePayload)
+                                });
+                                clearTimeout(tid);
+
+                                if (!closeRes.ok) {
+                                    if (closeRes.status === 403) {
+                                        const errJson = await closeRes.json().catch(() => ({}));
+                                        this.closingWizard.errorMsg = errJson.message || 'Anda tidak diizinkan menutup sesi kasir ini.';
+                                        this.closingWizard.isSubmitting = false;
+                                        return;
+                                    } else if (closeRes.status >= 500) {
+                                        queueShiftCloseOffline();
+                                    }
+                                    // Status 404 (sudah tertutup sebelumnya) diperlakukan sebagai sukses dan lanjut reset lokal
+                                }
+                            } catch (e) {
+                                console.warn('API Shift Close fallback offline:', e);
                                 queueShiftCloseOffline();
                             }
-                        } catch (e) {
-                            console.warn('API Shift Close fallback offline:', e);
-                            queueShiftCloseOffline();
                         }
-                    }
 
-                    localStorage.setItem('pos_cashier_opened', 'false');
-                    this.selectedShift = s.terminalId;
-                    localStorage.setItem('pos_kasir_shift', s.terminalId);
-                    this.persistAllState();
-                    window.location.href = '/select-shift';
+                        // Bersihkan sesi aktif lokal
+                        localStorage.setItem('pos_cashier_opened', 'false');
+                        localStorage.removeItem('pos_ilp_active_session_v1');
+                        this.activeSession = null;
+                        this.selectedShift = termId;
+                        localStorage.setItem('pos_kasir_shift', termId);
+
+                        if (this.closingWizard.holdAction === 'cancel') {
+                            this.heldBills = [];
+                            try { localStorage.removeItem('pos_held_bills_v1'); } catch(e) {}
+                        }
+
+                        this.persistAllState();
+                        this.closingWizard.open = false;
+
+                        // Alihkan kasir ke halaman pemilihan shift
+                        window.location.href = '/select-shift';
+                    } catch (err) {
+                        console.error('Gagal menutup sesi kasir:', err);
+                        this.closingWizard.errorMsg = 'Gagal menutup sesi: ' + (err.message || 'Terjadi kesalahan sistem.');
+                    } finally {
+                        this.closingWizard.isSubmitting = false;
+                    }
                 }
             };
         };

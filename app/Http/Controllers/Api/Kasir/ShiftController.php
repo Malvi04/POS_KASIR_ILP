@@ -331,6 +331,7 @@ class ShiftController extends Controller
         ]);
 
         $shift = null;
+        $cleanCode = null;
         if (!empty($validated['shift_code'])) {
             $shift = CashierShift::where('shift_code', $validated['shift_code'])->where('status', 'OPEN')->first();
         }
@@ -361,6 +362,7 @@ class ShiftController extends Controller
             if ($alreadyClosed) {
                 return response()->json([
                     'success' => true,
+                    'already_closed' => true,
                     'message' => "Sesi {$alreadyClosed->shift_code} sudah ditutup sebelumnya.",
                     'data' => [
                         'shift_code' => $alreadyClosed->shift_code,
@@ -376,16 +378,51 @@ class ShiftController extends Controller
         }
 
         if (!$shift) {
+            $lastClosed = null;
+            if (!empty($cleanCode)) {
+                $lastClosed = CashierShift::where('terminal_code', $cleanCode)->latest('id')->first();
+            }
+            if (!$lastClosed && Auth::check()) {
+                $lastClosed = CashierShift::where('user_id', Auth::id())->latest('id')->first();
+            }
+            if (!$lastClosed) {
+                $lastClosed = CashierShift::latest('id')->first();
+            }
+
             return response()->json([
-                'success' => false,
-                'message' => 'Tidak ditemukan sesi shift kasir yang aktif untuk ditutup.',
-            ], 404);
+                'success' => true,
+                'already_closed' => true,
+                'message' => $lastClosed
+                    ? "Sesi {$lastClosed->shift_code} ({$lastClosed->terminal_code}) sudah berstatus tutup sebelumnya."
+                    : 'Tidak ada sesi kasir aktif yang perlu ditutup. Sesi berstatus siap.',
+                'data' => $lastClosed ? [
+                    'shift_code' => $lastClosed->shift_code,
+                    'terminal_code' => $lastClosed->terminal_code,
+                    'cashier_name' => $lastClosed->cashier_name,
+                    'opened_at' => $lastClosed->opened_at?->toIso8601String(),
+                    'closed_at' => $lastClosed->closed_at?->toIso8601String(),
+                    'actual_cash' => (float) $lastClosed->actual_cash,
+                    'closing_notes' => $lastClosed->closing_notes,
+                ] : null,
+            ]);
         }
 
         $authUser = Auth::user();
         if ($authUser && $authUser->isKasir()) {
-            $ownsShift = ($shift->user_id && $shift->user_id === $authUser->id)
-                || ($shift->cashier_nik && ($shift->cashier_nik === $authUser->nik || $shift->cashier_nik === $authUser->username));
+            $ownsShift = false;
+            if ($shift->user_id && (int) $shift->user_id === (int) $authUser->id) {
+                $ownsShift = true;
+            } elseif ($shift->cashier_nik) {
+                $shiftNik = strtolower(trim($shift->cashier_nik));
+                $authNik = strtolower(trim((string) $authUser->nik));
+                $authUsername = strtolower(trim((string) $authUser->username));
+                $authName = strtolower(trim((string) $authUser->name));
+                if ($shiftNik === $authNik || $shiftNik === $authUsername || $shiftNik === $authName) {
+                    $ownsShift = true;
+                }
+            } elseif (empty($shift->user_id) && empty($shift->cashier_nik)) {
+                $ownsShift = true;
+            }
             if (!$ownsShift) {
                 return response()->json([
                     'success' => false,
@@ -462,6 +499,7 @@ class ShiftController extends Controller
             'data' => [
                 'shift_code' => $shift->shift_code,
                 'terminal_code' => $shift->terminal_code,
+                'status' => $shift->status,
                 'cashier_name' => $shift->cashier_name,
                 'opened_at' => $shift->opened_at->toIso8601String(),
                 'closed_at' => $shift->closed_at->toIso8601String(),
