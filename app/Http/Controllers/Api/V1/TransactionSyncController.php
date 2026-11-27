@@ -886,6 +886,47 @@ class TransactionSyncController extends Controller
                         }
                         $receipt->synced_at = $now;
                         $receipt->save();
+                    } elseif ($targetStatus === 'SUDAH_SAMPAI' && $receipt->verified_at === null
+                        && in_array(strtoupper((string) $receipt->status), ['BELUM_SAMPAI', 'MENUNGGU_VERIFIKASI'], true)) {
+                        $receipt->status = 'SUDAH_SAMPAI';
+                        $receipt->synced_at = $now;
+                        $receipt->save();
+                    } elseif ($targetStatus === 'TIDAK_SAMPAI' && $receipt->verified_at === null
+                        && in_array(strtoupper((string) $receipt->status), ['BELUM_SAMPAI', 'MENUNGGU_VERIFIKASI', 'SUDAH_SAMPAI'], true)) {
+                        // Return in-transit stock to origin warehouse on central
+                        $stockService = app(\App\Services\LocationStockService::class);
+                        $fromLocId = $receipt->from_location_id ?: $stockService->getWarehouseLocation()?->id;
+                        if ($fromLocId) {
+                            foreach ($receipt->items as $item) {
+                                $qty = (int) round((float) $item->qty_sent);
+                                if ($qty > 0) {
+                                    $stockService->addStock($item->product_id, (int) $fromLocId, $qty, [
+                                        'movement_type' => 'RETURN_IN',
+                                        'unit_cost' => (float) $item->actual_unit_cost,
+                                        'expired_date' => $item->expired_date?->toDateString(),
+                                        'reference_type' => \App\Models\GoodsReceipt::class,
+                                        'reference_id' => $receipt->id,
+                                        'reference_number' => $receipt->receipt_number,
+                                        'notes' => "Pengiriman tidak sampai / batal {$receipt->receipt_number} (sync kasir)",
+                                    ]);
+                                }
+                            }
+                        }
+                        $receipt->status = 'TIDAK_SAMPAI';
+                        $receipt->synced_at = $now;
+                        $receipt->save();
+                    }
+
+                    if (in_array($targetStatus, ['SUDAH_SAMPAI', 'TIDAK_SAMPAI', 'APPROVED', 'DITERIMA_LENGKAP', 'DITERIMA_SELISIH'], true)) {
+                        try {
+                            event(new \App\Events\StockUpdatedEvent([
+                                'location_id' => $receipt->to_location_id,
+                                'type' => 'goods_receipt_status',
+                                'receipt_number' => $receipt->receipt_number,
+                                'status' => $receipt->status,
+                            ]));
+                        } catch (Throwable $e) {
+                        }
                     }
 
                     $grResults[] = ['uuid' => $grUuid, 'success' => true, 'status' => 'synced'];

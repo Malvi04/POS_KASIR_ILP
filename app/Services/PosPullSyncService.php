@@ -783,8 +783,8 @@ class PosPullSyncService
                 ->orWhere('receipt_number', $receiptNo)
                 ->first();
 
-            // Do not overwrite a locally verified receipt that hasn't pushed yet
-            if ($existing && $existing->verified_at !== null && $existing->synced_at === null) {
+            // Do not overwrite a local status change (Sudah Sampai / Approved / Tidak Sampai) that hasn't been pushed yet
+            if ($existing && ($existing->synced_at === null || ($existing->updated_at && $existing->updated_at->gt($existing->synced_at)))) {
                 continue;
             }
 

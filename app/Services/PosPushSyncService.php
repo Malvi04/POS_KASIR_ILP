@@ -408,7 +408,7 @@ class PosPushSyncService
         }
         if (\Illuminate\Support\Facades\Schema::hasColumn('goods_receipts', 'synced_at')) {
             if (\App\Models\GoodsReceipt::query()
-                ->whereIn('status', ['APPROVED', 'DITERIMA_LENGKAP', 'DITERIMA_SELISIH', 'TIDAK_SAMPAI'])
+                ->whereIn('status', ['SUDAH_SAMPAI', 'APPROVED', 'DITERIMA_LENGKAP', 'DITERIMA_SELISIH', 'TIDAK_SAMPAI'])
                 ->where(fn ($q) => $q->whereNull('synced_at')->orWhereColumn('updated_at', '>', 'synced_at'))
                 ->exists()) {
                 return true;
@@ -455,7 +455,7 @@ class PosPushSyncService
 
         $goodsReceipts = \Illuminate\Support\Facades\Schema::hasColumn('goods_receipts', 'synced_at')
             ? \App\Models\GoodsReceipt::with(['items.product', 'receiver'])
-                ->whereIn('status', ['APPROVED', 'DITERIMA_LENGKAP', 'DITERIMA_SELISIH', 'TIDAK_SAMPAI'])
+                ->whereIn('status', ['SUDAH_SAMPAI', 'APPROVED', 'DITERIMA_LENGKAP', 'DITERIMA_SELISIH', 'TIDAK_SAMPAI'])
                 ->where(fn ($q) => $q->whereNull('synced_at')->orWhereColumn('updated_at', '>', 'synced_at'))
                 ->orderBy('id')
                 ->limit($batchSize)
