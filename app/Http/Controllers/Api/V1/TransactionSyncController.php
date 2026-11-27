@@ -699,6 +699,14 @@ class TransactionSyncController extends Controller
                         }
                     }
 
+                    if ($status === 'CLOSED') {
+                        CashierShift::where('location_id', $authoritativeBranchId)
+                            ->where('terminal_code', $uiTerminal)
+                            ->where('status', 'OPEN')
+                            ->where('uuid', '!=', $sUuid)
+                            ->update(['status' => 'CLOSED', 'closed_at' => $closedAt ?: $now]);
+                    }
+
                     \Illuminate\Support\Facades\Cache::forget('owner_dashboard_summary_' . Carbon::today()->toDateString() . '_' . Carbon::today()->toDateString());
 
                     $shiftResults[] = ['uuid' => $sUuid, 'success' => true, 'status' => 'synced'];

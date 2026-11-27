@@ -98,7 +98,10 @@ class CashierShiftCloseEdgeCasesTest extends TestCase
         $response->assertStatus(200)
             ->assertJson([
                 'success' => true,
-                'already_closed' => true,
+                'data' => [
+                    'shift_code' => 'CS-NONEXISTENT',
+                    'status' => 'CLOSED',
+                ],
             ]);
     }
 

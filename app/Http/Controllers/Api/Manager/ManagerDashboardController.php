@@ -189,9 +189,10 @@ class ManagerDashboardController extends Controller
             'definition' => 'Agregat Stock Master seluruh lokasi (Gudang Pusat + semua Toko); bukan stok tersedia di masing-masing toko.',
         ];
 
-        // 3. Active Cashiers & Terminals (Open Shifts + Cashiers Logged Into Portal Today)
+        // 3. Active Cashiers & Terminals (Open Shifts today + Cashiers Logged Into Portal Today)
         $openShiftsQuery = CashierShift::with('location')
             ->where('status', 'OPEN')
+            ->where('opened_at', '>=', $today)
             ->orderBy('opened_at', 'desc');
         if ($filterRequested && $filterLoc) {
             $openShiftsQuery->where('location_id', $filterLoc->id);

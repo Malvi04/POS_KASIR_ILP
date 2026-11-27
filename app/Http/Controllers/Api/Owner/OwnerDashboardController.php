@@ -80,9 +80,10 @@ class OwnerDashboardController extends Controller
                 ];
             }
 
-            // 3. Active Cashiers & Terminals across all branches (Open Shifts + Today's Portal Logins)
+            // 3. Active Cashiers & Terminals across all branches (Open Shifts today + Today's Portal Logins)
             $openShifts = \App\Models\CashierShift::with('location')
                 ->where('status', 'OPEN')
+                ->where('opened_at', '>=', Carbon::today())
                 ->orderByDesc('opened_at')
                 ->get();
 

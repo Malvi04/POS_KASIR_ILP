@@ -360,6 +360,15 @@ class ShiftController extends Controller
         if (!$shift && !empty($validated['shift_code'])) {
             $alreadyClosed = CashierShift::where('shift_code', $validated['shift_code'])->latest('id')->first();
             if ($alreadyClosed) {
+                try {
+                    \App\Services\AttendanceService::recordCashierCheckOut(
+                        shift: $alreadyClosed,
+                        staffName: $alreadyClosed->cashier_name,
+                        terminalCode: $alreadyClosed->terminal_code,
+                        noteReason: "Sesi {$alreadyClosed->shift_code} ditutup"
+                    );
+                } catch (\Throwable $e) {}
+
                 return response()->json([
                     'success' => true,
                     'already_closed' => true,
@@ -367,6 +376,7 @@ class ShiftController extends Controller
                     'data' => [
                         'shift_code' => $alreadyClosed->shift_code,
                         'terminal_code' => $alreadyClosed->terminal_code,
+                        'status' => 'CLOSED',
                         'cashier_name' => $alreadyClosed->cashier_name,
                         'opened_at' => $alreadyClosed->opened_at?->toIso8601String(),
                         'closed_at' => $alreadyClosed->closed_at?->toIso8601String(),
@@ -377,37 +387,36 @@ class ShiftController extends Controller
             }
         }
 
-        if (!$shift) {
-            $lastClosed = null;
-            if (!empty($cleanCode)) {
-                $lastClosed = CashierShift::where('terminal_code', $cleanCode)->latest('id')->first();
-            }
-            if (!$lastClosed && Auth::check()) {
-                $lastClosed = CashierShift::where('user_id', Auth::id())->latest('id')->first();
-            }
-            if (!$lastClosed) {
-                $lastClosed = CashierShift::latest('id')->first();
-            }
+        $authUser = Auth::user();
 
-            return response()->json([
-                'success' => true,
-                'already_closed' => true,
-                'message' => $lastClosed
-                    ? "Sesi {$lastClosed->shift_code} ({$lastClosed->terminal_code}) sudah berstatus tutup sebelumnya."
-                    : 'Tidak ada sesi kasir aktif yang perlu ditutup. Sesi berstatus siap.',
-                'data' => $lastClosed ? [
-                    'shift_code' => $lastClosed->shift_code,
-                    'terminal_code' => $lastClosed->terminal_code,
-                    'cashier_name' => $lastClosed->cashier_name,
-                    'opened_at' => $lastClosed->opened_at?->toIso8601String(),
-                    'closed_at' => $lastClosed->closed_at?->toIso8601String(),
-                    'actual_cash' => (float) $lastClosed->actual_cash,
-                    'closing_notes' => $lastClosed->closing_notes,
-                ] : null,
+        if (!$shift) {
+            // Skenario di mana kasir menutup sesi yang dibuat dari antarmuka kasir (misal offline/localStorage)
+            // tanpa baris OPEN sebelumnya di DB. Buatkan record shift baru agar tercatat resmi di database & tersinkronisasi.
+            $shiftCode = !empty($validated['shift_code']) ? trim($validated['shift_code']) : ('CS-' . date('Ymd') . '-' . ($cleanCode ?: 'POS01') . '-001');
+            $locId = $request->integer('location_id') ?: ($authUser?->location_id ?: (\App\Models\Location::where('type', '!=', 'WAREHOUSE')->value('id') ?: \App\Models\Location::value('id')));
+            $branchName = $request->input('branch') ?: ($authUser?->branch ?: 'Cabang Pusat');
+            $staffName = $request->input('cashier_name') ?: ($authUser?->name ?: 'Kasir');
+            $staffNik = $request->input('cashier_nik') ?: ($authUser?->nik ?: ($authUser?->username ?: 'KASIR'));
+
+            $shift = CashierShift::create([
+                'shift_code' => $shiftCode,
+                'terminal_code' => $cleanCode ?: ($validated['terminal_code'] ?? 'POS-01'),
+                'location_id' => $locId,
+                'branch' => $branchName,
+                'user_id' => $authUser?->id,
+                'cashier_nik' => $staffNik,
+                'cashier_name' => $staffName,
+                'opening_cash' => 0,
+                'actual_cash' => (float) $validated['actual_cash'],
+                'expected_cash' => 0,
+                'variance' => 0,
+                'variance_status' => 'SESUAI',
+                'closing_notes' => $validated['closing_notes'] ?? null,
+                'status' => 'OPEN',
+                'opened_at' => now(),
+                'synced_at' => null,
             ]);
         }
-
-        $authUser = Auth::user();
         if ($authUser && $authUser->isKasir()) {
             $ownsShift = false;
             if ($shift->user_id && (int) $shift->user_id === (int) $authUser->id) {
