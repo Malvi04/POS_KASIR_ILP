@@ -181,7 +181,7 @@ class GoodsReceiptController extends Controller
             );
 
             $origin = $validated['warehouseOrigin'] ?? $validated['origin_source'] ?? ($fromLoc?->name ?? 'Gudang Pusat');
-            $dest = $toLoc?->name ?? $destStr;
+            $dest = (!empty($destStr) && $destStr !== '-') ? $destStr : ($toLoc?->name ?? 'Toko Pusat');
             $driver = $validated['driverName'] ?? $validated['driver_name'] ?? '-';
             $plate = $validated['plateNumber'] ?? $validated['plate_number'] ?? '-';
             $inputStatus = strtoupper(trim($validated['status'] ?? ''));
@@ -775,6 +775,11 @@ class GoodsReceiptController extends Controller
             default => 'Belum sampai',
         };
 
+        $rawDest = $r->destination_store ?: ($r->toLocation?->name ?? '-');
+        $destStore = ($r->to_location_id === 2 || (str_contains(strtolower($rawDest), 'pusat') && !str_contains(strtolower($rawDest), 'gudang')))
+            ? 'Toko Pusat'
+            : $rawDest;
+
         return [
             'id' => $r->id,
             'docNo' => $r->receipt_number,
@@ -783,7 +788,7 @@ class GoodsReceiptController extends Controller
             'date' => $dateStr,
             'time' => $r->created_at ? $r->created_at->format('H:i') . ' WIB' : now()->format('H:i') . ' WIB',
             'warehouseOrigin' => $r->fromLocation?->name ?? ($r->origin_source ?: '-'),
-            'destinationStore' => $r->toLocation?->name ?? ($r->destination_store ?: '-'),
+            'destinationStore' => $destStore,
             'driverName' => $r->driver_name ?: '-',
             'plateNumber' => $r->plate_number ?: '-',
             'sent_by' => $r->sent_by,

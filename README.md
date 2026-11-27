@@ -11,6 +11,9 @@ Sistem Kasir (Point of Sale) dan Manajemen Retail Koperasi Minimarket ILP berbas
 ---
 
 ## 📑 Daftar Isi
+- [🧭 Dokumentasi Flow Sistem & Relasi Per Role](docs/DOKUMENTASI_FLOW_SISTEM_DAN_RELASI_PER_ROLE.md)
+- [🖥️ Panduan Instalasi Server Pusat (Central Server)](docs/PANDUAN_INSTALASI_SERVER_PUSAT.md)
+- [🛒 Panduan Instalasi PC Kasir (Local Node & Offline-First)](docs/PANDUAN_INSTALASI_PC_KASIR.md)
 - [📚 Dokumentasi Komprehensif Backend & Sistem](docs/DOKUMENTASI_LENGKAP_BACKEND_DAN_SISTEM_POS.md)
 - [🗄️ Dokumentasi Lengkap Skema Database & Relasi Tabel](docs/DOKUMENTASI_DATABASE_DAN_RELASI_TABEL.md)
 - [Ringkasan Pembaruan Terkini](#-ringkasan-pembaruan-terkini)
@@ -175,12 +178,20 @@ Untuk mempermudah pengujian dan demonstrasi sistem, gunakan kredensial bawaan be
 
 ## 💻 Panduan Instalasi & Menjalankan
 
-### Prasyarat Sistem
+Aplikasi ILP POS menggunakan arsitektur **Hybrid Distributed**:
+- Untuk deployment **Server Pusat (Central Node)** pada Linux Ubuntu/Debian Server, ikuti panduan lengkap di: 👉 [**Panduan Instalasi Server Pusat**](docs/PANDUAN_INSTALASI_SERVER_PUSAT.md)
+- Untuk instalasi **PC Kasir Meja Toko (Local POS Client - Offline-First)** pada Windows/Linux, ikuti panduan lengkap di: 👉 [**Panduan Instalasi PC Kasir**](docs/PANDUAN_INSTALASI_PC_KASIR.md)
+
+---
+
+### Panduan Cepat Pengembangan Lokal (Local Development)
+
+#### Prasyarat Sistem
 - **PHP**: Versi `>= 8.3` (dengan ekstensi `pdo_sqlite`, `pdo_pgsql`, `mbstring`, `openssl`, `curl`)
 - **Composer**: Versi `>= 2.0`
 - **Node.js**: Versi `>= 18.x` & **NPM**: Versi `>= 9.x`
 
-### Langkah-langkah Instalasi
+#### Langkah-langkah Instalasi Cepat:
 
 1. **Clone Repositori**:
    ```bash

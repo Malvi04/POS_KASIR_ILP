@@ -140,14 +140,17 @@
         }
         try {
             // Sinkronkan dokumen lokal ke localStorage cabang tujuan (jika di browser yang sama)
-            const branchesToSync = targetBranch ? [targetBranch] : ['Cabang A', 'Cabang B', 'Toko Pusat', 'Pusat'];
+            let branchesToSync = targetBranch ? [targetBranch] : ['Cabang A', 'Cabang B', 'Toko Pusat', 'Cabang Pusat', 'Pusat'];
+            if (targetBranch && targetBranch.toLowerCase().includes('pusat')) {
+                branchesToSync = ['Toko Pusat', 'Cabang Pusat', 'Pusat'];
+            }
             branchesToSync.forEach(b => {
                 const bNorm = b.toLowerCase();
                 const branchDocs = this.documents.filter(d => {
                     const dest = (d.destinationStore || '').toLowerCase();
-                    if (bNorm.includes('pusat')) return dest.includes('pusat');
-                    if (bNorm.includes('cabang a')) return dest.includes('cabang a');
-                    if (bNorm.includes('cabang b')) return dest.includes('cabang b');
+                    if (bNorm.includes('pusat')) return dest.includes('pusat') || Number(d.to_location_id) === 2;
+                    if (bNorm.includes('cabang a')) return dest.includes('cabang a') || Number(d.to_location_id) === 3;
+                    if (bNorm.includes('cabang b')) return dest.includes('cabang b') || Number(d.to_location_id) === 4;
                     return dest === bNorm;
                 });
                 localStorage.setItem('pos_ilp_goods_in_docs_v1_' + b, JSON.stringify(branchDocs));
@@ -155,20 +158,68 @@
         } catch (e) {}
     },
 
+    formatStoreName(name) {
+        if (!name || name === '-') return '-';
+        const lower = String(name).toLowerCase();
+        if (lower.includes('pusat')) return 'Toko Pusat';
+        if (lower.includes('cabang a') || lower.includes('sektor a') || lower === 'cab-002') return 'Cabang A';
+        if (lower.includes('cabang b') || lower.includes('sektor b') || lower === 'cab-003') return 'Cabang B';
+        return name;
+    },
+
+    matchesDestination(doc, filterVal) {
+        if (!filterVal || filterVal === 'all') return true;
+        const f = String(filterVal).toLowerCase().trim();
+        const dest = String(doc.destinationStore || '').toLowerCase().trim();
+        const locId = Number(doc.to_location_id);
+
+        if (f.includes('pusat')) {
+            return dest.includes('pusat') || dest.includes('minimarket') || locId === 2;
+        }
+        if (f.includes('cabang a') || f.includes('sektor a') || f === 'cab-002') {
+            return dest.includes('cabang a') || dest.includes('sektor a') || dest.includes('cabang 1') || locId === 3;
+        }
+        if (f.includes('cabang b') || f.includes('sektor b') || f === 'cab-003') {
+            return dest.includes('cabang b') || dest.includes('sektor b') || dest.includes('cabang 2') || locId === 4;
+        }
+        return dest === f || dest.includes(f);
+    },
+
+    matchesStatus(docStatus, filterVal) {
+        if (!filterVal || filterVal === 'all') return true;
+        const s = String(docStatus || '').toUpperCase();
+        const f = String(filterVal).toUpperCase();
+        if (f === 'MENUNGGU_VERIFIKASI' || f === 'BELUM_SAMPAI') {
+            return s === 'MENUNGGU_VERIFIKASI' || s === 'BELUM_SAMPAI';
+        }
+        if (f === 'DITERIMA_LENGKAP' || f === 'APPROVED') {
+            return s === 'DITERIMA_LENGKAP' || s === 'APPROVED';
+        }
+        if (f === 'DIBATALKAN' || f === 'TIDAK_SAMPAI') {
+            return s === 'DIBATALKAN' || s === 'TIDAK_SAMPAI';
+        }
+        return s === f;
+    },
+
+    matchesSearch(doc, query) {
+        if (!query || query.trim() === '') return true;
+        const q = query.toLowerCase().trim();
+        const matchNo = (doc.docNo || '').toLowerCase().includes(q);
+        const matchRef = (doc.requestRef || '').toLowerCase().includes(q);
+        const matchWh = (doc.warehouseOrigin || '').toLowerCase().includes(q);
+        const rawDest = (doc.destinationStore || '').toLowerCase();
+        const fmtDest = this.formatStoreName(doc.destinationStore).toLowerCase();
+        const matchDest = rawDest.includes(q) || fmtDest.includes(q) || (q.includes('pusat') && (rawDest.includes('pusat') || Number(doc.to_location_id) === 2));
+        const matchDriver = (doc.driverName || '').toLowerCase().includes(q) || (doc.plateNumber || '').toLowerCase().includes(q);
+        const matchProd = Array.isArray(doc.items) && doc.items.some(it => (it.name || '').toLowerCase().includes(q) || (it.sku || '').toLowerCase().includes(q));
+        return matchNo || matchRef || matchWh || matchDest || matchDriver || matchProd;
+    },
+
     get filteredDocuments() {
         return this.documents.filter(doc => {
-            if (this.statusFilter !== 'all' && doc.status !== this.statusFilter) return false;
-            if (this.destinationFilter !== 'all' && doc.destinationStore !== this.destinationFilter) return false;
-            if (this.searchQuery.trim() !== '') {
-                const q = this.searchQuery.toLowerCase();
-                const matchNo = (doc.docNo || '').toLowerCase().includes(q);
-                const matchRef = (doc.requestRef || '').toLowerCase().includes(q);
-                const matchWh = (doc.warehouseOrigin || '').toLowerCase().includes(q);
-                const matchDest = (doc.destinationStore || '').toLowerCase().includes(q);
-                const matchDriver = (doc.driverName || '').toLowerCase().includes(q) || (doc.plateNumber || '').toLowerCase().includes(q);
-                const matchProd = Array.isArray(doc.items) && doc.items.some(it => (it.name || '').toLowerCase().includes(q) || (it.sku || '').toLowerCase().includes(q));
-                return matchNo || matchRef || matchWh || matchDest || matchDriver || matchProd;
-            }
+            if (!this.matchesStatus(doc.status, this.statusFilter)) return false;
+            if (!this.matchesDestination(doc, this.destinationFilter)) return false;
+            if (!this.matchesSearch(doc, this.searchQuery)) return false;
             return true;
         });
     },
@@ -732,7 +783,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                                                 <td :rowspan="doc.items && doc.items.length > 0 ? doc.items.length : 1" class="px-4 py-3 align-middle whitespace-nowrap bg-white text-xs font-bold text-gray-900">
                                                     <span class="inline-flex items-center gap-1 text-slate-800">
                                                         <span class="material-symbols-rounded text-[14px] text-[#0052cc]">store</span>
-                                                        <span x-text="doc.destinationStore"></span>
+                                                        <span x-text="formatStoreName(doc.destinationStore)"></span>
                                                     </span>
                                                 </td>
                                             </template>
@@ -1131,7 +1182,7 @@ class="flex h-screen w-full bg-[#f8f9fa] font-sans text-gray-800 overflow-hidden
                         </div>
                         <div>
                             <span class="text-[10.5px] font-bold text-gray-400 uppercase tracking-wider block">Toko Tujuan</span>
-                            <span class="text-xs font-bold text-[#0052cc] mt-0.5 block" x-text="selectedDoc.destinationStore"></span>
+                            <span class="text-xs font-bold text-[#0052cc] mt-0.5 block" x-text="formatStoreName(selectedDoc.destinationStore)"></span>
                         </div>
                         <div>
                             <span class="text-[10.5px] font-bold text-gray-400 uppercase tracking-wider block">No. Referensi</span>
