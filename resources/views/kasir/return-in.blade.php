@@ -113,7 +113,11 @@
     },
 
     updateInventoryStock(items, docType) {
-        const rawProd = localStorage.getItem('pos_ilp_inventory_products_v1');
+        const rawBranch = this.getActiveCashierBranch ? this.getActiveCashierBranch() : (localStorage.getItem('pos_kasir_branch') || 'Cabang Pusat');
+        const branch = this.normalizeBranchName ? this.normalizeBranchName(rawBranch) : rawBranch;
+        const slug = String(branch).toLowerCase().replace(/[^a-z0-9]+/g, '_');
+        const branchKey = `pos_ilp_stock_toko_${slug}_v1`;
+        const rawProd = localStorage.getItem(branchKey);
         if (!rawProd) return;
         try {
             let prods = JSON.parse(rawProd);
@@ -128,7 +132,8 @@
                     }
                 }
             });
-            localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(prods));
+            localStorage.setItem(branchKey, JSON.stringify(prods));
+            localStorage.removeItem('pos_ilp_inventory_products_v1');
             window.dispatchEvent(new CustomEvent('pos-inventory-synced'));
         } catch(e) {
             console.error('Error updating stock', e);

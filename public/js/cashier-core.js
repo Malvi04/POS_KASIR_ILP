@@ -1,8 +1,9 @@
         (function() {
-            const RESET_FLAG = 'pos_ilp_v4_db_only_init';
+            const RESET_FLAG = 'pos_ilp_v5_branch_products_cleanup_20261128';
             if (localStorage.getItem(RESET_FLAG) !== 'true') {
                 const keysToClear = [
                     'pos_ilp_inventory_products_v1',
+                    'pos_ilp_inventory_catalog_meta_v1',
                     'pos_ilp_members_v1',
                     'pos_ilp_branches_v1',
                     'pos_ilp_transactions_v1',
@@ -35,6 +36,22 @@
                     'pos_cashier_opened'
                 ];
                 keysToClear.forEach(k => localStorage.removeItem(k));
+
+                // Clear all branch-specific product caches
+                for (let i = localStorage.length - 1; i >= 0; i--) {
+                    const k = localStorage.key(i);
+                    if (k && (k.startsWith('pos_ilp_stock_toko_') || k.startsWith('pos_ilp_inv_'))) {
+                        localStorage.removeItem(k);
+                    }
+                }
+
+                // Reset Dexie IndexedDB offline product cache so it re-fetches per branch from server
+                if (window.indexedDB && typeof window.indexedDB.deleteDatabase === 'function') {
+                    try {
+                        window.indexedDB.deleteDatabase('PosIlpOfflineDB');
+                    } catch(e) {}
+                }
+
                 localStorage.setItem(RESET_FLAG, 'true');
             }
         })();
@@ -221,8 +238,8 @@
                     if (!str) return 'Cabang Pusat';
                     const s = str.toString().toLowerCase();
                     if (s.includes('pusat') || s.includes('minimarket')) return 'Cabang Pusat';
-                    if (s.includes('cabang a') || s.includes('sektor a') || s.includes('cabang 1')) return 'Cabang A';
-                    if (s.includes('cabang b') || s.includes('sektor b') || s.includes('cabang 2')) return 'Cabang B';
+                    if (s.includes('cabang a') || s.includes('sektor a') || s.includes('cabang 1') || s.includes('mill') || s.includes('pabrik')) return 'Cabang A';
+                    if (s.includes('cabang b') || s.includes('sektor b') || s.includes('cabang 2') || s.includes('kebun')) return 'Cabang B';
                     return str;
                 },
 
@@ -461,14 +478,8 @@
                     localStorage.setItem('pos_kasir_branch', norm);
                     localStorage.setItem('pos_kasir_location', norm);
                     try {
-                        const metaRaw = localStorage.getItem('pos_ilp_inventory_catalog_meta_v1');
-                        if (metaRaw) {
-                            const meta = JSON.parse(metaRaw);
-                            if (meta && meta.branch && this.normalizeBranchName(meta.branch) !== norm) {
-                                localStorage.removeItem('pos_ilp_inventory_products_v1');
-                                localStorage.removeItem('pos_ilp_inventory_catalog_meta_v1');
-                            }
-                        }
+                        localStorage.removeItem('pos_ilp_inventory_products_v1');
+                        localStorage.removeItem('pos_ilp_inventory_catalog_meta_v1');
                     } catch (e) {}
                     this.branchAssignmentError = '';
                     this.terminalInactiveNotice = '';

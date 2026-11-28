@@ -18,17 +18,22 @@
     showToast: false,
 
     async initOpname(forceFresh = false) {
-        // 1. Ambil data produk terbaru langsung dari API master inventori
+        // 1. Ambil data produk terbaru langsung dari API master inventori cabang
         let prods = [];
+        const rawBranch = this.getActiveCashierBranch ? this.getActiveCashierBranch() : (localStorage.getItem('pos_kasir_branch') || 'Cabang Pusat');
+        const branch = this.normalizeBranchName ? this.normalizeBranchName(rawBranch) : rawBranch;
+        const slug = String(branch).toLowerCase().replace(/[^a-z0-9]+/g, '_');
+        const branchKey = `pos_ilp_stock_toko_${slug}_v1`;
         try {
-            const res = await fetch('/api/pos/products/search?limit=500', {
+            const res = await fetch('/api/pos/products/search?branch=' + encodeURIComponent(branch) + '&limit=500', {
                 headers: { 'Accept': 'application/json' }
             });
             if (res.ok) {
                 const json = await res.json();
                 if (json.success && Array.isArray(json.data)) {
                     prods = json.data;
-                    localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(prods));
+                    localStorage.setItem(branchKey, JSON.stringify(prods));
+                    localStorage.removeItem('pos_ilp_inventory_products_v1');
                 }
             }
         } catch(e) {
@@ -192,8 +197,12 @@
         this.isSubmittingOpname = true;
         const idemKey = window.createIdempotencyKey ? window.createIdempotencyKey() : ('sop-' + Date.now());
         try {
-            // 1. Update master inventory products in pos_ilp_inventory_products_v1
-            const raw = localStorage.getItem('pos_ilp_inventory_products_v1');
+            // 1. Update stock in isolated branch cache
+            const rawBranch = this.getActiveCashierBranch ? this.getActiveCashierBranch() : (localStorage.getItem('pos_kasir_branch') || 'Cabang Pusat');
+            const branch = this.normalizeBranchName ? this.normalizeBranchName(rawBranch) : rawBranch;
+            const slug = String(branch).toLowerCase().replace(/[^a-z0-9]+/g, '_');
+            const branchKey = `pos_ilp_stock_toko_${slug}_v1`;
+            const raw = localStorage.getItem(branchKey);
             if (raw) {
                 try {
                     let prods = JSON.parse(raw);
@@ -206,7 +215,8 @@
                             }
                         }
                     });
-                    localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(prods));
+                    localStorage.setItem(branchKey, JSON.stringify(prods));
+                    localStorage.removeItem('pos_ilp_inventory_products_v1');
                 } catch(e) {
                     console.error(e);
                 }

@@ -64,24 +64,20 @@
         return (num >= 1 && num <= 5) ? candidate : 'POS-01';
     },
     getBranchCacheKey(branch) {
-        const slug = String(branch || 'pusat').toLowerCase().replace(/[^a-z0-9]+/g, '_');
+        const norm = this.normalizeBranchName ? this.normalizeBranchName(branch) : (branch || 'Cabang Pusat');
+        const slug = String(norm || 'cabang_pusat').toLowerCase().replace(/[^a-z0-9]+/g, '_');
         return `pos_ilp_stock_toko_${slug}_v1`;
     },
     getCatalogMeta() {
-        try {
-            const raw = localStorage.getItem('pos_ilp_inventory_catalog_meta_v1');
-            return raw ? JSON.parse(raw) : null;
-        } catch (e) {
-            return null;
-        }
+        return null;
     },
     resolveBranchLocationId(branchName) {
         if (this.activeSession?.locationId) return Number(this.activeSession.locationId);
         const b = String(branchName || this.getActiveBranch() || '').toLowerCase();
-        if (b.includes('cabang a') || b.includes('cabang 1') || b === 'cab-002') return 3;
-        if (b.includes('cabang b') || b.includes('cabang 2') || b === 'cab-003') return 4;
+        if (b.includes('cabang a') || b.includes('cabang 1') || b.includes('mill') || b.includes('pabrik') || b === 'cab-002') return 3;
+        if (b.includes('cabang b') || b.includes('cabang 2') || b.includes('kebun') || b === 'cab-003') return 4;
         if (b.includes('gudang') || b === 'gdg-001') return 1;
-        return 2; // Default Toko Pusat (CAB-001)
+        return 2; // Default Cabang Pusat (CAB-001)
     },
     isCatalogSyncing: false,
 
@@ -90,7 +86,13 @@
         const terminal = this.getActiveTerminal();
         const branchKey = this.getBranchCacheKey(branch);
 
-        // 1. Instant Render from Dexie.js (IndexedDB) or location-isolated Stock Toko cache ONLY (never mix branches)
+        // Force purge legacy global/unscoped inventory caches
+        try {
+            localStorage.removeItem('pos_ilp_inventory_products_v1');
+            localStorage.removeItem('pos_ilp_inventory_catalog_meta_v1');
+        } catch(e) {}
+
+        // 1. Instant Render from isolated branch cache only (never mix branches)
         let loadedFromBranchCache = false;
         try {
             if (window.PosDb && typeof window.PosDb.products?.getByLocation === 'function') {
@@ -107,33 +109,22 @@
                 const branchRaw = localStorage.getItem(branchKey);
                 if (branchRaw) {
                     const parsed = JSON.parse(branchRaw);
-                    if (Array.isArray(parsed)) {
+                    if (Array.isArray(parsed) && parsed.length > 0) {
                         const result = this.deduplicateProducts(parsed);
                         this.products = result.unique;
                         loadedFromBranchCache = true;
                     }
-                }
-            }
-            if (!loadedFromBranchCache) {
-                const meta = this.getCatalogMeta();
-                const legacyRaw = localStorage.getItem('pos_ilp_inventory_products_v1');
-                if (legacyRaw && meta && meta.branch && this.normalizeBranchName(meta.branch) === branch) {
-                    const parsed = JSON.parse(legacyRaw);
-                    if (Array.isArray(parsed)) {
-                        const result = this.deduplicateProducts(parsed);
-                        this.products = result.unique;
-                        loadedFromBranchCache = true;
-                    }
-                } else if (!meta || (meta.branch && this.normalizeBranchName(meta.branch) !== branch)) {
-                    // Location changed: never display another branch's cached catalog
-                    this.products = [];
                 }
             }
         } catch (e) {
             this.products = [];
         }
 
-        // 2. Online Fetch: Initial view strictly capped at 100 items from Stock Toko of active branch
+        if (!loadedFromBranchCache) {
+            this.products = [];
+        }
+
+        // 2. Online Fetch: Strictly load from active branch's Stock Toko (Informasi Produk Cabang)
         const isLocalHost = ['127.0.0.1', 'localhost'].includes(window.location.hostname);
         const isOffline = !isLocalHost && (
             (window.Alpine && window.Alpine.store && window.Alpine.store('network') && window.Alpine.store('network').isServerConnected === false)
@@ -168,14 +159,25 @@
                             if (json.location && json.location.id && this.activeSession) {
                                 this.activeSession.locationId = json.location.id;
                             }
+                            try {
+                                localStorage.setItem(branchKey, JSON.stringify(this.products));
+                            } catch (e) {}
+
                             // Incremental paginated sync of Stock Toko for offline readiness
                             this.syncStoreCatalogIncremental(branch, terminal, json.location || null);
                             return true;
                         }
                     }
+
+                    // If API returned 422 or empty or error: reset to empty array
+                    this.products = [];
+                    try {
+                        localStorage.setItem(branchKey, JSON.stringify([]));
+                    } catch (e) {}
                     return false;
                 } catch (err) {
                     clearTimeout(timeoutId);
+                    this.products = [];
                     throw err;
                 }
             };
@@ -185,12 +187,7 @@
                 // Preload available coupon units for POS cashier
                 this.loadCouponProductsInPos(false);
             } catch (e) {
-                // Retry once after brief yield if showcase is still empty (e.g. single-worker startup queue)
-                if (!this.products || this.products.length === 0) {
-                    setTimeout(() => {
-                        fetchInitialCatalog(15000).catch(() => {});
-                    }, 700);
-                }
+                if (!this.products) this.products = [];
             }
         }
     },

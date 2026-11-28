@@ -241,7 +241,7 @@ class ProductController extends Controller
         $category = $request->query('category');
         $limit = min(max(1, (int) $request->query('limit', $request->query('per_page', 100))), 100);
 
-        $locContext = $this->resolvePosStoreContext($request);
+        $locContext = $this->resolvePosStoreContext($request, forceStrict: true);
         if ($locContext['error']) {
             return $locContext['error'];
         }
@@ -548,7 +548,7 @@ class ProductController extends Controller
     public function lookupBarcode(Request $request, string $barcode): JsonResponse
     {
         $barcode = trim($barcode);
-        $locContext = $this->resolvePosStoreContext($request);
+        $locContext = $this->resolvePosStoreContext($request, forceStrict: true);
         if ($locContext['error']) {
             return $locContext['error'];
         }
@@ -634,7 +634,7 @@ class ProductController extends Controller
      */
     public function categories(Request $request): JsonResponse
     {
-        $locContext = $this->resolvePosStoreContext($request);
+        $locContext = $this->resolvePosStoreContext($request, forceStrict: true);
         if ($locContext['error']) {
             return $locContext['error'];
         }
@@ -675,7 +675,7 @@ class ProductController extends Controller
      */
     public function couponProducts(Request $request): JsonResponse
     {
-        $locContext = $this->resolvePosStoreContext($request);
+        $locContext = $this->resolvePosStoreContext($request, forceStrict: true);
         $location = $locContext['location'] ?? null;
 
         $couponQuery = CouponUnit::with('product')
@@ -794,7 +794,7 @@ class ProductController extends Controller
     {
         $this->stockService->ensureDefaultLocations();
 
-        $locContext = $this->resolvePosStoreContext($request);
+        $locContext = $this->resolvePosStoreContext($request, forceStrict: true);
         $location = $locContext['location']
             ?? $this->stockService->resolveLocation(null, 'Toko Pusat', null, Auth::user(), 'STORE')
             ?? Location::where('type', '!=', 'WAREHOUSE')->first();
@@ -897,7 +897,7 @@ class ProductController extends Controller
     {
         $this->stockService->ensureDefaultLocations();
 
-        $locContext = $this->resolvePosStoreContext($request);
+        $locContext = $this->resolvePosStoreContext($request, forceStrict: true);
         $location = $locContext['location']
             ?? $this->stockService->resolveLocation(null, $request->input('branch') ?: 'Toko Pusat', $request->input('terminal_code'), Auth::user(), 'STORE')
             ?? Location::where('type', '!=', 'WAREHOUSE')->first();

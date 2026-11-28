@@ -78,6 +78,8 @@ class LocationStockService
         ?User $user = null,
         ?string $expectedType = null
     ): ?Location {
+        $this->ensureDefaultLocations();
+
         $baseQuery = function () use ($expectedType) {
             $q = Location::query();
             if ($expectedType === 'STORE') {
@@ -857,14 +859,14 @@ class LocationStockService
         if (str_contains($lower, 'gudang') || $lower === 'dc' || str_contains($lower, 'logistik') || $lower === 'gdg-001' || $lower === 'loc-dc') {
             return ['gdg-001', 'loc-dc', 'gudang', 'dc'];
         }
-        if ($lower === 'pst' || $lower === 'pusat' || str_contains($lower, 'cabang pusat') || str_contains($lower, 'toko pusat') || str_contains($lower, 'minimarket pusat') || $lower === 'cab-001' || $lower === 'loc-01') {
-            return ['cab-001', 'pst', 'loc-01', 'cabang pusat', 'toko pusat', 'pusat'];
+        if ($lower === 'pst' || $lower === 'pusat' || str_contains($lower, 'cabang pusat') || str_contains($lower, 'toko pusat') || str_contains($lower, 'minimarket pusat') || str_contains($lower, 'minimarket') || $lower === 'cab-001' || $lower === 'loc-01') {
+            return ['cab-001', 'pst', 'loc-01', 'cabang pusat', 'toko pusat', 'pusat', 'minimarket pusat'];
         }
-        if ($lower === 'cbg1' || str_contains($lower, 'cabang a') || str_contains($lower, 'cabang 1') || str_contains($lower, 'sektor a') || $lower === 'cab-002' || $lower === 'loc-02') {
-            return ['cab-002', 'cbg1', 'loc-02', 'cabang a', 'cabang 1'];
+        if ($lower === 'cbg1' || str_contains($lower, 'cabang a') || str_contains($lower, 'cabang 1') || str_contains($lower, 'sektor a') || str_contains($lower, 'mill') || str_contains($lower, 'pabrik') || $lower === 'cab-002' || $lower === 'loc-02') {
+            return ['cab-002', 'cbg1', 'loc-02', 'cabang a', 'cabang 1', 'mill', 'pabrik'];
         }
-        if ($lower === 'cbg2' || str_contains($lower, 'cabang b') || str_contains($lower, 'cabang 2') || str_contains($lower, 'sektor b') || $lower === 'cab-003' || $lower === 'loc-03') {
-            return ['cab-003', 'cbg2', 'loc-03', 'cabang b', 'cabang 2'];
+        if ($lower === 'cbg2' || str_contains($lower, 'cabang b') || str_contains($lower, 'cabang 2') || str_contains($lower, 'sektor b') || str_contains($lower, 'kebun') || $lower === 'cab-003' || $lower === 'loc-03') {
+            return ['cab-003', 'cbg2', 'loc-03', 'cabang b', 'cabang 2', 'kebun'];
         }
 
         return [$lower];

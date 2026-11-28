@@ -208,7 +208,7 @@
 
             const merged = Array.from(bySku.values());
             localStorage.setItem(branchKey, JSON.stringify(merged.slice(0, 150)));
-            localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(merged.slice(0, 150)));
+            localStorage.removeItem('pos_ilp_inventory_products_v1');
 
             // 2. Update Dexie IndexedDB if available (purge unshipped UMKM records for this location)
             if (window.PosDb) {

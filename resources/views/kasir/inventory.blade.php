@@ -106,15 +106,12 @@
 
     saveProductsToStorage() {
         try {
-            const branch = this.activeSession?.storeLocation || this.selectedBranch || localStorage.getItem('pos_kasir_branch') || 'Pusat';
+            const rawBranch = this.activeSession?.storeLocation || this.selectedBranch || localStorage.getItem('pos_kasir_branch') || 'Cabang Pusat';
+            const branch = this.normalizeBranchName ? this.normalizeBranchName(rawBranch) : rawBranch;
             const slug = String(branch).toLowerCase().replace(/[^a-z0-9]+/g, '_');
             localStorage.setItem(`pos_ilp_stock_toko_${slug}_v1`, JSON.stringify(this.products));
-            localStorage.setItem('pos_ilp_inventory_products_v1', JSON.stringify(this.products));
-            localStorage.setItem('pos_ilp_inventory_catalog_meta_v1', JSON.stringify({
-                branch: branch,
-                total: this.products.length,
-                synced_at: new Date().toISOString()
-            }));
+            localStorage.removeItem('pos_ilp_inventory_products_v1');
+            localStorage.removeItem('pos_ilp_inventory_catalog_meta_v1');
             window.dispatchEvent(new CustomEvent('pos-inventory-synced', { detail: { count: this.products.length } }));
         } catch (e) {
             console.error('Failed to save inventory products:', e);

@@ -66,17 +66,19 @@
                 // Discover all branch-specific catalogs in localStorage (e.g. pos_ilp_stock_toko_pusat_v1)
                 for (let i = 0; i < localStorage.length; i++) {
                     const key = localStorage.key(i);
-                    if (key && (key.startsWith('pos_ilp_stock_toko_') || key === OLD_STORAGE_KEYS.INVENTORY)) {
+                    if (key && key.startsWith('pos_ilp_stock_toko_')) {
                         const rawCat = localStorage.getItem(key);
                         const prods = safeParse(rawCat, []);
                         if (Array.isArray(prods) && prods.length > 0) {
-                            let locId = 1; // Default Pusat
-                            if (key.includes('cabang_1') || key.includes('cabang1')) locId = 2;
-                            else if (key.includes('cabang_2') || key.includes('cabang2')) locId = 3;
+                            let locId = 2; // Default Cabang Pusat (ID: 2)
+                            if (key.includes('cabang_a') || key.includes('cabang_1')) locId = 3;
+                            else if (key.includes('cabang_b') || key.includes('cabang_2')) locId = 4;
                             branchCatalogs.push({ locationId: locId, products: prods, key: key });
                         }
                     }
                 }
+                localStorage.removeItem(OLD_STORAGE_KEYS.INVENTORY);
+                localStorage.removeItem(OLD_STORAGE_KEYS.CATALOG_META);
             } catch (readErr) {
                 console.error('[PosMigration] Error reading localStorage during migration:', readErr);
                 return { success: false, error: 'Read error: ' + readErr.message };
