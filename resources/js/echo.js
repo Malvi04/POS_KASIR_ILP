@@ -335,6 +335,17 @@ try {
             }
         });
 
+    // 6. Real-time Coupons Channel
+    window.Echo.channel('coupons')
+        .listen('.coupon.updated', (e) => {
+            console.log('[Reverb/WebSocket] Coupon update event received:', e);
+            window.dispatchEvent(new CustomEvent('pos:coupons_updated', { detail: e }));
+            window.dispatchEvent(new CustomEvent('pos:entity:coupons', { detail: e }));
+            window.dispatchEvent(new CustomEvent('pos:realtime', {
+                detail: { type: 'coupons_updated', entity: 'coupons', data: e }
+            }));
+        });
+
 } catch (err) {
     console.warn('[Reverb/WebSocket] Could not initialize Echo listener:', err);
 }

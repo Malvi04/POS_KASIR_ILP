@@ -652,12 +652,15 @@ class ProductController extends Controller
         if ($location) {
             $couponQuery->where(function ($cq) use ($location) {
                 $cq->where('location_id', $location->id)
-                  ->orWhere('branch', $location->name);
+                  ->orWhere('branch', $location->name)
+                  ->orWhereNull('location_id')
+                  ->orWhere('branch', 'Semua Cabang');
             });
         } else {
             $couponQuery->where(function ($cq) {
-                $cq->whereNotNull('location_id')->where('location_id', '!=', 1);
-            })->where('branch', '!=', 'Gudang Pusat');
+                $cq->where('branch', '!=', 'Gudang Pusat')
+                   ->orWhereNull('branch');
+            });
         }
         $hasCoupons = $couponQuery->exists();
         if ($hasCoupons && !in_array('Kupon', $categories)) {
@@ -684,12 +687,15 @@ class ProductController extends Controller
         if ($location) {
             $couponQuery->where(function ($cq) use ($location) {
                 $cq->where('location_id', $location->id)
-                  ->orWhere('branch', $location->name);
+                  ->orWhere('branch', $location->name)
+                  ->orWhereNull('location_id')
+                  ->orWhere('branch', 'Semua Cabang');
             });
         } else {
             $couponQuery->where(function ($cq) {
-                $cq->whereNotNull('location_id')->where('location_id', '!=', 1);
-            })->where('branch', '!=', 'Gudang Pusat');
+                $cq->where('branch', '!=', 'Gudang Pusat')
+                   ->orWhereNull('branch');
+            });
         }
 
         $coupons = $couponQuery->latest('id')->get();

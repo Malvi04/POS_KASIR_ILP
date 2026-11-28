@@ -352,6 +352,10 @@ class CouponController extends Controller
             'status' => $validated['status'] ?? 'TERVALIDASI',
         ]);
 
+        try {
+            event(new \App\Events\CouponUpdatedEvent($coupon->toArray()));
+        } catch (\Throwable $e) {}
+
         return response()->json([
             'success' => true,
             'message' => "Kupon [{$coupon->serial_number}] berhasil diterbitkan dan stok masuk ke Gudang Pusat.",
@@ -390,6 +394,10 @@ class CouponController extends Controller
 
         $coupon->update($validated);
 
+        try {
+            event(new \App\Events\CouponUpdatedEvent($coupon->toArray()));
+        } catch (\Throwable $e) {}
+
         return response()->json([
             'success' => true,
             'message' => "Kupon [{$coupon->serial_number}] berhasil diperbarui.",
@@ -404,7 +412,12 @@ class CouponController extends Controller
     {
         $coupon = CouponUnit::findOrFail($id);
         $serial = $coupon->serial_number;
+        $couponData = $coupon->toArray();
         $coupon->delete();
+
+        try {
+            event(new \App\Events\CouponUpdatedEvent(array_merge($couponData, ['action' => 'deleted'])));
+        } catch (\Throwable $e) {}
 
         return response()->json([
             'success' => true,
@@ -442,6 +455,10 @@ class CouponController extends Controller
                 'redeemed_by' => $request->input('user_id') ?: \Illuminate\Support\Facades\Auth::id(),
                 'status' => 'COMPLETED',
             ]);
+
+            try {
+                event(new \App\Events\CouponUpdatedEvent($coupon->toArray()));
+            } catch (\Throwable $e) {}
 
             return response()->json([
                 'success' => true,

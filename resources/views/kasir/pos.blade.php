@@ -124,6 +124,17 @@
             this.products = [];
         }
 
+        // Restore cached coupons if in memory they are not loaded yet
+        if (!this.couponProducts || this.couponProducts.length === 0) {
+            try {
+                const cachedCoupons = localStorage.getItem('pos_ilp_coupons_cache_' + (branch || 'default'));
+                if (cachedCoupons) {
+                    this.couponProducts = JSON.parse(cachedCoupons);
+                }
+            } catch (e) {}
+        }
+        this.mergeCouponProducts();
+
         // 2. Online Fetch: Strictly load from active branch's Stock Toko (Informasi Produk Cabang)
         const isLocalHost = ['127.0.0.1', 'localhost'].includes(window.location.hostname);
         const isOffline = !isLocalHost && (
@@ -156,6 +167,7 @@
                         if (json.success && Array.isArray(json.data)) {
                             const result = this.deduplicateProducts(json.data);
                             this.products = result.unique.slice(0, 100);
+                            this.mergeCouponProducts();
                             if (json.location && json.location.id && this.activeSession) {
                                 this.activeSession.locationId = json.location.id;
                             }
@@ -184,10 +196,13 @@
 
             try {
                 await fetchInitialCatalog(12000);
-                // Preload available coupon units for POS cashier
-                this.loadCouponProductsInPos(false);
+                // Preload available coupon units for POS cashier ONLY ONCE when POS opens
+                if (!this.hasLoadedCouponsOnce) {
+                    this.loadCouponProductsInPos(false);
+                }
             } catch (e) {
                 if (!this.products) this.products = [];
+                this.mergeCouponProducts();
             }
         }
     },
@@ -377,41 +392,103 @@
         }
     },
 
+    hasLoadedCouponsOnce: false,
+    couponProducts: [],
     isLoadingCouponPos: false,
-    async loadCouponProductsInPos(switchToKuponTab = true) {
+
+    mergeCouponProducts() {
+        if (!Array.isArray(this.couponProducts) || this.couponProducts.length === 0) return;
+        const byKey = new Map();
+        (this.products || []).forEach(p => {
+            if (p && (p.sku || p.barcode)) byKey.set(String(p.sku || p.barcode).toUpperCase(), p);
+        });
+        this.couponProducts.forEach(p => {
+            if (p && (p.sku || p.barcode)) byKey.set(String(p.sku || p.barcode).toUpperCase(), p);
+        });
+        this.products = Array.from(byKey.values());
+    },
+
+    selectCouponCategory() {
+        this.selectedCategory = 'Kupon';
+        this.displayLimit = 48;
+        // Only load from network if never loaded even once and not currently loading
+        if (!this.hasLoadedCouponsOnce && !this.isLoadingCouponPos) {
+            this.loadCouponProductsInPos(false);
+        }
+    },
+
+    async loadCouponProductsInPos(switchToKuponTab = false, force = false) {
         if (this.isLoadingCouponPos) return;
+        if (this.hasLoadedCouponsOnce && !force && !switchToKuponTab) return;
+
         this.isLoadingCouponPos = true;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+
         try {
-            const res = await fetch('/api/pos/products/coupons', {
+            const branch = this.getActiveBranch();
+            const terminal = this.getActiveTerminal();
+            const params = new URLSearchParams({
+                branch: branch || '',
+                terminal_code: terminal || ''
+            });
+            if (this.activeSession?.locationId) {
+                params.set('location_id', String(this.activeSession.locationId));
+            }
+
+            const res = await fetch('/api/pos/products/coupons?' + params.toString(), {
+                signal: controller.signal,
                 headers: {
                     'Accept': 'application/json',
                     'X-CSRF-TOKEN': '{{ csrf_token() }}'
                 }
             });
-            const json = await res.json();
-            if (res.ok && json.success && Array.isArray(json.data)) {
-                const byKey = new Map();
-                (this.products || []).forEach(p => {
-                    if (p && (p.sku || p.barcode)) byKey.set(String(p.sku || p.barcode).toUpperCase(), p);
-                });
-                json.data.forEach(p => {
-                    if (p && (p.sku || p.barcode)) byKey.set(String(p.sku || p.barcode).toUpperCase(), p);
-                });
-                this.products = Array.from(byKey.values());
-                if (switchToKuponTab) {
-                    this.selectedCategory = 'Kupon';
-                    this.triggerPosToast(json.message || `Ditemukan ${json.data.length} kupon aktif di sistem!`, json.data.length > 0 ? 'success' : 'info');
+            clearTimeout(timeoutId);
+
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success && Array.isArray(json.data)) {
+                    this.couponProducts = json.data;
+                    this.mergeCouponProducts();
+                    this.hasLoadedCouponsOnce = true;
+
+                    // Cache locally for instant offline restore
+                    try {
+                        const couponCacheKey = 'pos_ilp_coupons_cache_' + (branch || 'default');
+                        localStorage.setItem(couponCacheKey, JSON.stringify(json.data));
+                    } catch (e) {}
+
+                    if (switchToKuponTab) {
+                        this.selectedCategory = 'Kupon';
+                        this.triggerPosToast(json.message || `Ditemukan ${json.data.length} kupon aktif di sistem!`, json.data.length > 0 ? 'success' : 'info');
+                    }
+                    return;
                 }
-            } else if (switchToKuponTab) {
-                this.triggerPosToast(json.message || 'Gagal memuat data kupon.', 'error');
+            }
+
+            if (switchToKuponTab) {
+                this.triggerPosToast('Gagal memuat data kupon dari server.', 'error');
             }
         } catch (e) {
+            clearTimeout(timeoutId);
             console.warn('Coupon fetch error in POS:', e);
+            // Fallback restore from local cache
+            try {
+                const branch = this.getActiveBranch();
+                const couponCacheKey = 'pos_ilp_coupons_cache_' + (branch || 'default');
+                const cached = localStorage.getItem(couponCacheKey);
+                if (cached) {
+                    this.couponProducts = JSON.parse(cached);
+                    this.mergeCouponProducts();
+                }
+            } catch (ce) {}
+
             if (switchToKuponTab) {
                 this.triggerPosToast('Gagal memuat kupon dari server.', 'error');
             }
         } finally {
             this.isLoadingCouponPos = false;
+            this.hasLoadedCouponsOnce = true;
         }
     },
     get visibleProducts() {
@@ -1368,6 +1445,17 @@
             }
         });
 
+        const hadOfflineCoupon = (this.cart || []).some(it => it.is_coupon || it.coupon_number);
+        if (hadOfflineCoupon) {
+            const soldSerials = new Set(this.cart.filter(it => it.is_coupon || it.coupon_number).map(it => String(it.coupon_number || it.barcode || it.sku).toUpperCase()));
+            this.couponProducts = (this.couponProducts || []).filter(c => !soldSerials.has(String(c.serial_number || c.barcode || c.sku).toUpperCase()));
+            this.products = (this.products || []).filter(p => !soldSerials.has(String(p.coupon_number || p.serial_number || p.barcode || p.sku).toUpperCase()));
+            try {
+                const branch = this.getActiveBranch();
+                localStorage.setItem('pos_ilp_coupons_cache_' + (branch || 'default'), JSON.stringify(this.couponProducts));
+            } catch (e) {}
+        }
+
         // Clear Cart ONLY after offline queue write succeeded
         this.cart = [];
         this.saveCart();
@@ -1528,8 +1616,15 @@
                 window.dispatchEvent(new CustomEvent('pos:session_updated'));
             }
 
+            // If transaction included coupons, refresh active coupons list
+            const hadCoupon = (this.cart || []).some(it => it.is_coupon || it.coupon_number);
+
             // Refresh products catalog stock from backend
             this.initProducts();
+
+            if (hadCoupon) {
+                this.loadCouponProductsInPos(false, true);
+            }
 
             // Clear Cart
             this.cart = [];
@@ -1566,6 +1661,9 @@ x-init="initOpening(); initProducts(); initCart(); initHeldBills(); initPromotio
 @pos:held_bills_updated.window="initHeldBills()"
 @pos:session_updated.window="initOpening(); if (!products || products.length === 0) initProducts();"
 @pos:sync-all.window="initOpening(); initProducts(); initHeldBills();"
+@pos:coupons_updated.window="loadCouponProductsInPos(false, true)"
+@pos:entity:coupons.window="loadCouponProductsInPos(false, true)"
+@pos-coupons-synced.window="loadCouponProductsInPos(false, true)"
 @keydown.f2.window.prevent="$refs.searchInput.focus()"
 @keydown.f3.window.prevent="showHoldModal = true"
 @keydown.f4.window.prevent="openPaymentModal()"
@@ -1668,12 +1766,15 @@ class="flex w-full h-full relative text-gray-800">
                 <div class="flex items-center gap-2 overflow-x-auto pb-3 scrollbar-hide shrink-0">
                     <!-- Quick Kupon Filter & Load Button -->
                     <button type="button"
-                            @click="loadCouponProductsInPos(true)"
+                            @click="selectCouponCategory()"
                             :class="(selectedCategory || '').trim().toLowerCase() === 'kupon' ? 'bg-[#0052cc] text-white shadow-xs' : 'bg-blue-50 border border-blue-200 text-[#0052cc] hover:bg-blue-100'"
                             class="px-3.5 py-2 font-bold rounded-full text-xs transition-colors whitespace-nowrap cursor-pointer flex items-center gap-1.5 shrink-0"
-                            title="Tampilkan & Jual Kupon Komoditas">
+                            title="Tampilkan Kupon Komoditas">
                         <span class="material-symbols-rounded text-[15px]" :class="isLoadingCouponPos ? 'animate-spin' : ''">confirmation_number</span>
                         <span x-text="isLoadingCouponPos ? 'Memuat Kupon...' : 'Kupon'"></span>
+                        <template x-if="couponProducts && couponProducts.length > 0">
+                            <span class="ml-1 px-1.5 py-0.2 text-[10px] bg-blue-100 text-[#0052cc] font-extrabold rounded-full" :class="(selectedCategory || '').trim().toLowerCase() === 'kupon' ? 'bg-white text-[#0052cc]' : ''" x-text="couponProducts.length"></span>
+                        </template>
                     </button>
 
                     <!-- Quick UMKM Filter & Load Button -->
